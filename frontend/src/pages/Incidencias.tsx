@@ -91,6 +91,16 @@ export default function Incidencias() {
       }
     });
     getTasks({ showCompleted: false }).then(r => setTasks(r.data || []));
+
+    // Si venimos con ?inc_id, abrir esa incidencia directamente
+    const incId = searchParams.get('inc_id');
+    if (incId) {
+      const id = Number(incId);
+      getIncidencia(id).then(r => {
+        setSelected(r.data);
+        loadTareasVinculadas(id);
+      });
+    }
   }, []);
 
   useEffect(() => {

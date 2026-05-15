@@ -127,7 +127,7 @@ export default function Dashboard() {
             <ul className="space-y-2">
               {incidencias.map(i => (
                 <li key={i.id}>
-                  <Link to="/incidencias" className="block rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors -mx-2 border-l-2 border-primary-300 pl-3">
+                  <Link to={`/incidencias?inc_id=${i.id}`} className="block rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors -mx-2 border-l-2 border-primary-300 pl-3">
                     <p className="text-sm font-medium text-gray-800 leading-tight truncate">{i.titulo}</p>
                     <p className="text-xs text-gray-400">{i.cliente_nombre}</p>
                     <PriorityBadge p={i.prioridad} />
