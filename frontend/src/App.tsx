@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Clientes from './pages/Clientes';
+import ClienteDetalle from './pages/ClienteDetalle';
 import Incidencias from './pages/Incidencias';
 import Agenda from './pages/Agenda';
 import Tareas from './pages/Tareas';
@@ -28,6 +29,7 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clientes" element={<Clientes />} />
+        <Route path="/clientes/:id" element={<ClienteDetalle />} />
         <Route path="/incidencias" element={<Incidencias />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/tareas" element={<Tareas />} />

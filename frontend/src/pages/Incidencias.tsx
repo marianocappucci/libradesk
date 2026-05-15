@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks } from '../services/api';
 import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone } from 'lucide-react';
 
@@ -30,6 +31,8 @@ const estadoClass = (e: string) => ({
 const emptyForm = { cliente_id: '', titulo: '', descripcion: '', prioridad: 'media', tecnico_asignado: '' };
 
 export default function Incidencias() {
+  const [searchParams] = useSearchParams();
+
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [selected, setSelected] = useState<Incidencia | null>(null);
@@ -38,7 +41,10 @@ export default function Incidencias() {
   const [filtroEstado, setFiltroEstado] = useState('');
 
   // Filtro por cliente
-  const [filtroCliente, setFiltroCliente] = useState<number | null>(null);
+  const [filtroCliente, setFiltroCliente] = useState<number | null>(() => {
+    const p = searchParams.get('cliente_id');
+    return p ? Number(p) : null;
+  });
   const [clienteSearch, setClienteSearch] = useState('');
   const [clienteDetalle, setClienteDetalle] = useState<Cliente | null>(null);
   const [showClienteList, setShowClienteList] = useState(false);
@@ -70,7 +76,14 @@ export default function Incidencias() {
   };
 
   useEffect(() => {
-    getClientes().then(r => setClientes(r.data));
+    getClientes().then(r => {
+      setClientes(r.data);
+      // Si venimos desde /clientes/:id, pre-rellenar el buscador
+      if (filtroCliente) {
+        const c = r.data.find((x: Cliente) => x.id === filtroCliente);
+        if (c) setClienteSearch(c.nombre + (c.empresa ? ` (${c.empresa})` : ''));
+      }
+    });
   }, []);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
 import api from '../services/api';
 import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2, RefreshCw } from 'lucide-react';
@@ -11,6 +12,7 @@ interface Cliente {
 const emptyForm = { nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '' };
 
 export default function Clientes() {
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -164,15 +166,19 @@ export default function Clientes() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {clientes.map(c => (
-          <div key={c.id} className="card hover:shadow-md transition-shadow">
+          <div
+            key={c.id}
+            onClick={() => navigate(`/clientes/${c.id}`)}
+            className="card hover:shadow-md transition-shadow cursor-pointer hover:border-primary-200"
+          >
             <div className="flex items-start justify-between mb-3">
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-semibold text-gray-900">{c.nombre}</h3>
                 {c.empresa && <p className="text-sm text-gray-500 flex items-center gap-1"><Building2 size={12} />{c.empresa}</p>}
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => openEdit(c)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded"><Pencil size={14} /></button>
-                <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded"><Trash2 size={14} /></button>
+              <div className="flex gap-1 shrink-0">
+                <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 text-gray-400 hover:text-primary-600 rounded"><Pencil size={14} /></button>
+                <button onClick={e => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded"><Trash2 size={14} /></button>
               </div>
             </div>
             <div className="space-y-1 text-sm text-gray-500">
