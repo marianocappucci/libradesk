@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../database/connection';
 import { createOAuthClient } from '../utils/googleClient';
 import { syncContacto, deleteContacto } from '../utils/contactsSync';
+import { google } from 'googleapis';
 
 function getAuthClient(req: Request) {
   const oauth2Client = createOAuthClient();
@@ -165,5 +166,99 @@ export async function syncAllContactos(req: Request, res: Response) {
     res.json({ success: true, ...results });
   } catch (error) {
     res.status(500).json({ error: 'Error al sincronizar contactos' });
+  }
+}
+
+export async function importFromGoogle(req: Request, res: Response) {
+  try {
+    const auth = getAuthClient(req);
+    const people = google.people({ version: 'v1', auth });
+
+    // Buscar el grupo "IT Soporte"
+    const groupsRes = await people.contactGroups.list({ pageSize: 200 });
+    const groups = groupsRes.data.contactGroups || [];
+    const group = groups.find(g => g.name === 'IT Soporte');
+
+    if (!group?.resourceName) {
+      return res.json({ success: true, imported: 0, updated: 0, message: 'No existe el grupo IT Soporte en Google Contacts' });
+    }
+
+    // Obtener los miembros del grupo
+    const groupDetail = await people.contactGroups.get({
+      resourceName: group.resourceName,
+      maxMembers: 500,
+    });
+
+    const memberResourceNames = groupDetail.data.memberResourceNames || [];
+    if (memberResourceNames.length === 0) {
+      return res.json({ success: true, imported: 0, updated: 0 });
+    }
+
+    let imported = 0;
+    let updated = 0;
+
+    // Traer detalles en lotes de 50 (límite de la API)
+    const BATCH = 50;
+    for (let i = 0; i < memberResourceNames.length; i += BATCH) {
+      const batch = memberResourceNames.slice(i, i + BATCH);
+      const batchRes = await people.people.getBatchGet({
+        resourceNames: batch,
+        personFields: 'names,emailAddresses,phoneNumbers,organizations,addresses',
+      });
+
+      for (const { person } of batchRes.data.responses || []) {
+        if (!person?.resourceName) continue;
+
+        const resourceName = person.resourceName;
+        const nombre = person.names?.[0]?.displayName || person.names?.[0]?.givenName || 'Sin nombre';
+        const email = person.emailAddresses?.[0]?.value || null;
+        const telefono = person.phoneNumbers?.[0]?.value || null;
+        const empresa = person.organizations?.[0]?.name || null;
+        const ciudad = person.addresses?.[0]?.city || null;
+
+        // Ya existe por google_contact_id → actualizar datos
+        const byId = await pool.query(
+          'SELECT id FROM clientes WHERE google_contact_id = $1',
+          [resourceName]
+        );
+        if (byId.rows.length > 0) {
+          await pool.query(
+            'UPDATE clientes SET nombre=$1, empresa=$2, email=$3, telefono=$4, ciudad=$5 WHERE google_contact_id=$6',
+            [nombre, empresa, email, telefono, ciudad, resourceName]
+          );
+          updated++;
+          continue;
+        }
+
+        // Ya existe por email → vincular google_contact_id
+        if (email) {
+          const byEmail = await pool.query(
+            'SELECT id FROM clientes WHERE email = $1 AND activo = true',
+            [email]
+          );
+          if (byEmail.rows.length > 0) {
+            await pool.query(
+              'UPDATE clientes SET google_contact_id=$1 WHERE id=$2',
+              [resourceName, byEmail.rows[0].id]
+            );
+            updated++;
+            continue;
+          }
+        }
+
+        // Nuevo cliente
+        await pool.query(
+          'INSERT INTO clientes (nombre, empresa, email, telefono, ciudad, google_contact_id) VALUES ($1,$2,$3,$4,$5,$6)',
+          [nombre, empresa, email, telefono, ciudad, resourceName]
+        );
+        imported++;
+      }
+    }
+
+    console.log(`✓ Import Google: ${imported} nuevos, ${updated} actualizados`);
+    res.json({ success: true, imported, updated });
+  } catch (error) {
+    console.error('✗ Error importando desde Google:', error);
+    res.status(500).json({ error: 'Error al importar contactos de Google' });
   }
 }

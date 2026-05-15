@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
-import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2 } from 'lucide-react';
+import api from '../services/api';
+import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2, RefreshCw } from 'lucide-react';
 
 interface Cliente {
   id: number; nombre: string; empresa?: string; email?: string;
@@ -17,6 +18,8 @@ export default function Clientes() {
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const load = async (q?: string) => {
     const r = await getClientes(q);
@@ -53,6 +56,25 @@ export default function Clientes() {
     }
   };
 
+  const handleImportGoogle = async () => {
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const r = await api.post('/clientes/import-google');
+      const { imported, updated, message } = r.data;
+      if (message) {
+        setImportMsg(message);
+      } else {
+        setImportMsg(`${imported} contactos importados, ${updated} actualizados`);
+        load();
+      }
+    } catch {
+      setImportMsg('Error al importar desde Google Contacts');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm('¿Eliminar este cliente?')) return;
     await deleteCliente(id);
@@ -63,10 +85,20 @@ export default function Clientes() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-        <button onClick={openNew} className="btn-primary">
-          <Plus size={16} /> Nuevo cliente
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleImportGoogle} disabled={importing} className="btn-secondary disabled:opacity-60 flex items-center gap-1.5">
+            <RefreshCw size={14} className={importing ? 'animate-spin' : ''} />
+            {importing ? 'Importando...' : 'Importar de Google'}
+          </button>
+          <button onClick={openNew} className="btn-primary">
+            <Plus size={16} /> Nuevo cliente
+          </button>
+        </div>
       </div>
+
+      {importMsg && (
+        <div className="mb-4 text-sm rounded-lg px-4 py-2 bg-blue-50 text-blue-700">{importMsg}</div>
+      )}
 
       <form onSubmit={handleSearch} className="flex gap-2 mb-6">
         <div className="relative flex-1 max-w-sm">
