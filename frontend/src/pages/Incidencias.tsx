@@ -319,7 +319,7 @@ export default function Incidencias() {
           {incidencias.map(i => (
             <div
               key={i.id}
-              onClick={() => getIncidencia(i.id).then(r => { setSelected(r.data); loadTareasVinculadas(i.id); setShowVincular(false); })}
+              onClick={() => getIncidencia(i.id).then(r => { setSelected(r.data); loadTareasVinculadas(i.id); setShowVincular(false); setShowNuevaTarea(false); setNuevaTareaForm({ title: '', notes: '', due: '' }); setTaskSeleccionada(''); })}
               className={`bg-white border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500 border-primary-300' : ''}`}
             >
               <div className="flex items-center gap-2 min-w-0">
