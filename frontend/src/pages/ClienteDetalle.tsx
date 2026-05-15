@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getCliente, getIncidencias, getTareasCliente, getCalendarEvents } from '../services/api';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getCliente, getIncidencias, getTareasCliente } from '../services/api';
 import {
   ArrowLeft, Building2, Mail, Phone, MapPin, FileText,
-  AlertCircle, CheckSquare, CalendarDays, Clock, ArrowRight, User,
+  AlertCircle, CheckSquare, ArrowRight, User, Clock,
 } from 'lucide-react';
 
 interface Cliente {
@@ -15,7 +15,6 @@ interface Incidencia {
   fecha_creacion: string; tecnico_asignado?: string;
 }
 interface Task { id: number; google_task_id: string; task_title: string; incidencia_titulo: string; incidencia_estado: string; incidencia_id: number }
-interface CalEvent { id: string; summary: string; start: { dateTime?: string; date?: string } }
 
 const prioClass = (p: string) => ({
   alta: 'badge bg-red-100 text-red-700',
@@ -29,14 +28,6 @@ const estadoClass = (e: string) => ({
   cerrado: 'badge bg-gray-100 text-gray-500',
 }[e] || 'badge bg-gray-100 text-gray-700');
 
-function formatFecha(dt?: string, d?: string) {
-  const s = dt || d;
-  if (!s) return '';
-  return new Date(s).toLocaleDateString('es-AR', {
-    weekday: 'short', day: 'numeric', month: 'short',
-    ...(dt ? { hour: '2-digit', minute: '2-digit' } : {}),
-  });
-}
 
 export default function ClienteDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -45,26 +36,20 @@ export default function ClienteDetalle() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     const numId = Number(id);
-    const now = new Date();
-    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
     Promise.all([
       getCliente(numId),
       getIncidencias({ cliente_id: numId }),
       getTareasCliente(numId),
-      getCalendarEvents({ timeMin: now.toISOString(), timeMax: in30.toISOString() }),
     ])
-      .then(([c, inc, t, ev]) => {
+      .then(([c, inc, t]) => {
         setCliente(c.data);
         setIncidencias(inc.data);
         setTasks(t.data || []);
-        setEvents((ev.data || []).slice(0, 6));
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -150,7 +135,7 @@ export default function ClienteDetalle() {
       <div className="grid grid-cols-3 gap-6">
 
         {/* Incidencias */}
-        <div className="col-span-2 card !p-4">
+        <div className="col-span-2 card !p-4 h-fit">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <AlertCircle size={16} className="text-primary-500" />
@@ -186,11 +171,9 @@ export default function ClienteDetalle() {
           )}
         </div>
 
-        {/* Columna derecha: Tareas + Agenda */}
-        <div className="space-y-5">
-
-          {/* Tareas vinculadas */}
-          <div className="card !p-4">
+        {/* Columna derecha: Tareas vinculadas */}
+        <div>
+          <div className="card !p-4 h-fit">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <CheckSquare size={15} className="text-primary-500" />
@@ -203,7 +186,7 @@ export default function ClienteDetalle() {
               </button>
             </div>
             {tasks.length === 0
-              ? <p className="text-xs text-gray-400">Sin tareas vinculadas a incidencias de este cliente</p>
+              ? <p className="text-xs text-gray-400">Sin tareas vinculadas. Abrí una incidencia y vinculá tareas desde el panel de detalle.</p>
               : (
                 <ul className="space-y-1.5">
                   {tasks.map(t => (
@@ -212,37 +195,6 @@ export default function ClienteDetalle() {
                       <p className="text-[10px] text-gray-500 truncate mt-0.5">
                         #{t.incidencia_id} · {t.incidencia_titulo} · <span className={t.incidencia_estado === 'cerrado' ? 'text-gray-400' : t.incidencia_estado === 'en_progreso' ? 'text-orange-500' : 'text-blue-500'}>{t.incidencia_estado.replace('_', ' ')}</span>
                       </p>
-                    </li>
-                  ))}
-                </ul>
-              )
-            }
-          </div>
-
-          {/* Agenda */}
-          <div className="card !p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CalendarDays size={15} className="text-primary-500" />
-                <h2 className="font-semibold text-gray-800 text-sm">Agenda (30 días)</h2>
-              </div>
-              <Link to="/agenda" className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
-                Ver <ArrowRight size={11} />
-              </Link>
-            </div>
-            {events.length === 0
-              ? <p className="text-xs text-gray-400">Sin eventos próximos</p>
-              : (
-                <ul className="space-y-1.5">
-                  {events.map(ev => (
-                    <li key={ev.id}>
-                      <Link to="/agenda" className="flex items-start gap-2 rounded-lg px-1 py-1 hover:bg-gray-50 -mx-1 transition-colors">
-                        <Clock size={11} className="text-gray-400 mt-0.5 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-800 truncate">{ev.summary}</p>
-                          <p className="text-[10px] text-gray-400">{formatFecha(ev.start.dateTime, ev.start.date)}</p>
-                        </div>
-                      </Link>
                     </li>
                   ))}
                 </ul>
