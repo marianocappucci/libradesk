@@ -134,8 +134,14 @@ export default function Tareas() {
     }
 
     return (
-      <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 group">
-        <button onClick={() => toggleComplete(task)} className="mt-0.5 text-gray-300 hover:text-green-500 shrink-0 transition-colors">
+      <div
+        className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 group cursor-pointer"
+        onClick={() => startEdit(task)}
+      >
+        <button
+          onClick={e => { e.stopPropagation(); toggleComplete(task); }}
+          className="mt-0.5 text-gray-300 hover:text-green-500 shrink-0 transition-colors"
+        >
           <Circle size={18} />
         </button>
         <div className="flex-1 min-w-0">
@@ -149,10 +155,10 @@ export default function Tareas() {
           )}
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={() => startEdit(task)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded">
-            <Pencil size={13} />
-          </button>
-          <button onClick={() => handleDelete(task.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded">
+          <button
+            onClick={e => { e.stopPropagation(); handleDelete(task.id); }}
+            className="p-1.5 text-gray-400 hover:text-red-500 rounded"
+          >
             <Trash2 size={13} />
           </button>
         </div>

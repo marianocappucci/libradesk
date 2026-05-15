@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getCalendarEvents, getTasks, getIncidencias } from '../services/api';
-import { CalendarDays, CheckSquare, AlertCircle, Clock } from 'lucide-react';
+import { CalendarDays, CheckSquare, AlertCircle, Clock, ArrowRight } from 'lucide-react';
 
 interface CalEvent { id: string; summary: string; start: { dateTime?: string; date?: string } }
 interface Task { id: string; title: string; due?: string; status: string }
@@ -51,21 +52,28 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Próximos eventos */}
         <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays size={18} className="text-primary-600" />
-            <h2 className="font-semibold text-gray-800">Próximos 7 días</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={18} className="text-primary-600" />
+              <h2 className="font-semibold text-gray-800">Próximos 7 días</h2>
+            </div>
+            <Link to="/agenda" className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
+              Ver agenda <ArrowRight size={12} />
+            </Link>
           </div>
           {events.length === 0 ? (
             <p className="text-sm text-gray-400">Sin eventos próximos</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-2">
               {events.map(ev => (
-                <li key={ev.id} className="flex items-start gap-2">
-                  <Clock size={14} className="text-gray-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 leading-tight">{ev.summary}</p>
-                    <p className="text-xs text-gray-400">{formatDate(ev.start.dateTime, ev.start.date)}</p>
-                  </div>
+                <li key={ev.id}>
+                  <Link to="/agenda" className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors -mx-2">
+                    <Clock size={13} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 leading-tight truncate">{ev.summary}</p>
+                      <p className="text-xs text-gray-400">{formatDate(ev.start.dateTime, ev.start.date)}</p>
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -74,21 +82,28 @@ export default function Dashboard() {
 
         {/* Tareas pendientes */}
         <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <CheckSquare size={18} className="text-primary-600" />
-            <h2 className="font-semibold text-gray-800">Tareas pendientes</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={18} className="text-primary-600" />
+              <h2 className="font-semibold text-gray-800">Tareas pendientes</h2>
+            </div>
+            <Link to="/tareas" className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
+              Ver todas <ArrowRight size={12} />
+            </Link>
           </div>
           {tasks.length === 0 ? (
             <p className="text-sm text-gray-400">Sin tareas pendientes</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-1">
               {tasks.map(t => (
-                <li key={t.id} className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-2 shrink-0" />
-                  <div>
-                    <p className="text-sm text-gray-800">{t.title}</p>
-                    {t.due && <p className="text-xs text-gray-400">{new Date(t.due).toLocaleDateString('es-AR')}</p>}
-                  </div>
+                <li key={t.id}>
+                  <Link to="/tareas" className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors -mx-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-2 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 truncate">{t.title}</p>
+                      {t.due && <p className="text-xs text-gray-400">{new Date(t.due).toLocaleDateString('es-AR')}</p>}
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -97,19 +112,26 @@ export default function Dashboard() {
 
         {/* Incidencias abiertas */}
         <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertCircle size={18} className="text-primary-600" />
-            <h2 className="font-semibold text-gray-800">Incidencias abiertas</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="text-primary-600" />
+              <h2 className="font-semibold text-gray-800">Incidencias abiertas</h2>
+            </div>
+            <Link to="/incidencias" className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
+              Ver todas <ArrowRight size={12} />
+            </Link>
           </div>
           {incidencias.length === 0 ? (
             <p className="text-sm text-gray-400">Sin incidencias abiertas</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-2">
               {incidencias.map(i => (
-                <li key={i.id} className="border-l-2 border-primary-300 pl-3">
-                  <p className="text-sm font-medium text-gray-800 leading-tight">{i.titulo}</p>
-                  <p className="text-xs text-gray-400">{i.cliente_nombre}</p>
-                  <PriorityBadge p={i.prioridad} />
+                <li key={i.id}>
+                  <Link to="/incidencias" className="block rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors -mx-2 border-l-2 border-primary-300 pl-3">
+                    <p className="text-sm font-medium text-gray-800 leading-tight truncate">{i.titulo}</p>
+                    <p className="text-xs text-gray-400">{i.cliente_nombre}</p>
+                    <PriorityBadge p={i.prioridad} />
+                  </Link>
                 </li>
               ))}
             </ul>
