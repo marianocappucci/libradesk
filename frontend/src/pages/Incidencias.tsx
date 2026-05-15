@@ -8,6 +8,7 @@ interface Incidencia {
   cliente_id: number; cliente_nombre: string; cliente_empresa?: string;
   equipo_tipo?: string; tecnico_asignado?: string; fecha_creacion: string;
   actividades?: Actividad[];
+  actividades_count?: number; tareas_count?: number;
 }
 interface Actividad { id: number; descripcion: string; usuario?: string; fecha: string }
 interface Cliente { id: number; nombre: string; empresa?: string; email?: string; telefono?: string }
@@ -328,11 +329,20 @@ export default function Incidencias() {
                 <span className="font-medium text-gray-900 truncate flex-1 text-sm">{i.titulo}</span>
                 <ChevronRight size={13} className="text-gray-400 shrink-0" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 pl-0.5">
+              <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 pl-0.5 flex-wrap">
                 {!filtroCliente && <span className="truncate max-w-[160px]">{i.cliente_nombre}{i.cliente_empresa ? ` · ${i.cliente_empresa}` : ''}</span>}
                 {!filtroCliente && <span className="text-gray-300">·</span>}
                 <Clock size={9} className="shrink-0" />
                 <span className="shrink-0">{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                {(i.actividades_count ?? 0) > 0 && (
+                  <span className="shrink-0 text-gray-300">·</span>
+                )}
+                {(i.actividades_count ?? 0) > 0 && (
+                  <span className="shrink-0 flex items-center gap-0.5"><User size={9} />{i.actividades_count} act.</span>
+                )}
+                {(i.tareas_count ?? 0) > 0 && (
+                  <span className="shrink-0 flex items-center gap-0.5 text-primary-500"><ListTodo size={9} />{i.tareas_count} tarea{i.tareas_count !== 1 ? 's' : ''}</span>
+                )}
               </div>
             </div>
           ))}

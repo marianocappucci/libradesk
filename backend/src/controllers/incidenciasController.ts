@@ -6,7 +6,9 @@ export async function getIncidencias(req: Request, res: Response) {
     const { estado, cliente_id, prioridad } = req.query;
     let query = `
       SELECT i.*, c.nombre as cliente_nombre, c.empresa as cliente_empresa,
-             e.tipo as equipo_tipo, e.modelo as equipo_modelo
+             e.tipo as equipo_tipo, e.modelo as equipo_modelo,
+             (SELECT COUNT(*) FROM actividades_incidencia a WHERE a.incidencia_id = i.id)::int AS actividades_count,
+             (SELECT COUNT(*) FROM incidencia_tareas t WHERE t.incidencia_id = i.id)::int AS tareas_count
       FROM incidencias i
       JOIN clientes c ON i.cliente_id = c.id
       LEFT JOIN equipos e ON i.equipo_id = e.id
