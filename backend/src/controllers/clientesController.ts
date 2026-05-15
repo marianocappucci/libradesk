@@ -262,3 +262,22 @@ export async function importFromGoogle(req: Request, res: Response) {
     res.status(500).json({ error: 'Error al importar contactos de Google' });
   }
 }
+
+
+export async function getTareasCliente(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT it.id, it.google_task_id, it.task_title, it.created_at,
+              i.id as incidencia_id, i.titulo as incidencia_titulo, i.estado as incidencia_estado
+       FROM incidencia_tareas it
+       JOIN incidencias i ON it.incidencia_id = i.id
+       WHERE i.cliente_id = $1
+       ORDER BY i.estado, it.created_at DESC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener tareas del cliente' });
+  }
+}

@@ -16,6 +16,7 @@ export const getCliente = (id: number) => api.get(`/clientes/${id}`);
 export const createCliente = (data: object) => api.post('/clientes', data);
 export const updateCliente = (id: number, data: object) => api.put(`/clientes/${id}`, data);
 export const deleteCliente = (id: number) => api.delete(`/clientes/${id}`);
+export const getTareasCliente = (id: number) => api.get(`/clientes/${id}/tareas`);
 
 // --- Equipos ---
 export const getEquipos = (cliente_id?: number) =>
@@ -35,6 +36,11 @@ export const updateActividad = (id: number, actividadId: number, data: object) =
   api.put(`/incidencias/${id}/actividades/${actividadId}`, data);
 export const deleteActividad = (id: number, actividadId: number) =>
   api.delete(`/incidencias/${id}/actividades/${actividadId}`);
+
+// --- Tareas vinculadas a incidencias ---
+export const getTareasVinculadas = (incidenciaId: number) => api.get(`/incidencias/${incidenciaId}/tareas`);
+export const vincularTarea = (incidenciaId: number, data: object) => api.post(`/incidencias/${incidenciaId}/tareas`, data);
+export const desvincularTarea = (incidenciaId: number, tareaId: number) => api.delete(`/incidencias/${incidenciaId}/tareas/${tareaId}`);
 
 // --- Calendar ---
 export const getCalendarEvents = (params?: object) => api.get('/calendar/events', { params });

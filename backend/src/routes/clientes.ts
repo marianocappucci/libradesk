@@ -9,6 +9,7 @@ router.get('/', ctrl.getClientes);
 router.post('/sync-google', ctrl.syncAllContactos);
 router.post('/import-google', ctrl.importFromGoogle);
 router.get('/:id', ctrl.getCliente);
+router.get('/:id/tareas', ctrl.getTareasCliente);
 router.post('/', ctrl.createCliente);
 router.put('/:id', ctrl.updateCliente);
 router.delete('/:id', ctrl.deleteCliente);

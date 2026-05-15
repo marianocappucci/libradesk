@@ -13,4 +13,8 @@ router.post('/:id/actividades', ctrl.addActividad);
 router.put('/:id/actividades/:actividadId', ctrl.updateActividad);
 router.delete('/:id/actividades/:actividadId', ctrl.deleteActividad);
 
+router.get('/:id/tareas', ctrl.getTareasVinculadas);
+router.post('/:id/tareas', ctrl.vincularTarea);
+router.delete('/:id/tareas/:tareaId', ctrl.desvincularTarea);
+
 export default router;

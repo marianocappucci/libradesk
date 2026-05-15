@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getCliente, getIncidencias, getTasks, getCalendarEvents } from '../services/api';
+import { getCliente, getIncidencias, getTareasCliente, getCalendarEvents } from '../services/api';
 import {
   ArrowLeft, Building2, Mail, Phone, MapPin, FileText,
   AlertCircle, CheckSquare, CalendarDays, Clock, ArrowRight, User,
@@ -14,7 +14,7 @@ interface Incidencia {
   id: number; titulo: string; estado: string; prioridad: string;
   fecha_creacion: string; tecnico_asignado?: string;
 }
-interface Task { id: string; title: string; due?: string; notes?: string }
+interface Task { id: number; google_task_id: string; task_title: string; incidencia_titulo: string; incidencia_estado: string; incidencia_id: number }
 interface CalEvent { id: string; summary: string; start: { dateTime?: string; date?: string } }
 
 const prioClass = (p: string) => ({
@@ -57,13 +57,13 @@ export default function ClienteDetalle() {
     Promise.all([
       getCliente(numId),
       getIncidencias({ cliente_id: numId }),
-      getTasks({ showCompleted: false }),
+      getTareasCliente(numId),
       getCalendarEvents({ timeMin: now.toISOString(), timeMax: in30.toISOString() }),
     ])
       .then(([c, inc, t, ev]) => {
         setCliente(c.data);
         setIncidencias(inc.data);
-        setTasks((t.data || []).slice(0, 8));
+        setTasks(t.data || []);
         setEvents((ev.data || []).slice(0, 6));
       })
       .finally(() => setLoading(false));
@@ -189,30 +189,29 @@ export default function ClienteDetalle() {
         {/* Columna derecha: Tareas + Agenda */}
         <div className="space-y-5">
 
-          {/* Tareas */}
+          {/* Tareas vinculadas */}
           <div className="card !p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <CheckSquare size={15} className="text-primary-500" />
-                <h2 className="font-semibold text-gray-800 text-sm">Tareas pendientes</h2>
+                <h2 className="font-semibold text-gray-800 text-sm">
+                  Tareas vinculadas <span className="text-gray-400 font-normal">({tasks.length})</span>
+                </h2>
               </div>
-              <Link to="/tareas" className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
-                Ver <ArrowRight size={11} />
-              </Link>
+              <button onClick={irAIncidencias} className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5">
+                Gestionar <ArrowRight size={11} />
+              </button>
             </div>
             {tasks.length === 0
-              ? <p className="text-xs text-gray-400">Sin tareas pendientes</p>
+              ? <p className="text-xs text-gray-400">Sin tareas vinculadas a incidencias de este cliente</p>
               : (
                 <ul className="space-y-1.5">
                   {tasks.map(t => (
-                    <li key={t.id}>
-                      <Link to="/tareas" className="flex items-start gap-2 rounded-lg px-1 py-1 hover:bg-gray-50 -mx-1 transition-colors">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary-400 mt-1.5 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-800 truncate">{t.title}</p>
-                          {t.due && <p className="text-[10px] text-gray-400">{new Date(t.due).toLocaleDateString('es-AR')}</p>}
-                        </div>
-                      </Link>
+                    <li key={t.id} className="bg-blue-50 rounded-lg px-2 py-1.5">
+                      <p className="text-xs font-medium text-gray-800 truncate">{t.task_title}</p>
+                      <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                        #{t.incidencia_id} · {t.incidencia_titulo} · <span className={t.incidencia_estado === 'cerrado' ? 'text-gray-400' : t.incidencia_estado === 'en_progreso' ? 'text-orange-500' : 'text-blue-500'}>{t.incidencia_estado.replace('_', ' ')}</span>
+                      </p>
                     </li>
                   ))}
                 </ul>

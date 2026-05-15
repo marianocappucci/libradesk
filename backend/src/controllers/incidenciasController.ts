@@ -131,3 +131,42 @@ export async function deleteActividad(req: Request, res: Response) {
     res.status(500).json({ error: 'Error al eliminar actividad' });
   }
 }
+
+export async function getTareasVinculadas(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM incidencia_tareas WHERE incidencia_id=$1 ORDER BY created_at',
+      [id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener tareas vinculadas' });
+  }
+}
+
+export async function vincularTarea(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { google_task_id, task_title } = req.body;
+    if (!google_task_id || !task_title) return res.status(400).json({ error: 'google_task_id y task_title son requeridos' });
+    const result = await pool.query(
+      `INSERT INTO incidencia_tareas (incidencia_id, google_task_id, task_title)
+       VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING *`,
+      [id, google_task_id, task_title]
+    );
+    res.status(201).json(result.rows[0] || {});
+  } catch (error) {
+    res.status(500).json({ error: 'Error al vincular tarea' });
+  }
+}
+
+export async function desvincularTarea(req: Request, res: Response) {
+  try {
+    const { id, tareaId } = req.params;
+    await pool.query('DELETE FROM incidencia_tareas WHERE id=$1 AND incidencia_id=$2', [tareaId, id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al desvincular tarea' });
+  }
+}

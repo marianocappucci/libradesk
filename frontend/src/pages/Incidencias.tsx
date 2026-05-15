@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks } from '../services/api';
-import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone } from 'lucide-react';
+import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks, getTareasVinculadas, vincularTarea, desvincularTarea } from '../services/api';
+import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone, Link2, Unlink } from 'lucide-react';
 
 interface Incidencia {
   id: number; titulo: string; descripcion?: string; estado: string; prioridad: string;
@@ -12,6 +12,7 @@ interface Incidencia {
 interface Actividad { id: number; descripcion: string; usuario?: string; fecha: string }
 interface Cliente { id: number; nombre: string; empresa?: string; email?: string; telefono?: string }
 interface Task { id: string; title?: string; status?: string; due?: string; notes?: string }
+interface TareaVinculada { id: number; google_task_id: string; task_title: string; created_at: string }
 
 const PRIORIDADES = ['alta', 'media', 'baja'];
 const ESTADOS = ['abierto', 'en_progreso', 'cerrado'];
@@ -63,6 +64,11 @@ export default function Incidencias() {
   const [editingIncidencia, setEditingIncidencia] = useState(false);
   const [incForm, setIncForm] = useState({ titulo: '', descripcion: '', prioridad: '', tecnico_asignado: '' });
 
+  // Tareas vinculadas a la incidencia seleccionada
+  const [tareasVinculadas, setTareasVinculadas] = useState<TareaVinculada[]>([]);
+  const [showVincular, setShowVincular] = useState(false);
+  const [taskSeleccionada, setTaskSeleccionada] = useState('');
+
   const load = async () => {
     const params: Record<string, unknown> = {};
     if (filtroCliente) {
@@ -76,14 +82,15 @@ export default function Incidencias() {
   };
 
   useEffect(() => {
+    // Cargamos clientes y tareas al montar (tareas necesarias para vincular)
     getClientes().then(r => {
       setClientes(r.data);
-      // Si venimos desde /clientes/:id, pre-rellenar el buscador
       if (filtroCliente) {
         const c = r.data.find((x: Cliente) => x.id === filtroCliente);
         if (c) setClienteSearch(c.nombre + (c.empresa ? ` (${c.empresa})` : ''));
       }
     });
+    getTasks({ showCompleted: false }).then(r => setTasks(r.data || []));
   }, []);
 
   useEffect(() => {
@@ -180,6 +187,27 @@ export default function Incidencias() {
     setSelected(r.data);
   };
 
+  const loadTareasVinculadas = async (incId: number) => {
+    const r = await getTareasVinculadas(incId);
+    setTareasVinculadas(r.data);
+  };
+
+  const handleVincularTarea = async () => {
+    if (!selected || !taskSeleccionada) return;
+    const task = tasks.find(t => t.id === taskSeleccionada);
+    if (!task || !task.title) return;
+    await vincularTarea(selected.id, { google_task_id: task.id, task_title: task.title });
+    setTaskSeleccionada('');
+    setShowVincular(false);
+    loadTareasVinculadas(selected.id);
+  };
+
+  const handleDesvincularTarea = async (tareaId: number) => {
+    if (!selected) return;
+    await desvincularTarea(selected.id, tareaId);
+    loadTareasVinculadas(selected.id);
+  };
+
   // Panel derecho: tareas cuando hay cliente seleccionado y no hay incidencia abierta
   const showTasks = filtroCliente && !selected;
 
@@ -260,7 +288,7 @@ export default function Incidencias() {
           {incidencias.map(i => (
             <div
               key={i.id}
-              onClick={() => getIncidencia(i.id).then(r => setSelected(r.data))}
+              onClick={() => getIncidencia(i.id).then(r => { setSelected(r.data); loadTareasVinculadas(i.id); setShowVincular(false); })}
               className={`bg-white border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500 border-primary-300' : ''}`}
             >
               <div className="flex items-center gap-2 min-w-0">
@@ -333,7 +361,7 @@ export default function Incidencias() {
                   ) : (
                     <button onClick={startEditIncidencia} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={13} /></button>
                   )}
-                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
+                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); setTareasVinculadas([]); setShowVincular(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
                 </div>
               </div>
 
@@ -367,6 +395,62 @@ export default function Incidencias() {
                     → {e.replace('_', ' ')}
                   </button>
                 ))}
+              </div>
+
+              {/* Tareas vinculadas */}
+              <div className="border-t pt-3 mb-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tareas vinculadas</h4>
+                  <button
+                    onClick={() => { setShowVincular(v => !v); setTaskSeleccionada(''); }}
+                    className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5"
+                  >
+                    <Link2 size={11} /> Vincular
+                  </button>
+                </div>
+
+                {tareasVinculadas.length === 0 && !showVincular && (
+                  <p className="text-xs text-gray-400">Sin tareas vinculadas</p>
+                )}
+
+                <div className="space-y-1 mb-1.5">
+                  {tareasVinculadas.map(tv => (
+                    <div key={tv.id} className="flex items-center gap-2 bg-blue-50 rounded px-2 py-1 text-xs group">
+                      <span className="flex-1 text-gray-800 truncate">{tv.task_title}</span>
+                      <button
+                        onClick={() => handleDesvincularTarea(tv.id)}
+                        className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Desvincular"
+                      >
+                        <Unlink size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {showVincular && (
+                  <div className="flex gap-1.5 mt-1">
+                    <select
+                      className="input text-xs flex-1"
+                      value={taskSeleccionada}
+                      onChange={e => setTaskSeleccionada(e.target.value)}
+                    >
+                      <option value="">Seleccionar tarea...</option>
+                      {tasks
+                        .filter(t => t.title && !tareasVinculadas.find(tv => tv.google_task_id === t.id))
+                        .map(t => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))
+                      }
+                    </select>
+                    <button onClick={handleVincularTarea} disabled={!taskSeleccionada} className="btn-primary !px-2 !py-1 text-xs disabled:opacity-40">
+                      <Check size={12} />
+                    </button>
+                    <button onClick={() => setShowVincular(false)} className="btn-secondary !px-2 !py-1 text-xs">
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Actividades */}
