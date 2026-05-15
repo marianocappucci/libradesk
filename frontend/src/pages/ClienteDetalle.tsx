@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getCliente, getIncidencias, getTareasCliente } from '../services/api';
 import {
   ArrowLeft, Building2, Mail, Phone, MapPin, FileText,
@@ -14,7 +14,7 @@ interface Incidencia {
   id: number; titulo: string; estado: string; prioridad: string;
   fecha_creacion: string; tecnico_asignado?: string;
 }
-interface Task { id: number; google_task_id: string; task_title: string; incidencia_titulo: string; incidencia_estado: string; incidencia_id: number }
+interface Task { id: number; google_task_id: string; task_title: string; task_due?: string; created_at: string; incidencia_titulo: string; incidencia_estado: string; incidencia_id: number }
 
 const prioClass = (p: string) => ({
   alta: 'badge bg-red-100 text-red-700',
@@ -192,6 +192,10 @@ export default function ClienteDetalle() {
                   {tasks.map(t => (
                     <li key={t.id} className="bg-blue-50 rounded-lg px-2 py-1.5">
                       <p className="text-xs font-medium text-gray-800 truncate">{t.task_title}</p>
+                      <div className="flex gap-2 flex-wrap mt-0.5">
+                        <span className="text-[10px] text-gray-400">Vinculada {new Date(t.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                        {t.task_due && <span className="text-[10px] text-orange-500 font-medium">Vence {new Date(t.task_due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
+                      </div>
                       <p className="text-[10px] text-gray-500 truncate mt-0.5">
                         #{t.incidencia_id} · {t.incidencia_titulo} · <span className={t.incidencia_estado === 'cerrado' ? 'text-gray-400' : t.incidencia_estado === 'en_progreso' ? 'text-orange-500' : 'text-blue-500'}>{t.incidencia_estado.replace('_', ' ')}</span>
                       </p>

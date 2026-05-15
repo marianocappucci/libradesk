@@ -4,7 +4,7 @@ import { getCalendarEvents, getTasks, getIncidencias } from '../services/api';
 import { CalendarDays, CheckSquare, AlertCircle, Clock, ArrowRight } from 'lucide-react';
 
 interface CalEvent { id: string; summary: string; start: { dateTime?: string; date?: string } }
-interface Task { id: string; title: string; due?: string; status: string }
+interface Task { id: string; title: string; due?: string; updated?: string; status: string }
 interface Incidencia { id: number; titulo: string; cliente_nombre: string; prioridad: string; estado: string }
 
 function PriorityBadge({ p }: { p: string }) {
@@ -101,7 +101,10 @@ export default function Dashboard() {
                     <span className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-2 shrink-0" />
                     <div className="min-w-0">
                       <p className="text-sm text-gray-800 truncate">{t.title}</p>
-                      {t.due && <p className="text-xs text-gray-400">{new Date(t.due).toLocaleDateString('es-AR')}</p>}
+                      <div className="flex gap-2 flex-wrap mt-0.5">
+                        {t.updated && <p className="text-xs text-gray-400">Creada {new Date(t.updated).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>}
+                        {t.due && <p className="text-xs text-orange-500 font-medium">Vence {new Date(t.due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>}
+                      </div>
                     </div>
                   </Link>
                 </li>

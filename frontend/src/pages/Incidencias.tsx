@@ -12,7 +12,7 @@ interface Incidencia {
 interface Actividad { id: number; descripcion: string; usuario?: string; fecha: string }
 interface Cliente { id: number; nombre: string; empresa?: string; email?: string; telefono?: string }
 interface Task { id: string; title?: string; status?: string; due?: string; notes?: string }
-interface TareaVinculada { id: number; google_task_id: string; task_title: string; created_at: string }
+interface TareaVinculada { id: number; google_task_id: string; task_title: string; created_at: string; task_due?: string }
 
 const PRIORIDADES = ['alta', 'media', 'baja'];
 const ESTADOS = ['abierto', 'en_progreso', 'cerrado'];
@@ -206,7 +206,7 @@ export default function Incidencias() {
     if (!selected || !taskSeleccionada) return;
     const task = tasks.find(t => t.id === taskSeleccionada);
     if (!task || !task.title) return;
-    await vincularTarea(selected.id, { google_task_id: task.id, task_title: task.title });
+    await vincularTarea(selected.id, { google_task_id: task.id, task_title: task.title, task_due: task.due || null });
     setTaskSeleccionada('');
     setShowVincular(false);
     loadTareasVinculadas(selected.id);
@@ -340,7 +340,10 @@ export default function Incidencias() {
                         <div key={t.id} className="bg-gray-50 rounded-lg p-3 text-sm">
                           <p className="font-medium text-gray-800">{t.title}</p>
                           {t.notes && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{t.notes}</p>}
-                          {t.due && <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><Clock size={10} />{new Date(t.due).toLocaleDateString('es-AR')}</p>}
+                          <div className="flex gap-3 flex-wrap mt-1">
+                            {t.updated && <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={9} />Creada {new Date(t.updated).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>}
+                            {t.due && <p className="text-xs text-orange-500 font-medium flex items-center gap-1"><Clock size={9} />Vence {new Date(t.due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -425,8 +428,14 @@ export default function Incidencias() {
 
                 <div className="space-y-1 mb-1.5">
                   {tareasVinculadas.map(tv => (
-                    <div key={tv.id} className="flex items-center gap-2 bg-blue-50 rounded px-2 py-1 text-xs group">
-                      <span className="flex-1 text-gray-800 truncate">{tv.task_title}</span>
+                    <div key={tv.id} className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5 text-xs group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-800 truncate">{tv.task_title}</p>
+                        <div className="flex gap-2 flex-wrap mt-0.5">
+                          <span className="text-gray-400">Vinculada {new Date(tv.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                          {tv.task_due && <span className="text-orange-500 font-medium">Vence {new Date(tv.task_due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
+                        </div>
+                      </div>
                       <button
                         onClick={() => handleDesvincularTarea(tv.id)}
                         className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getTasks, createTask, updateTask, deleteTask } from '../services/api';
 import { Plus, CheckCircle2, Circle, Trash2, Calendar, Pencil, X, Check } from 'lucide-react';
 
-interface Task { id: string; title: string; notes?: string; due?: string; status: string }
+interface Task { id: string; title: string; notes?: string; due?: string; updated?: string; status: string }
 interface EditForm { title: string; notes: string; due: string }
 
 const emptyForm = { title: '', notes: '', due: '' };
@@ -147,12 +147,20 @@ export default function Tareas() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900">{task.title}</p>
           {task.notes && <p className="text-xs text-gray-500 mt-0.5">{task.notes}</p>}
-          {task.due && (
-            <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-              <Calendar size={10} />
-              {new Date(task.due).toLocaleDateString('es-AR')}
-            </p>
-          )}
+          <div className="flex gap-3 flex-wrap mt-0.5">
+            {task.updated && (
+              <p className="text-xs text-gray-400 flex items-center gap-1">
+                <Calendar size={10} />
+                Creada {new Date(task.updated).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+              </p>
+            )}
+            {task.due && (
+              <p className="text-xs text-orange-500 font-medium flex items-center gap-1">
+                <Calendar size={10} />
+                Vence {new Date(task.due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button
