@@ -13,6 +13,7 @@ interface Cliente {
 interface Incidencia {
   id: number; titulo: string; estado: string; prioridad: string;
   fecha_creacion: string; tecnico_asignado?: string;
+  actividades_count?: number; tareas_count?: number;
 }
 interface Task { id: number; google_task_id: string; task_title: string; task_due?: string; created_at: string; incidencia_titulo: string; incidencia_estado: string; incidencia_id: number }
 
@@ -161,9 +162,11 @@ export default function ClienteDetalle() {
                     <span className={estadoClass(i.estado)}>{i.estado.replace('_', ' ')}</span>
                     <span className="text-sm font-medium text-gray-900 truncate flex-1">{i.titulo}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5 pl-0.5">
+                  <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 pl-0.5 flex-wrap">
                     {i.tecnico_asignado && <span className="flex items-center gap-1"><User size={9} />{i.tecnico_asignado}</span>}
                     <span className="flex items-center gap-1"><Clock size={9} />{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                    {(i.actividades_count ?? 0) > 0 && <span className="flex items-center gap-0.5 text-gray-400"><User size={9} />{i.actividades_count} act.</span>}
+                    {(i.tareas_count ?? 0) > 0 && <span className="flex items-center gap-0.5 text-primary-500"><CheckSquare size={9} />{i.tareas_count} tarea{i.tareas_count !== 1 ? 's' : ''}</span>}
                   </div>
                 </button>
               ))}
