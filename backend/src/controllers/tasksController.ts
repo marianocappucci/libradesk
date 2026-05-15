@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { google } from 'googleapis';
 import { createOAuthClient } from '../utils/googleClient';
 import { OAuth2Client } from 'google-auth-library';
+import pool from '../database/connection';
 
 const LIST_NAME = 'IT Soporte';
 let cachedTaskListId: string | null = null;
@@ -62,10 +63,11 @@ export async function createTask(req: Request, res: Response) {
     const auth = getAuthClient(req);
     const tasksClient = google.tasks({ version: 'v1', auth });
     const listId = await getOrCreateITSoporteList(auth);
-    const { title, notes, due } = req.body;
+    const { title, notes, due, parent } = req.body;
 
     const result = await tasksClient.tasks.insert({
       tasklist: listId,
+      ...(parent ? { parent } : {}),
       requestBody: { title, notes, due },
     });
 
@@ -103,8 +105,50 @@ export async function deleteTask(req: Request, res: Response) {
     const { id } = req.params;
 
     await tasksClient.tasks.delete({ tasklist: listId, task: id });
+    // Limpiar adjuntos locales
+    await pool.query('DELETE FROM task_attachments WHERE google_task_id=$1', [id]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Error al eliminar tarea' });
+  }
+}
+
+// --- Adjuntos ---
+
+export async function getAttachments(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const r = await pool.query(
+      'SELECT * FROM task_attachments WHERE google_task_id=$1 ORDER BY created_at',
+      [id]
+    );
+    res.json(r.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener adjuntos' });
+  }
+}
+
+export async function addAttachment(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { nombre, url } = req.body;
+    if (!nombre || !url) return res.status(400).json({ error: 'nombre y url son requeridos' });
+    const r = await pool.query(
+      'INSERT INTO task_attachments (google_task_id, nombre, url) VALUES ($1,$2,$3) RETURNING *',
+      [id, nombre, url]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al agregar adjunto' });
+  }
+}
+
+export async function deleteAttachment(req: Request, res: Response) {
+  try {
+    const { attachId } = req.params;
+    await pool.query('DELETE FROM task_attachments WHERE id=$1', [attachId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar adjunto' });
   }
 }

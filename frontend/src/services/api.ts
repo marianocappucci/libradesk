@@ -53,5 +53,8 @@ export const getTasks = (params?: object) => api.get('/tasks', { params });
 export const createTask = (data: object) => api.post('/tasks', data);
 export const updateTask = (id: string, data: object) => api.put(`/tasks/${id}`, data);
 export const deleteTask = (id: string) => api.delete(`/tasks/${id}`);
+export const getAttachments = (taskId: string) => api.get(`/tasks/${taskId}/attachments`);
+export const addAttachment = (taskId: string, data: object) => api.post(`/tasks/${taskId}/attachments`, data);
+export const deleteAttachment = (taskId: string, attachId: number) => api.delete(`/tasks/${taskId}/attachments/${attachId}`);
 
 export default api;
