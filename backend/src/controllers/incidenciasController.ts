@@ -104,3 +104,30 @@ export async function addActividad(req: Request, res: Response) {
     res.status(500).json({ error: 'Error al agregar actividad' });
   }
 }
+
+export async function updateActividad(req: Request, res: Response) {
+  try {
+    const { actividadId } = req.params;
+    const { descripcion, usuario, fecha } = req.body;
+    if (!descripcion) return res.status(400).json({ error: 'La descripcion es requerida' });
+
+    const result = await pool.query(
+      'UPDATE actividades_incidencia SET descripcion=$1, usuario=$2, fecha=$3 WHERE id=$4 RETURNING *',
+      [descripcion, usuario || 'Técnico', fecha ? new Date(fecha) : new Date(), actividadId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Actividad no encontrada' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar actividad' });
+  }
+}
+
+export async function deleteActividad(req: Request, res: Response) {
+  try {
+    const { actividadId } = req.params;
+    await pool.query('DELETE FROM actividades_incidencia WHERE id=$1', [actividadId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar actividad' });
+  }
+}

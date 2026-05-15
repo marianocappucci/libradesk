@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, getClientes } from '../services/api';
-import { Plus, ChevronRight, Clock, User } from 'lucide-react';
+import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes } from '../services/api';
+import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X } from 'lucide-react';
 
 interface Incidencia {
   id: number; titulo: string; descripcion?: string; estado: string; prioridad: string;
@@ -37,6 +37,8 @@ export default function Incidencias() {
   const [filtroEstado, setFiltroEstado] = useState('');
   const [nuevaActividad, setNuevaActividad] = useState('');
   const [fechaActividad, setFechaActividad] = useState(() => new Date().toISOString().slice(0, 16));
+  const [editingActividad, setEditingActividad] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ descripcion: '', fecha: '' });
 
   const load = async () => {
     const params = filtroEstado ? { estado: filtroEstado } : {};
@@ -71,6 +73,33 @@ export default function Incidencias() {
     const r = await getIncidencia(selected.id);
     setSelected(r.data);
     load();
+  };
+
+  const startEditActividad = (a: Actividad) => {
+    setEditingActividad(a.id);
+    setEditForm({
+      descripcion: a.descripcion,
+      fecha: new Date(a.fecha).toISOString().slice(0, 16),
+    });
+  };
+
+  const handleUpdateActividad = async (a: Actividad) => {
+    if (!selected || !editForm.descripcion.trim()) return;
+    await updateActividad(selected.id, a.id, {
+      descripcion: editForm.descripcion,
+      usuario: a.usuario,
+      fecha: new Date(editForm.fecha).toISOString(),
+    });
+    setEditingActividad(null);
+    const r = await getIncidencia(selected.id);
+    setSelected(r.data);
+  };
+
+  const handleDeleteActividad = async (a: Actividad) => {
+    if (!selected || !confirm('¿Eliminar esta actividad?')) return;
+    await deleteActividad(selected.id, a.id);
+    const r = await getIncidencia(selected.id);
+    setSelected(r.data);
   };
 
   return (
@@ -141,13 +170,43 @@ export default function Incidencias() {
 
           <div className="border-t pt-4">
             <h4 className="text-sm font-medium text-gray-700 mb-3">Actividades</h4>
-            <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+            <div className="space-y-2 max-h-64 overflow-y-auto mb-3">
               {(selected.actividades || []).map(a => (
-                <div key={a.id} className="bg-gray-50 rounded p-2 text-xs">
-                  <p className="text-gray-800">{a.descripcion}</p>
-                  <p className="text-gray-400 flex items-center gap-1 mt-1">
-                    <User size={10} />{a.usuario} · <Clock size={10} />{new Date(a.fecha).toLocaleString('es-AR')}
-                  </p>
+                <div key={a.id} className="bg-gray-50 rounded p-2 text-xs group">
+                  {editingActividad === a.id ? (
+                    <div className="space-y-1.5">
+                      <textarea
+                        className="input text-xs w-full resize-none"
+                        rows={2}
+                        value={editForm.descripcion}
+                        onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))}
+                        autoFocus
+                      />
+                      <input
+                        type="datetime-local"
+                        className="input text-xs w-full"
+                        value={editForm.fecha}
+                        onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))}
+                      />
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => setEditingActividad(null)} className="p-1 text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                        <button onClick={() => handleUpdateActividad(a)} className="p-1 text-green-600 hover:text-green-700"><Check size={12} /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-1">
+                      <div className="flex-1">
+                        <p className="text-gray-800">{a.descripcion}</p>
+                        <p className="text-gray-400 flex items-center gap-1 mt-1">
+                          <User size={10} />{a.usuario} · <Clock size={10} />{new Date(a.fecha).toLocaleString('es-AR')}
+                        </p>
+                      </div>
+                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button onClick={() => startEditActividad(a)} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={11} /></button>
+                        <button onClick={() => handleDeleteActividad(a)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={11} /></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {!selected.actividades?.length && <p className="text-xs text-gray-400">Sin actividades</p>}

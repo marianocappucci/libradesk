@@ -31,6 +31,10 @@ export const createIncidencia = (data: object) => api.post('/incidencias', data)
 export const updateIncidencia = (id: number, data: object) => api.put(`/incidencias/${id}`, data);
 export const addActividad = (id: number, data: object) =>
   api.post(`/incidencias/${id}/actividades`, data);
+export const updateActividad = (id: number, actividadId: number, data: object) =>
+  api.put(`/incidencias/${id}/actividades/${actividadId}`, data);
+export const deleteActividad = (id: number, actividadId: number) =>
+  api.delete(`/incidencias/${id}/actividades/${actividadId}`);
 
 // --- Calendar ---
 export const getCalendarEvents = (params?: object) => api.get('/calendar/events', { params });
