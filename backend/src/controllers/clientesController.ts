@@ -132,3 +132,38 @@ export async function deleteCliente(req: Request, res: Response) {
     res.status(500).json({ error: 'Error al eliminar cliente' });
   }
 }
+
+export async function syncAllContactos(req: Request, res: Response) {
+  try {
+    const clientes = await pool.query(
+      'SELECT id, nombre, empresa, email, telefono, ciudad, google_contact_id FROM clientes WHERE activo = true'
+    );
+
+    const auth = getAuthClient(req);
+    const results = { ok: 0, error: 0, total: clientes.rows.length };
+
+    for (const c of clientes.rows) {
+      const resourceName = await syncContacto(auth, {
+        nombre: c.nombre,
+        empresa: c.empresa,
+        email: c.email,
+        telefono: c.telefono,
+        ciudad: c.ciudad,
+        googleContactId: c.google_contact_id,
+      });
+
+      if (resourceName) {
+        if (!c.google_contact_id) {
+          await pool.query('UPDATE clientes SET google_contact_id = $1 WHERE id = $2', [resourceName, c.id]);
+        }
+        results.ok++;
+      } else {
+        results.error++;
+      }
+    }
+
+    res.json({ success: true, ...results });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al sincronizar contactos' });
+  }
+}

@@ -25,6 +25,14 @@ async function getOrCreateITSoporteGroup(auth: OAuth2Client): Promise<string> {
   return cachedGroupResourceName;
 }
 
+async function addToGroup(auth: OAuth2Client, groupResourceName: string, contactResourceName: string): Promise<void> {
+  const people = google.people({ version: 'v1', auth });
+  await people.contactGroups.members.modify({
+    resourceName: groupResourceName,
+    requestBody: { resourceNamesToAdd: [contactResourceName] },
+  });
+}
+
 export interface ClienteSyncData {
   nombre: string;
   empresa?: string;
@@ -34,14 +42,13 @@ export interface ClienteSyncData {
   googleContactId?: string;
 }
 
-function buildContactBody(cliente: ClienteSyncData, groupResourceName: string) {
+function buildContactBody(cliente: ClienteSyncData) {
   return {
     names: [{ givenName: cliente.nombre }],
     ...(cliente.empresa && { organizations: [{ name: cliente.empresa }] }),
     ...(cliente.email && { emailAddresses: [{ value: cliente.email }] }),
     ...(cliente.telefono && { phoneNumbers: [{ value: cliente.telefono }] }),
     ...(cliente.ciudad && { addresses: [{ city: cliente.ciudad }] }),
-    memberships: [{ contactGroupMembership: { contactGroupResourceName: groupResourceName } }],
   };
 }
 
@@ -51,6 +58,7 @@ export async function syncContacto(auth: OAuth2Client, cliente: ClienteSyncData)
     const groupResourceName = await getOrCreateITSoporteGroup(auth);
 
     if (cliente.googleContactId) {
+      // Actualizar contacto existente
       const current = await people.people.get({
         resourceName: cliente.googleContactId,
         personFields: 'names,emailAddresses,phoneNumbers,organizations,addresses,memberships',
@@ -61,20 +69,38 @@ export async function syncContacto(auth: OAuth2Client, cliente: ClienteSyncData)
         updatePersonFields: 'names,emailAddresses,phoneNumbers,organizations,addresses',
         requestBody: {
           etag: current.data.etag,
-          ...buildContactBody(cliente, groupResourceName),
-          memberships: undefined,
+          ...buildContactBody(cliente),
         },
       });
 
+      // Verificar que el contacto siga en el grupo y re-agregarlo si no está
+      const memberships = current.data.memberships || [];
+      const inGroup = memberships.some(
+        m => m.contactGroupMembership?.contactGroupResourceName === groupResourceName
+      );
+      if (!inGroup) {
+        await addToGroup(auth, groupResourceName, cliente.googleContactId);
+        console.log(`✓ Contacto re-agregado al grupo IT Soporte: ${cliente.nombre}`);
+      }
+
       return cliente.googleContactId;
     } else {
+      // Crear nuevo contacto
       const result = await people.people.createContact({
-        requestBody: buildContactBody(cliente, groupResourceName),
+        requestBody: buildContactBody(cliente),
       });
-      return result.data.resourceName || null;
+
+      const resourceName = result.data.resourceName;
+      if (!resourceName) return null;
+
+      // Agregar al grupo "IT Soporte" via members.modify (la forma correcta)
+      await addToGroup(auth, groupResourceName, resourceName);
+      console.log(`✓ Contacto creado y agregado a IT Soporte: ${cliente.nombre}`);
+
+      return resourceName;
     }
   } catch (error) {
-    console.error('Error sincronizando contacto con Google:', error);
+    console.error(`✗ Error sincronizando contacto "${cliente.nombre}":`, error);
     return null;
   }
 }
@@ -84,6 +110,6 @@ export async function deleteContacto(auth: OAuth2Client, resourceName: string): 
     const people = google.people({ version: 'v1', auth });
     await people.people.deleteContact({ resourceName });
   } catch (error) {
-    console.error('Error eliminando contacto de Google:', error);
+    console.error('✗ Error eliminando contacto de Google:', error);
   }
 }
