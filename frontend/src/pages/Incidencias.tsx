@@ -159,6 +159,7 @@ export default function Incidencias() {
                   </div>
                   <h3 className="font-medium text-gray-900 truncate">{i.titulo}</h3>
                   <p className="text-sm text-gray-500">{i.cliente_nombre} {i.cliente_empresa ? `· ${i.cliente_empresa}` : ''}</p>
+                  <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Clock size={10} />{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                 </div>
                 <ChevronRight size={16} className="text-gray-400 shrink-0 mt-1" />
               </div>
@@ -217,8 +218,9 @@ export default function Incidencias() {
                 <span className={estadoClass(selected.estado)}>{selected.estado}</span>
               </div>
               {selected.tecnico_asignado && (
-                <p className="text-xs text-gray-400 flex items-center gap-1 mb-3"><User size={11} />{selected.tecnico_asignado}</p>
+                <p className="text-xs text-gray-400 flex items-center gap-1"><User size={11} />{selected.tecnico_asignado}</p>
               )}
+              <p className="text-xs text-gray-400 flex items-center gap-1 mb-3"><Clock size={11} />Abierta el {new Date(selected.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </>
           )}
 
