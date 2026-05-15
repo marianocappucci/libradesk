@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getIncidencias, createIncidencia, updateIncidencia, addActividad, getClientes } from '../services/api';
+import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, getClientes } from '../services/api';
 import { Plus, ChevronRight, Clock, User } from 'lucide-react';
 
 interface Incidencia {
@@ -66,9 +66,8 @@ export default function Incidencias() {
     if (!selected || !nuevaActividad.trim()) return;
     await addActividad(selected.id, { descripcion: nuevaActividad, usuario: 'Técnico' });
     setNuevaActividad('');
-    const r = await getIncidencias({});
-    const updated = r.data.find((i: Incidencia) => i.id === selected.id);
-    if (updated) setSelected(updated);
+    const r = await getIncidencia(selected.id);
+    setSelected(r.data);
     load();
   };
 
@@ -96,7 +95,7 @@ export default function Incidencias() {
           {incidencias.map(i => (
             <div
               key={i.id}
-              onClick={() => setSelected(i)}
+              onClick={() => getIncidencia(i.id).then(r => setSelected(r.data))}
               className={`card cursor-pointer hover:shadow-md transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500' : ''}`}
             >
               <div className="flex items-start justify-between gap-3">
