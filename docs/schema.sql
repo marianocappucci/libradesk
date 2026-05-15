@@ -57,6 +57,15 @@ CREATE TABLE actividades_incidencia (
   usuario VARCHAR(100)
 );
 
+-- Tabla de sesiones (connect-pg-simple)
+CREATE TABLE "session" (
+  "sid"    varchar      NOT NULL COLLATE "default",
+  "sess"   json         NOT NULL,
+  "expire" timestamp(6) NOT NULL,
+  CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+);
+CREATE INDEX "IDX_session_expire" ON "session" ("expire");
+
 -- Índices para búsquedas rápidas
 CREATE INDEX idx_equipos_cliente ON equipos(cliente_id);
 CREATE INDEX idx_incidencias_cliente ON incidencias(cliente_id);

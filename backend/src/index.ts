@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import dotenv from 'dotenv';
 import path from 'path';
-import { testConnection } from './database/connection';
+import pool, { testConnection } from './database/connection';
 import authRoutes from './routes/auth';
 import clientesRoutes from './routes/clientes';
 import equiposRoutes from './routes/equipos';
@@ -17,6 +18,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
 
+// Necesario para que Express confíe en los headers del reverse proxy (NPM)
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
@@ -24,13 +28,22 @@ app.use(cors({
 
 app.use(express.json());
 
+const PgSession = connectPgSimple(session);
+
 app.use(session({
+  store: new PgSession({
+    pool,
+    tableName: 'session',
+    // Limpia sesiones expiradas cada hora
+    pruneSessionInterval: 60 * 60,
+  }),
   secret: process.env.SESSION_SECRET || 'soporte-it-secret-2024',
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: false,
     httpOnly: true,
+    sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   },
 }));
