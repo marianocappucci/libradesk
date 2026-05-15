@@ -39,6 +39,8 @@ export default function Incidencias() {
   const [fechaActividad, setFechaActividad] = useState(() => new Date().toISOString().slice(0, 16));
   const [editingActividad, setEditingActividad] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ descripcion: '', fecha: '' });
+  const [editingIncidencia, setEditingIncidencia] = useState(false);
+  const [incForm, setIncForm] = useState({ titulo: '', descripcion: '', prioridad: '', tecnico_asignado: '' });
 
   const load = async () => {
     const params = filtroEstado ? { estado: filtroEstado } : {};
@@ -70,6 +72,26 @@ export default function Incidencias() {
     await addActividad(selected.id, { descripcion: nuevaActividad, usuario: 'Técnico', fecha: new Date(fechaActividad).toISOString() });
     setNuevaActividad('');
     setFechaActividad(new Date().toISOString().slice(0, 16));
+    const r = await getIncidencia(selected.id);
+    setSelected(r.data);
+    load();
+  };
+
+  const startEditIncidencia = () => {
+    if (!selected) return;
+    setIncForm({
+      titulo: selected.titulo,
+      descripcion: selected.descripcion || '',
+      prioridad: selected.prioridad,
+      tecnico_asignado: selected.tecnico_asignado || '',
+    });
+    setEditingIncidencia(true);
+  };
+
+  const handleUpdateIncidencia = async () => {
+    if (!selected || !incForm.titulo.trim()) return;
+    await updateIncidencia(selected.id, { ...selected, ...incForm });
+    setEditingIncidencia(false);
     const r = await getIncidencia(selected.id);
     setSelected(r.data);
     load();
@@ -151,14 +173,54 @@ export default function Incidencias() {
         <div className="w-96 card h-fit sticky top-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">Detalle #{selected.id}</h2>
-            <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            <div className="flex items-center gap-2">
+              {!editingIncidencia && (
+                <button onClick={startEditIncidencia} className="text-gray-400 hover:text-primary-600"><Pencil size={14} /></button>
+              )}
+              <button onClick={() => { setSelected(null); setEditingIncidencia(false); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
           </div>
-          <h3 className="font-medium text-gray-800 mb-1">{selected.titulo}</h3>
-          <p className="text-sm text-gray-500 mb-3">{selected.descripcion}</p>
-          <div className="flex gap-2 mb-4">
-            <span className={prioClass(selected.prioridad)}>{selected.prioridad}</span>
-            <span className={estadoClass(selected.estado)}>{selected.estado}</span>
-          </div>
+
+          {editingIncidencia ? (
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="label">Título *</label>
+                <input className="input" value={incForm.titulo} onChange={e => setIncForm(f => ({ ...f, titulo: e.target.value }))} autoFocus />
+              </div>
+              <div>
+                <label className="label">Descripción</label>
+                <textarea className="input resize-none" rows={3} value={incForm.descripcion} onChange={e => setIncForm(f => ({ ...f, descripcion: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label">Prioridad</label>
+                  <select className="input" value={incForm.prioridad} onChange={e => setIncForm(f => ({ ...f, prioridad: e.target.value }))}>
+                    {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Técnico</label>
+                  <input className="input" value={incForm.tecnico_asignado} onChange={e => setIncForm(f => ({ ...f, tecnico_asignado: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setEditingIncidencia(false)} className="btn-secondary text-sm py-1"><X size={14} /> Cancelar</button>
+                <button onClick={handleUpdateIncidencia} className="btn-primary text-sm py-1"><Check size={14} /> Guardar</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h3 className="font-medium text-gray-800 mb-1">{selected.titulo}</h3>
+              <p className="text-sm text-gray-500 mb-3">{selected.descripcion}</p>
+              <div className="flex gap-2 mb-1">
+                <span className={prioClass(selected.prioridad)}>{selected.prioridad}</span>
+                <span className={estadoClass(selected.estado)}>{selected.estado}</span>
+              </div>
+              {selected.tecnico_asignado && (
+                <p className="text-xs text-gray-400 flex items-center gap-1 mb-3"><User size={11} />{selected.tecnico_asignado}</p>
+              )}
+            </>
+          )}
 
           <div className="flex gap-1 mb-4 flex-wrap">
             {ESTADOS.filter(e => e !== selected.estado).map(e => (
