@@ -243,24 +243,24 @@ export default function Incidencias() {
           </div>
         )}
 
-        <div className="space-y-3" onClick={() => setShowClienteList(false)}>
+        <div className="space-y-1.5" onClick={() => setShowClienteList(false)}>
           {incidencias.map(i => (
             <div
               key={i.id}
               onClick={() => getIncidencia(i.id).then(r => setSelected(r.data))}
-              className={`card cursor-pointer hover:shadow-md transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500' : ''}`}
+              className={`bg-white border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500 border-primary-300' : ''}`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={prioClass(i.prioridad)}>{i.prioridad}</span>
-                    <span className={estadoClass(i.estado)}>{i.estado.replace('_', ' ')}</span>
-                  </div>
-                  <h3 className="font-medium text-gray-900 truncate">{i.titulo}</h3>
-                  {!filtroCliente && <p className="text-sm text-gray-500">{i.cliente_nombre}{i.cliente_empresa ? ` · ${i.cliente_empresa}` : ''}</p>}
-                  <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Clock size={10} />{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
-                </div>
-                <ChevronRight size={16} className="text-gray-400 shrink-0 mt-1" />
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={prioClass(i.prioridad)}>{i.prioridad}</span>
+                <span className={estadoClass(i.estado)}>{i.estado.replace('_', ' ')}</span>
+                <span className="font-medium text-gray-900 truncate flex-1 text-sm">{i.titulo}</span>
+                <ChevronRight size={13} className="text-gray-400 shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 pl-0.5">
+                {!filtroCliente && <span className="truncate max-w-[160px]">{i.cliente_nombre}{i.cliente_empresa ? ` · ${i.cliente_empresa}` : ''}</span>}
+                {!filtroCliente && <span className="text-gray-300">·</span>}
+                <Clock size={9} className="shrink-0" />
+                <span className="shrink-0">{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
               </div>
             </div>
           ))}
@@ -301,105 +301,116 @@ export default function Incidencias() {
 
           {/* Detalle de incidencia */}
           {selected && (
-            <div className="card h-fit sticky top-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">Detalle #{selected.id}</h2>
-                <div className="flex items-center gap-2">
-                  {!editingIncidencia && (
-                    <button onClick={startEditIncidencia} className="text-gray-400 hover:text-primary-600"><Pencil size={14} /></button>
+            <div className="card !p-4 h-fit sticky top-8 max-h-[calc(100vh-6rem)] overflow-y-auto">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex-1 min-w-0">
+                  {editingIncidencia ? (
+                    <input className="input text-sm font-semibold" value={incForm.titulo} onChange={e => setIncForm(f => ({ ...f, titulo: e.target.value }))} autoFocus />
+                  ) : (
+                    <h3 className="font-semibold text-gray-900 text-sm leading-snug">{selected.titulo}</h3>
                   )}
-                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {editingIncidencia ? (
+                    <>
+                      <button onClick={() => setEditingIncidencia(false)} className="p-1 text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                      <button onClick={handleUpdateIncidencia} className="p-1 text-green-600 hover:text-green-700"><Check size={14} /></button>
+                    </>
+                  ) : (
+                    <button onClick={startEditIncidencia} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={13} /></button>
+                  )}
+                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
                 </div>
               </div>
 
+              {/* Meta compacta */}
               {editingIncidencia ? (
-                <div className="space-y-3 mb-4">
-                  <div>
-                    <label className="label">Título *</label>
-                    <input className="input" value={incForm.titulo} onChange={e => setIncForm(f => ({ ...f, titulo: e.target.value }))} autoFocus />
-                  </div>
-                  <div>
-                    <label className="label">Descripción</label>
-                    <textarea className="input resize-none" rows={3} value={incForm.descripcion} onChange={e => setIncForm(f => ({ ...f, descripcion: e.target.value }))} />
-                  </div>
+                <div className="space-y-2 mb-3">
+                  <textarea className="input text-xs resize-none" rows={2} placeholder="Descripción..." value={incForm.descripcion} onChange={e => setIncForm(f => ({ ...f, descripcion: e.target.value }))} />
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="label">Prioridad</label>
-                      <select className="input" value={incForm.prioridad} onChange={e => setIncForm(f => ({ ...f, prioridad: e.target.value }))}>
-                        {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">Técnico</label>
-                      <input className="input" value={incForm.tecnico_asignado} onChange={e => setIncForm(f => ({ ...f, tecnico_asignado: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button onClick={() => setEditingIncidencia(false)} className="btn-secondary text-sm py-1"><X size={14} /> Cancelar</button>
-                    <button onClick={handleUpdateIncidencia} className="btn-primary text-sm py-1"><Check size={14} /> Guardar</button>
+                    <select className="input text-xs" value={incForm.prioridad} onChange={e => setIncForm(f => ({ ...f, prioridad: e.target.value }))}>
+                      {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <input className="input text-xs" placeholder="Técnico..." value={incForm.tecnico_asignado} onChange={e => setIncForm(f => ({ ...f, tecnico_asignado: e.target.value }))} />
                   </div>
                 </div>
               ) : (
                 <>
-                  <h3 className="font-medium text-gray-800 mb-1">{selected.titulo}</h3>
-                  <p className="text-sm text-gray-500 mb-3">{selected.descripcion}</p>
-                  <div className="flex gap-2 mb-1">
+                  {selected.descripcion && <p className="text-xs text-gray-500 mb-2 leading-relaxed">{selected.descripcion}</p>}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 mb-2">
                     <span className={prioClass(selected.prioridad)}>{selected.prioridad}</span>
-                    <span className={estadoClass(selected.estado)}>{selected.estado}</span>
+                    <span className={estadoClass(selected.estado)}>{selected.estado.replace('_', ' ')}</span>
+                    {selected.tecnico_asignado && <span className="flex items-center gap-1 text-gray-400"><User size={10} />{selected.tecnico_asignado}</span>}
+                    <span className="flex items-center gap-1 text-gray-400"><Clock size={10} />{new Date(selected.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                  {selected.tecnico_asignado && (
-                    <p className="text-xs text-gray-400 flex items-center gap-1"><User size={11} />{selected.tecnico_asignado}</p>
-                  )}
-                  <p className="text-xs text-gray-400 flex items-center gap-1 mb-3"><Clock size={11} />Abierta el {new Date(selected.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                 </>
               )}
 
-              <div className="flex gap-1 mb-4 flex-wrap">
+              {/* Cambio de estado */}
+              <div className="flex gap-1 mb-3 flex-wrap">
                 {ESTADOS.filter(e => e !== selected.estado).map(e => (
-                  <button key={e} onClick={() => handleEstado(selected, e)} className="btn-secondary text-xs py-1">
+                  <button key={e} onClick={() => handleEstado(selected, e)} className="btn-secondary text-xs !py-0.5 !px-2">
                     → {e.replace('_', ' ')}
                   </button>
                 ))}
               </div>
 
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Actividades</h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto mb-3">
-                  {(selected.actividades || []).map(a => (
-                    <div key={a.id} className="bg-gray-50 rounded p-2 text-xs group">
-                      {editingActividad === a.id ? (
-                        <div className="space-y-1.5">
-                          <textarea className="input text-xs w-full resize-none" rows={2} value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))} autoFocus />
-                          <input type="datetime-local" className="input text-xs w-full" value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))} />
-                          <div className="flex gap-1 justify-end">
-                            <button onClick={() => setEditingActividad(null)} className="p-1 text-gray-400 hover:text-gray-600"><X size={12} /></button>
-                            <button onClick={() => handleUpdateActividad(a)} className="p-1 text-green-600 hover:text-green-700"><Check size={12} /></button>
+              {/* Actividades */}
+              <div className="border-t pt-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Actividades</h4>
+
+                <div className="space-y-0 mb-3 max-h-72 overflow-y-auto">
+                  {(selected.actividades || []).length === 0 && (
+                    <p className="text-xs text-gray-400 py-1">Sin actividades</p>
+                  )}
+                  {(selected.actividades || []).map((a, idx) => (
+                    <div key={a.id} className="flex gap-2 group relative">
+                      {/* Timeline line */}
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className="w-2 h-2 rounded-full bg-primary-400 mt-1 shrink-0" />
+                        {idx < (selected.actividades!.length - 1) && <div className="w-px flex-1 bg-gray-200 my-0.5" />}
+                      </div>
+                      <div className="flex-1 pb-2 min-w-0">
+                        {editingActividad === a.id ? (
+                          <div className="space-y-1.5">
+                            <textarea className="input text-xs w-full resize-none" rows={2} value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))} autoFocus />
+                            <input type="datetime-local" className="input text-xs w-full" value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))} />
+                            <div className="flex gap-1">
+                              <button onClick={() => setEditingActividad(null)} className="p-1 text-gray-400 hover:text-gray-600"><X size={11} /></button>
+                              <button onClick={() => handleUpdateActividad(a)} className="p-1 text-green-600 hover:text-green-700"><Check size={11} /></button>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-1">
-                          <div className="flex-1">
-                            <p className="text-gray-800">{a.descripcion}</p>
-                            <p className="text-gray-400 flex items-center gap-1 mt-1">
-                              <User size={10} />{a.usuario} · <Clock size={10} />{new Date(a.fecha).toLocaleString('es-AR')}
-                            </p>
-                          </div>
-                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button onClick={() => startEditActividad(a)} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={11} /></button>
-                            <button onClick={() => handleDeleteActividad(a)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={11} /></button>
-                          </div>
-                        </div>
-                      )}
+                        ) : (
+                          <>
+                            <p className="text-xs text-gray-800 leading-snug">{a.descripcion}</p>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <p className="text-[10px] text-gray-400">{a.usuario} · {new Date(a.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => startEditActividad(a)} className="p-0.5 text-gray-400 hover:text-primary-600"><Pencil size={10} /></button>
+                                <button onClick={() => handleDeleteActividad(a)} className="p-0.5 text-gray-400 hover:text-red-600"><Trash2 size={10} /></button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
-                  {!selected.actividades?.length && <p className="text-xs text-gray-400">Sin actividades</p>}
                 </div>
-                <div className="space-y-2">
-                  <input className="input text-sm w-full" placeholder="Descripción de la actividad..." value={nuevaActividad} onChange={e => setNuevaActividad(e.target.value)} />
-                  <div className="flex gap-2">
-                    <input type="datetime-local" className="input text-sm flex-1" value={fechaActividad} onChange={e => setFechaActividad(e.target.value)} />
-                    <button onClick={handleAddActividad} className="btn-primary py-1 px-3 text-sm">+</button>
+
+                {/* Nueva actividad */}
+                <div className="flex gap-1.5">
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      className="input text-xs"
+                      placeholder="Nueva actividad..."
+                      value={nuevaActividad}
+                      onChange={e => setNuevaActividad(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAddActividad()}
+                    />
+                    <input type="datetime-local" className="input text-xs" value={fechaActividad} onChange={e => setFechaActividad(e.target.value)} />
                   </div>
+                  <button onClick={handleAddActividad} className="btn-primary !px-2.5 !py-1 text-sm self-start"><Plus size={14} /></button>
                 </div>
               </div>
             </div>
