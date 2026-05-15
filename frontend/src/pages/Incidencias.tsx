@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks, getTareasVinculadas, vincularTarea, desvincularTarea } from '../services/api';
-import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone, Link2, Unlink } from 'lucide-react';
+import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks, createTask, getTareasVinculadas, vincularTarea, desvincularTarea } from '../services/api';
+import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone, Link2, Unlink, Calendar } from 'lucide-react';
 
 interface Incidencia {
   id: number; titulo: string; descripcion?: string; estado: string; prioridad: string;
@@ -68,6 +68,9 @@ export default function Incidencias() {
   const [tareasVinculadas, setTareasVinculadas] = useState<TareaVinculada[]>([]);
   const [showVincular, setShowVincular] = useState(false);
   const [taskSeleccionada, setTaskSeleccionada] = useState('');
+  const [showNuevaTarea, setShowNuevaTarea] = useState(false);
+  const [nuevaTareaForm, setNuevaTareaForm] = useState({ title: '', notes: '', due: '' });
+  const [savingTarea, setSavingTarea] = useState(false);
 
   const load = async () => {
     const params: Record<string, unknown> = {};
@@ -216,6 +219,24 @@ export default function Incidencias() {
     if (!selected) return;
     await desvincularTarea(selected.id, tareaId);
     loadTareasVinculadas(selected.id);
+  };
+
+  const handleCrearYVincular = async () => {
+    if (!selected || !nuevaTareaForm.title.trim()) return;
+    setSavingTarea(true);
+    try {
+      const dueIso = nuevaTareaForm.due ? new Date(nuevaTareaForm.due).toISOString() : undefined;
+      const r = await createTask({ title: nuevaTareaForm.title, notes: nuevaTareaForm.notes || undefined, due: dueIso });
+      const newTask = r.data;
+      await vincularTarea(selected.id, { google_task_id: newTask.id, task_title: newTask.title, task_due: dueIso || null });
+      // Refrescar lista de tasks disponibles también
+      getTasks({ showCompleted: false }).then(rt => setTasks(rt.data || []));
+      setNuevaTareaForm({ title: '', notes: '', due: '' });
+      setShowNuevaTarea(false);
+      loadTareasVinculadas(selected.id);
+    } finally {
+      setSavingTarea(false);
+    }
   };
 
   // Panel derecho: tareas cuando hay cliente seleccionado y no hay incidencia abierta
@@ -374,7 +395,7 @@ export default function Incidencias() {
                   ) : (
                     <button onClick={startEditIncidencia} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={13} /></button>
                   )}
-                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); setTareasVinculadas([]); setShowVincular(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
+                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); setTareasVinculadas([]); setShowVincular(false); setShowNuevaTarea(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
                 </div>
               </div>
 
@@ -413,32 +434,45 @@ export default function Incidencias() {
               {/* Tareas vinculadas */}
               <div className="border-t pt-3 mb-1">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tareas vinculadas</h4>
-                  <button
-                    onClick={() => { setShowVincular(v => !v); setTaskSeleccionada(''); }}
-                    className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5"
-                  >
-                    <Link2 size={11} /> Vincular
-                  </button>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Tareas <span className="text-gray-400 font-normal normal-case">({tareasVinculadas.length})</span>
+                  </h4>
+                  {!showNuevaTarea && !showVincular && (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => setShowNuevaTarea(true)}
+                        className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5 font-medium"
+                      >
+                        <Plus size={11} /> Nueva
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        onClick={() => { setShowVincular(true); setTaskSeleccionada(''); }}
+                        className="text-xs text-gray-500 hover:text-primary-700 flex items-center gap-0.5"
+                      >
+                        <Link2 size={11} /> Vincular existente
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {tareasVinculadas.length === 0 && !showVincular && (
-                  <p className="text-xs text-gray-400">Sin tareas vinculadas</p>
+                {/* Lista de tareas vinculadas */}
+                {tareasVinculadas.length === 0 && !showNuevaTarea && !showVincular && (
+                  <p className="text-xs text-gray-400 mb-2">Sin tareas. Creá una nueva o vinculá una existente.</p>
                 )}
-
-                <div className="space-y-1 mb-1.5">
+                <div className="space-y-1 mb-2">
                   {tareasVinculadas.map(tv => (
                     <div key={tv.id} className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5 text-xs group">
                       <div className="flex-1 min-w-0">
-                        <p className="text-gray-800 truncate">{tv.task_title}</p>
+                        <p className="text-gray-800 truncate font-medium">{tv.task_title}</p>
                         <div className="flex gap-2 flex-wrap mt-0.5">
-                          <span className="text-gray-400">Vinculada {new Date(tv.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-                          {tv.task_due && <span className="text-orange-500 font-medium">Vence {new Date(tv.task_due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
+                          <span className="text-gray-400 flex items-center gap-0.5"><Calendar size={9} />Creada {new Date(tv.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                          {tv.task_due && <span className="text-orange-500 font-medium flex items-center gap-0.5"><Calendar size={9} />Vence {new Date(tv.task_due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
                         </div>
                       </div>
                       <button
                         onClick={() => handleDesvincularTarea(tv.id)}
-                        className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                         title="Desvincular"
                       >
                         <Unlink size={11} />
@@ -447,27 +481,71 @@ export default function Incidencias() {
                   ))}
                 </div>
 
+                {/* Form: nueva tarea (crea en Google Tasks + vincula) */}
+                {showNuevaTarea && (
+                  <div className="bg-primary-50 border border-primary-100 rounded-lg p-2.5 space-y-2">
+                    <p className="text-[10px] font-semibold text-primary-600 uppercase tracking-wide">Nueva tarea · IT Soporte</p>
+                    <input
+                      className="input text-xs"
+                      placeholder="Título de la tarea *"
+                      autoFocus
+                      value={nuevaTareaForm.title}
+                      onChange={e => setNuevaTareaForm(f => ({ ...f, title: e.target.value }))}
+                      onKeyDown={e => e.key === 'Escape' && setShowNuevaTarea(false)}
+                    />
+                    <textarea
+                      className="input text-xs resize-none"
+                      rows={2}
+                      placeholder="Notas (opcional)..."
+                      value={nuevaTareaForm.notes}
+                      onChange={e => setNuevaTareaForm(f => ({ ...f, notes: e.target.value }))}
+                    />
+                    <div className="flex gap-1.5 items-center">
+                      <input
+                        type="date"
+                        className="input text-xs flex-1"
+                        value={nuevaTareaForm.due}
+                        onChange={e => setNuevaTareaForm(f => ({ ...f, due: e.target.value }))}
+                      />
+                      <button
+                        onClick={handleCrearYVincular}
+                        disabled={!nuevaTareaForm.title.trim() || savingTarea}
+                        className="btn-primary !px-2.5 !py-1 text-xs disabled:opacity-40 shrink-0"
+                      >
+                        {savingTarea ? '...' : <><Check size={12} /> Crear</>}
+                      </button>
+                      <button onClick={() => { setShowNuevaTarea(false); setNuevaTareaForm({ title: '', notes: '', due: '' }); }} className="btn-secondary !px-2 !py-1 text-xs shrink-0">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Selector: vincular tarea existente */}
                 {showVincular && (
-                  <div className="flex gap-1.5 mt-1">
-                    <select
-                      className="input text-xs flex-1"
-                      value={taskSeleccionada}
-                      onChange={e => setTaskSeleccionada(e.target.value)}
-                    >
-                      <option value="">Seleccionar tarea...</option>
-                      {tasks
-                        .filter(t => t.title && !tareasVinculadas.find(tv => tv.google_task_id === t.id))
-                        .map(t => (
-                          <option key={t.id} value={t.id}>{t.title}</option>
-                        ))
-                      }
-                    </select>
-                    <button onClick={handleVincularTarea} disabled={!taskSeleccionada} className="btn-primary !px-2 !py-1 text-xs disabled:opacity-40">
-                      <Check size={12} />
-                    </button>
-                    <button onClick={() => setShowVincular(false)} className="btn-secondary !px-2 !py-1 text-xs">
-                      <X size={12} />
-                    </button>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Vincular tarea existente</p>
+                    <div className="flex gap-1.5">
+                      <select
+                        className="input text-xs flex-1"
+                        value={taskSeleccionada}
+                        onChange={e => setTaskSeleccionada(e.target.value)}
+                        autoFocus
+                      >
+                        <option value="">Seleccionar tarea de IT Soporte...</option>
+                        {tasks
+                          .filter(t => t.title && !tareasVinculadas.find(tv => tv.google_task_id === t.id))
+                          .map(t => (
+                            <option key={t.id} value={t.id}>{t.title}{t.due ? ` · Vence ${new Date(t.due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}` : ''}</option>
+                          ))}
+                      </select>
+                      <button onClick={handleVincularTarea} disabled={!taskSeleccionada} className="btn-primary !px-2 !py-1 text-xs disabled:opacity-40 shrink-0">
+                        <Check size={12} />
+                      </button>
+                      <button onClick={() => { setShowVincular(false); setTaskSeleccionada(''); }} className="btn-secondary !px-2 !py-1 text-xs shrink-0">
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
