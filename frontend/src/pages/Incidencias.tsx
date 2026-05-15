@@ -36,6 +36,7 @@ export default function Incidencias() {
   const [form, setForm] = useState(emptyForm);
   const [filtroEstado, setFiltroEstado] = useState('');
   const [nuevaActividad, setNuevaActividad] = useState('');
+  const [fechaActividad, setFechaActividad] = useState(() => new Date().toISOString().slice(0, 16));
 
   const load = async () => {
     const params = filtroEstado ? { estado: filtroEstado } : {};
@@ -64,8 +65,9 @@ export default function Incidencias() {
 
   const handleAddActividad = async () => {
     if (!selected || !nuevaActividad.trim()) return;
-    await addActividad(selected.id, { descripcion: nuevaActividad, usuario: 'Técnico' });
+    await addActividad(selected.id, { descripcion: nuevaActividad, usuario: 'Técnico', fecha: new Date(fechaActividad).toISOString() });
     setNuevaActividad('');
+    setFechaActividad(new Date().toISOString().slice(0, 16));
     const r = await getIncidencia(selected.id);
     setSelected(r.data);
     load();
@@ -150,15 +152,22 @@ export default function Incidencias() {
               ))}
               {!selected.actividades?.length && <p className="text-xs text-gray-400">Sin actividades</p>}
             </div>
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <input
-                className="input text-sm flex-1"
-                placeholder="Nueva actividad..."
+                className="input text-sm w-full"
+                placeholder="Descripción de la actividad..."
                 value={nuevaActividad}
                 onChange={e => setNuevaActividad(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddActividad()}
               />
-              <button onClick={handleAddActividad} className="btn-primary py-1 px-3 text-sm">+</button>
+              <div className="flex gap-2">
+                <input
+                  type="datetime-local"
+                  className="input text-sm flex-1"
+                  value={fechaActividad}
+                  onChange={e => setFechaActividad(e.target.value)}
+                />
+                <button onClick={handleAddActividad} className="btn-primary py-1 px-3 text-sm">+</button>
+              </div>
             </div>
           </div>
         </div>

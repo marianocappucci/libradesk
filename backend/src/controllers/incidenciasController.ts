@@ -94,9 +94,10 @@ export async function addActividad(req: Request, res: Response) {
     const { descripcion, usuario } = req.body;
     if (!descripcion) return res.status(400).json({ error: 'La descripcion es requerida' });
 
+    const fecha = req.body.fecha ? new Date(req.body.fecha) : new Date();
     const result = await pool.query(
-      'INSERT INTO actividades_incidencia (incidencia_id, descripcion, usuario) VALUES ($1,$2,$3) RETURNING *',
-      [id, descripcion, usuario || 'Técnico']
+      'INSERT INTO actividades_incidencia (incidencia_id, descripcion, usuario, fecha) VALUES ($1,$2,$3,$4) RETURNING *',
+      [id, descripcion, usuario || 'Técnico', fecha]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
