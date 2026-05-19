@@ -13,14 +13,14 @@ export async function getDashboard(req: Request, res: Response) {
           COUNT(*) FILTER (WHERE estado = 'cerrado'   AND COALESCE(activo, true) = true)   AS cerradas,
           COUNT(*) FILTER (WHERE
             COALESCE(activo, true) = true AND
-            estado NOT IN ('resuelta','cerrada') AND
+            estado NOT IN ('resuelta','cerrado') AND
             (
-              SELECT MAX(a2.fecha) FROM actividades a2 WHERE a2.incidencia_id = i.id
+              SELECT MAX(a2.fecha) FROM actividades_incidencia a2 WHERE a2.incidencia_id = i.id
             ) < NOW() - INTERVAL '3 days'
             OR (
               COALESCE(activo, true) = true AND
-              estado NOT IN ('resuelta','cerrada') AND
-              NOT EXISTS (SELECT 1 FROM actividades a2 WHERE a2.incidencia_id = i.id) AND
+              estado NOT IN ('resuelta','cerrado') AND
+              NOT EXISTS (SELECT 1 FROM actividades_incidencia a2 WHERE a2.incidencia_id = i.id) AND
               i.fecha_creacion < NOW() - INTERVAL '3 days'
             )
           ) AS sin_actividad_3d
@@ -43,11 +43,11 @@ export async function getDashboard(req: Request, res: Response) {
           COALESCE(t.nombre, i.tecnico_asignado, 'Sin asignar') AS tecnico,
           c.nombre AS cliente,
           COALESCE(
-            (SELECT MAX(a.fecha) FROM actividades a WHERE a.incidencia_id = i.id),
+            (SELECT MAX(a.fecha) FROM actividades_incidencia a WHERE a.incidencia_id = i.id),
             i.fecha_creacion
           ) AS ultima_actividad,
           EXTRACT(EPOCH FROM (NOW() - COALESCE(
-            (SELECT MAX(a.fecha) FROM actividades a WHERE a.incidencia_id = i.id),
+            (SELECT MAX(a.fecha) FROM actividades_incidencia a WHERE a.incidencia_id = i.id),
             i.fecha_creacion
           ))) / 86400 AS dias_sin_actividad
         FROM incidencias i
@@ -56,7 +56,7 @@ export async function getDashboard(req: Request, res: Response) {
         WHERE COALESCE(i.activo, true) = true
           AND i.estado NOT IN ('resuelta','cerrado')
           AND COALESCE(
-            (SELECT MAX(a.fecha) FROM actividades a WHERE a.incidencia_id = i.id),
+            (SELECT MAX(a.fecha) FROM actividades_incidencia a WHERE a.incidencia_id = i.id),
             i.fecha_creacion
           ) < NOW() - INTERVAL '3 days'
         ORDER BY dias_sin_actividad DESC
