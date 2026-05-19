@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
 import api from '../services/api';
-import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2, RefreshCw, CalendarClock, Wrench } from 'lucide-react';
 
 interface Cliente {
   id: number; nombre: string; empresa?: string; email?: string;
   telefono?: string; ciudad?: string; observaciones?: string;
+  tipo_facturacion: 'mensual' | 'por_servicio';
 }
 
-const emptyForm = { nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '' };
+const emptyForm = { nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '', tipo_facturacion: 'por_servicio' };
 
 export default function Clientes() {
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ export default function Clientes() {
 
   const openNew = () => { setForm(emptyForm); setEditing(null); setError(null); setShowForm(true); };
   const openEdit = (c: Cliente) => {
-    setForm({ nombre: c.nombre, empresa: c.empresa || '', email: c.email || '', telefono: c.telefono || '', ciudad: c.ciudad || '', observaciones: c.observaciones || '' });
+    setForm({ nombre: c.nombre, empresa: c.empresa || '', email: c.email || '', telefono: c.telefono || '', ciudad: c.ciudad || '', observaciones: c.observaciones || '', tipo_facturacion: c.tipo_facturacion || 'por_servicio' });
     setEditing(c.id); setShowForm(true);
   };
 
@@ -150,6 +151,25 @@ export default function Clientes() {
                 </div>
               </div>
               <div>
+                <label className="label">Tipo de facturación</label>
+                <div className="flex gap-2">
+                  <label className={`flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer transition-colors ${form.tipo_facturacion === 'mensual' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <input type="radio" name="tipo_facturacion" value="mensual" checked={form.tipo_facturacion === 'mensual'} onChange={() => setForm(f => ({ ...f, tipo_facturacion: 'mensual' }))} className="accent-primary-600" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 flex items-center gap-1"><CalendarClock size={13} /> Arancel mensual</p>
+                      <p className="text-xs text-gray-400">Cuota fija, sin cobro por incidencia</p>
+                    </div>
+                  </label>
+                  <label className={`flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer transition-colors ${form.tipo_facturacion === 'por_servicio' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <input type="radio" name="tipo_facturacion" value="por_servicio" checked={form.tipo_facturacion === 'por_servicio'} onChange={() => setForm(f => ({ ...f, tipo_facturacion: 'por_servicio' }))} className="accent-primary-600" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 flex items-center gap-1"><Wrench size={13} /> Por servicio</p>
+                      <p className="text-xs text-gray-400">Se factura por incidencia cerrada</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <div>
                 <label className="label">Observaciones</label>
                 <textarea className="input" rows={2} value={form.observaciones} onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))} />
               </div>
@@ -173,7 +193,13 @@ export default function Clientes() {
           >
             <div className="flex items-start justify-between mb-3">
               <div className="min-w-0">
-                <h3 className="font-semibold text-gray-900">{c.nombre}</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-gray-900">{c.nombre}</h3>
+                  {c.tipo_facturacion === 'mensual'
+                    ? <span className="badge bg-violet-100 text-violet-700 flex items-center gap-0.5"><CalendarClock size={9} /> Mensual</span>
+                    : <span className="badge bg-blue-50 text-blue-600 flex items-center gap-0.5"><Wrench size={9} /> Por servicio</span>
+                  }
+                </div>
                 {c.empresa && <p className="text-sm text-gray-500 flex items-center gap-1"><Building2 size={12} />{c.empresa}</p>}
               </div>
               <div className="flex gap-1 shrink-0">

@@ -8,7 +8,8 @@ interface CalEvent {
   end: { dateTime?: string; date?: string };
 }
 
-const emptyForm = { summary: '', description: '', location: '', start: '', end: '' };
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const emptyForm = { summary: '', description: '', location: '', date: todayStr(), start: '', end: '', allDay: true };
 
 function toDatetimeLocal(iso?: string): string {
   if (!iso) return '';
@@ -52,12 +53,15 @@ export default function Agenda() {
   };
 
   const openEdit = (ev: CalEvent) => {
+    const isAllDay = !ev.start.dateTime;
     setForm({
       summary: ev.summary || '',
       description: ev.description || '',
       location: ev.location || '',
-      start: toDatetimeLocal(ev.start.dateTime),
-      end: toDatetimeLocal(ev.end.dateTime),
+      allDay: isAllDay,
+      date: isAllDay ? (ev.start.date || todayStr()) : todayStr(),
+      start: isAllDay ? '' : toDatetimeLocal(ev.start.dateTime),
+      end: isAllDay ? '' : toDatetimeLocal(ev.end.dateTime),
     });
     setEditingId(ev.id);
     setError(null);
@@ -69,13 +73,28 @@ export default function Agenda() {
     setLoading(true);
     setError(null);
     try {
-      const payload = {
-        summary: form.summary,
-        description: form.description,
-        location: form.location,
-        start: new Date(form.start).toISOString(),
-        end: new Date(form.end).toISOString(),
-      };
+      let payload: object;
+      if (form.allDay) {
+        const nextDay = new Date(form.date + 'T12:00:00');
+        nextDay.setDate(nextDay.getDate() + 1);
+        payload = {
+          summary: form.summary,
+          description: form.description,
+          location: form.location,
+          allDay: true,
+          start: form.date,
+          end: nextDay.toISOString().slice(0, 10),
+        };
+      } else {
+        payload = {
+          summary: form.summary,
+          description: form.description,
+          location: form.location,
+          allDay: false,
+          start: new Date(form.start).toISOString(),
+          end: new Date(form.end).toISOString(),
+        };
+      }
       if (editingId) {
         await updateCalendarEvent(editingId, payload);
       } else {
@@ -140,24 +159,44 @@ export default function Agenda() {
                   onChange={e => setForm(f => ({ ...f, summary: e.target.value }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Inicio *</label>
-                  <input
-                    type="datetime-local" className="input" required
-                    value={form.start}
-                    onChange={e => setForm(f => ({ ...f, start: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="label">Fin *</label>
-                  <input
-                    type="datetime-local" className="input" required
-                    value={form.end}
-                    onChange={e => setForm(f => ({ ...f, end: e.target.value }))}
-                  />
-                </div>
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  type="checkbox" id="allDay" className="w-4 h-4 accent-primary-600 cursor-pointer"
+                  checked={form.allDay}
+                  onChange={e => setForm(f => ({ ...f, allDay: e.target.checked, start: '', end: '' }))}
+                />
+                <label htmlFor="allDay" className="text-sm text-gray-600 cursor-pointer select-none">Todo el día</label>
               </div>
+
+              {form.allDay ? (
+                <div>
+                  <label className="label">Fecha *</label>
+                  <input
+                    type="date" className="input w-44" required
+                    value={form.date}
+                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Inicio *</label>
+                    <input
+                      type="datetime-local" className="input" required
+                      value={form.start}
+                      onChange={e => setForm(f => ({ ...f, start: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Fin *</label>
+                    <input
+                      type="datetime-local" className="input" required
+                      value={form.end}
+                      onChange={e => setForm(f => ({ ...f, end: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="label">Ubicación</label>
                 <input

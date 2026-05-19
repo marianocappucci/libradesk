@@ -19,17 +19,24 @@ export const deleteCliente = (id: number) => api.delete(`/clientes/${id}`);
 export const getTareasCliente = (id: number) => api.get(`/clientes/${id}/tareas`);
 
 // --- Equipos ---
-export const getEquipos = (cliente_id?: number) =>
-  api.get('/equipos', { params: cliente_id ? { cliente_id } : {} });
+export const getEquipos = (params?: object) => api.get('/equipos', { params });
+export const getEquipo = (id: number) => api.get(`/equipos/${id}`);
 export const createEquipo = (data: object) => api.post('/equipos', data);
 export const updateEquipo = (id: number, data: object) => api.put(`/equipos/${id}`, data);
 export const deleteEquipo = (id: number) => api.delete(`/equipos/${id}`);
+export const darBajaEquipo = (id: number, data: object) => api.post(`/equipos/${id}/baja`, data);
+export const trasladarEquipo = (id: number, data: object) => api.post(`/equipos/${id}/traslado`, data);
+export const cambiarEstadoEquipo = (id: number, data: object) => api.post(`/equipos/${id}/estado`, data);
+export const crearLoteEquipos = (data: object) => api.post('/equipos/lote', data);
+export const desplegarEquipo = (id: number, data: object) => api.post(`/equipos/${id}/desplegar`, data);
 
 // --- Incidencias ---
 export const getIncidencias = (params?: object) => api.get('/incidencias', { params });
 export const getIncidencia = (id: number) => api.get(`/incidencias/${id}`);
 export const createIncidencia = (data: object) => api.post('/incidencias', data);
 export const updateIncidencia = (id: number, data: object) => api.put(`/incidencias/${id}`, data);
+export const deleteIncidencia = (id: number) => api.delete(`/incidencias/${id}`);
+export const setFacturacion = (id: number, data: object) => api.post(`/incidencias/${id}/facturacion`, data);
 export const addActividad = (id: number, data: object) =>
   api.post(`/incidencias/${id}/actividades`, data);
 export const updateActividad = (id: number, actividadId: number, data: object) =>
@@ -56,5 +63,28 @@ export const deleteTask = (id: string) => api.delete(`/tasks/${id}`);
 export const getAttachments = (taskId: string) => api.get(`/tasks/${taskId}/attachments`);
 export const addAttachment = (taskId: string, data: object) => api.post(`/tasks/${taskId}/attachments`, data);
 export const deleteAttachment = (taskId: string, attachId: number) => api.delete(`/tasks/${taskId}/attachments/${attachId}`);
+
+// --- Técnicos ---
+export const getTecnicos = () => api.get('/tecnicos');
+export const createTecnico = (data: object) => api.post('/tecnicos', data);
+export const updateTecnico = (id: number, data: object) => api.put(`/tecnicos/${id}`, data);
+export const deleteTecnico = (id: number) => api.delete(`/tecnicos/${id}`);
+
+// --- Dashboard ---
+export const getDashboard = () => api.get('/dashboard');
+
+// --- Sectores ---
+export const getSectores = (clienteId?: string | number) =>
+  api.get('/sectores', { params: clienteId ? { cliente_id: clienteId } : {} });
+export const createSector = (data: object) => api.post('/sectores', data);
+export const deleteSector = (id: number) => api.delete(`/sectores/${id}`);
+
+// --- Reportes ---
+export const getReporteEquipamiento  = (params?: object) => api.get('/reportes/equipamiento', { params });
+export const getReporteIncidencias   = (params?: object) => api.get('/reportes/incidencias',  { params });
+export const getReporteFacturacion   = (params?: object) => api.get('/reportes/facturacion',  { params });
+export const getReporteGarantias     = (params?: object) => api.get('/reportes/garantias',    { params });
+export const getReporteTecnico       = (params?: object) => api.get('/reportes/tecnico',      { params });
+export const getReporteMovimientos   = (params?: object) => api.get('/reportes/movimientos',  { params });
 
 export default api;

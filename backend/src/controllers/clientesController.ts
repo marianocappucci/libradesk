@@ -53,12 +53,13 @@ export async function getCliente(req: Request, res: Response) {
 
 export async function createCliente(req: Request, res: Response) {
   try {
-    const { nombre, empresa, email, telefono, ciudad, observaciones } = req.body;
+    const { nombre, empresa, email, telefono, ciudad, observaciones, tipo_facturacion } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
+    const tf = ['mensual', 'por_servicio'].includes(tipo_facturacion) ? tipo_facturacion : 'por_servicio';
 
     const result = await pool.query(
-      'INSERT INTO clientes (nombre, empresa, email, telefono, ciudad, observaciones) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [nombre, empresa || null, email || null, telefono || null, ciudad || null, observaciones || null]
+      'INSERT INTO clientes (nombre, empresa, email, telefono, ciudad, observaciones, tipo_facturacion) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [nombre, empresa || null, email || null, telefono || null, ciudad || null, observaciones || null, tf]
     );
 
     const cliente = result.rows[0];
@@ -85,11 +86,12 @@ export async function createCliente(req: Request, res: Response) {
 export async function updateCliente(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { nombre, empresa, email, telefono, ciudad, observaciones } = req.body;
+    const { nombre, empresa, email, telefono, ciudad, observaciones, tipo_facturacion } = req.body;
+    const tf = ['mensual', 'por_servicio'].includes(tipo_facturacion) ? tipo_facturacion : 'por_servicio';
 
     const result = await pool.query(
-      'UPDATE clientes SET nombre=$1, empresa=$2, email=$3, telefono=$4, ciudad=$5, observaciones=$6 WHERE id=$7 RETURNING *',
-      [nombre, empresa || null, email || null, telefono || null, ciudad || null, observaciones || null, id]
+      'UPDATE clientes SET nombre=$1, empresa=$2, email=$3, telefono=$4, ciudad=$5, observaciones=$6, tipo_facturacion=$7 WHERE id=$8 RETURNING *',
+      [nombre, empresa || null, email || null, telefono || null, ciudad || null, observaciones || null, tf, id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
 

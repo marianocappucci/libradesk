@@ -66,18 +66,18 @@ export async function createEvent(req: Request, res: Response) {
     const auth = getAuthClient(req);
     const calendar = google.calendar({ version: 'v3', auth });
     const calendarId = await getOrCreateITSoporteCalendar(auth);
-    const { summary, description, start, end, location, colorId } = req.body;
+    const { summary, description, start, end, location, colorId, allDay } = req.body;
+
+    const startObj = allDay
+      ? { date: start }
+      : { dateTime: start, timeZone: 'America/Argentina/Buenos_Aires' };
+    const endObj = allDay
+      ? { date: end }
+      : { dateTime: end, timeZone: 'America/Argentina/Buenos_Aires' };
 
     const result = await calendar.events.insert({
       calendarId,
-      requestBody: {
-        summary,
-        description,
-        location,
-        colorId,
-        start: { dateTime: start, timeZone: 'America/Argentina/Buenos_Aires' },
-        end: { dateTime: end, timeZone: 'America/Argentina/Buenos_Aires' },
-      },
+      requestBody: { summary, description, location, colorId, start: startObj, end: endObj },
     });
 
     res.status(201).json(result.data);
@@ -95,19 +95,19 @@ export async function updateEvent(req: Request, res: Response) {
     const calendar = google.calendar({ version: 'v3', auth });
     const calendarId = await getOrCreateITSoporteCalendar(auth);
     const { id } = req.params;
-    const { summary, description, start, end, location, colorId } = req.body;
+    const { summary, description, start, end, location, colorId, allDay } = req.body;
+
+    const startObj = allDay
+      ? { date: start }
+      : { dateTime: start, timeZone: 'America/Argentina/Buenos_Aires' };
+    const endObj = allDay
+      ? { date: end }
+      : { dateTime: end, timeZone: 'America/Argentina/Buenos_Aires' };
 
     const result = await calendar.events.update({
       calendarId,
       eventId: id,
-      requestBody: {
-        summary,
-        description,
-        location,
-        colorId,
-        start: { dateTime: start, timeZone: 'America/Argentina/Buenos_Aires' },
-        end: { dateTime: end, timeZone: 'America/Argentina/Buenos_Aires' },
-      },
+      requestBody: { summary, description, location, colorId, start: startObj, end: endObj },
     });
 
     res.json(result.data);

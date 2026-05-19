@@ -11,6 +11,10 @@ import equiposRoutes from './routes/equipos';
 import incidenciasRoutes from './routes/incidencias';
 import calendarRoutes from './routes/calendar';
 import tasksRoutes from './routes/tasks';
+import reportesRoutes from './routes/reportes';
+import sectoresRoutes from './routes/sectores';
+import tecnicosRoutes from './routes/tecnicos';
+import dashboardRoutes from './routes/dashboard';
 
 dotenv.config();
 
@@ -54,6 +58,10 @@ app.use('/api/equipos', equiposRoutes);
 app.use('/api/incidencias', incidenciasRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/reportes', reportesRoutes);
+app.use('/api/sectores', sectoresRoutes);
+app.use('/api/tecnicos', tecnicosRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

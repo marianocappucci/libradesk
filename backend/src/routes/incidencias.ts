@@ -9,6 +9,8 @@ router.get('/', ctrl.getIncidencias);
 router.get('/:id', ctrl.getIncidencia);
 router.post('/', ctrl.createIncidencia);
 router.put('/:id', ctrl.updateIncidencia);
+router.delete('/:id', ctrl.deleteIncidencia);
+router.post('/:id/facturacion', ctrl.setFacturacion);
 router.post('/:id/actividades', ctrl.addActividad);
 router.put('/:id/actividades/:actividadId', ctrl.updateActividad);
 router.delete('/:id/actividades/:actividadId', ctrl.deleteActividad);

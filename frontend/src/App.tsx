@@ -8,6 +8,9 @@ import ClienteDetalle from './pages/ClienteDetalle';
 import Incidencias from './pages/Incidencias';
 import Agenda from './pages/Agenda';
 import Tareas from './pages/Tareas';
+import Equipos from './pages/Equipos';
+import Reportes from './pages/Reportes';
+import Tecnicos from './pages/Tecnicos';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -32,7 +35,10 @@ function AppRoutes() {
         <Route path="/clientes/:id" element={<ClienteDetalle />} />
         <Route path="/incidencias" element={<Incidencias />} />
         <Route path="/agenda" element={<Agenda />} />
+        <Route path="/equipos" element={<Equipos />} />
+        <Route path="/reportes" element={<Reportes />} />
         <Route path="/tareas" element={<Tareas />} />
+        <Route path="/tecnicos" element={<Tecnicos />} />
       </Route>
     </Routes>
   );

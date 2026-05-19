@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks, createTask, getTareasVinculadas, vincularTarea, desvincularTarea } from '../services/api';
-import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone, Link2, Unlink, Calendar } from 'lucide-react';
+import { getIncidencias, getIncidencia, createIncidencia, updateIncidencia, deleteIncidencia, setFacturacion, addActividad, updateActividad, deleteActividad, getClientes, getCliente, getTasks, createTask, getTareasVinculadas, vincularTarea, desvincularTarea } from '../services/api';
+import { Plus, ChevronRight, Clock, User, Pencil, Trash2, Check, X, Search, ListTodo, Building2, Mail, Phone, Link2, Unlink, Calendar, Receipt, DollarSign, CalendarClock, AlertTriangle } from 'lucide-react';
+import ClienteSelect from '../components/ClienteSelect';
+import SectorSelect from '../components/SectorSelect';
+import TecnicoSelect from '../components/TecnicoSelect';
 
 interface Incidencia {
-  id: number; titulo: string; descripcion?: string; estado: string; prioridad: string;
+  id: number; titulo: string; descripcion?: string; sector?: string; sector_nombre?: string; estado: string; prioridad: string;
   cliente_id: number; cliente_nombre: string; cliente_empresa?: string;
-  equipo_tipo?: string; tecnico_asignado?: string; fecha_creacion: string;
-  actividades?: Actividad[];
+  equipo_tipo?: string; tecnico_asignado?: string; tecnico_nombre?: string; tecnico_id?: number | null; sector_id?: number | null;
+  fecha_creacion: string; actividades?: Actividad[];
   actividades_count?: number; tareas_count?: number;
+  estado_facturacion?: string | null; tipo_facturacion?: string;
+  resolucion?: string; dias_sin_actividad?: number;
 }
 interface Actividad { id: number; descripcion: string; usuario?: string; fecha: string }
 interface Cliente { id: number; nombre: string; empresa?: string; email?: string; telefono?: string }
@@ -16,7 +21,18 @@ interface Task { id: string; title?: string; status?: string; due?: string; note
 interface TareaVinculada { id: number; google_task_id: string; task_title: string; created_at: string; task_due?: string }
 
 const PRIORIDADES = ['alta', 'media', 'baja'];
-const ESTADOS = ['abierto', 'en_progreso', 'cerrado'];
+const ESTADOS = ['abierto', 'en_progreso', 'resuelta', 'cerrado'];
+
+const factBadge = (f: string | null | undefined) => {
+  if (f === 'pendiente_cobro') return 'badge bg-yellow-100 text-yellow-700';
+  if (f === 'facturada') return 'badge bg-emerald-100 text-emerald-700';
+  return '';
+};
+const factLabel = (f: string | null | undefined) => {
+  if (f === 'pendiente_cobro') return 'Pend. cobro';
+  if (f === 'facturada') return 'Facturada';
+  return '';
+};
 
 const prioClass = (p: string) => ({
   alta: 'badge bg-red-100 text-red-700',
@@ -27,10 +43,11 @@ const prioClass = (p: string) => ({
 const estadoClass = (e: string) => ({
   abierto: 'badge bg-blue-100 text-blue-700',
   en_progreso: 'badge bg-orange-100 text-orange-700',
+  resuelta: 'badge bg-green-100 text-green-700',
   cerrado: 'badge bg-gray-100 text-gray-500',
 }[e] || 'badge bg-gray-100 text-gray-700');
 
-const emptyForm = { cliente_id: '', titulo: '', descripcion: '', prioridad: 'media', tecnico_asignado: '' };
+const emptyForm = { cliente_id: '', titulo: '', descripcion: '', prioridad: 'media', tecnico_id: '', sector_id: '' };
 
 export default function Incidencias() {
   const [searchParams] = useSearchParams();
@@ -41,8 +58,9 @@ export default function Incidencias() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroFacturacion, setFiltroFacturacion] = useState('');
+  const [filtroKeyword, setFiltroKeyword] = useState('');
 
-  // Filtro por cliente
   const [filtroCliente, setFiltroCliente] = useState<number | null>(() => {
     const p = searchParams.get('cliente_id');
     return p ? Number(p) : null;
@@ -51,21 +69,18 @@ export default function Incidencias() {
   const [clienteDetalle, setClienteDetalle] = useState<Cliente | null>(null);
   const [showClienteList, setShowClienteList] = useState(false);
 
-  // Tareas
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
 
-  // Actividades
   const [nuevaActividad, setNuevaActividad] = useState('');
   const [fechaActividad, setFechaActividad] = useState(() => new Date().toISOString().slice(0, 16));
   const [editingActividad, setEditingActividad] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ descripcion: '', fecha: '' });
 
-  // Edición incidencia
   const [editingIncidencia, setEditingIncidencia] = useState(false);
-  const [incForm, setIncForm] = useState({ titulo: '', descripcion: '', prioridad: '', tecnico_asignado: '' });
+  const [incForm, setIncForm] = useState({ titulo: '', descripcion: '', prioridad: '', tecnico_id: '', fecha_creacion: '', sector_id: '', resolucion: '' });
+  const [showDeleteInc, setShowDeleteInc] = useState(false);
 
-  // Tareas vinculadas a la incidencia seleccionada
   const [tareasVinculadas, setTareasVinculadas] = useState<TareaVinculada[]>([]);
   const [showVincular, setShowVincular] = useState(false);
   const [taskSeleccionada, setTaskSeleccionada] = useState('');
@@ -75,18 +90,15 @@ export default function Incidencias() {
 
   const load = async () => {
     const params: Record<string, unknown> = {};
-    if (filtroCliente) {
-      params.cliente_id = filtroCliente;
-      // Con cliente seleccionado mostramos todos los estados
-    } else if (filtroEstado) {
-      params.estado = filtroEstado;
-    }
+    if (filtroCliente) { params.cliente_id = filtroCliente; }
+    else if (filtroEstado) { params.estado = filtroEstado; }
+    if (filtroFacturacion) { params.estado_facturacion = filtroFacturacion; }
+    if (filtroKeyword.trim()) { params.keyword = filtroKeyword.trim(); }
     const r = await getIncidencias(params);
     setIncidencias(r.data);
   };
 
   useEffect(() => {
-    // Cargamos clientes y tareas al montar (tareas necesarias para vincular)
     getClientes().then(r => {
       setClientes(r.data);
       if (filtroCliente) {
@@ -96,7 +108,6 @@ export default function Incidencias() {
     });
     getTasks({ showCompleted: false }).then(r => setTasks(r.data || []));
 
-    // Si venimos con ?inc_id, abrir esa incidencia directamente
     const incId = searchParams.get('inc_id');
     if (incId) {
       const id = Number(incId);
@@ -107,11 +118,8 @@ export default function Incidencias() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [filtroEstado, filtroCliente]);
+  useEffect(() => { load(); }, [filtroEstado, filtroCliente, filtroFacturacion]);
 
-  // Al seleccionar cliente: carga su detalle y las tareas
   useEffect(() => {
     if (filtroCliente) {
       getCliente(filtroCliente).then(r => setClienteDetalle(r.data));
@@ -144,7 +152,14 @@ export default function Incidencias() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createIncidencia({ ...form, cliente_id: Number(form.cliente_id) });
+    await createIncidencia({
+      cliente_id: Number(form.cliente_id),
+      titulo: form.titulo,
+      descripcion: form.descripcion,
+      prioridad: form.prioridad,
+      tecnico_id: form.tecnico_id ? Number(form.tecnico_id) : null,
+      sector_id: form.sector_id ? Number(form.sector_id) : null,
+    });
     setShowForm(false);
     setForm(emptyForm);
     load();
@@ -154,6 +169,14 @@ export default function Incidencias() {
     await updateIncidencia(inc.id, { ...inc, estado });
     load();
     if (selected?.id === inc.id) setSelected({ ...inc, estado });
+  };
+
+  const handleFacturacion = async (ef: string | null) => {
+    if (!selected) return;
+    const r = await setFacturacion(selected.id, { estado_facturacion: ef });
+    const updated = { ...selected, estado_facturacion: r.data.estado_facturacion };
+    setSelected(updated);
+    load();
   };
 
   const handleAddActividad = async () => {
@@ -168,13 +191,39 @@ export default function Incidencias() {
 
   const startEditIncidencia = () => {
     if (!selected) return;
-    setIncForm({ titulo: selected.titulo, descripcion: selected.descripcion || '', prioridad: selected.prioridad, tecnico_asignado: selected.tecnico_asignado || '' });
+    setIncForm({
+      titulo: selected.titulo,
+      descripcion: selected.descripcion || '',
+      prioridad: selected.prioridad,
+      tecnico_id: selected.tecnico_id ? String(selected.tecnico_id) : '',
+      fecha_creacion: selected.fecha_creacion ? new Date(selected.fecha_creacion).toISOString().slice(0, 16) : '',
+      sector_id: selected.sector_id ? String(selected.sector_id) : '',
+      resolucion: selected.resolucion || '',
+    });
     setEditingIncidencia(true);
+  };
+
+  const handleDeleteInc = async () => {
+    if (!selected) return;
+    await deleteIncidencia(selected.id);
+    setSelected(null);
+    setShowDeleteInc(false);
+    setEditingIncidencia(false);
+    load();
   };
 
   const handleUpdateIncidencia = async () => {
     if (!selected || !incForm.titulo.trim()) return;
-    await updateIncidencia(selected.id, { ...selected, ...incForm });
+    await updateIncidencia(selected.id, {
+      ...selected,
+      titulo: incForm.titulo,
+      descripcion: incForm.descripcion,
+      prioridad: incForm.prioridad,
+      tecnico_id: incForm.tecnico_id ? Number(incForm.tecnico_id) : null,
+      sector_id: incForm.sector_id ? Number(incForm.sector_id) : null,
+      fecha_creacion: incForm.fecha_creacion || null,
+      resolucion: incForm.resolucion || null,
+    });
     setEditingIncidencia(false);
     const r = await getIncidencia(selected.id);
     setSelected(r.data);
@@ -230,7 +279,6 @@ export default function Incidencias() {
       const r = await createTask({ title: nuevaTareaForm.title, notes: nuevaTareaForm.notes || undefined, due: dueIso });
       const newTask = r.data;
       await vincularTarea(selected.id, { google_task_id: newTask.id, task_title: newTask.title, task_due: dueIso || null });
-      // Refrescar lista de tasks disponibles también
       getTasks({ showCompleted: false }).then(rt => setTasks(rt.data || []));
       setNuevaTareaForm({ title: '', notes: '', due: '' });
       setShowNuevaTarea(false);
@@ -240,13 +288,15 @@ export default function Incidencias() {
     }
   };
 
-  // Panel derecho: tareas cuando hay cliente seleccionado y no hay incidencia abierta
   const showTasks = filtroCliente && !selected;
+  const tecnicoDisplay = (i: Incidencia) => i.tecnico_nombre || i.tecnico_asignado || '';
+  const sectorDisplay = (i: Incidencia) => i.sector_nombre || i.sector || '';
+  const sinActividad = (i: Incidencia) => (i.dias_sin_actividad ?? 0) > 3 && !['resuelta','cerrado'].includes(i.estado);
 
   return (
-    <div className="flex gap-6 h-full">
+    <div className="flex gap-6 h-[calc(100vh-4rem)] overflow-hidden">
       {/* Lista */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Incidencias</h1>
           <button onClick={() => setShowForm(true)} className="btn-primary">
@@ -304,9 +354,9 @@ export default function Incidencias() {
           </div>
         )}
 
-        {/* Filtros de estado (solo sin cliente seleccionado) */}
+        {/* Filtros de estado */}
         {!filtroCliente && (
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-2 flex-wrap">
             <button onClick={() => setFiltroEstado('')} className={`btn ${!filtroEstado ? 'btn-primary' : 'btn-secondary'} text-xs py-1`}>Todas</button>
             {ESTADOS.map(e => (
               <button key={e} onClick={() => setFiltroEstado(e)} className={`btn ${filtroEstado === e ? 'btn-primary' : 'btn-secondary'} text-xs py-1`}>
@@ -316,33 +366,75 @@ export default function Incidencias() {
           </div>
         )}
 
-        <div className="space-y-1.5" onClick={() => setShowClienteList(false)}>
+        {/* Keyword search + filtros de facturación */}
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              className="input pl-7 text-xs py-1.5"
+              placeholder="Buscar en título/descripción..."
+              value={filtroKeyword}
+              onChange={e => setFiltroKeyword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && load()}
+            />
+          </div>
+          {filtroKeyword && (
+            <button onClick={() => { setFiltroKeyword(''); }} className="btn-secondary text-xs py-1.5 shrink-0"><X size={12} /></button>
+          )}
+          {filtroKeyword && (
+            <button onClick={load} className="btn-primary text-xs py-1.5 shrink-0">Buscar</button>
+          )}
+          <button
+            onClick={() => setFiltroFacturacion(filtroFacturacion === 'sin_facturar' ? '' : 'sin_facturar')}
+            className={`btn text-xs py-1 flex items-center gap-1 ${filtroFacturacion === 'sin_facturar' ? 'bg-gray-700 text-white' : 'btn-secondary'}`}
+          >
+            Sin facturar
+          </button>
+          <button
+            onClick={() => setFiltroFacturacion(filtroFacturacion === 'pendiente_cobro' ? '' : 'pendiente_cobro')}
+            className={`btn text-xs py-1 flex items-center gap-1 ${filtroFacturacion === 'pendiente_cobro' ? 'bg-yellow-500 text-white' : 'btn-secondary'}`}
+          >
+            <DollarSign size={11} /> Pend. cobro
+          </button>
+          <button
+            onClick={() => setFiltroFacturacion(filtroFacturacion === 'facturada' ? '' : 'facturada')}
+            className={`btn text-xs py-1 flex items-center gap-1 ${filtroFacturacion === 'facturada' ? 'bg-emerald-600 text-white' : 'btn-secondary'}`}
+          >
+            <Check size={11} /> Facturada
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-1.5 px-[7px] pt-[7px]" onClick={() => setShowClienteList(false)}>
           {incidencias.map(i => (
             <div
               key={i.id}
               onClick={() => getIncidencia(i.id).then(r => { setSelected(r.data); loadTareasVinculadas(i.id); setShowVincular(false); setShowNuevaTarea(false); setNuevaTareaForm({ title: '', notes: '', due: '' }); setTaskSeleccionada(''); })}
-              className={`bg-white border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500 border-primary-300' : ''}`}
+              className={`bg-white border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all ${selected?.id === i.id ? 'ring-2 ring-primary-500 border-primary-300' : ''} ${sinActividad(i) ? 'border-l-4 border-l-amber-400' : ''}`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span className={prioClass(i.prioridad)}>{i.prioridad}</span>
                 <span className={estadoClass(i.estado)}>{i.estado.replace('_', ' ')}</span>
+                {i.estado === 'cerrado' && i.tipo_facturacion === 'mensual' && (
+                  <span className="badge bg-violet-100 text-violet-600 flex items-center gap-0.5"><CalendarClock size={9} /> Mensual</span>
+                )}
+                {i.estado_facturacion && i.tipo_facturacion !== 'mensual' && (
+                  <span className={factBadge(i.estado_facturacion)}>{factLabel(i.estado_facturacion)}</span>
+                )}
+                {sinActividad(i) && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
                 <span className="font-medium text-gray-900 truncate flex-1 text-sm">{i.titulo}</span>
                 <ChevronRight size={13} className="text-gray-400 shrink-0" />
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 pl-0.5 flex-wrap">
                 {!filtroCliente && <span className="truncate max-w-[160px]">{i.cliente_nombre}{i.cliente_empresa ? ` · ${i.cliente_empresa}` : ''}</span>}
                 {!filtroCliente && <span className="text-gray-300">·</span>}
+                {sectorDisplay(i) && <span className="text-indigo-500 font-medium shrink-0">{sectorDisplay(i)}</span>}
+                {sectorDisplay(i) && <span className="text-gray-300 shrink-0">·</span>}
                 <Clock size={9} className="shrink-0" />
                 <span className="shrink-0">{new Date(i.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-                {(i.actividades_count ?? 0) > 0 && (
-                  <span className="shrink-0 text-gray-300">·</span>
-                )}
-                {(i.actividades_count ?? 0) > 0 && (
-                  <span className="shrink-0 flex items-center gap-0.5"><User size={9} />{i.actividades_count} act.</span>
-                )}
-                {(i.tareas_count ?? 0) > 0 && (
-                  <span className="shrink-0 flex items-center gap-0.5 text-primary-500"><ListTodo size={9} />{i.tareas_count} tarea{i.tareas_count !== 1 ? 's' : ''}</span>
-                )}
+                {(i.actividades_count ?? 0) > 0 && <span className="shrink-0 text-gray-300">·</span>}
+                {(i.actividades_count ?? 0) > 0 && <span className="shrink-0 flex items-center gap-0.5"><User size={9} />{i.actividades_count} act.</span>}
+                {(i.tareas_count ?? 0) > 0 && <span className="shrink-0 flex items-center gap-0.5 text-primary-500"><ListTodo size={9} />{i.tareas_count} tarea{i.tareas_count !== 1 ? 's' : ''}</span>}
+                {tecnicoDisplay(i) && <span className="shrink-0 text-gray-400">· {tecnicoDisplay(i)}</span>}
               </div>
             </div>
           ))}
@@ -352,11 +444,10 @@ export default function Incidencias() {
 
       {/* Panel derecho: detalle de incidencia o tareas */}
       {(selected || showTasks) && (
-        <div className="w-96 shrink-0">
+        <div className="w-96 shrink-0 overflow-y-auto">
 
-          {/* Tareas cuando hay cliente seleccionado y no hay incidencia */}
           {showTasks && (
-            <div className="card h-fit sticky top-8">
+            <div className="card h-fit">
               <div className="flex items-center gap-2 mb-4">
                 <ListTodo size={16} className="text-primary-500" />
                 <h2 className="font-semibold text-gray-900">Tareas pendientes</h2>
@@ -380,13 +471,12 @@ export default function Incidencias() {
                     </div>
                   )
               }
-              <p className="text-xs text-gray-400 mt-3 pt-3 border-t">Lista "IT Soporte" de Google Tasks · hacé click en una incidencia para ver su detalle</p>
+              <p className="text-xs text-gray-400 mt-3 pt-3 border-t">Lista "IT Soporte" · hacé click en una incidencia para ver su detalle</p>
             </div>
           )}
 
-          {/* Detalle de incidencia */}
           {selected && (
-            <div className="card !p-4 h-fit sticky top-8 max-h-[calc(100vh-6rem)] overflow-y-auto">
+            <div className="card !p-4 h-fit">
               {/* Header */}
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex-1 min-w-0">
@@ -403,13 +493,26 @@ export default function Incidencias() {
                       <button onClick={handleUpdateIncidencia} className="p-1 text-green-600 hover:text-green-700"><Check size={14} /></button>
                     </>
                   ) : (
-                    <button onClick={startEditIncidencia} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={13} /></button>
+                    <>
+                      <button onClick={startEditIncidencia} className="p-1 text-gray-400 hover:text-primary-600"><Pencil size={13} /></button>
+                      <button onClick={() => setShowDeleteInc(true)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+                    </>
                   )}
-                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); setTareasVinculadas([]); setShowVincular(false); setShowNuevaTarea(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
+                  <button onClick={() => { setSelected(null); setEditingIncidencia(false); setShowDeleteInc(false); setTareasVinculadas([]); setShowVincular(false); setShowNuevaTarea(false); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={15} /></button>
                 </div>
               </div>
 
-              {/* Meta compacta */}
+              {showDeleteInc && (
+                <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-xs">
+                  <p className="text-red-700 font-medium mb-2">¿Eliminar esta incidencia?</p>
+                  <div className="flex gap-2">
+                    <button onClick={handleDeleteInc} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 font-medium">Eliminar</button>
+                    <button onClick={() => setShowDeleteInc(false)} className="px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Meta */}
               {editingIncidencia ? (
                 <div className="space-y-2 mb-3">
                   <textarea className="input text-xs resize-none" rows={2} placeholder="Descripción..." value={incForm.descripcion} onChange={e => setIncForm(f => ({ ...f, descripcion: e.target.value }))} />
@@ -417,29 +520,111 @@ export default function Incidencias() {
                     <select className="input text-xs" value={incForm.prioridad} onChange={e => setIncForm(f => ({ ...f, prioridad: e.target.value }))}>
                       {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
-                    <input className="input text-xs" placeholder="Técnico..." value={incForm.tecnico_asignado} onChange={e => setIncForm(f => ({ ...f, tecnico_asignado: e.target.value }))} />
+                    <TecnicoSelect value={incForm.tecnico_id} onChange={v => setIncForm(f => ({ ...f, tecnico_id: v }))} className="input text-xs" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Sector</label>
+                      <SectorSelect
+                        clienteId={selected?.cliente_id || ''}
+                        value={incForm.sector_id}
+                        onChange={v => setIncForm(f => ({ ...f, sector_id: v }))}
+                        placeholder="Sector..."
+                        className="text-xs"
+                        useId
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Fecha de creación</label>
+                      <input
+                        type="datetime-local"
+                        className="input text-xs"
+                        value={incForm.fecha_creacion}
+                        onChange={e => setIncForm(f => ({ ...f, fecha_creacion: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-0.5">Resolución</label>
+                    <textarea className="input text-xs resize-none" rows={2} placeholder="Describí cómo se resolvió..." value={incForm.resolucion} onChange={e => setIncForm(f => ({ ...f, resolucion: e.target.value }))} />
                   </div>
                 </div>
               ) : (
                 <>
                   {selected.descripcion && <p className="text-xs text-gray-500 mb-2 leading-relaxed">{selected.descripcion}</p>}
+                  {selected.resolucion && (
+                    <div className="mb-2 bg-green-50 border border-green-100 rounded px-2 py-1.5">
+                      <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide mb-0.5">Resolución</p>
+                      <p className="text-xs text-green-800 leading-relaxed">{selected.resolucion}</p>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 mb-2">
                     <span className={prioClass(selected.prioridad)}>{selected.prioridad}</span>
                     <span className={estadoClass(selected.estado)}>{selected.estado.replace('_', ' ')}</span>
-                    {selected.tecnico_asignado && <span className="flex items-center gap-1 text-gray-400"><User size={10} />{selected.tecnico_asignado}</span>}
+                    {selected.estado === 'cerrado' && selected.tipo_facturacion === 'mensual' && (
+                      <span className="badge bg-violet-100 text-violet-600 flex items-center gap-0.5"><CalendarClock size={9} /> Mensual</span>
+                    )}
+                    {selected.estado_facturacion && selected.tipo_facturacion !== 'mensual' && (
+                      <span className={factBadge(selected.estado_facturacion)}>{factLabel(selected.estado_facturacion)}</span>
+                    )}
+                    {sectorDisplay(selected) && <span className="badge bg-indigo-50 text-indigo-600">{sectorDisplay(selected)}</span>}
+                    {tecnicoDisplay(selected) && <span className="flex items-center gap-1 text-gray-400"><User size={10} />{tecnicoDisplay(selected)}</span>}
                     <span className="flex items-center gap-1 text-gray-400"><Clock size={10} />{new Date(selected.fecha_creacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    {sinActividad(selected) && (
+                      <span className="flex items-center gap-1 text-amber-600"><AlertTriangle size={10} />{Math.floor(selected.dias_sin_actividad ?? 0)}d sin actividad</span>
+                    )}
                   </div>
                 </>
               )}
 
               {/* Cambio de estado */}
-              <div className="flex gap-1 mb-3 flex-wrap">
+              <div className="flex gap-1 mb-2 flex-wrap">
                 {ESTADOS.filter(e => e !== selected.estado).map(e => (
                   <button key={e} onClick={() => handleEstado(selected, e)} className="btn-secondary text-xs !py-0.5 !px-2">
                     → {e.replace('_', ' ')}
                   </button>
                 ))}
               </div>
+
+              {/* Facturación — solo cuando está cerrada */}
+              {selected.estado === 'cerrado' && (
+                selected.tipo_facturacion === 'mensual' ? (
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <Receipt size={12} className="text-violet-400 shrink-0" />
+                    <span className="text-xs text-violet-600 font-medium">Incluido en arancel mensual</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                    <Receipt size={12} className="text-gray-400 shrink-0" />
+                    <span className="text-xs text-gray-400">Cobro:</span>
+                    <button
+                      onClick={() => handleFacturacion(selected.estado_facturacion === 'pendiente_cobro' ? null : 'pendiente_cobro')}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border transition-colors ${
+                        selected.estado_facturacion === 'pendiente_cobro'
+                          ? 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                          : 'border-gray-200 text-gray-400 hover:border-yellow-300 hover:text-yellow-600'
+                      }`}
+                    >
+                      <DollarSign size={10} className="inline mr-0.5" />Pend. cobro
+                    </button>
+                    <button
+                      onClick={() => handleFacturacion(selected.estado_facturacion === 'facturada' ? null : 'facturada')}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border transition-colors ${
+                        selected.estado_facturacion === 'facturada'
+                          ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                          : 'border-gray-200 text-gray-400 hover:border-emerald-300 hover:text-emerald-600'
+                      }`}
+                    >
+                      <Check size={10} className="inline mr-0.5" />Facturada
+                    </button>
+                    {selected.estado_facturacion && (
+                      <button onClick={() => handleFacturacion(null)} className="text-[10px] text-gray-400 hover:text-red-500 px-1" title="Quitar estado de cobro">
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
 
               {/* Tareas vinculadas */}
               <div className="border-t pt-3 mb-1">
@@ -449,24 +634,17 @@ export default function Incidencias() {
                   </h4>
                   {!showNuevaTarea && !showVincular && (
                     <div className="flex gap-1.5">
-                      <button
-                        onClick={() => setShowNuevaTarea(true)}
-                        className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5 font-medium"
-                      >
+                      <button onClick={() => setShowNuevaTarea(true)} className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5 font-medium">
                         <Plus size={11} /> Nueva
                       </button>
                       <span className="text-gray-300">|</span>
-                      <button
-                        onClick={() => { setShowVincular(true); setTaskSeleccionada(''); }}
-                        className="text-xs text-gray-500 hover:text-primary-700 flex items-center gap-0.5"
-                      >
+                      <button onClick={() => { setShowVincular(true); setTaskSeleccionada(''); }} className="text-xs text-gray-500 hover:text-primary-700 flex items-center gap-0.5">
                         <Link2 size={11} /> Vincular existente
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* Lista de tareas vinculadas */}
                 {tareasVinculadas.length === 0 && !showNuevaTarea && !showVincular && (
                   <p className="text-xs text-gray-400 mb-2">Sin tareas. Creá una nueva o vinculá una existente.</p>
                 )}
@@ -480,48 +658,29 @@ export default function Incidencias() {
                           {tv.task_due && <span className="text-orange-500 font-medium flex items-center gap-0.5"><Calendar size={9} />Vence {new Date(tv.task_due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDesvincularTarea(tv.id)}
-                        className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        title="Desvincular"
-                      >
+                      <button onClick={() => handleDesvincularTarea(tv.id)} className="p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Desvincular">
                         <Unlink size={11} />
                       </button>
                     </div>
                   ))}
                 </div>
 
-                {/* Form: nueva tarea (crea en Google Tasks + vincula) */}
                 {showNuevaTarea && (
                   <div className="bg-primary-50 border border-primary-100 rounded-lg p-2.5 space-y-2">
                     <p className="text-[10px] font-semibold text-primary-600 uppercase tracking-wide">Nueva tarea · IT Soporte</p>
                     <input
-                      className="input text-xs"
-                      placeholder="Título de la tarea *"
-                      autoFocus
+                      className="input text-xs" placeholder="Título de la tarea *" autoFocus
                       value={nuevaTareaForm.title}
                       onChange={e => setNuevaTareaForm(f => ({ ...f, title: e.target.value }))}
                       onKeyDown={e => e.key === 'Escape' && setShowNuevaTarea(false)}
                     />
-                    <textarea
-                      className="input text-xs resize-none"
-                      rows={2}
-                      placeholder="Notas (opcional)..."
+                    <textarea className="input text-xs resize-none" rows={2} placeholder="Notas (opcional)..."
                       value={nuevaTareaForm.notes}
                       onChange={e => setNuevaTareaForm(f => ({ ...f, notes: e.target.value }))}
                     />
                     <div className="flex gap-1.5 items-center">
-                      <input
-                        type="date"
-                        className="input text-xs flex-1"
-                        value={nuevaTareaForm.due}
-                        onChange={e => setNuevaTareaForm(f => ({ ...f, due: e.target.value }))}
-                      />
-                      <button
-                        onClick={handleCrearYVincular}
-                        disabled={!nuevaTareaForm.title.trim() || savingTarea}
-                        className="btn-primary !px-2.5 !py-1 text-xs disabled:opacity-40 shrink-0"
-                      >
+                      <input type="date" className="input text-xs flex-1" value={nuevaTareaForm.due} onChange={e => setNuevaTareaForm(f => ({ ...f, due: e.target.value }))} />
+                      <button onClick={handleCrearYVincular} disabled={!nuevaTareaForm.title.trim() || savingTarea} className="btn-primary !px-2.5 !py-1 text-xs disabled:opacity-40 shrink-0">
                         {savingTarea ? '...' : <><Check size={12} /> Crear</>}
                       </button>
                       <button onClick={() => { setShowNuevaTarea(false); setNuevaTareaForm({ title: '', notes: '', due: '' }); }} className="btn-secondary !px-2 !py-1 text-xs shrink-0">
@@ -531,17 +690,11 @@ export default function Incidencias() {
                   </div>
                 )}
 
-                {/* Selector: vincular tarea existente */}
                 {showVincular && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Vincular tarea existente</p>
                     <div className="flex gap-1.5">
-                      <select
-                        className="input text-xs flex-1"
-                        value={taskSeleccionada}
-                        onChange={e => setTaskSeleccionada(e.target.value)}
-                        autoFocus
-                      >
+                      <select className="input text-xs flex-1" value={taskSeleccionada} onChange={e => setTaskSeleccionada(e.target.value)} autoFocus>
                         <option value="">Seleccionar tarea de IT Soporte...</option>
                         {tasks
                           .filter(t => t.title && !tareasVinculadas.find(tv => tv.google_task_id === t.id))
@@ -549,12 +702,8 @@ export default function Incidencias() {
                             <option key={t.id} value={t.id}>{t.title}{t.due ? ` · Vence ${new Date(t.due).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}` : ''}</option>
                           ))}
                       </select>
-                      <button onClick={handleVincularTarea} disabled={!taskSeleccionada} className="btn-primary !px-2 !py-1 text-xs disabled:opacity-40 shrink-0">
-                        <Check size={12} />
-                      </button>
-                      <button onClick={() => { setShowVincular(false); setTaskSeleccionada(''); }} className="btn-secondary !px-2 !py-1 text-xs shrink-0">
-                        <X size={12} />
-                      </button>
+                      <button onClick={handleVincularTarea} disabled={!taskSeleccionada} className="btn-primary !px-2 !py-1 text-xs disabled:opacity-40 shrink-0"><Check size={12} /></button>
+                      <button onClick={() => { setShowVincular(false); setTaskSeleccionada(''); }} className="btn-secondary !px-2 !py-1 text-xs shrink-0"><X size={12} /></button>
                     </div>
                   </div>
                 )}
@@ -563,14 +712,10 @@ export default function Incidencias() {
               {/* Actividades */}
               <div className="border-t pt-3">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Actividades</h4>
-
                 <div className="space-y-0 mb-3 max-h-72 overflow-y-auto">
-                  {(selected.actividades || []).length === 0 && (
-                    <p className="text-xs text-gray-400 py-1">Sin actividades</p>
-                  )}
+                  {(selected.actividades || []).length === 0 && <p className="text-xs text-gray-400 py-1">Sin actividades</p>}
                   {(selected.actividades || []).map((a, idx) => (
                     <div key={a.id} className="flex gap-2 group relative">
-                      {/* Timeline line */}
                       <div className="flex flex-col items-center shrink-0">
                         <div className="w-2 h-2 rounded-full bg-primary-400 mt-1 shrink-0" />
                         {idx < (selected.actividades!.length - 1) && <div className="w-px flex-1 bg-gray-200 my-0.5" />}
@@ -602,12 +747,10 @@ export default function Incidencias() {
                   ))}
                 </div>
 
-                {/* Nueva actividad */}
                 <div className="flex gap-1.5">
                   <div className="flex-1 space-y-1.5">
                     <input
-                      className="input text-xs"
-                      placeholder="Nueva actividad..."
+                      className="input text-xs" placeholder="Nueva actividad..."
                       value={nuevaActividad}
                       onChange={e => setNuevaActividad(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleAddActividad()}
@@ -630,10 +773,23 @@ export default function Incidencias() {
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="label">Cliente *</label>
-                <select className="input" required value={form.cliente_id} onChange={e => setForm(f => ({ ...f, cliente_id: e.target.value }))}>
-                  <option value="">Seleccionar...</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.empresa ? ` (${c.empresa})` : ''}</option>)}
-                </select>
+                <ClienteSelect
+                  clientes={clientes}
+                  value={form.cliente_id}
+                  onChange={id => setForm(f => ({ ...f, cliente_id: id, sector_id: '' }))}
+                  placeholder="Buscar cliente..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Sector</label>
+                <SectorSelect
+                  clienteId={form.cliente_id}
+                  value={form.sector_id}
+                  onChange={v => setForm(f => ({ ...f, sector_id: v }))}
+                  placeholder={form.cliente_id ? 'Sector afectado...' : 'Primero seleccioná un cliente'}
+                  useId
+                />
               </div>
               <div>
                 <label className="label">Título *</label>
@@ -652,7 +808,7 @@ export default function Incidencias() {
                 </div>
                 <div>
                   <label className="label">Técnico</label>
-                  <input className="input" value={form.tecnico_asignado} onChange={e => setForm(f => ({ ...f, tecnico_asignado: e.target.value }))} />
+                  <TecnicoSelect value={form.tecnico_id} onChange={v => setForm(f => ({ ...f, tecnico_id: v }))} />
                 </div>
               </div>
               <div className="flex gap-2 justify-end pt-2">

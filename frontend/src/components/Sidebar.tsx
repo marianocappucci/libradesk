@@ -1,13 +1,16 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, AlertCircle, CalendarDays, CheckSquare, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, AlertCircle, CalendarDays, CheckSquare, LogOut, Monitor, BarChart2, UserCog } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const links = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
+  { to: '/equipos', icon: Monitor, label: 'Equipos' },
   { to: '/agenda', icon: CalendarDays, label: 'Agenda' },
   { to: '/tareas', icon: CheckSquare, label: 'Tareas' },
+  { to: '/reportes', icon: BarChart2, label: 'Reportes' },
+  { to: '/tecnicos', icon: UserCog, label: 'Técnicos' },
 ];
 
 export default function Sidebar() {

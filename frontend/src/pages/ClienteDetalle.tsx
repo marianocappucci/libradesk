@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getCliente, getIncidencias, getTareasCliente } from '../services/api';
+import { getCliente, getIncidencias, getTareasCliente, getSectores, createSector, deleteSector } from '../services/api';
 import {
   ArrowLeft, Building2, Mail, Phone, MapPin, FileText,
-  AlertCircle, CheckSquare, ArrowRight, User, Clock,
+  AlertCircle, CheckSquare, ArrowRight, User, Clock, CalendarClock, Wrench,
+  Layers, Plus, Trash2,
 } from 'lucide-react';
 
 interface Cliente {
   id: number; nombre: string; empresa?: string; email?: string;
   telefono?: string; ciudad?: string; observaciones?: string;
+  tipo_facturacion?: string;
 }
 interface Incidencia {
   id: number; titulo: string; estado: string; prioridad: string;
@@ -39,6 +41,10 @@ export default function ClienteDetalle() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [sectores, setSectores] = useState<{ id: number; nombre: string }[]>([]);
+  const [nuevoSector, setNuevoSector] = useState('');
+  const [savingSector, setSavingSector] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     const numId = Number(id);
@@ -46,11 +52,13 @@ export default function ClienteDetalle() {
       getCliente(numId),
       getIncidencias({ cliente_id: numId }),
       getTareasCliente(numId),
+      getSectores(numId),
     ])
-      .then(([c, inc, t]) => {
+      .then(([c, inc, t, s]) => {
         setCliente(c.data);
         setIncidencias(inc.data);
         setTasks(t.data || []);
+        setSectores(s.data || []);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -74,6 +82,27 @@ export default function ClienteDetalle() {
 
   const irAIncidencias = () => navigate(`/incidencias?cliente_id=${cliente.id}`);
 
+  const handleAddSector = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoSector.trim() || !cliente) return;
+    setSavingSector(true);
+    try {
+      const r = await createSector({ cliente_id: cliente.id, nombre: nuevoSector.trim() });
+      setSectores(s => [...s, r.data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setNuevoSector('');
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Error al crear sector');
+    } finally {
+      setSavingSector(false);
+    }
+  };
+
+  const handleDeleteSector = async (id: number) => {
+    if (!confirm('¿Eliminar este sector?')) return;
+    await deleteSector(id);
+    setSectores(s => s.filter(x => x.id !== id));
+  };
+
   return (
     <div>
       {/* Breadcrumb / back */}
@@ -89,7 +118,13 @@ export default function ClienteDetalle() {
       <div className="card !p-5 mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{cliente.nombre}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-gray-900">{cliente.nombre}</h1>
+              {cliente.tipo_facturacion === 'mensual'
+                ? <span className="badge bg-violet-100 text-violet-700 flex items-center gap-0.5"><CalendarClock size={10} /> Arancel mensual</span>
+                : <span className="badge bg-blue-50 text-blue-600 flex items-center gap-0.5"><Wrench size={10} /> Por servicio</span>
+              }
+            </div>
             {cliente.empresa && (
               <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-0.5">
                 <Building2 size={13} /> {cliente.empresa}
@@ -174,8 +209,53 @@ export default function ClienteDetalle() {
           )}
         </div>
 
-        {/* Columna derecha: Tareas vinculadas */}
-        <div>
+        {/* Columna derecha */}
+        <div className="space-y-4">
+
+          {/* Sectores */}
+          <div className="card !p-4 h-fit">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers size={15} className="text-indigo-500" />
+              <h2 className="font-semibold text-gray-800 text-sm">
+                Sectores <span className="text-gray-400 font-normal">({sectores.length})</span>
+              </h2>
+            </div>
+            <form onSubmit={handleAddSector} className="flex gap-2 mb-3">
+              <input
+                className="input text-xs flex-1"
+                placeholder="Nombre del sector..."
+                value={nuevoSector}
+                onChange={e => setNuevoSector(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={savingSector || !nuevoSector.trim()}
+                className="btn-primary text-xs !py-1.5 !px-2.5 shrink-0 disabled:opacity-50"
+              >
+                <Plus size={13} />
+              </button>
+            </form>
+            {sectores.length === 0 ? (
+              <p className="text-xs text-gray-400">Sin sectores. Agregá los sectores de esta empresa para poder asignarlos a incidencias y equipos.</p>
+            ) : (
+              <ul className="space-y-1">
+                {sectores.map(s => (
+                  <li key={s.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-indigo-50 group transition-colors">
+                    <span className="text-xs text-gray-700">{s.nombre}</span>
+                    <button
+                      onClick={() => handleDeleteSector(s.id)}
+                      className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                      title="Eliminar sector"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Tareas vinculadas */}
           <div className="card !p-4 h-fit">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -208,6 +288,7 @@ export default function ClienteDetalle() {
               )
             }
           </div>
+
         </div>
       </div>
     </div>
