@@ -1,0 +1,42 @@
+name: Deploy a VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy en VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 149.50.136.218
+          port: 5384
+          username: root
+          key: ${{ secrets.VPS_DEPLOY_KEY }}
+          script: |
+            set -e
+            cd /root/soporte-neuroflow
+
+            echo "→ git pull"
+            git pull origin main
+
+            echo "→ backend: instalar deps y compilar"
+            cd backend
+            npm install
+            npm run build
+            cd ..
+
+            echo "→ frontend: instalar deps y compilar"
+            cd frontend
+            npm install
+            npm run build
+            cd ..
+
+            echo "→ reiniciar PM2"
+            pm2 restart soporte-neuroflow
+
+            echo "Deploy OK: $(date)"
