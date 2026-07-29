@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
 import { Equipos } from './pages/Equipos'
 import { Incidencias } from './pages/Incidencias'
+import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Tecnicos } from './pages/Tecnicos'
 import { Usuarios } from './pages/Usuarios'
 
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
+      <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
