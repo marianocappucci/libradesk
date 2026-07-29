@@ -15,6 +15,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
 from .services.tecnicos import TecnicoRepository
 from .services.users import ensure_default_admin
@@ -42,6 +43,7 @@ def create_app(database_url: str) -> FastAPI:
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
+    app.state.reportes = ReportesService(sessions)
 
     app.include_router(health.router)
     app.include_router(auth_router.router)

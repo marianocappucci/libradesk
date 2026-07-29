@@ -99,4 +99,130 @@ def test_export_xlsx(client):
     client.post("/api/clientes", json={"nombre": "Cliente XLSX"})
     r = client.get("/api/reportes/clientes.xlsx")
     assert r.status_code == 200
-    assert r.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert r.headers["content-type"] == XLSX_MIME
+
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _armar_datos_para_reportes(client) -> dict:
+    """Un cliente por_servicio con equipo (garantia vencida), incidencia
+    cerrada, actividad y movimiento — toca las 6 consultas analiticas."""
+    cliente_id = client.post("/api/clientes", json={
+        "nombre": "Reportes SA", "empresa": "Reportes SA",
+        "tipo_facturacion": "por_servicio",
+    }).json()["id"]
+    equipo_id = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Notebook", "marca": "Lenovo",
+        "garantia_vence": "2020-01-01", "estado": "activo",
+    }).json()["id"]
+    tecnico_id = client.post("/api/tecnicos", json={"nombre": "Tec Reportes"}).json()["id"]
+    incidencia_id = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "equipo_id": equipo_id, "tecnico_id": tecnico_id,
+        "titulo": "Falla de fuente", "prioridad": "alta",
+    }).json()["id"]
+    client.post(f"/api/incidencias/{incidencia_id}/actividades",
+                json={"descripcion": "Diagnostico inicial"})
+    client.put(f"/api/incidencias/{incidencia_id}", json={
+        "cliente_id": cliente_id, "equipo_id": equipo_id, "tecnico_id": tecnico_id,
+        "titulo": "Falla de fuente", "prioridad": "alta", "estado": "cerrado",
+    })
+    return {"cliente_id": cliente_id, "equipo_id": equipo_id}
+
+
+def test_reportes_analiticos_devuelven_xlsx(client):
+    """Los 6 reportes reconstruidos responden 200 con un xlsx real. Se
+    verifica la firma ZIP ('PK') y no solo el content-type: un 200 con
+    cuerpo vacio pasaria el chequeo de header igual."""
+    _login(client)
+    _armar_datos_para_reportes(client)
+    periodo = "desde=2020-01-01&hasta=2030-12-31"
+
+    for url in [
+        "/api/reportes/equipamiento.xlsx",
+        f"/api/reportes/incidencias-periodo.xlsx?{periodo}",
+        f"/api/reportes/facturacion.xlsx?{periodo}",
+        "/api/reportes/garantias.xlsx?dias=60",
+        f"/api/reportes/tecnico.xlsx?{periodo}",
+        f"/api/reportes/movimientos.xlsx?{periodo}",
+    ]:
+        r = client.get(url)
+        assert r.status_code == 200, f"{url} -> {r.status_code}"
+        assert r.headers["content-type"] == XLSX_MIME, url
+        assert r.content[:2] == b"PK", f"{url} no devolvio un xlsx real"
+
+
+def test_reporte_periodo_exige_fechas(client):
+    """`desde`/`hasta` son obligatorios: sin ellos el reporte no tiene
+    sentido y el original respondia 400."""
+    _login(client)
+    assert client.get("/api/reportes/incidencias-periodo.xlsx").status_code == 422
+
+
+def test_reportes_exigen_autenticacion(client):
+    assert client.get("/api/reportes/garantias.xlsx").status_code == 401
+
+
+def test_contenido_real_del_reporte_por_tecnico(client):
+    """Lee el xlsx con openpyxl y confirma los numeros, no solo que baje:
+    un reporte que devuelve un archivo vacio tambien daria 200."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    _login(client)
+    _armar_datos_para_reportes(client)
+    r = client.get("/api/reportes/tecnico.xlsx?desde=2020-01-01&hasta=2030-12-31")
+    ws = load_workbook(BytesIO(r.content)).active
+
+    # Fila 4 = headers; 5 = primer tecnico; ultima = totales.
+    assert ws.cell(row=4, column=1).value == "Técnico"
+    assert ws.cell(row=5, column=1).value == "Tec Reportes"
+    assert ws.cell(row=5, column=2).value == 1  # total
+    assert ws.cell(row=5, column=5).value == 1  # cerradas
+    assert ws.cell(row=5, column=6).value == "100%"  # % resolucion
+    assert ws.cell(row=5, column=7).value == 1  # actividades
+    assert ws.cell(row=6, column=1).value == "TOTAL"
+
+
+def test_garantia_vencida_se_reporta_como_vencida(client):
+    """El equipo del fixture vencio en 2020: la columna de dias tiene que
+    decir 'Vencida hace Xd', no un numero de dias positivo."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    _login(client)
+    _armar_datos_para_reportes(client)
+    r = client.get("/api/reportes/garantias.xlsx?dias=60")
+    ws = load_workbook(BytesIO(r.content)).active
+    assert str(ws.cell(row=5, column=9).value).startswith("Vencida hace")
+
+
+def test_facturacion_solo_incluye_clientes_por_servicio(client):
+    """Un cliente 'mensual' cobra abono, no incidencia: sus cerradas no
+    deben aparecer en el reporte de facturacion."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    _login(client)
+    _armar_datos_para_reportes(client)  # por_servicio -> si aparece
+
+    mensual_id = client.post("/api/clientes", json={
+        "nombre": "Abono SA", "tipo_facturacion": "mensual",
+    }).json()["id"]
+    inc = client.post("/api/incidencias", json={
+        "cliente_id": mensual_id, "titulo": "Incidencia de abono",
+    }).json()["id"]
+    client.put(f"/api/incidencias/{inc}", json={
+        "cliente_id": mensual_id, "titulo": "Incidencia de abono", "estado": "cerrado",
+    })
+
+    r = client.get("/api/reportes/facturacion.xlsx?desde=2020-01-01&hasta=2030-12-31")
+    ws = load_workbook(BytesIO(r.content)).active
+    textos = [
+        str(c.value) for fila in ws.iter_rows() for c in fila if c.value is not None
+    ]
+    assert any("Falla de fuente" in t for t in textos)
+    assert not any("Incidencia de abono" in t for t in textos)
