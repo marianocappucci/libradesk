@@ -1,6 +1,11 @@
 # LibraDesk
 
-Sistema interno de soporte IT. Gestión de clientes, equipos, incidencias, agenda y tareas, con integración a Google Workspace.
+Sistema interno de soporte IT. Gestión de clientes, equipos e incidencias.
+
+Reescrito el 2026-07-29 como producto Libra nativo (antes: Node.js/
+Express + PostgreSQL, ver historial de git) — comparte stack y motores
+con el resto de la familia Libra (Contalibra/Restolibra/Gestiolibra/
+MedLibra/VentaLibra).
 
 ---
 
@@ -8,32 +13,34 @@ Sistema interno de soporte IT. Gestión de clientes, equipos, incidencias, agend
 
 | Módulo | Descripción |
 |---|---|
-| **Clientes** | CRUD de clientes con sincronización bidireccional a Google Contacts (etiqueta "IT Soporte") |
-| **Equipos** | Inventario de equipos por cliente (tipo, modelo, serial, garantía, estado) |
-| **Incidencias** | Tickets de soporte con estados, prioridades, técnico asignado, horas y actividades |
-| **Agenda** | Eventos en el calendario "IT Soporte" de Google Calendar |
-| **Tareas** | Lista "IT Soporte" de Google Tasks |
+| **Clientes** | CRUD de clientes (empresa, contacto, tipo de facturación) |
+| **Equipos** | Inventario de equipos por cliente, con historial de movimientos |
+| **Incidencias** | Tickets de soporte con estados, prioridades, técnico asignado, horas y auditoría de cambios de estado |
+| **Técnicos / Sectores** | Catálogos de apoyo para incidencias |
+| **Dashboard / Reportes** | Resumen agregado + exports a Excel |
 
-El acceso está restringido a una única cuenta de Google (`ALLOWED_EMAIL` en el `.env`).
-
-> La etiqueta interna "IT Soporte" de los recursos de Google Workspace (Contacts/Calendar/Tasks) queda igual por ahora — se va a eliminar junto con esta integración cuando se reemplace por una funcionalidad propietaria (pendiente, ver sección abajo).
+Login propio (usuario/contraseña) via [libraauth](https://github.com/marianocappucci/libraauth)
+— reemplaza la integración anterior con Google OAuth/Contacts/Calendar/
+Tasks (eliminada en la reescritura; reemplazarla por una funcionalidad
+propietaria queda pendiente para otra sesión).
 
 ---
 
 ## Stack
 
 **Backend**
-- Node.js 22 + Express + TypeScript
-- PostgreSQL 16 (sesiones y datos)
-- Google OAuth 2.0 + googleapis (Contacts, Calendar, Tasks)
+- FastAPI + SQLAlchemy (Python 3.12)
+- SQLite (estándar de la familia Libra)
+- [libraauth](https://github.com/marianocappucci/libraauth) — sesión por cookie + usuarios (motor nuevo, primer consumidor)
+- openpyxl para exports xlsx
 
 **Frontend**
-- React 18 + Vite + Tailwind CSS
-- Axios con `withCredentials` (sesión por cookie)
-- React Router v6
+- React 19 + Vite + Tailwind CSS v4 + shadcn/ui
+- [libra-ui](https://github.com/marianocappucci/libra-ui) (Layout, Login, AuthContext, DataTable, api-client)
+- React Hook Form + Zod + TanStack Table
 
 **Infraestructura (VPS)**
-- PM2 como process manager
+- Docker (`docker compose`), mismo patrón que el resto de la familia
 - Nginx Proxy Manager (Docker) como reverse proxy
 - Dominio: `libradesk.com.ar`
 
@@ -43,177 +50,96 @@ El acceso está restringido a una única cuenta de Google (`ALLOWED_EMAIL` en el
 
 ```
 libradesk/
-├── backend/
-│   ├── src/
-│   │   ├── controllers/      # Lógica de cada recurso
-│   │   ├── routes/           # Definición de endpoints
-│   │   ├── middleware/        # Auth (requireAuth)
-│   │   ├── database/         # Pool de conexión PostgreSQL
-│   │   ├── models/           # Tipos TypeScript
-│   │   └── utils/
-│   │       ├── contactsSync.ts   # Sync con Google Contacts
-│   │       └── googleClient.ts   # OAuth2 client factory
-│   ├── dist/                 # Compilado (generado, no commitear)
-│   ├── .env                  # Variables de entorno (no commiteado)
-│   ├── .env.example          # Plantilla de variables
-│   └── tsconfig.json
+├── app/
+│   ├── main.py            # create_app(): engine SQLite, libraauth, routers
+│   ├── asgi.py             # entrypoint uvicorn, sirve frontend/dist
+│   ├── database.py         # engine/session factory propios
+│   ├── auth.py              # shim sobre libraauth.session_auth
+│   ├── dependencies.py      # Depends(get_x_repository)
+│   ├── routers/              # endpoints FastAPI (Pydantic inline)
+│   └── services/             # modelo SQLAlchemy + Repository por recurso
 ├── frontend/
-│   ├── src/
-│   │   ├── pages/            # Clientes, Incidencias, Agenda, Tareas, Dashboard
-│   │   ├── components/       # Layout, Sidebar
-│   │   ├── hooks/            # useAuth
-│   │   └── services/         # api.ts (axios)
-│   ├── dist/                 # Build de producción (generado)
-│   └── vite.config.ts
-└── docs/
-    └── schema.sql            # Schema completo de la BD
+│   └── src/
+│       ├── pages/            # Clientes, Equipos, Incidencias, Tecnicos, Dashboard, Usuarios
+│       ├── components/       # Layout/data-table (shims libra-ui), ui/ (shadcn)
+│       └── api.ts            # cliente HTTP + tipos propios
+├── tests/                    # pytest (auth + CRUD + dashboard + xlsx)
+├── Dockerfile
+├── docker-compose.yml
+└── docs/schema.sql           # [HISTÓRICO] schema Postgres de la version Node.js anterior
 ```
 
 ---
 
-## Variables de entorno (backend/.env)
+## Variables de entorno
 
-```env
-DATABASE_URL=postgresql://usuario:password@localhost:5432/libradesk
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://libradesk.com.ar/api/auth/google/callback
-SESSION_SECRET=clave-secreta-larga
-ALLOWED_EMAIL=tu@email.com
-FRONTEND_URL=http://libradesk.com.ar
-PORT=3001
-NODE_ENV=production
-```
+| Variable | Descripción |
+|----------|-------------|
+| `SECRET_KEY` | Secreto de la cookie de sesión (libraauth) — obligatorio fuera de `ENV=development` |
+| `LIBRADESK_ADMIN_USERNAME` | Usuario admin inicial (default `admin`) |
+| `LIBRADESK_ADMIN_PASSWORD` | Contraseña del admin inicial — obligatoria fuera de `ENV=development` |
+| `DATA_DIR` | Carpeta donde vive `libradesk.db` (default `/app/data` en el container) |
+| `ENV` | `development` relaja los fail-fast anteriores |
 
 ---
 
-## Base de datos
+## Desarrollo local
 
-```sql
-clientes              -- Clientes con google_contact_id para sync
-equipos               -- Equipos vinculados a clientes
-incidencias           -- Tickets de soporte
-actividades_incidencia -- Historial de actividades por ticket
-session               -- Sesiones persistentes (connect-pg-simple)
-```
-
-Setup inicial:
 ```bash
-sudo -u postgres psql -f docs/schema.sql
-sudo -u postgres psql -c "CREATE USER usuario WITH PASSWORD 'password';"
-sudo -u postgres psql -c "CREATE DATABASE libradesk OWNER usuario;"
-sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
-sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
+# Backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+ENV=development DATA_DIR=./dev-data uvicorn app.asgi:app --reload
+
+# Frontend (proxea /auth y /api al backend en :8000, ver vite.config.ts)
+cd frontend
+npm install
+npm run dev
 ```
 
----
-
-## Google Cloud Console
-
-El proyecto requiere un OAuth 2.0 client con los siguientes scopes habilitados:
-- `openid`, `email`, `profile`
-- `https://www.googleapis.com/auth/calendar`
-- `https://www.googleapis.com/auth/tasks`
-- `https://www.googleapis.com/auth/contacts`
-
-Y la siguiente URI de redirección autorizada:
-```
-https://libradesk.com.ar/api/auth/google/callback
-```
+Tests: `pytest -v`
 
 ---
 
 ## Deploy en el VPS
 
-### Primera vez
+Mismo patrón que Gestiolibra/MedLibra/VentaLibra — build y deploy manual
+via `docker compose`, sin CI/CD automatizado (el CI de GitHub Actions
+solo corre tests, no despliega):
 
 ```bash
-# 1. Clonar
-git clone https://github.com/marianocappucci/libradesk.git
-cd libradesk
-
-# 2. Instalar dependencias
-cd backend && npm install
-cd ../frontend && npm install
-
-# 3. Configurar .env
-cp backend/.env.example backend/.env
-# editar backend/.env con los valores reales
-
-# 4. Crear BD y schema
-sudo -u postgres psql -c "CREATE USER usuario WITH PASSWORD 'password';"
-sudo -u postgres psql -c "CREATE DATABASE libradesk OWNER usuario;"
-sudo -u postgres psql -d libradesk < docs/schema.sql
-sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
-sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
-
-# 5. Compilar backend
-cd backend
-chmod -R +x node_modules/.bin/
-node_modules/.bin/tsc
-
-# 6. Build frontend
-cd ../frontend
-chmod +x node_modules/@esbuild/linux-x64/bin/esbuild
-node node_modules/vite/bin/vite.js build
-
-# 7. Iniciar con PM2
-pm2 start backend/dist/index.js --name libradesk --cwd backend
-pm2 save
-```
-
-### Deploy de cambios
-
-```bash
-# Compilar backend
-cd /root/libradesk/backend
-node_modules/.bin/tsc
-
-# Build frontend (si hubo cambios en frontend/)
-cd /root/libradesk/frontend
-node node_modules/vite/bin/vite.js build
-
-# Reiniciar
-pm2 restart libradesk --update-env
-
-# Subir a GitHub
 cd /root/libradesk
-git add <archivos>
-git commit -m "descripción"
-git push
+git pull
+docker compose build
+docker compose up -d
 ```
+
+El `Dockerfile` usa `--mount=type=ssh` para instalar las dos
+dependencias privadas (`libraauth` en el backend, `libra-ui` en el
+frontend) con sus deploy keys de solo lectura dedicadas
+(`~/.ssh/id_ed25519_libraauth`, `~/.ssh/id_ed25519_libra_ui` en el VPS).
 
 ### Comandos útiles
 
 ```bash
-pm2 status                    # Estado del proceso
-pm2 logs libradesk            # Logs en tiempo real
-pm2 logs libradesk --lines 50 --nostream  # Últimas 50 líneas
-
-# Ver sesiones activas en BD
-sudo -u postgres psql -d libradesk -c "SELECT sid, expire FROM session;"
-
-# Conectarse a la BD
-psql -U usuario -d libradesk -h localhost
+docker compose logs -f libradesk      # Logs en tiempo real
+docker compose restart libradesk
+docker exec -it libradesk sqlite3 /app/data/libradesk.db
 ```
-
----
-
-## Sincronización con Google Contacts
-
-> Pendiente: esta integración se va a reemplazar por una funcionalidad propietaria en una sesión aparte (decidido explícitamente al hacer el rebrand a LibraDesk).
-
-- Al **crear** un cliente en la app → se crea el contacto en Google y se agrega a la etiqueta "IT Soporte" via `contactGroups.members.modify`
-- Al **editar** un cliente → se actualiza el contacto en Google (verifica y re-agrega al grupo si hace falta)
-- Al **eliminar** un cliente → se elimina el contacto de Google
-- Botón **"Importar de Google"** → lee solo los contactos etiquetados "IT Soporte" e importa los que no existan en la app (merge por `google_contact_id` o email)
 
 ---
 
 ## Notas de arquitectura
 
-- El backend Express sirve tanto la API (`/api/*`) como el frontend estático (`frontend/dist/`)
-- Las sesiones se persisten en PostgreSQL (`tabla session`) con `connect-pg-simple`, sobreviven reinicios de PM2
-- El proxy en Nginx Proxy Manager apunta `libradesk.com.ar → 172.17.0.1:3001`
-- `app.set('trust proxy', 1)` está activo para funcionar correctamente detrás de NPM
-- PostgreSQL corre nativo por systemd en el VPS (`postgresql@16-main`), no en Docker
+- El backend FastAPI sirve tanto la API (`/api/*`, `/auth/*`) como el
+  frontend estático (build horneado en `/opt/frontend-dist`, fuera del
+  bind mount de dev — mismo patrón que el resto de la familia).
+- `libraauth` y el dominio propio de LibraDesk viven en el **mismo**
+  archivo SQLite (`Base.metadata.create_all()` se llama para las dos
+  metadatas contra el mismo engine) — decisión explícita para no
+  arrastrar las 28 tablas de facturación/ARCA de `libracore.db` que no
+  aplican a este producto.
+- `docs/schema.sql` queda como referencia histórica del schema Postgres
+  de la versión Node.js anterior — no se usa en el sistema actual
+  (SQLAlchemy `create_all()` en su lugar, sin Alembic todavía).

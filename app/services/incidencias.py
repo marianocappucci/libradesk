@@ -7,7 +7,7 @@ estado — 31 filas reales migradas desde Postgres). `tecnico_id`/
 donde haya coincidencia."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, func, select
@@ -151,7 +151,7 @@ class IncidenciaRepository:
                     estado_nuevo=i.estado, tecnico=usuario_actor,
                 ))
                 if i.estado in ("resuelta", "cerrado"):
-                    i.fecha_cierre = datetime.utcnow()
+                    i.fecha_cierre = datetime.now(timezone.utc)
                 else:
                     i.fecha_cierre = None
             session.commit()
@@ -171,7 +171,7 @@ class IncidenciaRepository:
             stmt = (
                 select(ActividadIncidencia)
                 .where(ActividadIncidencia.incidencia_id == incidencia_id)
-                .order_by(ActividadIncidencia.fecha.desc())
+                .order_by(ActividadIncidencia.fecha.desc(), ActividadIncidencia.id.desc())
             )
             return [_actividad_to_dict(a) for a in session.execute(stmt).scalars()]
 
@@ -188,6 +188,6 @@ class IncidenciaRepository:
             stmt = (
                 select(IncidenciaEstadoLog)
                 .where(IncidenciaEstadoLog.incidencia_id == incidencia_id)
-                .order_by(IncidenciaEstadoLog.fecha.desc())
+                .order_by(IncidenciaEstadoLog.fecha.desc(), IncidenciaEstadoLog.id.desc())
             )
             return [_estado_log_to_dict(e) for e in session.execute(stmt).scalars()]

@@ -1,3 +1,10 @@
+-- [HISTORICO, 2026-07-29] Schema de la version anterior en Node.js +
+-- PostgreSQL. El sistema actual usa FastAPI + SQLAlchemy + SQLite
+-- (modelos en app/services/*.py, create_all() en app/main.py, sin
+-- Alembic todavia) -- este archivo NO se ejecuta ni se mantiene, se
+-- conserva solo como referencia del esquema original migrado. Ver
+-- README.md.
+
 -- Crear base de datos
 CREATE DATABASE libradesk;
 

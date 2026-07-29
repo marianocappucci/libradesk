@@ -7,7 +7,7 @@ from libraauth.models import Base as AuthBase
 from libraauth.repository import UserRepository
 
 from . import database
-from .auth import build_session_auth, require_admin
+from .auth import build_session_auth, require_admin, require_staff
 from .database import Base, configure, get_engine, get_session_factory
 from .routers import auth as auth_router
 from .routers import clientes, dashboard, equipos, health, incidencias, reportes, sectores, tecnicos, users
@@ -47,13 +47,17 @@ def create_app(database_url: str) -> FastAPI:
     app.include_router(auth_router.router)
 
     admin_only = [Depends(require_admin)]
+    # Sin planes/gating (instancia unica): cualquier usuario logueado
+    # (admin o staff) lee y opera el dominio; solo el ABM de usuarios es
+    # admin-only.
+    staff_or_admin = [Depends(require_staff)]
     app.include_router(users.router, dependencies=admin_only)
-    app.include_router(clientes.router)
-    app.include_router(equipos.router)
-    app.include_router(incidencias.router)
-    app.include_router(tecnicos.router)
-    app.include_router(sectores.router)
-    app.include_router(dashboard.router)
-    app.include_router(reportes.router)
+    app.include_router(clientes.router, dependencies=staff_or_admin)
+    app.include_router(equipos.router, dependencies=staff_or_admin)
+    app.include_router(incidencias.router, dependencies=staff_or_admin)
+    app.include_router(tecnicos.router, dependencies=staff_or_admin)
+    app.include_router(sectores.router, dependencies=staff_or_admin)
+    app.include_router(dashboard.router, dependencies=staff_or_admin)
+    app.include_router(reportes.router, dependencies=staff_or_admin)
 
     return app

@@ -126,6 +126,6 @@ class EquipoRepository:
             stmt = (
                 select(EquipoMovimiento)
                 .where(EquipoMovimiento.equipo_id == equipo_id)
-                .order_by(EquipoMovimiento.fecha.desc())
+                .order_by(EquipoMovimiento.fecha.desc(), EquipoMovimiento.id.desc())
             )
             return [_mov_to_dict(m) for m in session.execute(stmt).scalars()]

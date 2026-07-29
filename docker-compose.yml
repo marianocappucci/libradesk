@@ -1,0 +1,40 @@
+services:
+  libradesk:
+    build:
+      context: .
+      # Un id SSH por paquete privado, mismo patron que el resto de la
+      # familia (ver Dockerfile) — GitHub autentica toda la conexion con
+      # la primera deploy key que le ofrecen, asi que una sola key no
+      # alcanza si hay mas de una dependencia privada.
+      ssh:
+        - default=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
+        - libraauth=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
+        - libra-ui=${LIBRA_UI_SSH_KEY:-~/.ssh/id_ed25519_libra_ui}
+    container_name: libradesk
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 192m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "8086:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:?falta SECRET_KEY}
+      - LIBRADESK_ADMIN_USERNAME=${LIBRADESK_ADMIN_USERNAME:-admin}
+      - LIBRADESK_ADMIN_PASSWORD=${LIBRADESK_ADMIN_PASSWORD:?falta LIBRADESK_ADMIN_PASSWORD}
+      - DATA_DIR=/app/data
+      - ENV=production
+    networks:
+      - stack-net
+
+networks:
+  stack-net:
+    external: true
+    name: stack_stack-net
