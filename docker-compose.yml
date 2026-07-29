@@ -1,38 +1,60 @@
+x-libradesk-build: &libradesk-build
+  context: .
+  # Un id SSH por paquete privado, mismo patron que el resto de la
+  # familia (ver Dockerfile) — GitHub autentica toda la conexion con la
+  # primera deploy key que le ofrecen, asi que una sola key no alcanza
+  # si hay mas de una dependencia privada.
+  ssh:
+    - default=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
+    - libraauth=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
+    - libra-ui=${LIBRA_UI_SSH_KEY:-~/.ssh/id_ed25519_libra_ui}
+
+x-libradesk-common: &libradesk-common
+  restart: unless-stopped
+  mem_limit: 512m
+  mem_reservation: 192m
+  cpus: 1.0
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+  networks:
+    - stack-net
+
 services:
-  libradesk:
-    build:
-      context: .
-      # Un id SSH por paquete privado, mismo patron que el resto de la
-      # familia (ver Dockerfile) — GitHub autentica toda la conexion con
-      # la primera deploy key que le ofrecen, asi que una sola key no
-      # alcanza si hay mas de una dependencia privada.
-      ssh:
-        - default=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
-        - libraauth=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
-        - libra-ui=${LIBRA_UI_SSH_KEY:-~/.ssh/id_ed25519_libra_ui}
-    container_name: libradesk
-    restart: unless-stopped
-    mem_limit: 512m
-    mem_reservation: 192m
-    cpus: 1.0
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+  # Instancia de desarrollo/pruebas — dev.libradesk.com.ar
+  libradesk-dev:
+    <<: *libradesk-common
+    build: *libradesk-build
+    container_name: libradesk-dev
     ports:
       - "8086:8000"
     volumes:
-      - ./data:/app/data
+      - ./data-dev:/app/data
     environment:
-      - SECRET_KEY=${SECRET_KEY:?falta SECRET_KEY}
-      - LIBRADESK_ADMIN_USERNAME=${LIBRADESK_ADMIN_USERNAME:-admin}
-      - LIBRADESK_ADMIN_PASSWORD=${LIBRADESK_ADMIN_PASSWORD:?falta LIBRADESK_ADMIN_PASSWORD}
+      - SECRET_KEY=${DEV_SECRET_KEY:?falta DEV_SECRET_KEY}
+      - LIBRADESK_ADMIN_USERNAME=${DEV_ADMIN_USERNAME:-admin}
+      - LIBRADESK_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:?falta DEV_ADMIN_PASSWORD}
       - DATA_DIR=/app/data
       - ENV=production
-    networks:
-      - stack-net
+
+  # Cliente real de produccion — compulibra.libradesk.com.ar
+  libradesk-compulibra:
+    <<: *libradesk-common
+    build: *libradesk-build
+    container_name: libradesk-compulibra
+    ports:
+      - "8087:8000"
+    volumes:
+      - ./data-compulibra:/app/data
+    environment:
+      - SECRET_KEY=${COMPULIBRA_SECRET_KEY:?falta COMPULIBRA_SECRET_KEY}
+      - LIBRADESK_ADMIN_USERNAME=${COMPULIBRA_ADMIN_USERNAME:-admin}
+      - LIBRADESK_ADMIN_PASSWORD=${COMPULIBRA_ADMIN_PASSWORD:?falta COMPULIBRA_ADMIN_PASSWORD}
+      - DATA_DIR=/app/data
+      - ENV=production
 
 networks:
   stack-net:
