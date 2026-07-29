@@ -17,28 +17,53 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Sin este chequeo, un LIBRA_PAT ausente no falla acá sino mas
-      # adelante, en el pip install, con un "fatal: could not read
-      # Password for 'https://github.com'" que no menciona el secret ni
-      # dice que el problema es de configuracion del repo. Paso barato
-      # que convierte esa causa en un mensaje directo.
-      - name: Check that LIBRA_PAT is configured
+      # libraauth es un repo privado, inalcanzable con el GITHUB_TOKEN
+      # default (scopeado solo a este repo). Se accede con una deploy key
+      # SSH de solo lectura registrada en libraauth, cuya clave privada
+      # vive en el secret LIBRAAUTH_DEPLOY_KEY de este repo.
+      #
+      # Por que deploy key y no un PAT: un PAT vence sin aviso y tumba el
+      # CI (y en el VPS tumbo un deploy real, incidente Restolibra del
+      # 2026-07-25). Las deploy keys no vencen. Mismo mecanismo que ya usa
+      # el VPS para las dependencias privadas de toda la familia.
+      #
+      # El alias `github-libraauth` en vez de github.com a secas es
+      # deliberado: cuando un repo necesita mas de una dependencia privada,
+      # SSH ofrece las claves en orden y GitHub autentica con la PRIMERA
+      # que acepta, que puede no ser la del repo que se esta clonando. El
+      # alias + IdentitiesOnly fuerza una identidad por repo. Aca hay una
+      # sola dependencia, pero se usa el mismo patron que en los repos con
+      # varias para que no diverjan.
+      - name: Configure SSH access to private Libra dependencies
         env:
-          LIBRA_PAT: ${{ secrets.LIBRA_PAT }}
+          LIBRAAUTH_DEPLOY_KEY: ${{ secrets.LIBRAAUTH_DEPLOY_KEY }}
         run: |
-          if [ -z "$LIBRA_PAT" ]; then
-            echo "::error::Falta el secret LIBRA_PAT en este repositorio."
+          if [ -z "$LIBRAAUTH_DEPLOY_KEY" ]; then
+            echo "::error::Falta el secret LIBRAAUTH_DEPLOY_KEY en este repositorio."
             echo "Sin el, pip no puede clonar libraauth (repo privado) y el build falla."
-            echo "Cargarlo con: gh secret set LIBRA_PAT --repo marianocappucci/libradesk"
-            echo "El PAT necesita acceso de lectura a Contents de marianocappucci/libraauth."
+            echo "Es la clave privada de una deploy key de solo lectura sobre marianocappucci/libraauth."
             exit 1
           fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$LIBRAAUTH_DEPLOY_KEY" > ~/.ssh/id_libraauth
+          chmod 600 ~/.ssh/id_libraauth
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          printf 'Host github-libraauth\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_libraauth\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+          git config --global \
+            url."git@github-libraauth:marianocappucci/libraauth".insteadOf \
+            "https://github.com/marianocappucci/libraauth"
 
-      # libraauth es un repo privado, inalcanzable con el GITHUB_TOKEN
-      # default (scope limitado a este repo). LIBRA_PAT es un PAT de
-      # grano fino con acceso de lectura a Contents solo de ese repo.
-      - name: Configure git for private Libra dependencies
-        run: git config --global url."https://${{ secrets.LIBRA_PAT }}@github.com/".insteadOf "https://github.com/"
+      # Confirma que la deploy key autentica y que resuelve a libraauth y
+      # no a otro repo -- sin esto, una clave equivocada recien se notaria
+      # en el pip install con un error de git que no dice cual fallo.
+      - name: Verify deploy key resolves to libraauth
+        run: |
+          saludo=$(ssh -o StrictHostKeyChecking=yes -T git@github-libraauth 2>&1 || true)
+          echo "$saludo"
+          case "$saludo" in
+            *marianocappucci/libraauth*) echo "OK: autentica como libraauth" ;;
+            *) echo "::error::La deploy key no resuelve a marianocappucci/libraauth."; exit 1 ;;
+          esac
 
       - name: Install package + dev deps
         run: pip install -e ".[dev]"
