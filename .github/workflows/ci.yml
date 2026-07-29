@@ -17,6 +17,23 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Sin este chequeo, un LIBRA_PAT ausente no falla acá sino mas
+      # adelante, en el pip install, con un "fatal: could not read
+      # Password for 'https://github.com'" que no menciona el secret ni
+      # dice que el problema es de configuracion del repo. Paso barato
+      # que convierte esa causa en un mensaje directo.
+      - name: Check that LIBRA_PAT is configured
+        env:
+          LIBRA_PAT: ${{ secrets.LIBRA_PAT }}
+        run: |
+          if [ -z "$LIBRA_PAT" ]; then
+            echo "::error::Falta el secret LIBRA_PAT en este repositorio."
+            echo "Sin el, pip no puede clonar libraauth (repo privado) y el build falla."
+            echo "Cargarlo con: gh secret set LIBRA_PAT --repo marianocappucci/libradesk"
+            echo "El PAT necesita acceso de lectura a Contents de marianocappucci/libraauth."
+            exit 1
+          fi
+
       # libraauth es un repo privado, inalcanzable con el GITHUB_TOKEN
       # default (scope limitado a este repo). LIBRA_PAT es un PAT de
       # grano fino con acceso de lectura a Contents solo de ese repo.
