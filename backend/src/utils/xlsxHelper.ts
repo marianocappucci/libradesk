@@ -45,7 +45,7 @@ export interface XlsxMeta { titulo: string; filtros: string[]; generadoEl: strin
 
 export function createSheet(meta: XlsxMeta, sheetName: string) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'IT Support Hub';
+  wb.creator = 'LibraDesk';
   wb.created = new Date();
   const ws = wb.addWorksheet(sheetName, {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
@@ -56,7 +56,7 @@ export function createSheet(meta: XlsxMeta, sheetName: string) {
 export function addMetaHeader(ws: ExcelJS.Worksheet, meta: XlsxMeta, colCount: number): number {
   ws.mergeCells(1, 1, 1, colCount);
   const r1 = ws.getCell('A1');
-  r1.value = `IT Support Hub — ${meta.titulo}`;
+  r1.value = `LibraDesk — ${meta.titulo}`;
   r1.font = { bold: true, size: 13, color: { argb: WHITE } };
   r1.fill = fill(PRIMARY);
   r1.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };

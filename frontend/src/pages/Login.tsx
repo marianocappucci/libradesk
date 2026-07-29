@@ -7,7 +7,7 @@ export default function Login({ error }: { error?: string }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">IT Support Hub</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">LibraDesk</h1>
         <p className="text-gray-500 text-sm mb-6">Sistema de soporte técnico</p>
 
         {error === 'unauthorized' && (

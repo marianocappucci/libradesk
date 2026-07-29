@@ -1,7 +1,7 @@
 {
-  "name": "soporte-it-backend",
+  "name": "libradesk-backend",
   "version": "1.0.0",
-  "description": "Backend para sistema de soporte IT",
+  "description": "Backend de LibraDesk, sistema de soporte IT",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node src/index.ts",

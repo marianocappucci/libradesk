@@ -41,7 +41,7 @@ app.use(session({
     // Limpia sesiones expiradas cada hora
     pruneSessionInterval: 60 * 60,
   }),
-  secret: process.env.SESSION_SECRET || 'soporte-it-secret-2024',
+  secret: process.env.SESSION_SECRET || 'libradesk-secret-2024',
   resave: false,
   saveUninitialized: false,
   cookie: {

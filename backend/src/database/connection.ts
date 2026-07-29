@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://usuario:password@localhost:5432/soporte_it',
+  connectionString: process.env.DATABASE_URL || 'postgresql://usuario:password@localhost:5432/libradesk',
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

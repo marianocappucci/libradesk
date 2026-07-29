@@ -181,7 +181,7 @@ export default function Reportes() {
           <div className="hidden print:block mb-6 pb-4 border-b-2 border-gray-800">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-1">IT Support Hub — Neuroflow</p>
+                <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-1">LibraDesk</p>
                 <h1 className="text-2xl font-bold text-gray-900">{cfg.label}</h1>
                 <p className="text-sm text-gray-500 mt-0.5">{cfg.desc}</p>
               </div>

@@ -1,8 +1,8 @@
 -- Crear base de datos
-CREATE DATABASE soporte_it;
+CREATE DATABASE libradesk;
 
 -- Conectarse a la BD
-\c soporte_it
+\c libradesk
 
 -- Tabla clientes
 CREATE TABLE clientes (

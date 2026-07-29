@@ -1,6 +1,6 @@
-# Soporte Neuroflow
+# LibraDesk
 
-Sistema interno de soporte IT para Neuroflow. Gestión de clientes, equipos, incidencias, agenda y tareas, con integración a Google Workspace.
+Sistema interno de soporte IT. Gestión de clientes, equipos, incidencias, agenda y tareas, con integración a Google Workspace.
 
 ---
 
@@ -15,6 +15,8 @@ Sistema interno de soporte IT para Neuroflow. Gestión de clientes, equipos, inc
 | **Tareas** | Lista "IT Soporte" de Google Tasks |
 
 El acceso está restringido a una única cuenta de Google (`ALLOWED_EMAIL` en el `.env`).
+
+> La etiqueta interna "IT Soporte" de los recursos de Google Workspace (Contacts/Calendar/Tasks) queda igual por ahora — se va a eliminar junto con esta integración cuando se reemplace por una funcionalidad propietaria (pendiente, ver sección abajo).
 
 ---
 
@@ -33,14 +35,14 @@ El acceso está restringido a una única cuenta de Google (`ALLOWED_EMAIL` en el
 **Infraestructura (VPS)**
 - PM2 como process manager
 - Nginx Proxy Manager (Docker) como reverse proxy
-- Dominio: `soporte.neuroflow.com.ar`
+- Dominio: `libradesk.com.ar`
 
 ---
 
 ## Estructura del proyecto
 
 ```
-soporte-neuroflow/
+libradesk/
 ├── backend/
 │   ├── src/
 │   │   ├── controllers/      # Lógica de cada recurso
@@ -72,13 +74,13 @@ soporte-neuroflow/
 ## Variables de entorno (backend/.env)
 
 ```env
-DATABASE_URL=postgresql://usuario:password@localhost:5432/soporte_it
+DATABASE_URL=postgresql://usuario:password@localhost:5432/libradesk
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://soporte.neuroflow.com.ar/api/auth/google/callback
+GOOGLE_REDIRECT_URI=http://libradesk.com.ar/api/auth/google/callback
 SESSION_SECRET=clave-secreta-larga
 ALLOWED_EMAIL=tu@email.com
-FRONTEND_URL=http://soporte.neuroflow.com.ar
+FRONTEND_URL=http://libradesk.com.ar
 PORT=3001
 NODE_ENV=production
 ```
@@ -99,9 +101,9 @@ Setup inicial:
 ```bash
 sudo -u postgres psql -f docs/schema.sql
 sudo -u postgres psql -c "CREATE USER usuario WITH PASSWORD 'password';"
-sudo -u postgres psql -c "CREATE DATABASE soporte_it OWNER usuario;"
-sudo -u postgres psql -d soporte_it -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
-sudo -u postgres psql -d soporte_it -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
+sudo -u postgres psql -c "CREATE DATABASE libradesk OWNER usuario;"
+sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
+sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
 ```
 
 ---
@@ -116,9 +118,8 @@ El proyecto requiere un OAuth 2.0 client con los siguientes scopes habilitados:
 
 Y la siguiente URI de redirección autorizada:
 ```
-http://soporte.neuroflow.com.ar/api/auth/google/callback
+https://libradesk.com.ar/api/auth/google/callback
 ```
-(Agregar también la versión `https://` cuando se active SSL)
 
 ---
 
@@ -128,8 +129,8 @@ http://soporte.neuroflow.com.ar/api/auth/google/callback
 
 ```bash
 # 1. Clonar
-git clone https://github.com/marianocappucci/soporte-neuroflow.git
-cd soporte-neuroflow
+git clone https://github.com/marianocappucci/libradesk.git
+cd libradesk
 
 # 2. Instalar dependencias
 cd backend && npm install
@@ -140,11 +141,11 @@ cp backend/.env.example backend/.env
 # editar backend/.env con los valores reales
 
 # 4. Crear BD y schema
-sudo -u postgres psql -c "CREATE USER usuario WITH PASSWORD 'soporte2024';"
-sudo -u postgres psql -c "CREATE DATABASE soporte_it OWNER usuario;"
-sudo -u postgres psql -d soporte_it < docs/schema.sql
-sudo -u postgres psql -d soporte_it -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
-sudo -u postgres psql -d soporte_it -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
+sudo -u postgres psql -c "CREATE USER usuario WITH PASSWORD 'password';"
+sudo -u postgres psql -c "CREATE DATABASE libradesk OWNER usuario;"
+sudo -u postgres psql -d libradesk < docs/schema.sql
+sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO usuario;"
+sudo -u postgres psql -d libradesk -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO usuario;"
 
 # 5. Compilar backend
 cd backend
@@ -157,7 +158,7 @@ chmod +x node_modules/@esbuild/linux-x64/bin/esbuild
 node node_modules/vite/bin/vite.js build
 
 # 7. Iniciar con PM2
-pm2 start backend/dist/index.js --name soporte-neuroflow --cwd backend
+pm2 start backend/dist/index.js --name libradesk --cwd backend
 pm2 save
 ```
 
@@ -165,18 +166,18 @@ pm2 save
 
 ```bash
 # Compilar backend
-cd /root/soporte-neuroflow/backend
+cd /root/libradesk/backend
 node_modules/.bin/tsc
 
 # Build frontend (si hubo cambios en frontend/)
-cd /root/soporte-neuroflow/frontend
+cd /root/libradesk/frontend
 node node_modules/vite/bin/vite.js build
 
 # Reiniciar
-pm2 restart soporte-neuroflow --update-env
+pm2 restart libradesk --update-env
 
 # Subir a GitHub
-cd /root/soporte-neuroflow
+cd /root/libradesk
 git add <archivos>
 git commit -m "descripción"
 git push
@@ -185,20 +186,22 @@ git push
 ### Comandos útiles
 
 ```bash
-pm2 status                          # Estado del proceso
-pm2 logs soporte-neuroflow          # Logs en tiempo real
-pm2 logs soporte-neuroflow --lines 50 --nostream  # Últimas 50 líneas
+pm2 status                    # Estado del proceso
+pm2 logs libradesk            # Logs en tiempo real
+pm2 logs libradesk --lines 50 --nostream  # Últimas 50 líneas
 
 # Ver sesiones activas en BD
-sudo -u postgres psql -d soporte_it -c "SELECT sid, expire FROM session;"
+sudo -u postgres psql -d libradesk -c "SELECT sid, expire FROM session;"
 
 # Conectarse a la BD
-psql -U usuario -d soporte_it -h localhost
+psql -U usuario -d libradesk -h localhost
 ```
 
 ---
 
 ## Sincronización con Google Contacts
+
+> Pendiente: esta integración se va a reemplazar por una funcionalidad propietaria en una sesión aparte (decidido explícitamente al hacer el rebrand a LibraDesk).
 
 - Al **crear** un cliente en la app → se crea el contacto en Google y se agrega a la etiqueta "IT Soporte" via `contactGroups.members.modify`
 - Al **editar** un cliente → se actualiza el contacto en Google (verifica y re-agrega al grupo si hace falta)
@@ -211,5 +214,6 @@ psql -U usuario -d soporte_it -h localhost
 
 - El backend Express sirve tanto la API (`/api/*`) como el frontend estático (`frontend/dist/`)
 - Las sesiones se persisten en PostgreSQL (`tabla session`) con `connect-pg-simple`, sobreviven reinicios de PM2
-- El proxy en Nginx Proxy Manager apunta `soporte.neuroflow.com.ar → 172.17.0.1:3001`
+- El proxy en Nginx Proxy Manager apunta `libradesk.com.ar → 172.17.0.1:3001`
 - `app.set('trust proxy', 1)` está activo para funcionar correctamente detrás de NPM
+- PostgreSQL corre nativo por systemd en el VPS (`postgresql@16-main`), no en Docker

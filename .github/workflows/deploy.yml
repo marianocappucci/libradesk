@@ -35,7 +35,7 @@ jobs:
         with:
           switches: -avz --delete
           path: backend/dist/
-          remote_path: /root/soporte-neuroflow/backend/dist/
+          remote_path: /root/libradesk/backend/dist/
           remote_host: 149.50.136.218
           remote_port: 5384
           remote_user: root
@@ -46,7 +46,7 @@ jobs:
         with:
           switches: -avz
           path: backend/package.json backend/package-lock.json
-          remote_path: /root/soporte-neuroflow/backend/
+          remote_path: /root/libradesk/backend/
           remote_host: 149.50.136.218
           remote_port: 5384
           remote_user: root
@@ -57,7 +57,7 @@ jobs:
         with:
           switches: -avz --delete
           path: frontend/dist/
-          remote_path: /root/soporte-neuroflow/frontend/dist/
+          remote_path: /root/libradesk/frontend/dist/
           remote_host: 149.50.136.218
           remote_port: 5384
           remote_user: root
@@ -72,7 +72,7 @@ jobs:
           key: ${{ secrets.VPS_DEPLOY_KEY }}
           script: |
             set -e
-            cd /root/soporte-neuroflow/backend
+            cd /root/libradesk/backend
             npm install --omit=dev
-            pm2 restart soporte-neuroflow
+            pm2 restart libradesk
             echo "Deploy OK: $(date)"
