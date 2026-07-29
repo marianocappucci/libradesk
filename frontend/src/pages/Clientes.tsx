@@ -1,225 +1,265 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
-import api from '../services/api';
-import { Plus, Search, Building2, Phone, Mail, MapPin, Pencil, Trash2, RefreshCw, CalendarClock, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { type ColumnDef } from '@tanstack/react-table'
+import { api, ApiError, type Cliente } from '../api'
+import { useAuth } from '../context/AuthContext'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+} from '@/components/ui/form'
+import { DataTable, sortableHeader } from '@/components/data-table'
+import { Pencil, Trash2 } from 'lucide-react'
 
-interface Cliente {
-  id: number; nombre: string; empresa?: string; email?: string;
-  telefono?: string; ciudad?: string; observaciones?: string;
-  tipo_facturacion: 'mensual' | 'por_servicio';
+const clienteSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
+  empresa: z.string().trim().optional(),
+  email: z.string().trim().email('Email inválido').optional().or(z.literal('')),
+  telefono: z.string().trim().optional(),
+  ciudad: z.string().trim().optional(),
+  observaciones: z.string().trim().optional(),
+  tipo_facturacion: z.enum(['mensual', 'por_servicio']),
+})
+
+type ClienteFormValues = z.infer<typeof clienteSchema>
+
+const EMPTY_VALUES: ClienteFormValues = {
+  nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '',
+  tipo_facturacion: 'por_servicio',
 }
 
-const emptyForm = { nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '', tipo_facturacion: 'por_servicio' };
+export function Clientes() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
 
-export default function Clientes() {
-  const navigate = useNavigate();
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const load = async (q?: string) => {
-    const r = await getClientes(q);
-    setClientes(r.data);
-  };
+  const form = useForm<ClienteFormValues>({
+    resolver: zodResolver(clienteSchema),
+    defaultValues: EMPTY_VALUES,
+  })
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadClientes()
+  }, [])
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    load(search || undefined);
-  };
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
 
-  const openNew = () => { setForm(emptyForm); setEditing(null); setError(null); setShowForm(true); };
-  const openEdit = (c: Cliente) => {
-    setForm({ nombre: c.nombre, empresa: c.empresa || '', email: c.email || '', telefono: c.telefono || '', ciudad: c.ciudad || '', observaciones: c.observaciones || '', tipo_facturacion: c.tipo_facturacion || 'por_servicio' });
-    setEditing(c.id); setShowForm(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
+  async function loadClientes() {
+    setLoading(true)
+    setError(null)
     try {
-      if (editing) await updateCliente(editing, form);
-      else await createCliente(form);
-      setShowForm(false);
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Error al guardar cliente';
-      setError(msg);
+      const items = await api.get<Cliente[]>('/api/clientes')
+      setClientes(items.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    } catch (err) {
+      setError(describeError(err))
     } finally {
-      setSaving(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const handleImportGoogle = async () => {
-    setImporting(true);
-    setImportMsg(null);
+  function startCreate() {
+    setEditingId('new')
+    form.reset(EMPTY_VALUES)
+  }
+
+  function startEdit(cliente: Cliente) {
+    setEditingId(cliente.id)
+    form.reset({
+      nombre: cliente.nombre,
+      empresa: cliente.empresa ?? '',
+      email: cliente.email ?? '',
+      telefono: cliente.telefono ?? '',
+      ciudad: cliente.ciudad ?? '',
+      observaciones: cliente.observaciones ?? '',
+      tipo_facturacion: cliente.tipo_facturacion,
+    })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    form.reset(EMPTY_VALUES)
+  }
+
+  async function handleSubmit(values: ClienteFormValues) {
+    setSaving(true)
+    setError(null)
+    const payload = {
+      nombre: values.nombre,
+      empresa: values.empresa || null,
+      email: values.email || null,
+      telefono: values.telefono || null,
+      ciudad: values.ciudad || null,
+      observaciones: values.observaciones || null,
+      tipo_facturacion: values.tipo_facturacion,
+      activo: true,
+    }
     try {
-      const r = await api.post('/clientes/import-google');
-      const { imported, updated, message } = r.data;
-      if (message) {
-        setImportMsg(message);
-      } else {
-        setImportMsg(`${imported} contactos importados, ${updated} actualizados`);
-        load();
+      if (editingId === 'new') {
+        await api.post('/api/clientes', payload)
+      } else if (editingId) {
+        await api.put(`/api/clientes/${editingId}`, payload)
       }
-    } catch {
-      setImportMsg('Error al importar desde Google Contacts');
+      cancelEdit()
+      await loadClientes()
+    } catch (err) {
+      setError(describeError(err))
     } finally {
-      setImporting(false);
+      setSaving(false)
     }
-  };
+  }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este cliente?')) return;
-    await deleteCliente(id);
-    load();
-  };
+  async function handleDelete(cliente: Cliente) {
+    setError(null)
+    try {
+      await api.del(`/api/clientes/${cliente.id}`)
+      await loadClientes()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  const columns = useMemo<ColumnDef<Cliente>[]>(() => {
+    const base: ColumnDef<Cliente>[] = [
+      { accessorKey: 'nombre', header: sortableHeader('Nombre'), size: 180, minSize: 120, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.nombre}>{row.original.nombre}</span> },
+      { accessorKey: 'empresa', header: 'Empresa', size: 160, minSize: 100, cell: ({ row }) => row.original.empresa ?? '—' },
+      { accessorKey: 'telefono', header: 'Teléfono', size: 130, minSize: 100, cell: ({ row }) => row.original.telefono ?? '—' },
+      { accessorKey: 'email', header: 'Email', size: 190, minSize: 140, cell: ({ row }) => <span className="block truncate" title={row.original.email ?? undefined}>{row.original.email ?? '—'}</span> },
+      { accessorKey: 'ciudad', header: 'Ciudad', size: 120, minSize: 90, cell: ({ row }) => row.original.ciudad ?? '—' },
+      {
+        accessorKey: 'activo',
+        header: 'Estado',
+        size: 100,
+        minSize: 85,
+        cell: ({ row }) => (
+          <Badge variant={row.original.activo ? 'default' : 'outline'}>
+            {row.original.activo ? 'Activo' : 'Inactivo'}
+          </Badge>
+        ),
+      },
+    ]
+    if (isAdmin) {
+      base.push({
+        id: 'actions',
+        header: () => <div className="text-right">Acciones</div>,
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => startEdit(row.original)}><Pencil /></Button>
+            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar cliente" aria-label="Eliminar cliente" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
+          </div>
+        ),
+      })
+    }
+    return base
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin])
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={handleImportGoogle} disabled={importing} className="btn-secondary disabled:opacity-60 flex items-center gap-1.5">
-            <RefreshCw size={14} className={importing ? 'animate-spin' : ''} />
-            {importing ? 'Importando...' : 'Importar de Google'}
-          </button>
-          <button onClick={openNew} className="btn-primary">
-            <Plus size={16} /> Nuevo cliente
-          </button>
-        </div>
-      </div>
-
-      {importMsg && (
-        <div className="mb-4 text-sm rounded-lg px-4 py-2 bg-blue-50 text-blue-700">{importMsg}</div>
-      )}
-
-      <form onSubmit={handleSearch} className="flex gap-2 mb-6">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            className="input pl-9"
-            placeholder="Buscar por nombre, empresa o email..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <button type="submit" className="btn-secondary">Buscar</button>
-        {search && <button type="button" onClick={() => { setSearch(''); load(); }} className="btn-secondary">Limpiar</button>}
-      </form>
-
-      {/* Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">{editing ? 'Editar cliente' : 'Nuevo cliente'}</h2>
-            {error && (
-              <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3 mb-2">{error}</div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="label">Nombre *</label>
-                <input className="input" required value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Empresa</label>
-                  <input className="input" value={form.empresa} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="label">Ciudad</label>
-                  <input className="input" value={form.ciudad} onChange={e => setForm(f => ({ ...f, ciudad: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Email</label>
-                  <input type="email" className="input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="label">Teléfono</label>
-                  <input className="input" value={form.telefono} onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))} />
-                </div>
-              </div>
-              <div>
-                <label className="label">Tipo de facturación</label>
-                <div className="flex gap-2">
-                  <label className={`flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer transition-colors ${form.tipo_facturacion === 'mensual' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <input type="radio" name="tipo_facturacion" value="mensual" checked={form.tipo_facturacion === 'mensual'} onChange={() => setForm(f => ({ ...f, tipo_facturacion: 'mensual' }))} className="accent-primary-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 flex items-center gap-1"><CalendarClock size={13} /> Arancel mensual</p>
-                      <p className="text-xs text-gray-400">Cuota fija, sin cobro por incidencia</p>
-                    </div>
-                  </label>
-                  <label className={`flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer transition-colors ${form.tipo_facturacion === 'por_servicio' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <input type="radio" name="tipo_facturacion" value="por_servicio" checked={form.tipo_facturacion === 'por_servicio'} onChange={() => setForm(f => ({ ...f, tipo_facturacion: 'por_servicio' }))} className="accent-primary-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 flex items-center gap-1"><Wrench size={13} /> Por servicio</p>
-                      <p className="text-xs text-gray-400">Se factura por incidencia cerrada</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-              <div>
-                <label className="label">Observaciones</label>
-                <textarea className="input" rows={2} value={form.observaciones} onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))} />
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={() => { setShowForm(false); setError(null); }} className="btn-secondary">Cancelar</button>
-                <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {clientes.map(c => (
-          <div
-            key={c.id}
-            onClick={() => navigate(`/clientes/${c.id}`)}
-            className="card hover:shadow-md transition-shadow cursor-pointer hover:border-primary-200"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-gray-900">{c.nombre}</h3>
-                  {c.tipo_facturacion === 'mensual'
-                    ? <span className="badge bg-violet-100 text-violet-700 flex items-center gap-0.5"><CalendarClock size={9} /> Mensual</span>
-                    : <span className="badge bg-blue-50 text-blue-600 flex items-center gap-0.5"><Wrench size={9} /> Por servicio</span>
-                  }
-                </div>
-                {c.empresa && <p className="text-sm text-gray-500 flex items-center gap-1"><Building2 size={12} />{c.empresa}</p>}
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 text-gray-400 hover:text-primary-600 rounded"><Pencil size={14} /></button>
-                <button onClick={e => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded"><Trash2 size={14} /></button>
-              </div>
-            </div>
-            <div className="space-y-1 text-sm text-gray-500">
-              {c.email && <p className="flex items-center gap-1.5"><Mail size={12} />{c.email}</p>}
-              {c.telefono && <p className="flex items-center gap-1.5"><Phone size={12} />{c.telefono}</p>}
-              {c.ciudad && <p className="flex items-center gap-1.5"><MapPin size={12} />{c.ciudad}</p>}
-            </div>
-          </div>
-        ))}
-        {clientes.length === 0 && (
-          <div className="col-span-full text-center py-12 text-gray-400">
-            No hay clientes. ¡Creá el primero!
-          </div>
+    <div className="grid gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Clientes</h2>
+        {isAdmin && editingId === null && (
+          <Button onClick={startCreate}>+ Nuevo cliente</Button>
         )}
       </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {isAdmin && editingId !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{editingId === 'new' ? 'Nuevo cliente' : 'Editar cliente'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
+                <FormField control={form.control} name="nombre" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl><Input {...field} className="w-48" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="empresa" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Empresa</FormLabel>
+                    <FormControl><Input {...field} className="w-44" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="telefono" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl><Input {...field} className="w-36" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl><Input type="email" {...field} className="w-52" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="ciudad" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ciudad</FormLabel>
+                    <FormControl><Input {...field} className="w-36" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="tipo_facturacion" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Facturación</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="por_servicio">Por servicio</SelectItem>
+                        <SelectItem value="mensual">Mensual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <div className="flex gap-2 pt-6">
+                  <Button type="submit" disabled={saving}>
+                    {saving ? 'Guardando…' : editingId === 'new' ? 'Crear' : 'Guardar'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={cancelEdit}>Cancelar</Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent>
+          {loading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <DataTable columns={columns} data={clientes} emptyMessage="Sin clientes todavía." />
+          )}
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }

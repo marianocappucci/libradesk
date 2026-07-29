@@ -1,129 +1,188 @@
-import { useEffect, useState } from 'react';
-import { getTecnicos, createTecnico, updateTecnico, deleteTecnico } from '../services/api';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { type ColumnDef } from '@tanstack/react-table'
+import { api, ApiError, type Tecnico } from '../api'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+} from '@/components/ui/form'
+import { DataTable, sortableHeader } from '@/components/data-table'
+import { Pencil, Trash2 } from 'lucide-react'
 
-interface Tecnico { id: number; nombre: string; activo: boolean; created_at: string; }
+const tecnicoSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
+})
 
-export default function Tecnicos() {
-  const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [newNombre, setNewNombre] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editNombre, setEditNombre] = useState('');
+type TecnicoFormValues = z.infer<typeof tecnicoSchema>
 
-  const load = () => getTecnicos().then(r => setTecnicos(r.data));
-  useEffect(() => { load(); }, []);
+export function Tecnicos() {
+  const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newNombre.trim()) return;
-    setSaving(true);
-    setError(null);
+  const form = useForm<TecnicoFormValues>({
+    resolver: zodResolver(tecnicoSchema),
+    defaultValues: { nombre: '' },
+  })
+
+  useEffect(() => {
+    loadTecnicos()
+  }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function loadTecnicos() {
+    setLoading(true)
+    setError(null)
     try {
-      await createTecnico({ nombre: newNombre.trim() });
-      setNewNombre('');
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Error al crear técnico';
-      setError(msg);
+      const items = await api.get<Tecnico[]>('/api/tecnicos')
+      setTecnicos(items.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    } catch (err) {
+      setError(describeError(err))
     } finally {
-      setSaving(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const startEdit = (t: Tecnico) => {
-    setEditingId(t.id);
-    setEditNombre(t.nombre);
-    setError(null);
-  };
+  function startCreate() {
+    setEditingId('new')
+    form.reset({ nombre: '' })
+  }
 
-  const handleUpdate = async (t: Tecnico) => {
-    if (!editNombre.trim()) return;
+  function startEdit(tecnico: Tecnico) {
+    setEditingId(tecnico.id)
+    form.reset({ nombre: tecnico.nombre })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    form.reset({ nombre: '' })
+  }
+
+  async function handleSubmit(values: TecnicoFormValues) {
+    setSaving(true)
+    setError(null)
     try {
-      await updateTecnico(t.id, { nombre: editNombre.trim() });
-      setEditingId(null);
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Error al actualizar';
-      setError(msg);
+      if (editingId === 'new') {
+        await api.post('/api/tecnicos', { nombre: values.nombre, activo: true })
+      } else if (editingId) {
+        const current = tecnicos.find((t) => t.id === editingId)
+        await api.put(`/api/tecnicos/${editingId}`, { nombre: values.nombre, activo: current?.activo ?? true })
+      }
+      cancelEdit()
+      await loadTecnicos()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setSaving(false)
     }
-  };
+  }
 
-  const handleToggle = async (t: Tecnico) => {
-    await updateTecnico(t.id, { activo: !t.activo });
-    load();
-  };
+  async function toggleActivo(tecnico: Tecnico) {
+    setError(null)
+    try {
+      await api.put(`/api/tecnicos/${tecnico.id}`, { nombre: tecnico.nombre, activo: !tecnico.activo })
+      await loadTecnicos()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
 
-  const handleDelete = async (t: Tecnico) => {
-    if (!confirm(`¿Dar de baja a ${t.nombre}? Las incidencias asignadas no se modifican.`)) return;
-    await deleteTecnico(t.id);
-    load();
-  };
+  async function handleDelete(tecnico: Tecnico) {
+    setError(null)
+    try {
+      await api.del(`/api/tecnicos/${tecnico.id}`)
+      await loadTecnicos()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  const columns = useMemo<ColumnDef<Tecnico>[]>(() => [
+    { accessorKey: 'nombre', header: sortableHeader('Nombre'), size: 220, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="font-medium">{row.original.nombre}</span> },
+    {
+      accessorKey: 'activo',
+      header: 'Estado',
+      size: 110,
+      minSize: 90,
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.activo ? 'default' : 'outline'}
+          className="cursor-pointer"
+          onClick={() => toggleActivo(row.original)}
+        >
+          {row.original.activo ? 'Activo' : 'Inactivo'}
+        </Badge>
+      ),
+    },
+    {
+      id: 'actions',
+      header: () => <div className="text-right">Acciones</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="outline" title="Editar técnico" aria-label="Editar técnico" onClick={() => startEdit(row.original)}><Pencil /></Button>
+          <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar técnico" aria-label="Eliminar técnico" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
+        </div>
+      ),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [])
 
   return (
-    <div className="max-w-xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Técnicos</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Gestión del equipo técnico</p>
+    <div className="grid gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Técnicos</h2>
+        {editingId === null && <Button onClick={startCreate}>+ Nuevo técnico</Button>}
       </div>
 
-      {/* Nuevo técnico */}
-      <form onSubmit={handleCreate} className="flex gap-2 mb-6">
-        <input
-          className="input flex-1"
-          placeholder="Nombre del técnico..."
-          value={newNombre}
-          onChange={e => setNewNombre(e.target.value)}
-        />
-        <button type="submit" disabled={saving || !newNombre.trim()} className="btn-primary disabled:opacity-50">
-          <Plus size={16} /> Agregar
-        </button>
-      </form>
-      {error && <p className="text-sm text-red-600 mb-3 -mt-4">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {/* Lista */}
-      <div className="card divide-y divide-gray-100 !p-0 overflow-hidden">
-        {tecnicos.length === 0 && (
-          <p className="text-sm text-gray-400 px-4 py-6 text-center">Sin técnicos registrados</p>
-        )}
-        {tecnicos.map(t => (
-          <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.activo ? 'opacity-50' : ''}`}>
-            <div className="flex-1 min-w-0">
-              {editingId === t.id ? (
-                <input
-                  className="input text-sm py-1"
-                  value={editNombre}
-                  onChange={e => setEditNombre(e.target.value)}
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') handleUpdate(t); if (e.key === 'Escape') setEditingId(null); }}
-                />
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-800">{t.nombre}</span>
-                  {!t.activo && <span className="badge bg-gray-100 text-gray-400">Inactivo</span>}
+      {editingId !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{editingId === 'new' ? 'Nuevo técnico' : 'Editar técnico'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
+                <FormField control={form.control} name="nombre" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl><Input {...field} className="w-52" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <div className="flex gap-2 pt-6">
+                  <Button type="submit" disabled={saving}>
+                    {saving ? 'Guardando…' : editingId === 'new' ? 'Crear' : 'Guardar'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={cancelEdit}>Cancelar</Button>
                 </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {editingId === t.id ? (
-                <>
-                  <button onClick={() => setEditingId(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><X size={14} /></button>
-                  <button onClick={() => handleUpdate(t)} className="p-1.5 text-green-600 hover:text-green-700 rounded"><Check size={14} /></button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => startEdit(t)} className="p-1.5 text-gray-400 hover:text-primary-600 rounded" title="Editar nombre"><Pencil size={14} /></button>
-                  <button onClick={() => handleToggle(t)} className="p-1.5 text-gray-400 hover:text-yellow-600 rounded text-xs font-medium" title={t.activo ? 'Desactivar' : 'Activar'}>
-                    {t.activo ? '↓' : '↑'}
-                  </button>
-                  <button onClick={() => handleDelete(t)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Dar de baja"><Trash2 size={14} /></button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent>
+          {loading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <DataTable columns={columns} data={tecnicos} emptyMessage="Sin técnicos todavía." />
+          )}
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }

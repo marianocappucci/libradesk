@@ -1,0 +1,59 @@
+"""LibraDesk app factory: motor propio (clientes/equipos/incidencias/
+tecnicos/sectores/dashboard) + `libraauth` para sesion/usuarios. Mismo
+patron que `gestiolibra/app/main.py`."""
+from fastapi import Depends, FastAPI
+
+from libraauth.models import Base as AuthBase
+from libraauth.repository import UserRepository
+
+from . import database
+from .auth import build_session_auth, require_admin
+from .database import Base, configure, get_engine, get_session_factory
+from .routers import auth as auth_router
+from .routers import clientes, dashboard, equipos, health, incidencias, reportes, sectores, tecnicos, users
+from .services.clientes import ClienteRepository
+from .services.dashboard import DashboardService
+from .services.equipos import EquipoRepository
+from .services.incidencias import IncidenciaRepository
+from .services.sectores import SectorRepository
+from .services.tecnicos import TecnicoRepository
+from .services.users import ensure_default_admin
+
+
+def create_app(database_url: str) -> FastAPI:
+    configure(database_url)
+    engine = get_engine()
+    # Dos metadatas contra el mismo engine: el dominio propio de LibraDesk
+    # y el de libraauth (tabla `usuarios`) — conviven en el mismo archivo
+    # SQLite, sin una segunda base de datos separada.
+    Base.metadata.create_all(engine)
+    AuthBase.metadata.create_all(engine)
+
+    sessions = get_session_factory()
+    user_repository = UserRepository(sessions)
+    ensure_default_admin(user_repository)
+
+    app = FastAPI(title="LibraDesk")
+    app.state.users = user_repository
+    app.state.session_auth = build_session_auth(user_repository)
+    app.state.clientes = ClienteRepository(sessions)
+    app.state.equipos = EquipoRepository(sessions)
+    app.state.incidencias = IncidenciaRepository(sessions)
+    app.state.tecnicos = TecnicoRepository(sessions)
+    app.state.sectores = SectorRepository(sessions)
+    app.state.dashboard = DashboardService(sessions)
+
+    app.include_router(health.router)
+    app.include_router(auth_router.router)
+
+    admin_only = [Depends(require_admin)]
+    app.include_router(users.router, dependencies=admin_only)
+    app.include_router(clientes.router)
+    app.include_router(equipos.router)
+    app.include_router(incidencias.router)
+    app.include_router(tecnicos.router)
+    app.include_router(sectores.router)
+    app.include_router(dashboard.router)
+    app.include_router(reportes.router)
+
+    return app

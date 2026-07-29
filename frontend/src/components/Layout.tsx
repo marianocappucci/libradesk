@@ -1,15 +1,17 @@
-import { Outlet } from 'react-router-dom';
-import Sidebar from './Sidebar';
+// Shim sobre libra-ui/Layout (mismo patron que el resto de la familia,
+// branding + navItems propios de LibraDesk — Agenda/Tareas eliminadas).
+import { AlertCircle, LayoutDashboard, Monitor, UserCog, Users } from 'lucide-react'
+import { createLayout } from 'libra-ui/Layout'
 
-export default function Layout() {
-  return (
-    <div className="flex min-h-screen print:block">
-      <div className="print:hidden">
-        <Sidebar />
-      </div>
-      <main className="ml-60 flex-1 p-8 max-w-full overflow-auto print:ml-0 print:p-0">
-        <Outlet />
-      </main>
-    </div>
-  );
-}
+export const Layout = createLayout({
+  productName: 'LibraDesk',
+  productInitial: 'L',
+  navItems: [
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/clientes', label: 'Clientes', icon: Users },
+    { to: '/equipos', label: 'Equipos', icon: Monitor },
+    { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
+    { to: '/tecnicos', label: 'Técnicos', icon: UserCog, adminOnly: true },
+    { to: '/usuarios', label: 'Usuarios', icon: UserCog, adminOnly: true },
+  ],
+})
