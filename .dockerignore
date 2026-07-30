@@ -1,41 +1,45 @@
 # El Dockerfile hace `COPY . .`, asi que TODO lo que no este aca termina
-# dentro de la imagen. Dos incidentes reales salieron de esta lista
-# incompleta, los dos por lo mismo: restos gitignoreados que sobreviven en
-# el host del VPS (git los borra del arbol pero no toca lo ignorado) y que
-# el contexto de build barre igual.
+# dentro de la imagen. Tres incidentes reales salieron de esta lista, los
+# tres por lo mismo: restos que sobreviven en el host del VPS (git los
+# borra del arbol pero no toca lo ignorado) y que el contexto de build
+# barre igual.
 #
 #  1. `frontend/dist` con el build viejo de Node.js se horneo en la imagen
 #     y siguio sirviendo la pantalla de Google despues del cutover.
 #  2. `backend/` (262 MB) seguia entero en el VPS, incluido su `.env` con
 #     GOOGLE_CLIENT_SECRET, SESSION_SECRET y la password de Postgres:
-#     quedaba copiado en /app/backend/.env dentro de la imagen de
-#     produccion.
-#
-# Por eso los patrones de abajo van SIN prefijo de directorio: `node_modules`
-# aplica en cualquier nivel, no solo en `frontend/`. Si se agrega un
-# directorio nuevo al repo, revisar si corresponde excluirlo aca.
+#     quedaba copiado en /app/backend/.env dentro de la imagen.
+#  3. Al arreglar el punto 2 se escribieron los patrones SIN prefijo
+#     (`node_modules`, `dist`) asumiendo que aplicaban en cualquier nivel.
+#     **Eso vale en .gitignore, no en .dockerignore**: Docker usa
+#     filepath.Match, donde `node_modules` matchea solo la raiz. Se perdio
+#     la exclusion de `frontend/node_modules` (172 MB en el host), que
+#     paso a copiarse ENCIMA del `npm ci` del stage de build y rompio la
+#     compilacion del frontend. Por eso los patrones de abajo llevan `**/`
+#     explicito cuando tienen que aplicar en cualquier nivel.
 
 .git
 .github
 
-# Artefactos de build y dependencias, en cualquier nivel
-__pycache__
-*.pyc
+# Artefactos de build y dependencias. El `**/` no es decorativo: sin el,
+# esto solo excluiria la raiz (ver punto 3 arriba).
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/dist
 .venv
 .venv-py
-node_modules
-dist
 
-# Restos del stack Node.js anterior (ver punto 2 arriba)
+# Restos del stack Node.js anterior (ver punto 2)
 backend
 
 # Datos y secretos: nunca van a la imagen
-.env
-.env.*
+**/.env
+**/.env.*
+**/*.db
 data
 data-dev
 data-compulibra
-*.db
 
 # Scratch
 scripts_temp
