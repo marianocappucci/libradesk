@@ -14,7 +14,7 @@ dependencies = [
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v0.30.1",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.0.0",
 ]
 
 [project.optional-dependencies]
