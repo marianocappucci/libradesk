@@ -7,6 +7,7 @@ x-libradesk-build: &libradesk-build
   ssh:
     - default=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
     - libraauth=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
+    - libracore=${LIBRACORE_SSH_KEY:-~/.ssh/id_ed25519_libracore}
     - libra-ui=${LIBRA_UI_SSH_KEY:-~/.ssh/id_ed25519_libra_ui}
 
 x-libradesk-common: &libradesk-common

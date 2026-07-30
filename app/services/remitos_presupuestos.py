@@ -1,0 +1,308 @@
+"""Remitos y presupuestos: **cero logica de dominio propia**.
+
+Todo el dominio (numeracion, CRUD, busqueda, vencimiento automatico) sale
+de `libracore.db.remitos_presupuestos`, y los PDF de
+`libracore.pdf_generator` (`RemitoPDF` / `PresupuestoPDF`) — el mismo
+codigo que ya usan Contalibra y Restolibra. Este modulo es solo el
+adaptador: configura LibraCore contra la base de LibraDesk, crea las dos
+tablas que el dominio necesita, y envuelve las funciones para que los
+routers reciban/devuelvan dicts con totales ya calculados.
+
+Tres decisiones que cuestan tiempo si no estan escritas:
+
+1. **Una sola base, dos tablas.** `libracore.db.core.configure()` acepta un
+   `db_path` por producto, asi que apunta al mismo `libradesk.db` que usa
+   SQLAlchemy. No hay segunda base ni las otras 29 tablas de LibraCore
+   (facturacion/ARCA/caja), que LibraDesk no usa.
+
+2. **El DDL se copia a mano y SIN la FK a `clients`.** `init_core_schema()`
+   de LibraCore no es componible por tabla (es un solo `executescript` con
+   las 31), asi que las dos se crean aca. Pero el DDL original declara
+   `client_id INTEGER REFERENCES clients(id)` y LibraDesk **no tiene
+   `clients`** (tiene `clientes`, SQLAlchemy). Dejar la FK colgando NO es
+   inocuo: `libracore.db.core.get_connection()` corre
+   `PRAGMA foreign_keys = ON` en **toda** conexion (core.py:69), y con el
+   pragma activo SQLite resuelve la tabla padre al preparar el chequeo, asi
+   que **todo INSERT falla con `no such table: main.clients` — incluso con
+   `client_id = NULL`** (verificado empiricamente antes de escribir esto; no
+   es que las FK con NULL se saltean, es que ni llega a mirar el valor).
+   Por eso `client_id` se declara `INTEGER` pelado. La integridad contra
+   `clientes` la sostiene el router, que valida que el cliente exista.
+
+3. **`usuario_id` va en el `CREATE TABLE`.** En LibraCore esa columna la
+   agrega una funcion de migracion aparte, no el DDL — pero
+   `create_remito()`/`create_presupuesto()` la insertan. Copiar el DDL tal
+   cual daria `no such column: usuario_id` en el primer alta. Su FK a
+   `usuarios` SI se conserva: esa tabla existe (la crea `libraauth`), y
+   `ensure_schema()` corre despues de `create_all()` para garantizar el
+   orden.
+"""
+from __future__ import annotations
+
+import os
+
+from libracore import config_manager
+from libracore.db import core as libracore_core
+from libracore.db import remitos_presupuestos as rp
+from sqlalchemy.engine import make_url
+
+# El DDL de LibraCore (libracore/db/schema.py) menos la FK a `clients`, y
+# con `usuario_id` incluido. Cualquier otra diferencia contra el original es
+# un bug: las dos tablas las lee y escribe el codigo de LibraCore.
+_DDL = """
+CREATE TABLE IF NOT EXISTS remitos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    number         TEXT NOT NULL UNIQUE,
+    date           TEXT NOT NULL,
+    client_id      INTEGER,
+    client_name    TEXT NOT NULL,
+    client_address TEXT,
+    client_cuit    TEXT,
+    client_email   TEXT,
+    client_phone   TEXT,
+    items          TEXT NOT NULL,
+    subtotal       REAL NOT NULL,
+    tax_rate       REAL NOT NULL DEFAULT 0.21,
+    tax_amount     REAL NOT NULL,
+    total          REAL NOT NULL,
+    observations   TEXT,
+    pdf_path       TEXT,
+    usuario_id     INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at     TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS presupuestos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    number          TEXT NOT NULL UNIQUE,
+    date            TEXT NOT NULL,
+    valid_until     TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'borrador',
+    client_id       INTEGER,
+    client_name     TEXT NOT NULL,
+    client_address  TEXT,
+    client_cuit     TEXT,
+    client_email    TEXT,
+    client_phone    TEXT,
+    items           TEXT NOT NULL,
+    subtotal        REAL NOT NULL,
+    tax_rate        REAL NOT NULL DEFAULT 0.21,
+    tax_amount      REAL NOT NULL,
+    total           REAL NOT NULL,
+    observations    TEXT,
+    pdf_path        TEXT,
+    remito_id       INTEGER REFERENCES remitos(id),
+    usuario_id      INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+"""
+
+ESTADOS_PRESUPUESTO = ("borrador", "enviado", "aceptado", "rechazado", "vencido")
+
+
+def configure(database_url: str, data_dir: str) -> None:
+    """Apunta LibraCore a la base y al DATA_DIR de esta instancia.
+
+    `config_manager` y `pdf_generator` congelan sus rutas al importarse
+    (leen `DATA_DIR` a nivel de modulo), lo que en produccion da lo correcto
+    pero en los tests deja la ruta del primer test para todos los demas
+    —`libracore.*` no se reimporta entre tests, solo `app.*`—. Rebindear
+    aca es explicito y del mismo tipo que `core.configure()`: LibraCore esta
+    disenado para configurarse por producto.
+    """
+    db_path = make_url(database_url).database
+    if not db_path:
+        raise ValueError(f"database_url sin path de archivo: {database_url!r}")
+    libracore_core.configure(db_path)
+
+    config_manager.CONFIG_PATH = os.path.join(data_dir, "config.json")
+    config_manager.LOGO_DIR = os.path.join(data_dir, "logos")
+
+
+def ensure_schema() -> None:
+    """Crea `remitos` y `presupuestos` si no existen. Llamar DESPUES de
+    `create_all()`, para que la FK `usuario_id -> usuarios` tenga destino."""
+    with libracore_core.get_connection() as conn:
+        conn.executescript(_DDL)
+
+
+def _totales(items: list[dict], tax_rate: float) -> tuple[float, float, float]:
+    """Totales calculados en el servidor: lo que manda el cliente se ignora."""
+    subtotal = round(sum(float(i["qty"]) * float(i["unit_price"]) for i in items), 2)
+    tax_amount = round(subtotal * float(tax_rate), 2)
+    return subtotal, tax_amount, round(subtotal + tax_amount, 2)
+
+
+def _normalizar_items(items: list[dict]) -> list[dict]:
+    """Deja los items en la forma que espera el PDF de LibraCore
+    (`description`/`qty`/`unit_price`/`subtotal`, ver `_draw_items_table`),
+    con el subtotal por linea recalculado."""
+    salida = []
+    for i in items:
+        qty = float(i["qty"])
+        unit_price = float(i["unit_price"])
+        salida.append({
+            "description": str(i["description"]).strip(),
+            "qty": qty,
+            "unit_price": unit_price,
+            "subtotal": round(qty * unit_price, 2),
+        })
+    return salida
+
+
+class RemitoService:
+    """Envoltorio sobre `libracore.db.remitos_presupuestos` (remitos)."""
+
+    def next_number(self) -> str:
+        return rp.get_next_remito_number()
+
+    def create(self, *, date, client_id, client_name, client_address="", client_cuit="",
+               client_email="", client_phone="", items, tax_rate=0.21, observations="",
+               usuario_id=None) -> dict:
+        items = _normalizar_items(items)
+        subtotal, tax_amount, total = _totales(items, tax_rate)
+        remito_id = rp.create_remito(
+            rp.get_next_remito_number(), date, client_id, client_name, client_address,
+            client_cuit, client_email, client_phone, items, subtotal, tax_rate,
+            tax_amount, total, observations, "", usuario_id,
+        )
+        return rp.get_remito(remito_id)
+
+    def list(self, limit: int = 100) -> list[dict]:
+        return rp.get_all_remitos(limit)
+
+    def get(self, remito_id: int) -> dict | None:
+        return rp.get_remito(remito_id)
+
+    def by_client(self, client_id: int) -> list[dict]:
+        return rp.get_remitos_by_client(client_id)
+
+    def search(self, query: str) -> list[dict]:
+        return rp.search_remitos(query)
+
+    def update(self, remito_id: int, *, date, client_id, client_name, client_address="",
+               client_cuit="", client_email="", client_phone="", items, tax_rate=0.21,
+               observations="") -> dict:
+        if rp.get_remito(remito_id) is None:
+            raise KeyError(remito_id)
+        items = _normalizar_items(items)
+        subtotal, tax_amount, total = _totales(items, tax_rate)
+        rp.update_remito(
+            remito_id, date, client_id, client_name, client_address, client_cuit,
+            client_email, client_phone, items, subtotal, tax_rate, tax_amount,
+            total, observations,
+        )
+        return rp.get_remito(remito_id)
+
+    def delete(self, remito_id: int) -> None:
+        if rp.get_remito(remito_id) is None:
+            raise KeyError(remito_id)
+        rp.delete_remito(remito_id)
+
+    def set_pdf_path(self, remito_id: int, pdf_path: str) -> None:
+        rp.update_remito_pdf_path(remito_id, pdf_path)
+
+
+class PresupuestoService:
+    """Envoltorio sobre `libracore.db.remitos_presupuestos` (presupuestos).
+
+    Ojo: varias funciones de LibraCore corren `auto_vencimiento_presupuestos()`
+    antes de leer (los listados, la busqueda y el conteo por estado), asi que
+    un presupuesto `enviado` con `valid_until` pasado aparece ya como
+    `vencido` sin que nadie corra una tarea programada.
+    """
+
+    def next_number(self) -> str:
+        return rp.get_next_presupuesto_number()
+
+    def create(self, *, date, valid_until, client_id, client_name, client_address="",
+               client_cuit="", client_email="", client_phone="", items, tax_rate=0.21,
+               observations="", status="borrador", usuario_id=None) -> dict:
+        items = _normalizar_items(items)
+        subtotal, tax_amount, total = _totales(items, tax_rate)
+        presupuesto_id = rp.create_presupuesto(
+            rp.get_next_presupuesto_number(), date, valid_until, client_id, client_name,
+            client_address, client_cuit, client_email, client_phone, items, subtotal,
+            tax_rate, tax_amount, total, observations, "", status, usuario_id,
+        )
+        return rp.get_presupuesto(presupuesto_id)
+
+    def list(self, limit: int = 100, estado: str | None = None) -> list[dict]:
+        return rp.get_all_presupuestos(limit, estado)
+
+    def counts_by_estado(self) -> dict[str, int]:
+        return rp.get_presupuestos_count_by_estado()
+
+    def get(self, presupuesto_id: int) -> dict | None:
+        return rp.get_presupuesto(presupuesto_id)
+
+    def by_client(self, client_id: int) -> list[dict]:
+        return rp.get_presupuestos_by_client(client_id)
+
+    def search(self, query: str, estado: str | None = None) -> list[dict]:
+        return rp.search_presupuestos(query, estado)
+
+    def update(self, presupuesto_id: int, *, date, valid_until, status, client_id,
+               client_name, client_address="", client_cuit="", client_email="",
+               client_phone="", items, tax_rate=0.21, observations="") -> dict:
+        if rp.get_presupuesto(presupuesto_id) is None:
+            raise KeyError(presupuesto_id)
+        items = _normalizar_items(items)
+        subtotal, tax_amount, total = _totales(items, tax_rate)
+        rp.update_presupuesto(
+            presupuesto_id, date, valid_until, status, client_id, client_name,
+            client_address, client_cuit, client_email, client_phone, items,
+            subtotal, tax_rate, tax_amount, total, observations,
+        )
+        return rp.get_presupuesto(presupuesto_id)
+
+    def set_status(self, presupuesto_id: int, status: str) -> dict:
+        if status not in ESTADOS_PRESUPUESTO:
+            raise ValueError(status)
+        if rp.get_presupuesto(presupuesto_id) is None:
+            raise KeyError(presupuesto_id)
+        rp.update_presupuesto_status(presupuesto_id, status)
+        return rp.get_presupuesto(presupuesto_id)
+
+    def delete(self, presupuesto_id: int) -> None:
+        """LibraCore solo permite borrar un presupuesto en `borrador`; en
+        cualquier otro estado levanta ValueError, que el router traduce a 409."""
+        if rp.get_presupuesto(presupuesto_id) is None:
+            raise KeyError(presupuesto_id)
+        rp.delete_presupuesto(presupuesto_id)
+
+    def set_pdf_path(self, presupuesto_id: int, pdf_path: str) -> None:
+        rp.update_presupuesto_pdf_path(presupuesto_id, pdf_path)
+
+    def convertir_a_remito(self, presupuesto_id: int, remitos: RemitoService,
+                           usuario_id=None) -> dict:
+        """Genera el remito con los datos del presupuesto, lo deja linkeado y
+        marca el presupuesto como `aceptado`.
+
+        Idempotente a proposito: si ya tiene remito, devuelve ese en vez de
+        emitir un segundo remito por el mismo trabajo."""
+        presupuesto = rp.get_presupuesto(presupuesto_id)
+        if presupuesto is None:
+            raise KeyError(presupuesto_id)
+        if presupuesto.get("remito_id"):
+            existente = rp.get_remito(presupuesto["remito_id"])
+            if existente is not None:
+                return existente
+        if presupuesto["status"] in ("rechazado", "vencido"):
+            raise ValueError(f"no se convierte un presupuesto {presupuesto['status']}")
+
+        remito = remitos.create(
+            date=presupuesto["date"],
+            client_id=presupuesto["client_id"],
+            client_name=presupuesto["client_name"],
+            client_address=presupuesto["client_address"] or "",
+            client_cuit=presupuesto["client_cuit"] or "",
+            client_email=presupuesto["client_email"] or "",
+            client_phone=presupuesto["client_phone"] or "",
+            items=presupuesto["items"],
+            tax_rate=presupuesto["tax_rate"],
+            observations=f"Generado del presupuesto {presupuesto['number']}",
+            usuario_id=usuario_id,
+        )
+        rp.update_presupuesto_remito_id(presupuesto_id, remito["id"])
+        rp.update_presupuesto_status(presupuesto_id, "aceptado")
+        return remito

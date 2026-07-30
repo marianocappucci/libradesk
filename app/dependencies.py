@@ -8,6 +8,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.remitos_presupuestos import PresupuestoService, RemitoService
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
 from .services.tecnicos import TecnicoRepository
@@ -43,3 +44,15 @@ def get_dashboard_service(request: Request) -> DashboardService:
 
 def get_reportes_service(request: Request) -> ReportesService:
     return request.app.state.reportes
+
+
+def get_remito_service(request: Request) -> RemitoService:
+    return request.app.state.remitos
+
+
+def get_presupuesto_service(request: Request) -> PresupuestoService:
+    return request.app.state.presupuestos
+
+
+def get_data_dir(request: Request) -> str:
+    return request.app.state.data_dir

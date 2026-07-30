@@ -9,7 +9,10 @@ import { Equipos } from './pages/Equipos'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Tecnicos } from './pages/Tecnicos'
+import { Remitos } from './pages/Remitos'
+import { Presupuestos } from './pages/Presupuestos'
 import { Reportes } from './pages/Reportes'
+import { Configuracion } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -35,7 +38,10 @@ export default function App() {
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
+      <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
+      <Route path="/remitos" element={<ProtectedRoute><Remitos /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
+      <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

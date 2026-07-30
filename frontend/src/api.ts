@@ -115,6 +115,66 @@ export type Sector = {
   nombre: string
 }
 
+// Remitos y presupuestos. Las columnas vienen tal cual de las tablas de
+// libracore (en ingles, ver app/services/remitos_presupuestos.py): no se
+// renombran para no divergir del dominio compartido con Contalibra/
+// Restolibra, que es el que las lee y escribe.
+export type ComprobanteItem = {
+  description: string
+  qty: number
+  unit_price: number
+  subtotal: number
+}
+
+type ComprobanteBase = {
+  id: number
+  number: string
+  date: string
+  client_id: number | null
+  client_name: string
+  client_address: string | null
+  client_cuit: string | null
+  client_email: string | null
+  client_phone: string | null
+  items: ComprobanteItem[]
+  subtotal: number
+  tax_rate: number
+  tax_amount: number
+  total: number
+  observations: string | null
+  pdf_path: string | null
+  created_at: string | null
+}
+
+export type Remito = ComprobanteBase
+
+export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado' | 'vencido'
+
+export const ESTADO_PRESUPUESTO_LABELS: Record<EstadoPresupuesto, string> = {
+  borrador: 'Borrador',
+  enviado: 'Enviado',
+  aceptado: 'Aceptado',
+  rechazado: 'Rechazado',
+  vencido: 'Vencido',
+}
+
+export type Presupuesto = ComprobanteBase & {
+  valid_until: string
+  status: EstadoPresupuesto
+  remito_id: number | null
+}
+
+export type ConfigEmpresa = {
+  empresa_nombre: string
+  empresa_direccion: string
+  empresa_cuit: string
+  empresa_telefono: string
+  empresa_email: string
+  empresa_iibb: string
+  empresa_iva_condition: string
+  empresa_inicio_actividades: string
+}
+
 export type DashboardSummary = {
   incidencias_por_estado: Record<string, number>
   incidencias_por_prioridad_abiertas: Record<string, number>
