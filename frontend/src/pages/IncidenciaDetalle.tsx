@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
-  type Actividad, type Cliente, type Equipo, type Incidencia, type IncidenciaEstadoLog,
+  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
+  PRIORIDAD_LABELS, describirEquipo, ubicacionTexto,
+  type Actividad, type Cliente, type DestinoReemplazo, type Equipo,
+  type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
   type Sector, type Tecnico,
 } from '../api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,13 +16,20 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { ArrowLeft, History, MessageSquare, Trash2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { ArrowLeft, ArrowLeftRight, History, MessageSquare, Trash2 } from 'lucide-react'
 
 const NONE = '__none__'
 
 type TimelineEntry =
   | { tipo: 'actividad'; fecha: string; data: Actividad }
   | { tipo: 'estado'; fecha: string; data: IncidenciaEstadoLog }
+  // Tercera fuente: lo que este ticket le hizo al inventario. Antes el
+  // timeline solo tenía notas y cambios de estado, así que "se retiró la
+  // impresora" aparecía únicamente si alguien lo escribía a mano.
+  | { tipo: 'movimiento'; fecha: string; data: EquipoMovimiento }
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -39,11 +48,17 @@ export function IncidenciaDetalle() {
   const [sectores, setSectores] = useState<Sector[]>([])
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [estados, setEstados] = useState<IncidenciaEstadoLog[]>([])
+  const [movimientos, setMovimientos] = useState<EquipoMovimiento[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [reemplazoAbierto, setReemplazoAbierto] = useState(false)
+  const [reemplazando, setReemplazando] = useState(false)
+  const [reemplazo, setReemplazo] = useState({
+    retirado: NONE, sustituto: NONE, destino: 'service' as DestinoReemplazo, motivo: '',
+  })
 
   useEffect(() => {
     cargar()
@@ -59,7 +74,7 @@ export function IncidenciaDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq, te, se, act, est] = await Promise.all([
+      const [inc, cl, eq, te, se, act, est, mov] = await Promise.all([
         api.get<Incidencia>(`/api/incidencias/${incidenciaId}`),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
@@ -67,6 +82,7 @@ export function IncidenciaDetalle() {
         api.get<Sector[]>('/api/sectores'),
         api.get<Actividad[]>(`/api/incidencias/${incidenciaId}/actividades`),
         api.get<IncidenciaEstadoLog[]>(`/api/incidencias/${incidenciaId}/estados`),
+        api.get<EquipoMovimiento[]>(`/api/incidencias/${incidenciaId}/movimientos`),
       ])
       setIncidencia(inc)
       setClientes(cl)
@@ -75,6 +91,7 @@ export function IncidenciaDetalle() {
       setSectores(se)
       setActividades(act)
       setEstados(est)
+      setMovimientos(mov)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -149,12 +166,57 @@ export function IncidenciaDetalle() {
     }
   }
 
+  // Empate de fechas: las tres tablas usan CURRENT_TIMESTAMP, que en SQLite
+  // tiene resolución de un segundo, así que dos entradas de la misma
+  // operación empatan seguido. Sin desempate el orden queda a merced del
+  // orden de concatenación (que además viene DESC de la API) y la historia
+  // se lee al revés. El id ascendente dentro de cada fuente es el orden real
+  // de inserción.
+  const rangoPorTipo = { actividad: 0, movimiento: 1, estado: 2 }
   const timeline: TimelineEntry[] = [
     ...actividades.map((a): TimelineEntry => ({ tipo: 'actividad', fecha: a.fecha ?? '', data: a })),
     ...estados.map((e): TimelineEntry => ({ tipo: 'estado', fecha: e.fecha ?? '', data: e })),
-  ].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+    ...movimientos.map((m): TimelineEntry => ({ tipo: 'movimiento', fecha: m.fecha ?? '', data: m })),
+  ].sort((a, b) =>
+    new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+    || rangoPorTipo[a.tipo] - rangoPorTipo[b.tipo]
+    || a.data.id - b.data.id,
+  )
 
   const equiposDelCliente = incidencia ? equipos.filter((e) => e.cliente_id === incidencia.cliente_id) : []
+  const equipoPorId = (id: number) => equipos.find((e) => e.id === id)
+
+  function abrirReemplazo() {
+    setReemplazo({
+      // Por defecto se retira el equipo del ticket, que es el caso normal.
+      retirado: incidencia?.equipo_id ? String(incidencia.equipo_id) : NONE,
+      sustituto: NONE,
+      destino: 'service',
+      motivo: '',
+    })
+    setReemplazoAbierto(true)
+  }
+
+  async function confirmarReemplazo() {
+    if (reemplazo.retirado === NONE) return
+    setReemplazando(true)
+    setError(null)
+    try {
+      await api.post(`/api/incidencias/${incidenciaId}/reemplazar-equipo`, {
+        equipo_retirado_id: Number(reemplazo.retirado),
+        equipo_sustituto_id: reemplazo.sustituto === NONE ? null : Number(reemplazo.sustituto),
+        destino: reemplazo.destino,
+        motivo: reemplazo.motivo.trim() || null,
+      })
+      setReemplazoAbierto(false)
+      // Recarga completa: la operación tocó equipos, movimientos y actividad.
+      await cargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setReemplazando(false)
+    }
+  }
 
   return (
     <div className="grid gap-4">
@@ -174,9 +236,14 @@ export function IncidenciaDetalle() {
           )}
         </div>
         {incidencia && (
-          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-            <Trash2 />Eliminar
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={abrirReemplazo}>
+              <ArrowLeftRight />Reemplazar equipo
+            </Button>
+            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+              <Trash2 />Eliminar
+            </Button>
+          </div>
         )}
       </div>
 
@@ -223,9 +290,31 @@ export function IncidenciaDetalle() {
                           ? 'flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground'
                           : 'flex items-start gap-2 rounded-md border px-3 py-2 text-sm'}
                       >
-                        {entry.tipo === 'estado' ? <History className="mt-0.5 size-3.5 shrink-0" /> : <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                        {entry.tipo === 'estado' ? <History className="mt-0.5 size-3.5 shrink-0" />
+                          : entry.tipo === 'movimiento' ? <ArrowLeftRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                          : <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                         <div className="grid gap-0.5">
-                          {entry.tipo === 'estado' ? (
+                          {entry.tipo === 'movimiento' ? (
+                            <>
+                              <span className="flex flex-wrap items-center gap-2">
+                                <Badge variant={entry.data.tipo === 'baja' ? 'destructive' : 'outline'}>
+                                  {MOVIMIENTO_LABELS[entry.data.tipo] ?? entry.data.tipo}
+                                </Badge>
+                                <strong>{describirEquipo(equipoPorId(entry.data.equipo_id))}</strong>
+                              </span>
+                              {/* Solo el traslado tiene destino: en un cambio de
+                                  estado la ubicación va como origen (de dónde
+                                  sale), así que mostrar "→" sería inventar. */}
+                              <span className="text-xs text-muted-foreground">
+                                {entry.data.tipo === 'traslado'
+                                  ? `${ubicacionTexto(entry.data.sector_origen, entry.data.ubicacion_origen)} → ${ubicacionTexto(entry.data.sector_destino, entry.data.ubicacion_destino)}`
+                                  : `${entry.data.descripcion ?? '—'} · en ${ubicacionTexto(entry.data.sector_origen, entry.data.ubicacion_origen)}`}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {entry.data.usuario} · {formatFecha(entry.data.fecha)}
+                              </span>
+                            </>
+                          ) : entry.tipo === 'estado' ? (
                             <span>
                               Cambió de <strong>{entry.data.estado_anterior ? ESTADO_LABELS[entry.data.estado_anterior as keyof typeof ESTADO_LABELS] ?? entry.data.estado_anterior : 'creación'}</strong>
                               {' '}a <strong>{ESTADO_LABELS[entry.data.estado_nuevo as keyof typeof ESTADO_LABELS] ?? entry.data.estado_nuevo}</strong>
@@ -366,6 +455,86 @@ export function IncidenciaDetalle() {
           </Card>
         </div>
       )}
+
+      {/* Una sola operación en vez de tres pasos manuales sueltos: mueve
+          los dos activos, deja los movimientos ligados a este ticket y
+          narra las dos intervenciones en el timeline. */}
+      <Dialog open={reemplazoAbierto} onOpenChange={setReemplazoAbierto}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reemplazar equipo</DialogTitle>
+            <DialogDescription>
+              Actualiza el estado y la ubicación de los dos equipos, registra los
+              movimientos asociados a esta incidencia y deja las intervenciones
+              en la actividad del ticket.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label>Equipo que se retira</Label>
+              <Select value={reemplazo.retirado} onValueChange={(v) => setReemplazo({ ...reemplazo, retirado: v })}>
+                <SelectTrigger><SelectValue placeholder="Elegí el equipo…" /></SelectTrigger>
+                <SelectContent>
+                  {equiposDelCliente.map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {describirEquipo(e)} — {ubicacionTexto(e.sector, e.ubicacion_oficina)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Destino del equipo retirado</Label>
+              <Select value={reemplazo.destino} onValueChange={(v) => setReemplazo({ ...reemplazo, destino: v as DestinoReemplazo })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DESTINO_REEMPLAZO_LABELS) as DestinoReemplazo[]).map((d) => (
+                    <SelectItem key={d} value={d}>{DESTINO_REEMPLAZO_LABELS[d]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Equipo sustituto (opcional)</Label>
+              <Select value={reemplazo.sustituto} onValueChange={(v) => setReemplazo({ ...reemplazo, sustituto: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sin reemplazo</SelectItem>
+                  {equiposDelCliente
+                    .filter((e) => String(e.id) !== reemplazo.retirado)
+                    .map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>
+                        {describirEquipo(e)} — {ubicacionTexto(e.sector, e.ubicacion_oficina)}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                Queda en el lugar exacto que deja el equipo retirado.
+              </span>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Motivo</Label>
+              <Input
+                value={reemplazo.motivo}
+                placeholder="Ruido mecánico, se envía a service…"
+                onChange={(e) => setReemplazo({ ...reemplazo, motivo: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReemplazoAbierto(false)}>Cancelar</Button>
+            <Button onClick={confirmarReemplazo} disabled={reemplazando || reemplazo.retirado === NONE}>
+              {reemplazando ? 'Aplicando…' : 'Reemplazar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmDelete}

@@ -228,6 +228,376 @@ def test_traslado_y_cambio_de_estado_juntos_generan_dos_movimientos(client):
     assert len(movs) == 3  # alta + traslado + reactivacion
 
 
+# ─── Trazabilidad incidencia ↔ activo ───────────────────────────────────
+
+def _escenario_impresora(client) -> dict:
+    """El caso real que motivo todo esto: una impresora que hace ruido en
+    Admision, y una de repuesto en el deposito."""
+    cliente_id = client.post("/api/clientes", json={"nombre": "Hospital"}).json()["id"]
+    hp = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Impresora", "marca": "HP",
+        "modelo": "LaserJet M501", "sector": "Admision", "ubicacion_oficina": "Mostrador",
+        "estado": "activo",
+    }).json()["id"]
+    pantum = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Impresora", "marca": "Pantum",
+        "modelo": "M6559", "sector": "Deposito", "estado": "almacenado",
+    }).json()["id"]
+    incidencia_id = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "equipo_id": hp,
+        "titulo": "Ruido anormal al imprimir", "prioridad": "media",
+    }).json()["id"]
+    return {"cliente_id": cliente_id, "hp": hp, "pantum": pantum,
+            "incidencia_id": incidencia_id}
+
+
+def test_incidencias_se_filtran_por_equipo(client):
+    """'¿Cuántas veces falló esta impresora?' — el dato estaba desde la
+    migracion pero no habia forma de pedirlo: el listado solo filtraba por
+    cliente y estado."""
+    _login(client)
+    esc = _escenario_impresora(client)
+
+    client.post("/api/incidencias", json={
+        "cliente_id": esc["cliente_id"], "equipo_id": esc["hp"], "titulo": "Segunda falla",
+    })
+    client.post("/api/incidencias", json={
+        "cliente_id": esc["cliente_id"], "equipo_id": esc["pantum"], "titulo": "Otra impresora",
+    })
+
+    de_la_hp = client.get(f"/api/incidencias?equipo_id={esc['hp']}").json()
+    assert len(de_la_hp) == 2
+    assert {i["titulo"] for i in de_la_hp} == {"Ruido anormal al imprimir", "Segunda falla"}
+    # Y sigue combinando con los filtros que ya existian.
+    assert len(client.get(
+        f"/api/incidencias?equipo_id={esc['hp']}&estado=cerrado").json()) == 0
+
+
+def test_reemplazo_mueve_los_dos_equipos_y_deja_todo_ligado(client):
+    """La operacion completa en una llamada: la HP sale a service, la
+    Pantum ocupa su lugar, los 4 movimientos quedan atados al ticket y las
+    dos intervenciones narradas."""
+    _login(client)
+    esc = _escenario_impresora(client)
+
+    r = client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"],
+        "equipo_sustituto_id": esc["pantum"],
+        "destino": "service",
+        "motivo": "Ruido mecanico en el conjunto de rodillos",
+    })
+    assert r.status_code == 201, r.text
+    resultado = r.json()
+
+    # El equipo retirado quedo en service…
+    assert resultado["retirado"]["estado"] == "en_reparacion"
+    assert resultado["retirado"]["sector"] == "Service"
+    # …y el sustituto ocupa EXACTAMENTE el lugar que dejo.
+    assert resultado["sustituto"]["estado"] == "activo"
+    assert resultado["sustituto"]["sector"] == "Admision"
+    assert resultado["sustituto"]["ubicacion_oficina"] == "Mostrador"
+
+    # Los 4 movimientos (traslado + estado, por equipo) traen el ticket.
+    movs = client.get(f"/api/incidencias/{esc['incidencia_id']}/movimientos").json()
+    assert len(movs) == 4
+    assert all(m["incidencia_id"] == esc["incidencia_id"] for m in movs)
+    assert {m["equipo_id"] for m in movs} == {esc["hp"], esc["pantum"]}
+
+    # Y la incidencia cuenta la historia sola, sin que nadie escriba nada.
+    actividades = client.get(f"/api/incidencias/{esc['incidencia_id']}/actividades").json()
+    textos = " ".join(a["descripcion"] for a in actividades)
+    assert "Se retira Impresora HP LaserJet M501 de Admision · Mostrador" in textos
+    assert "se envía a service" in textos
+    assert "Se instala Impresora Pantum M6559 en Admision · Mostrador" in textos
+    assert "Ruido mecanico" in textos
+
+
+def test_el_reemplazo_queda_en_orden_cronologico_real(client):
+    """Defecto encontrado **probando la UI, no con los tests**: las 6 filas
+    de un reemplazo caian en el mismo segundo (`CURRENT_TIMESTAMP` de
+    SQLite no tiene fraccion), y el timeline mostraba la instalacion del
+    sustituto ANTES del retiro del equipo al que venia a reemplazar.
+
+    Las fechas ahora se sellan con microsegundos en orden causal: primero
+    el retiro y sus movimientos, despues la instalacion y los suyos.
+    """
+    _login(client)
+    esc = _escenario_impresora(client)
+    inc = esc["incidencia_id"]
+
+    client.post(f"/api/incidencias/{inc}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "equipo_sustituto_id": esc["pantum"],
+        "destino": "service",
+    })
+
+    actividades = client.get(f"/api/incidencias/{inc}/actividades").json()
+    movimientos = client.get(f"/api/incidencias/{inc}/movimientos").json()
+    todo = sorted([*actividades, *movimientos], key=lambda f: f["fecha"])
+
+    # Ninguna fecha empatada **con resolucion de milisegundo**, que es la
+    # del `Date` de JavaScript: sellarlas con microsegundos las deja
+    # distintas en la base y empatadas en el navegador — probado, el
+    # timeline seguia desordenado.
+    fechas_ms = [f["fecha"][:23] for f in todo]
+    assert len(set(fechas_ms)) == len(fechas_ms), fechas_ms
+
+    # Y la historia se lee en el orden en que paso.
+    def es_del(fila, equipo_id):
+        return fila.get("equipo_id") == equipo_id
+
+    assert "Se retira" in todo[0]["descripcion"]
+    assert all(es_del(f, esc["hp"]) for f in todo[1:3])
+    assert "Se instala" in todo[3]["descripcion"]
+    assert all(es_del(f, esc["pantum"]) for f in todo[4:6])
+
+
+def test_la_vuelta_del_service_es_la_misma_operacion_al_reves(client):
+    """No hace falta una accion aparte para reinstalar: se reemplaza la
+    prestada por la que volvio, con destino deposito."""
+    _login(client)
+    esc = _escenario_impresora(client)
+    inc = esc["incidencia_id"]
+
+    client.post(f"/api/incidencias/{inc}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "equipo_sustituto_id": esc["pantum"],
+        "destino": "service",
+    })
+    r = client.post(f"/api/incidencias/{inc}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["pantum"], "equipo_sustituto_id": esc["hp"],
+        "destino": "deposito", "motivo": "Reparada, se reinstala",
+    })
+    assert r.status_code == 201, r.text
+
+    hp = client.get(f"/api/equipos/{esc['hp']}").json()
+    pantum = client.get(f"/api/equipos/{esc['pantum']}").json()
+    assert (hp["estado"], hp["sector"], hp["ubicacion_oficina"]) == \
+        ("activo", "Admision", "Mostrador")
+    assert (pantum["estado"], pantum["sector"]) == ("almacenado", "Depósito")
+
+    # El historial de la HP cuenta el viaje completo, en orden inverso.
+    tipos = [m["tipo"] for m in client.get(f"/api/equipos/{esc['hp']}/movimientos").json()]
+    assert tipos == ["activo", "traslado", "en_reparacion", "traslado", "alta"]
+
+
+def test_reemplazo_sin_sustituto_es_valido(client):
+    """No siempre hay repuesto a mano: retirar sin reponer tiene que
+    poder registrarse, en vez de obligar a inventar un sustituto."""
+    _login(client)
+    esc = _escenario_impresora(client)
+
+    r = client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "destino": "baja",
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["sustituto"] is None
+    assert r.json()["retirado"]["estado"] == "baja"
+    assert len(r.json()["actividades"]) == 1
+    # La Pantum no se movio de su lugar.
+    assert client.get(f"/api/equipos/{esc['pantum']}").json()["sector"] == "Deposito"
+
+
+def test_reemplazo_rechaza_los_casos_imposibles(client):
+    _login(client)
+    esc = _escenario_impresora(client)
+    inc = esc["incidencia_id"]
+    url = f"/api/incidencias/{inc}/reemplazar-equipo"
+
+    # El mismo equipo de los dos lados.
+    assert client.post(url, json={"equipo_retirado_id": esc["hp"],
+                                  "equipo_sustituto_id": esc["hp"]}).status_code == 422
+    # Destino que no existe.
+    assert client.post(url, json={"equipo_retirado_id": esc["hp"],
+                                  "destino": "marte"}).status_code == 422
+    # Equipo inexistente e incidencia inexistente.
+    assert client.post(url, json={"equipo_retirado_id": 99999}).status_code == 404
+    assert client.post("/api/incidencias/99999/reemplazar-equipo",
+                       json={"equipo_retirado_id": esc["hp"]}).status_code == 404
+    # Un ticket de un cliente no puede retirar el equipo de otro.
+    otro = client.post("/api/clientes", json={"nombre": "Otro"}).json()["id"]
+    ajeno = client.post("/api/equipos", json={"cliente_id": otro, "tipo": "PC"}).json()["id"]
+    assert client.post(url, json={"equipo_retirado_id": ajeno}).status_code == 422
+
+
+def test_un_reemplazo_fallido_no_deja_nada_a_medias(client, monkeypatch):
+    """La atomicidad es el punto de la accion compuesta: media operacion
+    aplicada es peor que ninguna — el inventario diria que la impresora
+    esta en service y el ticket no tendria ni una linea que lo explique.
+
+    Se **fuerza el fallo en el medio** (despues de mover el retirado,
+    antes de terminar) en vez de confiar en que las validaciones de
+    entrada alcanzan: esas corren todas antes de la primera escritura, asi
+    que un `equipo_sustituto_id` inexistente no probaria nada sobre la
+    transaccion.
+    """
+    _login(client)
+    esc = _escenario_impresora(client)
+
+    from app.services import reemplazo as modulo
+
+    original = modulo.movimientos_por_cambio
+    llamadas = {"n": 0}
+
+    def explota_en_el_segundo_equipo(*args, **kwargs):
+        llamadas["n"] += 1
+        if llamadas["n"] == 2:
+            raise RuntimeError("fallo simulado a mitad de camino")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(modulo, "movimientos_por_cambio", explota_en_el_segundo_equipo)
+
+    antes = client.get(f"/api/equipos/{esc['hp']}").json()
+    with pytest.raises(RuntimeError):
+        client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+            "equipo_retirado_id": esc["hp"], "equipo_sustituto_id": esc["pantum"],
+        })
+
+    assert llamadas["n"] == 2  # el fallo ocurrio DESPUES de tocar el primer equipo
+    assert client.get(f"/api/equipos/{esc['hp']}").json() == antes
+    assert client.get(f"/api/equipos/{esc['pantum']}").json()["sector"] == "Deposito"
+    assert client.get(f"/api/incidencias/{esc['incidencia_id']}/movimientos").json() == []
+    assert client.get(f"/api/incidencias/{esc['incidencia_id']}/actividades").json() == []
+
+
+def test_un_sustituto_inexistente_da_404_antes_de_tocar_nada(client):
+    """Las validaciones corren antes de la primera escritura."""
+    _login(client)
+    esc = _escenario_impresora(client)
+
+    antes = client.get(f"/api/equipos/{esc['hp']}").json()
+    r = client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "equipo_sustituto_id": 99999,
+    })
+    assert r.status_code == 404
+    assert client.get(f"/api/equipos/{esc['hp']}").json() == antes
+
+
+def test_borrar_la_incidencia_no_borra_el_movimiento_pero_lo_desvincula(client):
+    """El equipo salio de Admision de verdad: ese hecho fisico sobrevive
+    al ticket. Y como el pragma foreign_keys esta apagado en las
+    conexiones de SQLAlchemy, esto se hace explicito en el repositorio —
+    si se confiara en el `ondelete`, el movimiento quedaria apuntando a un
+    ticket borrado."""
+    _login(client)
+    esc = _escenario_impresora(client)
+    client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "destino": "service",
+    })
+
+    assert client.delete(f"/api/incidencias/{esc['incidencia_id']}").status_code == 204
+
+    movs = client.get(f"/api/equipos/{esc['hp']}/movimientos").json()
+    assert len(movs) == 3  # alta + traslado + en_reparacion, intactos
+    assert all(m["incidencia_id"] is None for m in movs)
+
+
+def test_borrar_la_incidencia_borra_su_actividad_y_su_auditoria(client):
+    """Lo que el dialogo de confirmacion de la UI ya prometia y no pasaba:
+    los `ondelete=CASCADE` de los modelos son decorativos porque el engine
+    no activa `PRAGMA foreign_keys` (medido: devuelve 0)."""
+    _login(client)
+    esc = _escenario_impresora(client)
+    inc = esc["incidencia_id"]
+    client.post(f"/api/incidencias/{inc}/actividades", json={"descripcion": "Diagnostico"})
+
+    from sqlalchemy import text
+
+    from app import database
+
+    def contar(tabla: str) -> int:
+        with database.get_engine().connect() as conn:
+            return conn.execute(
+                text(f"SELECT COUNT(*) FROM {tabla} WHERE incidencia_id = {inc}")
+            ).scalar()
+
+    assert contar("actividades_incidencia") == 1
+    assert contar("incidencias_estados_log") == 1
+
+    assert client.delete(f"/api/incidencias/{inc}").status_code == 204
+
+    assert contar("actividades_incidencia") == 0
+    assert contar("incidencias_estados_log") == 0
+
+
+# El `CREATE TABLE` de `equipos_movimientos` ANTES de esta ronda: es el
+# schema que hoy tienen las dos instancias desplegadas. Se escribe
+# completo a proposito — el test de migracion tiene que correr contra el
+# estado real de produccion, no contra una aproximacion.
+_DDL_MOVIMIENTOS_VIEJO = """
+CREATE TABLE equipos_movimientos (
+    id INTEGER NOT NULL,
+    equipo_id INTEGER NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    descripcion TEXT,
+    sector_origen VARCHAR(255),
+    sector_destino VARCHAR(255),
+    ubicacion_origen VARCHAR(255),
+    ubicacion_destino VARCHAR(255),
+    motivo VARCHAR(500),
+    usuario VARCHAR(255) NOT NULL,
+    fecha DATETIME DEFAULT (CURRENT_TIMESTAMP),
+    PRIMARY KEY (id),
+    FOREIGN KEY(equipo_id) REFERENCES equipos (id) ON DELETE CASCADE
+)
+"""
+
+_COLUMNAS_VIEJAS = (
+    "id, equipo_id, tipo, descripcion, sector_origen, sector_destino, "
+    "ubicacion_origen, ubicacion_destino, motivo, usuario, fecha"
+)
+
+
+def test_la_migracion_agrega_la_columna_a_una_base_vieja(client):
+    """El caso real del deploy: `compulibra` ya existe con sus 75
+    movimientos, y `create_all()` **no altera tablas existentes** — sin la
+    migracion, la columna nueva jamas llegaria ahi.
+
+    Se reconstruye la tabla con el schema anterior (con datos adentro) y
+    se corre la migracion sobre esa base. No se puede simular con `DROP
+    COLUMN`: SQLite lo rechaza cuando la columna esta en una FK.
+    """
+    from sqlalchemy import text
+
+    from app import database
+    from app.migrations import run_migrations
+
+    _login(client)
+    esc = _escenario_impresora(client)  # deja movimientos de alta reales
+    engine = database.get_engine()
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP INDEX IF EXISTS ix_equipos_movimientos_incidencia_id"))
+        conn.execute(text("ALTER TABLE equipos_movimientos RENAME TO _mov_con_columna"))
+        conn.execute(text(_DDL_MOVIMIENTOS_VIEJO))
+        conn.execute(text(
+            f"INSERT INTO equipos_movimientos SELECT {_COLUMNAS_VIEJAS} FROM _mov_con_columna"
+        ))
+        conn.execute(text("DROP TABLE _mov_con_columna"))
+        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
+        filas_antes = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
+    assert "incidencia_id" not in columnas
+    assert filas_antes == 2  # las altas de la HP y la Pantum
+
+    assert run_migrations(engine) == ["equipos_movimientos.incidencia_id"]
+
+    with engine.begin() as conn:
+        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
+        indices = {f[1] for f in conn.execute(text("PRAGMA index_list(equipos_movimientos)")).all()}
+        filas_despues = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
+    assert "incidencia_id" in columnas
+    assert "ix_equipos_movimientos_incidencia_id" in indices
+    # El historial migrado no se pierde ni se toca: queda en NULL.
+    assert filas_despues == filas_antes
+    assert client.get(f"/api/equipos/{esc['hp']}/movimientos").json()[0]["incidencia_id"] is None
+
+    # Idempotente: correrla de nuevo no hace nada.
+    assert run_migrations(engine) == []
+
+    # Y la base migrada acepta escribir la columna nueva, que es el punto.
+    assert client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
+        "equipo_retirado_id": esc["hp"], "destino": "service",
+    }).status_code == 201
+
+
 def _armar_datos_para_reportes(client) -> dict:
     """Un cliente por_servicio con equipo (garantia vencida), incidencia
     cerrada, actividad y movimiento — toca las 6 consultas analiticas."""

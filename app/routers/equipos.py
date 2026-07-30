@@ -48,6 +48,8 @@ class MovimientoOut(BaseModel):
     motivo: str | None
     usuario: str
     fecha: str | None
+    # De que ticket vino este movimiento (None si fue una edicion suelta).
+    incidencia_id: int | None
 
 
 @router.post("", status_code=201, response_model=EquipoOut)

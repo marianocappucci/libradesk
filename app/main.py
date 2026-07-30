@@ -10,6 +10,7 @@ from libraauth.repository import UserRepository
 from . import database
 from .auth import build_session_auth, require_admin, require_staff
 from .database import Base, configure, get_engine, get_session_factory
+from .migrations import run_migrations
 from .routers import auth as auth_router
 from .routers import (
     clientes, config_empresa, dashboard, equipos, health, incidencias,
@@ -19,6 +20,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.reemplazo import ReemplazoService
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -33,6 +35,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # y el de libraauth (tabla `usuarios`) — conviven en el mismo archivo
     # SQLite, sin una segunda base de datos separada.
     Base.metadata.create_all(engine)
+    # `create_all()` no altera tablas que ya existen: sin esto, una columna
+    # nueva solo aparece en bases creadas desde cero y nunca llega a
+    # produccion. Ver app/migrations.py.
+    run_migrations(engine)
     AuthBase.metadata.create_all(engine)
 
     # Tercera capa sobre el MISMO archivo SQLite: `libracore.db` en sqlite3
@@ -52,6 +58,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.clientes = ClienteRepository(sessions)
     app.state.equipos = EquipoRepository(sessions)
     app.state.incidencias = IncidenciaRepository(sessions)
+    app.state.reemplazos = ReemplazoService(sessions)
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
