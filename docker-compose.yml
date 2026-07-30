@@ -40,6 +40,16 @@ services:
       - LIBRADESK_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:?falta DEV_ADMIN_PASSWORD}
       - DATA_DIR=/app/data
       - ENV=production
+      # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
+      # igual y POST /auth/forgot-password devuelve 503: cargar estas
+      # variables es lo unico que falta para que mande mails.
+      - LIBRADESK_RESET_URL_BASE=${DEV_RESET_URL_BASE:-https://dev.libradesk.com.ar/reset-password}
+      - LIBRAAUTH_SMTP_HOST=${LIBRAAUTH_SMTP_HOST:-}
+      - LIBRAAUTH_SMTP_PORT=${LIBRAAUTH_SMTP_PORT:-587}
+      - LIBRAAUTH_SMTP_USER=${LIBRAAUTH_SMTP_USER:-}
+      - LIBRAAUTH_SMTP_PASSWORD=${LIBRAAUTH_SMTP_PASSWORD:-}
+      - LIBRAAUTH_SMTP_FROM_EMAIL=${LIBRAAUTH_SMTP_FROM_EMAIL:-}
+      - LIBRAAUTH_SMTP_FROM_NAME=${LIBRAAUTH_SMTP_FROM_NAME:-LibraDesk}
 
   # Cliente real de produccion — compulibra.libradesk.com.ar
   libradesk-compulibra:
@@ -56,6 +66,16 @@ services:
       - LIBRADESK_ADMIN_PASSWORD=${COMPULIBRA_ADMIN_PASSWORD:?falta COMPULIBRA_ADMIN_PASSWORD}
       - DATA_DIR=/app/data
       - ENV=production
+      # El link del mail tiene que apuntar al dominio DE ESTA instancia: si
+      # heredara el de dev, el cliente recibiria un enlace a un sistema que no
+      # es el suyo (y donde su token no existe).
+      - LIBRADESK_RESET_URL_BASE=${COMPULIBRA_RESET_URL_BASE:-https://compulibra.libradesk.com.ar/reset-password}
+      - LIBRAAUTH_SMTP_HOST=${COMPULIBRA_SMTP_HOST:-}
+      - LIBRAAUTH_SMTP_PORT=${COMPULIBRA_SMTP_PORT:-587}
+      - LIBRAAUTH_SMTP_USER=${COMPULIBRA_SMTP_USER:-}
+      - LIBRAAUTH_SMTP_PASSWORD=${COMPULIBRA_SMTP_PASSWORD:-}
+      - LIBRAAUTH_SMTP_FROM_EMAIL=${COMPULIBRA_SMTP_FROM_EMAIL:-}
+      - LIBRAAUTH_SMTP_FROM_NAME=${COMPULIBRA_SMTP_FROM_NAME:-LibraDesk}
 
 networks:
   stack-net:

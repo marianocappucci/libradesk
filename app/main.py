@@ -4,7 +4,10 @@ tecnicos/sectores/dashboard) + `libraauth` para sesion/usuarios +
 `gestiolibra/app/main.py`."""
 from fastapi import Depends, FastAPI
 
+import os
+
 from libraauth.models import Base as AuthBase
+from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
 
 from . import database
@@ -55,6 +58,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app = FastAPI(title="LibraDesk")
     app.state.users = user_repository
     app.state.session_auth = build_session_auth(user_repository)
+    # Recuperación de contraseña por correo (libraauth v0.5.0). Acá `sessions`
+    # es el único session_factory del producto: LibraDesk tiene `usuarios` en
+    # el mismo archivo que su dominio, así que la FK de la tabla de tokens
+    # resuelve igual. Sin SMTP configurado la app levanta igual y el endpoint
+    # devuelve 503.
+    app.state.password_reset = PasswordResetService(
+        sessions,
+        product_name="LibraDesk",
+        reset_url_base=os.environ.get(
+            "LIBRADESK_RESET_URL_BASE", "https://dev.libradesk.com.ar/reset-password"
+        ),
+    )
     app.state.clientes = ClienteRepository(sessions)
     app.state.equipos = EquipoRepository(sessions)
     app.state.incidencias = IncidenciaRepository(sessions)
