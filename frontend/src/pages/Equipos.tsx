@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
-import { api, ApiError, type Cliente, type Equipo } from '../api'
+import { api, ApiError, type Cliente, type Equipo, type EquipoMovimiento } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,24 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
-import { Pencil, Trash2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { History, Pencil, Trash2 } from 'lucide-react'
+
+const MOV_LABELS: Record<string, string> = {
+  alta: 'Alta', baja: 'Baja', traslado: 'Traslado',
+  en_reparacion: 'Reparación', almacenado: 'Almacenado', activo: 'Reactivado',
+}
+
+function formatFecha(fecha: string | null): string {
+  if (!fecha) return '—'
+  return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function ubicacionTexto(sector: string | null, ubicacion: string | null): string | null {
+  return [sector, ubicacion].filter(Boolean).join(' · ') || null
+}
 
 const equipoSchema = z.object({
   cliente_id: z.string().min(1, 'Elegí un cliente'),
@@ -27,14 +44,19 @@ const equipoSchema = z.object({
   ubicacion_oficina: z.string().trim().optional(),
   sector: z.string().trim().optional(),
   estado: z.string().min(1),
+  garantia_vence: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
+  // Solo para el historial: si el guardado implica traslado o cambio de
+  // estado, este texto queda como motivo del movimiento.
+  motivo: z.string().trim().optional(),
 })
 
 type EquipoFormValues = z.infer<typeof equipoSchema>
 
 const EMPTY_VALUES: EquipoFormValues = {
   cliente_id: '', tipo: '', marca: '', modelo: '', serial: '',
-  ubicacion_oficina: '', sector: '', estado: 'activo', observaciones: '',
+  ubicacion_oficina: '', sector: '', estado: 'activo',
+  garantia_vence: '', observaciones: '', motivo: '',
 }
 
 const ESTADOS_EQUIPO = ['activo', 'en_reparacion', 'almacenado', 'baja']
@@ -52,6 +74,8 @@ export function Equipos() {
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
+  const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
+  const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
 
   const form = useForm<EquipoFormValues>({
     resolver: zodResolver(equipoSchema),
@@ -102,7 +126,9 @@ export function Equipos() {
       ubicacion_oficina: equipo.ubicacion_oficina ?? '',
       sector: equipo.sector ?? '',
       estado: equipo.estado,
+      garantia_vence: equipo.garantia_vence ?? '',
       observaciones: equipo.observaciones ?? '',
+      motivo: '',
     })
   }
 
@@ -124,13 +150,16 @@ export function Equipos() {
       sector: values.sector || null,
       estado: values.estado,
       observaciones: values.observaciones || null,
-      garantia_vence: null,
+      // Antes iba `null` fijo porque el formulario no tenía el campo: cada
+      // edición borraba la garantía del equipo y lo sacaba del reporte de
+      // Garantías sin que nadie lo notara.
+      garantia_vence: values.garantia_vence || null,
     }
     try {
       if (editingId === 'new') {
         await api.post('/api/equipos', payload)
       } else if (editingId) {
-        await api.put(`/api/equipos/${editingId}`, payload)
+        await api.put(`/api/equipos/${editingId}`, { ...payload, motivo: values.motivo || null })
       }
       cancelEdit()
       await loadAll()
@@ -138,6 +167,17 @@ export function Equipos() {
       setError(describeError(err))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function verHistorial(equipo: Equipo) {
+    setHistorialDe(equipo)
+    setMovimientos(null)
+    try {
+      setMovimientos(await api.get<EquipoMovimiento[]>(`/api/equipos/${equipo.id}/movimientos`))
+    } catch (err) {
+      setError(describeError(err))
+      setHistorialDe(null)
     }
   }
 
@@ -170,18 +210,23 @@ export function Equipos() {
         ),
       },
     ]
-    if (isAdmin) {
-      base.push({
-        id: 'actions',
-        header: () => <div className="text-right">Acciones</div>,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => startEdit(row.original)}><Pencil /></Button>
-            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
-          </div>
-        ),
-      })
-    }
+    // El historial es de solo lectura, así que lo ve cualquier usuario
+    // logueado; editar y borrar siguen siendo admin-only.
+    base.push({
+      id: 'actions',
+      header: () => <div className="text-right">Acciones</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="outline" title="Ver historial de movimientos" aria-label="Ver historial de movimientos" onClick={() => verHistorial(row.original)}><History /></Button>
+          {isAdmin && (
+            <>
+              <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => startEdit(row.original)}><Pencil /></Button>
+              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
+            </>
+          )}
+        </div>
+      ),
+    })
     return base
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, clientes])
@@ -249,10 +294,24 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="sector" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sector</FormLabel>
+                    <FormControl><Input {...field} className="w-36" placeholder="Depósito, Admisión…" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="ubicacion_oficina" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Ubicación</FormLabel>
                     <FormControl><Input {...field} className="w-36" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="garantia_vence" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Garantía vence</FormLabel>
+                    <FormControl><Input type="date" {...field} className="w-40" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -272,6 +331,17 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {editingId !== 'new' && (
+                  <FormField control={form.control} name="motivo" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Motivo del movimiento</FormLabel>
+                      <FormControl>
+                        <Input {...field} className="w-56" placeholder="Si cambia sector o estado" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
                 <div className="flex gap-2 pt-6">
                   <Button type="submit" disabled={saving}>
                     {saving ? 'Guardando…' : editingId === 'new' ? 'Crear' : 'Guardar'}
@@ -293,6 +363,52 @@ export function Equipos() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={historialDe !== null} onOpenChange={(open) => !open && setHistorialDe(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Historial de movimientos</DialogTitle>
+            <DialogDescription>
+              {historialDe && [historialDe.tipo, historialDe.marca, historialDe.modelo].filter(Boolean).join(' ')}
+              {historialDe?.serial ? ` — ${historialDe.serial}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {movimientos === null ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : movimientos.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Sin movimientos registrados.
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {movimientos.map((m) => {
+                const origen = ubicacionTexto(m.sector_origen, m.ubicacion_origen)
+                const destino = ubicacionTexto(m.sector_destino, m.ubicacion_destino)
+                return (
+                  <div key={m.id} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={m.tipo === 'baja' ? 'destructive' : 'outline'}>
+                        {MOV_LABELS[m.tipo] ?? m.tipo}
+                      </Badge>
+                      <span className="font-medium">{m.descripcion ?? '—'}</span>
+                    </div>
+                    {(origen || destino) && (
+                      <span className="text-xs text-muted-foreground">
+                        {origen ?? 'sin ubicación'} → {destino ?? 'sin ubicación'}
+                      </span>
+                    )}
+                    {m.motivo && <span className="text-xs text-muted-foreground">Motivo: {m.motivo}</span>}
+                    <span className="text-xs text-muted-foreground">
+                      {m.usuario} · {formatFecha(m.fecha)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

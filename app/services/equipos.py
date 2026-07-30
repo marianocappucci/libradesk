@@ -1,7 +1,17 @@
 """Equipos (inventario por cliente) + `EquipoMovimiento` (historial de
 movimientos/cambios de estado — 75 filas reales migradas desde Postgres,
 tabla que ni el backend Node.js viejo exponia via API, encontrada al
-inspeccionar el esquema real antes de migrar)."""
+inspeccionar el esquema real antes de migrar).
+
+**Escritura del historial (repuesta 2026-07-29).** Entre la reescritura y
+esa fecha la tabla quedo de solo lectura: se seguian mostrando las 75
+filas migradas pero no se registraba ningun movimiento nuevo. El backend
+Node.js lo hacia desde endpoints dedicados (`baja`, `trasladar`,
+`desplegar`, `cambiarEstado`); LibraDesk tiene un CRUD generico, asi que
+el movimiento se **deriva de lo que efectivamente cambio** en el update,
+mismo patron con el que `IncidenciaRepository` ya registra
+`IncidenciaEstadoLog`. Un update que no toca ubicacion ni estado no
+genera ruido en el historial."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -78,14 +88,30 @@ def _mov_to_dict(m: EquipoMovimiento) -> dict:
     }
 
 
+def _descripcion_equipo(e: Equipo) -> str:
+    """"Notebook Lenovo T14" — mismo armado que usaba el backend viejo
+    para el texto del movimiento."""
+    return " ".join(x for x in (e.tipo, e.marca, e.modelo) if x)
+
+
 class EquipoRepository:
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
 
-    def create(self, **data) -> dict:
+    def create(self, usuario_actor: str | None = None, **data) -> dict:
         with self.session_factory() as session:
             e = Equipo(**data)
             session.add(e)
+            session.flush()
+            session.add(EquipoMovimiento(
+                equipo_id=e.id,
+                tipo="alta",
+                descripcion=f"Alta: {_descripcion_equipo(e)}",
+                sector_destino=e.sector,
+                ubicacion_destino=e.ubicacion_oficina,
+                motivo="Alta inicial del equipo",
+                usuario=usuario_actor or "Sistema",
+            ))
             session.commit()
             session.refresh(e)
             return _to_dict(e)
@@ -102,13 +128,58 @@ class EquipoRepository:
             e = session.get(Equipo, equipo_id)
             return _to_dict(e) if e else None
 
-    def update(self, equipo_id: int, **data) -> dict:
+    def update(self, equipo_id: int, usuario_actor: str | None = None,
+               motivo: str | None = None, **data) -> dict:
+        """Registra en el historial lo que el update cambio de verdad:
+
+        - **traslado** si cambio `sector` o `ubicacion_oficina`, guardando
+          origen y destino de ambos.
+        - **cambio de estado** con `tipo` = el estado nuevo (asi el
+          reporte lo etiqueta 'Baja'/'Reparación'/'Reactivado' via
+          `MOV_LABEL`, igual que el sistema viejo).
+
+        Los dos pueden darse en un mismo update — el equipo que vuelve del
+        service Y cambia de sector genera dos filas, que es lo correcto.
+        Un update que solo corrige, por ejemplo, el serial no genera
+        ninguna."""
         with self.session_factory() as session:
             e = session.get(Equipo, equipo_id)
             if e is None:
                 raise KeyError(equipo_id)
+
+            sector_previo, ubicacion_previa, estado_previo = e.sector, e.ubicacion_oficina, e.estado
             for key, value in data.items():
                 setattr(e, key, value)
+
+            actor = usuario_actor or "Sistema"
+            se_movio = e.sector != sector_previo or e.ubicacion_oficina != ubicacion_previa
+            if se_movio:
+                destino = e.sector or e.ubicacion_oficina or "sin ubicación"
+                session.add(EquipoMovimiento(
+                    equipo_id=e.id,
+                    tipo="traslado",
+                    descripcion=f"Traslado → {destino}",
+                    sector_origen=sector_previo,
+                    sector_destino=e.sector,
+                    ubicacion_origen=ubicacion_previa,
+                    ubicacion_destino=e.ubicacion_oficina,
+                    motivo=motivo,
+                    usuario=actor,
+                ))
+
+            if e.estado != estado_previo:
+                session.add(EquipoMovimiento(
+                    equipo_id=e.id,
+                    tipo=e.estado,
+                    descripcion=f"Estado cambiado a: {e.estado}",
+                    # En un cambio de estado sin traslado, la ubicacion es
+                    # de donde sale: por eso va como origen y no destino.
+                    sector_origen=e.sector,
+                    ubicacion_origen=e.ubicacion_oficina,
+                    motivo=motivo,
+                    usuario=actor,
+                ))
+
             session.commit()
             session.refresh(e)
             return _to_dict(e)

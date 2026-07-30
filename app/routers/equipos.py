@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
+from ..auth import get_current_user
 from ..dependencies import get_equipo_repository
 from ..services.equipos import EquipoRepository
 
@@ -20,6 +21,13 @@ class EquipoIn(BaseModel):
     estado: str = "activo"
     garantia_vence: date | None = None
     observaciones: str | None = None
+
+
+class EquipoUpdate(EquipoIn):
+    # Solo para el historial: si el update genera un traslado o un cambio
+    # de estado, este texto queda como motivo del movimiento. No se guarda
+    # en el equipo.
+    motivo: str | None = None
 
 
 class EquipoOut(EquipoIn):
@@ -43,8 +51,12 @@ class MovimientoOut(BaseModel):
 
 
 @router.post("", status_code=201, response_model=EquipoOut)
-def create_equipo(data: EquipoIn, equipos: EquipoRepository = Depends(get_equipo_repository)):
-    return equipos.create(**data.model_dump())
+def create_equipo(
+    data: EquipoIn,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+    user: dict = Depends(get_current_user),
+):
+    return equipos.create(usuario_actor=user["username"], **data.model_dump())
 
 
 @router.get("", response_model=list[EquipoOut])
@@ -61,9 +73,18 @@ def get_equipo(equipo_id: int, equipos: EquipoRepository = Depends(get_equipo_re
 
 
 @router.put("/{equipo_id}", response_model=EquipoOut)
-def update_equipo(equipo_id: int, data: EquipoIn, equipos: EquipoRepository = Depends(get_equipo_repository)):
+def update_equipo(
+    equipo_id: int,
+    data: EquipoUpdate,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+    user: dict = Depends(get_current_user),
+):
+    payload = data.model_dump()
+    motivo = payload.pop("motivo", None)
     try:
-        return equipos.update(equipo_id, **data.model_dump())
+        return equipos.update(
+            equipo_id, usuario_actor=user["username"], motivo=motivo, **payload
+        )
     except KeyError:
         raise HTTPException(404, "equipo not found")
 

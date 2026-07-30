@@ -105,6 +105,102 @@ def test_export_xlsx(client):
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def _equipo_de_prueba(client, **extra) -> int:
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Mov"}).json()["id"]
+    body = {"cliente_id": cliente_id, "tipo": "Notebook", "marca": "Lenovo",
+            "sector": "Administracion", "ubicacion_oficina": "Piso 2",
+            "estado": "activo"}
+    body.update(extra)
+    return client.post("/api/equipos", json=body).json()["id"]
+
+
+def test_alta_de_equipo_registra_movimiento(client):
+    _login(client)
+    equipo_id = _equipo_de_prueba(client)
+
+    movs = client.get(f"/api/equipos/{equipo_id}/movimientos").json()
+    assert len(movs) == 1
+    assert movs[0]["tipo"] == "alta"
+    assert movs[0]["descripcion"] == "Alta: Notebook Lenovo"
+    assert movs[0]["sector_destino"] == "Administracion"
+    assert movs[0]["ubicacion_destino"] == "Piso 2"
+    # El actor queda registrado, no "Sistema".
+    assert movs[0]["usuario"] == "admin"
+
+
+def test_traslado_registra_origen_y_destino(client):
+    _login(client)
+    equipo_id = _equipo_de_prueba(client)
+
+    client.put(f"/api/equipos/{equipo_id}", json={
+        "cliente_id": 1, "tipo": "Notebook", "marca": "Lenovo",
+        "sector": "Deposito", "ubicacion_oficina": "Subsuelo",
+        "estado": "activo", "motivo": "Reubicacion por obra",
+    })
+
+    movs = client.get(f"/api/equipos/{equipo_id}/movimientos").json()
+    traslado = next(m for m in movs if m["tipo"] == "traslado")
+    assert traslado["sector_origen"] == "Administracion"
+    assert traslado["sector_destino"] == "Deposito"
+    assert traslado["ubicacion_origen"] == "Piso 2"
+    assert traslado["ubicacion_destino"] == "Subsuelo"
+    assert traslado["motivo"] == "Reubicacion por obra"
+    assert traslado["descripcion"] == "Traslado → Deposito"
+
+
+def test_cambio_de_estado_registra_movimiento_con_ese_tipo(client):
+    """El `tipo` del movimiento es el estado nuevo: asi el reporte lo
+    etiqueta 'Reparación'/'Baja'/'Reactivado' via MOV_LABEL."""
+    _login(client)
+    equipo_id = _equipo_de_prueba(client)
+
+    base = {"cliente_id": 1, "tipo": "Notebook", "marca": "Lenovo",
+            "sector": "Administracion", "ubicacion_oficina": "Piso 2"}
+    client.put(f"/api/equipos/{equipo_id}", json={**base, "estado": "en_reparacion",
+                                                 "motivo": "No enciende"})
+
+    movs = client.get(f"/api/equipos/{equipo_id}/movimientos").json()
+    cambio = next(m for m in movs if m["tipo"] == "en_reparacion")
+    assert cambio["descripcion"] == "Estado cambiado a: en_reparacion"
+    assert cambio["motivo"] == "No enciende"
+
+
+def test_un_update_sin_cambios_relevantes_no_ensucia_el_historial(client):
+    """Corregir el serial no es un movimiento: si cada PUT generara una
+    fila, el historial se volveria inservible."""
+    _login(client)
+    equipo_id = _equipo_de_prueba(client)
+    antes = len(client.get(f"/api/equipos/{equipo_id}/movimientos").json())
+
+    client.put(f"/api/equipos/{equipo_id}", json={
+        "cliente_id": 1, "tipo": "Notebook", "marca": "Lenovo",
+        "sector": "Administracion", "ubicacion_oficina": "Piso 2",
+        "estado": "activo", "serial": "CORREGIDO-123",
+    })
+
+    despues = client.get(f"/api/equipos/{equipo_id}/movimientos").json()
+    assert len(despues) == antes
+
+
+def test_traslado_y_cambio_de_estado_juntos_generan_dos_movimientos(client):
+    """Un equipo que vuelve del service Y cambia de sector son dos hechos
+    distintos, y el historial tiene que reflejar los dos."""
+    _login(client)
+    equipo_id = _equipo_de_prueba(client, estado="en_reparacion")
+
+    client.put(f"/api/equipos/{equipo_id}", json={
+        "cliente_id": 1, "tipo": "Notebook", "marca": "Lenovo",
+        "sector": "Consultorios", "ubicacion_oficina": "Consultorio 4",
+        "estado": "activo",
+    })
+
+    movs = client.get(f"/api/equipos/{equipo_id}/movimientos").json()
+    tipos = [m["tipo"] for m in movs]
+    assert "traslado" in tipos
+    assert "activo" in tipos
+    assert len(movs) == 3  # alta + traslado + reactivacion
+
+
 def _armar_datos_para_reportes(client) -> dict:
     """Un cliente por_servicio con equipo (garantia vencida), incidencia
     cerrada, actividad y movimiento — toca las 6 consultas analiticas."""

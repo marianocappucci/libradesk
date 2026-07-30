@@ -40,6 +40,12 @@ export type EquipoMovimiento = {
   equipo_id: number
   tipo: string
   descripcion: string | null
+  // El backend (MovimientoOut) siempre devolvió estos cuatro; faltaban acá
+  // porque nada del frontend consumía el historial todavía.
+  sector_origen: string | null
+  sector_destino: string | null
+  ubicacion_origen: string | null
+  ubicacion_destino: string | null
   motivo: string | null
   usuario: string
   fecha: string | null
