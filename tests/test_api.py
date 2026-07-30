@@ -322,3 +322,253 @@ def test_facturacion_solo_incluye_clientes_por_servicio(client):
     ]
     assert any("Falla de fuente" in t for t in textos)
     assert not any("Incidencia de abono" in t for t in textos)
+
+
+# ─── Remitos y presupuestos (dominio reusado de libracore) ──────────────
+
+def _cliente_para_comprobantes(client) -> int:
+    return client.post("/api/clientes", json={
+        "nombre": "Juan Perez", "empresa": "Compulibra SRL",
+        "email": "facturacion@compulibra.com.ar", "telefono": "3514567890",
+        "ciudad": "Cordoba",
+    }).json()["id"]
+
+
+_ITEMS = [
+    {"description": "Reparacion de notebook", "qty": 2, "unit_price": 15000},
+    {"description": "Cambio de disco SSD 480GB", "qty": 1, "unit_price": 45000},
+]
+
+
+def test_remito_con_client_id_real_se_inserta(client):
+    """El test que justifica el diseno del schema: el DDL de LibraCore declara
+    `client_id REFERENCES clients(id)` y LibraDesk no tiene `clients`. Como
+    `libracore.db.core.get_connection()` corre `PRAGMA foreign_keys = ON` en
+    toda conexion, dejar esa FK haria fallar TODO insert con `no such table:
+    main.clients` — incluso con client_id NULL. Si alguien "restaura" la FK
+    copiando el DDL original, este test se pone rojo."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+
+    r = client.post("/api/remitos", json={"client_id": cliente_id, "items": _ITEMS})
+    assert r.status_code == 201, r.text
+    remito = r.json()
+
+    assert remito["client_id"] == cliente_id
+    assert remito["client_name"] == "Compulibra SRL"   # empresa, no nombre
+    assert remito["client_email"] == "facturacion@compulibra.com.ar"
+    assert remito["client_address"] == "Cordoba"
+    assert remito["number"].startswith("0001-")
+    assert len(remito["items"]) == 2
+
+
+def test_remito_calcula_los_totales_en_el_servidor(client):
+    """Los importes no se aceptan del front: 2*15000 + 1*45000 = 75000."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+
+    remito = client.post("/api/remitos", json={
+        "client_id": cliente_id, "items": _ITEMS, "tax_rate": 0.21,
+    }).json()
+
+    assert remito["subtotal"] == 75000
+    assert remito["tax_amount"] == 15750
+    assert remito["total"] == 90750
+    assert remito["items"][0]["subtotal"] == 30000
+
+
+def test_remito_de_cliente_inexistente_da_404(client):
+    """La FK no existe, asi que la integridad la sostiene el router."""
+    _login(client)
+    r = client.post("/api/remitos", json={"client_id": 99999, "items": _ITEMS})
+    assert r.status_code == 404
+
+
+def test_remito_sin_items_es_rechazado(client):
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    r = client.post("/api/remitos", json={"client_id": cliente_id, "items": []})
+    assert r.status_code == 422
+
+
+def test_next_number_no_choca_con_la_ruta_de_detalle(client):
+    """/next-number va declarada antes de /{remito_id}; al reves daria 422
+    porque "next-number" no parsea como int."""
+    _login(client)
+    r = client.get("/api/remitos/next-number")
+    assert r.status_code == 200
+    assert r.json()["number"].startswith("0001-")
+
+
+def test_remitos_exigen_autenticacion(client):
+    """Los routers de dominio ya se habian olvidado la autenticacion una vez
+    (solo /api/usuarios la tenia); se cubre explicitamente."""
+    assert client.get("/api/remitos").status_code == 401
+    assert client.get("/api/presupuestos").status_code == 401
+    assert client.post("/api/remitos", json={"client_id": 1, "items": _ITEMS}).status_code == 401
+
+
+def test_remito_pdf_es_un_pdf_real(client):
+    """No alcanza con un 200: se verifica la firma del archivo y que el
+    generador de LibraCore produjo algo con contenido."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    remito_id = client.post("/api/remitos", json={
+        "client_id": cliente_id, "items": _ITEMS, "observations": "Retira el cliente",
+    }).json()["id"]
+
+    r = client.get(f"/api/remitos/{remito_id}/pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF")
+    assert len(r.content) > 1000
+
+    # El path queda guardado en la fila, como en Contalibra/Restolibra.
+    assert client.get(f"/api/remitos/{remito_id}").json()["pdf_path"].endswith(".pdf")
+
+
+def test_presupuesto_flujo_completo_y_conversion_a_remito(client):
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+
+    p = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+    })
+    assert p.status_code == 201, p.text
+    presupuesto = p.json()
+    assert presupuesto["number"].startswith("PRES-")
+    assert presupuesto["status"] == "borrador"
+    assert presupuesto["total"] == 90750
+
+    pid = presupuesto["id"]
+    r = client.patch(f"/api/presupuestos/{pid}/estado", json={"status": "enviado"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "enviado"
+
+    r = client.post(f"/api/presupuestos/{pid}/convertir-en-remito")
+    assert r.status_code == 201, r.text
+    remito = r.json()
+    assert remito["total"] == presupuesto["total"]
+    assert presupuesto["number"] in remito["observations"]
+
+    despues = client.get(f"/api/presupuestos/{pid}").json()
+    assert despues["status"] == "aceptado"
+    assert despues["remito_id"] == remito["id"]
+
+
+def test_convertir_dos_veces_no_emite_un_segundo_remito(client):
+    """Idempotente a proposito: dos clicks no facturan el trabajo dos veces."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+    }).json()["id"]
+
+    primero = client.post(f"/api/presupuestos/{pid}/convertir-en-remito").json()
+    segundo = client.post(f"/api/presupuestos/{pid}/convertir-en-remito").json()
+
+    assert primero["id"] == segundo["id"]
+    assert len(client.get("/api/remitos").json()) == 1
+
+
+def test_presupuesto_enviado_y_expirado_aparece_vencido_solo(client):
+    """El vencimiento lo corre LibraCore al leer, sin tarea programada: un
+    `enviado` con valid_until pasado sale `vencido` del listado."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+        "valid_until": "2020-01-01", "status": "enviado",
+    }).json()["id"]
+
+    # El detalle no dispara el vencimiento; el listado si.
+    assert client.get(f"/api/presupuestos/{pid}").json()["status"] == "enviado"
+    listado = client.get("/api/presupuestos").json()
+    assert next(p for p in listado if p["id"] == pid)["status"] == "vencido"
+    assert client.get("/api/presupuestos/resumen").json()["vencido"] == 1
+
+
+def test_convertir_un_presupuesto_vencido_da_409(client):
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+        "valid_until": "2020-01-01", "status": "enviado",
+    }).json()["id"]
+    client.get("/api/presupuestos")  # dispara el vencimiento
+
+    r = client.post(f"/api/presupuestos/{pid}/convertir-en-remito")
+    assert r.status_code == 409
+
+
+def test_solo_se_borra_un_presupuesto_en_borrador(client):
+    """Regla de LibraCore, no propia: en cualquier otro estado levanta
+    ValueError, que el router traduce a 409."""
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+
+    borrador = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+    }).json()["id"]
+    assert client.delete(f"/api/presupuestos/{borrador}").status_code == 204
+
+    enviado = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS, "status": "enviado",
+    }).json()["id"]
+    assert client.delete(f"/api/presupuestos/{enviado}").status_code == 409
+    assert client.get(f"/api/presupuestos/{enviado}").status_code == 200
+
+
+def test_estado_invalido_es_rechazado(client):
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+    }).json()["id"]
+    assert client.patch(f"/api/presupuestos/{pid}/estado",
+                        json={"status": "pagado"}).status_code == 422
+
+
+def test_presupuesto_pdf_es_un_pdf_real(client):
+    _login(client)
+    cliente_id = _cliente_para_comprobantes(client)
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id, "items": _ITEMS,
+    }).json()["id"]
+
+    r = client.get(f"/api/presupuestos/{pid}/pdf")
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF")
+    assert len(r.content) > 1000
+
+
+def test_config_empresa_ida_y_vuelta(client):
+    """El encabezado de los PDF. Sin esto salen con la empresa en blanco."""
+    _login(client)
+    assert client.get("/api/config-empresa").json()["empresa_nombre"] == ""
+
+    r = client.put("/api/config-empresa", json={
+        "empresa_nombre": "Compulibra", "empresa_cuit": "20-12345678-9",
+        "empresa_direccion": "Suipacha 123", "empresa_email": "info@compulibra.com.ar",
+    })
+    assert r.status_code == 200
+    assert r.json()["empresa_nombre"] == "Compulibra"
+    assert client.get("/api/config-empresa").json()["empresa_cuit"] == "20-12345678-9"
+
+
+def test_config_empresa_no_expone_ni_pisa_secretos(client):
+    """config.json es compartido con MercadoPago/SMTP en la familia: esta API
+    solo toca las claves empresa_*, y no devuelve las otras."""
+    from libracore import config_manager
+    _login(client)
+
+    cfg = config_manager.load()
+    cfg["mp_access_token"] = "TOKEN-QUE-NO-SE-DEBE-PERDER"
+    config_manager.save(cfg)
+
+    r = client.get("/api/config-empresa")
+    assert "mp_access_token" not in r.json()
+
+    client.put("/api/config-empresa", json={"empresa_nombre": "Compulibra"})
+    assert config_manager.load()["mp_access_token"] == "TOKEN-QUE-NO-SE-DEBE-PERDER"

@@ -1,0 +1,214 @@
+import { useEffect, useMemo, useState } from 'react'
+import { type ColumnDef } from '@tanstack/react-table'
+import { Download, Pencil, Trash2 } from 'lucide-react'
+import { api, ApiError, type Cliente, type Remito } from '../api'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { DataTable, sortableHeader } from '@/components/data-table'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import {
+  ComprobanteForm, comprobanteADraft, draftAPayload, draftVacio, formatMoney,
+  type ComprobanteDraft,
+} from '@/components/comprobante-form'
+
+export function Remitos() {
+  const [remitos, setRemitos] = useState<Remito[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  const [draft, setDraft] = useState<ComprobanteDraft>(draftVacio())
+  const [numeroPreview, setNumeroPreview] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [aBorrar, setABorrar] = useState<Remito | null>(null)
+
+  useEffect(() => {
+    cargar()
+  }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function cargar(q = '') {
+    setLoading(true)
+    setError(null)
+    try {
+      const [items, cls] = await Promise.all([
+        api.get<Remito[]>(`/api/remitos${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+        api.get<Cliente[]>('/api/clientes'),
+      ])
+      setRemitos(items)
+      setClientes(cls)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function startCreate() {
+    setEditingId('new')
+    setDraft(draftVacio())
+    try {
+      // Preview del numero que va a tomar, igual que en Contalibra.
+      const { number } = await api.get<{ number: string }>('/api/remitos/next-number')
+      setNumeroPreview(number)
+    } catch {
+      setNumeroPreview(null)
+    }
+  }
+
+  function startEdit(remito: Remito) {
+    setEditingId(remito.id)
+    setDraft(comprobanteADraft(remito))
+    setNumeroPreview(remito.number)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setNumeroPreview(null)
+    setDraft(draftVacio())
+  }
+
+  async function guardar() {
+    setSaving(true)
+    setError(null)
+    try {
+      const payload = draftAPayload(draft, 'remito')
+      if (editingId === 'new') {
+        await api.post('/api/remitos', payload)
+      } else if (editingId) {
+        await api.put(`/api/remitos/${editingId}`, payload)
+      }
+      cancelEdit()
+      await cargar(busqueda)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmarBorrado() {
+    if (!aBorrar) return
+    setError(null)
+    try {
+      await api.del(`/api/remitos/${aBorrar.id}`)
+      setABorrar(null)
+      await cargar(busqueda)
+    } catch (err) {
+      setError(describeError(err))
+      setABorrar(null)
+    }
+  }
+
+  const columns = useMemo<ColumnDef<Remito>[]>(() => [
+    {
+      accessorKey: 'number', header: sortableHeader('Número'), size: 130, minSize: 110,
+      cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.number}</span>,
+    },
+    { accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95 },
+    {
+      accessorKey: 'client_name', header: sortableHeader('Cliente'), size: 220, minSize: 140,
+      meta: { stretch: true },
+    },
+    {
+      accessorKey: 'total', header: sortableHeader('Total'), size: 130, minSize: 110,
+      cell: ({ row }) => (
+        <span className="block text-right tabular-nums">{formatMoney(row.original.total)}</span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: () => <div className="text-right">Acciones</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-1">
+          {/* PDF por navegacion directa: es una descarga con cookie de
+              sesion, no una llamada JSON. */}
+          <Button size="icon" variant="outline" title="Descargar PDF" aria-label="Descargar PDF"
+                  onClick={() => window.open(`/api/remitos/${row.original.id}/pdf`, '_blank')}>
+            <Download />
+          </Button>
+          <Button size="icon" variant="outline" title="Editar remito" aria-label="Editar remito"
+                  onClick={() => startEdit(row.original)}>
+            <Pencil />
+          </Button>
+          <Button size="icon" variant="outline" className="text-destructive hover:text-destructive"
+                  title="Eliminar remito" aria-label="Eliminar remito"
+                  onClick={() => setABorrar(row.original)}>
+            <Trash2 />
+          </Button>
+        </div>
+      ),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [])
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Remitos</h2>
+        {editingId === null && <Button onClick={startCreate}>+ Nuevo remito</Button>}
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {editingId !== null && (
+        <ComprobanteForm
+          tipo="remito"
+          titulo={editingId === 'new' ? 'Nuevo remito' : 'Editar remito'}
+          clientes={clientes}
+          draft={draft}
+          onChange={setDraft}
+          onSubmit={guardar}
+          onCancel={cancelEdit}
+          saving={saving}
+          numeroPreview={numeroPreview}
+        />
+      )}
+
+      <Card>
+        <CardContent className="grid gap-3">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => { e.preventDefault(); cargar(busqueda) }}
+          >
+            <Input
+              value={busqueda}
+              placeholder="Buscar por número, cliente u observaciones"
+              aria-label="Buscar remitos"
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="max-w-md"
+            />
+            <Button type="submit" variant="outline">Buscar</Button>
+            {busqueda && (
+              <Button type="button" variant="ghost"
+                      onClick={() => { setBusqueda(''); cargar('') }}>
+                Limpiar
+              </Button>
+            )}
+          </form>
+
+          {loading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <DataTable columns={columns} data={remitos} emptyMessage="Sin remitos todavía." />
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={aBorrar !== null}
+        onOpenChange={(open) => { if (!open) setABorrar(null) }}
+        title="Eliminar remito"
+        description={aBorrar ? `Se va a eliminar el remito ${aBorrar.number}. No se puede deshacer.` : ''}
+        confirmLabel="Eliminar"
+        onConfirm={confirmarBorrado}
+      />
+    </div>
+  )
+}

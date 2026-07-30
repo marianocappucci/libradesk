@@ -14,7 +14,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 os.makedirs(DATA_DIR, exist_ok=True)
 database_url = os.environ.get("DATABASE_URL", f"sqlite:///{DATA_DIR}/libradesk.db")
 
-app = create_app(database_url)
+app = create_app(database_url, DATA_DIR)
 
 _DOCKER_FRONTEND_DIST = Path("/opt/frontend-dist")
 _LOCAL_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"

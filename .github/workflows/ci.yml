@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
   pull_request:
-    branches: [main]
+    branches: [develop, main]
 
 jobs:
   test:
@@ -17,53 +17,64 @@ jobs:
         with:
           python-version: "3.12"
 
-      # libraauth es un repo privado, inalcanzable con el GITHUB_TOKEN
-      # default (scopeado solo a este repo). Se accede con una deploy key
-      # SSH de solo lectura registrada en libraauth, cuya clave privada
-      # vive en el secret LIBRAAUTH_DEPLOY_KEY de este repo.
+      # libraauth y libracore son repos privados, inalcanzables con el
+      # GITHUB_TOKEN default (scopeado solo a este repo). Se accede con
+      # deploy keys SSH de solo lectura, una por repo-motor, cuyas claves
+      # privadas viven en los secrets de abajo.
       #
-      # Por que deploy key y no un PAT: un PAT vence sin aviso y tumba el
+      # Por que deploy keys y no un PAT: un PAT vence sin aviso y tumba el
       # CI (y en el VPS tumbo un deploy real, incidente Restolibra del
       # 2026-07-25). Las deploy keys no vencen. Mismo mecanismo que ya usa
       # el VPS para las dependencias privadas de toda la familia.
       #
-      # El alias `github-libraauth` en vez de github.com a secas es
-      # deliberado: cuando un repo necesita mas de una dependencia privada,
-      # SSH ofrece las claves en orden y GitHub autentica con la PRIMERA
-      # que acepta, que puede no ser la del repo que se esta clonando. El
-      # alias + IdentitiesOnly fuerza una identidad por repo. Aca hay una
-      # sola dependencia, pero se usa el mismo patron que en los repos con
-      # varias para que no diverjan.
+      # El alias `github-<repo>` con IdentitiesOnly no es adorno: con dos
+      # claves cargadas, SSH las ofrece en orden y GitHub autentica con la
+      # PRIMERA que acepta, que puede no ser la del repo que se esta
+      # clonando -- una deploy key ES una identidad por repo. El alias
+      # fuerza la correcta. Es el mismo error que ya se pago en el VPS.
+      #
+      # Estructura generalizada (misma que gestiolibra/medlibra/ventalibra):
+      # agregar una dependencia privada nueva es una linea de `configurar`.
       - name: Configure SSH access to private Libra dependencies
         env:
           LIBRAAUTH_DEPLOY_KEY: ${{ secrets.LIBRAAUTH_DEPLOY_KEY }}
+          LIBRACORE_DEPLOY_KEY: ${{ secrets.LIBRACORE_DEPLOY_KEY }}
         run: |
-          if [ -z "$LIBRAAUTH_DEPLOY_KEY" ]; then
-            echo "::error::Falta el secret LIBRAAUTH_DEPLOY_KEY en este repositorio."
-            echo "Sin el, pip no puede clonar libraauth (repo privado) y el build falla."
-            echo "Es la clave privada de una deploy key de solo lectura sobre marianocappucci/libraauth."
-            exit 1
-          fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$LIBRAAUTH_DEPLOY_KEY" > ~/.ssh/id_libraauth
-          chmod 600 ~/.ssh/id_libraauth
           ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
-          printf 'Host github-libraauth\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_libraauth\n  IdentitiesOnly yes\n' >> ~/.ssh/config
-          git config --global \
-            url."git@github-libraauth:marianocappucci/libraauth".insteadOf \
-            "https://github.com/marianocappucci/libraauth"
+          configurar() {
+            repo=$1; clave=$2
+            if [ -z "$clave" ]; then
+              echo "::error::Falta el secret con la deploy key de $repo en este repositorio."
+              echo "Sin el, pip no puede clonar $repo (repo privado) y el build falla."
+              echo "Es la clave privada de una deploy key de solo lectura sobre marianocappucci/$repo."
+              exit 1
+            fi
+            printf '%s\n' "$clave" > ~/.ssh/id_"$repo"
+            chmod 600 ~/.ssh/id_"$repo"
+            printf 'Host github-%s\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_%s\n  IdentitiesOnly yes\n' \
+              "$repo" "$repo" >> ~/.ssh/config
+            git config --global \
+              url."git@github-$repo:marianocappucci/$repo".insteadOf \
+              "https://github.com/marianocappucci/$repo"
+          }
+          configurar libraauth "$LIBRAAUTH_DEPLOY_KEY"
+          configurar libracore "$LIBRACORE_DEPLOY_KEY"
 
-      # Confirma que la deploy key autentica y que resuelve a libraauth y
-      # no a otro repo -- sin esto, una clave equivocada recien se notaria
-      # en el pip install con un error de git que no dice cual fallo.
-      - name: Verify deploy key resolves to libraauth
+      # Confirma que cada clave autentica contra SU repo y no contra otro:
+      # es exactamente el modo de fallar que motiva los alias de arriba, y
+      # sin este paso recien se notaria dentro del pip install, como un
+      # error de git que no dice cual de las dos claves se uso.
+      - name: Verify each deploy key resolves to its own repo
         run: |
-          saludo=$(ssh -o StrictHostKeyChecking=yes -T git@github-libraauth 2>&1 || true)
-          echo "$saludo"
-          case "$saludo" in
-            *marianocappucci/libraauth*) echo "OK: autentica como libraauth" ;;
-            *) echo "::error::La deploy key no resuelve a marianocappucci/libraauth."; exit 1 ;;
-          esac
+          for repo in libraauth libracore; do
+            saludo=$(ssh -o StrictHostKeyChecking=yes -T "git@github-$repo" 2>&1 || true)
+            echo "$repo -> $saludo"
+            case "$saludo" in
+              *"marianocappucci/$repo"*) ;;
+              *) echo "::error::La deploy key de $repo no resuelve a marianocappucci/$repo."; exit 1 ;;
+            esac
+          done
 
       - name: Install package + dev deps
         run: pip install -e ".[dev]"
