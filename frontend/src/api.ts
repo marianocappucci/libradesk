@@ -49,6 +49,46 @@ export type EquipoMovimiento = {
   motivo: string | null
   usuario: string
   fecha: string | null
+  // El ticket que causó el movimiento, o null si fue una edición suelta
+  // del equipo. Lo escribe la acción "Reemplazar equipo".
+  incidencia_id: number | null
+}
+
+// Vivían duplicadas en Equipos.tsx; ahora las consumen también el timeline
+// de la incidencia y el diálogo de reemplazo.
+export const MOVIMIENTO_LABELS: Record<string, string> = {
+  alta: 'Alta', baja: 'Baja', traslado: 'Traslado',
+  en_reparacion: 'Reparación', almacenado: 'Almacenado', activo: 'Reactivado',
+}
+
+export const ESTADO_EQUIPO_LABELS: Record<string, string> = {
+  activo: 'Activo', en_reparacion: 'En reparación', almacenado: 'En depósito', baja: 'Baja',
+}
+
+// Destino del equipo retirado en un reemplazo. El backend deriva de acá el
+// estado y el sector por defecto (ver services/reemplazo.py, DESTINOS).
+export type DestinoReemplazo = 'service' | 'deposito' | 'baja'
+
+export const DESTINO_REEMPLAZO_LABELS: Record<DestinoReemplazo, string> = {
+  service: 'Enviar a service',
+  deposito: 'Volver a depósito',
+  baja: 'Dar de baja',
+}
+
+export type ResultadoReemplazo = {
+  retirado: Equipo
+  sustituto: Equipo | null
+  movimientos: EquipoMovimiento[]
+  actividades: Actividad[]
+}
+
+export function describirEquipo(e: Equipo | undefined): string {
+  if (!e) return 'Equipo'
+  return [e.tipo, e.marca, e.modelo].filter(Boolean).join(' ')
+}
+
+export function ubicacionTexto(sector: string | null, ubicacion: string | null): string {
+  return [sector, ubicacion].filter(Boolean).join(' · ') || 'sin ubicación'
 }
 
 export type EstadoIncidencia = 'abierto' | 'en_progreso' | 'resuelta' | 'cerrado'

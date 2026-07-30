@@ -8,6 +8,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.reemplazo import ReemplazoService
 from .services.remitos_presupuestos import PresupuestoService, RemitoService
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -28,6 +29,10 @@ def get_equipo_repository(request: Request) -> EquipoRepository:
 
 def get_incidencia_repository(request: Request) -> IncidenciaRepository:
     return request.app.state.incidencias
+
+
+def get_reemplazo_service(request: Request) -> ReemplazoService:
+    return request.app.state.reemplazos
 
 
 def get_tecnico_repository(request: Request) -> TecnicoRepository:

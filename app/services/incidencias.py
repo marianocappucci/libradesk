@@ -10,7 +10,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, func, select
+from sqlalchemy import (
+    Boolean, DateTime, ForeignKey, Numeric, String, Text, delete, func, select, update,
+)
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -120,13 +122,20 @@ class IncidenciaRepository:
             session.refresh(i)
             return _to_dict(i)
 
-    def list(self, cliente_id: int | None = None, estado: str | None = None) -> list[dict]:
+    def list(self, cliente_id: int | None = None, estado: str | None = None,
+             equipo_id: int | None = None) -> list[dict]:
+        """`equipo_id` es lo que hace contestable "¿cuántas veces falló
+        este equipo?": el dato estaba desde la migracion, pero no habia
+        forma de pedirlo — el listado solo filtraba por cliente y estado,
+        asi que la unica manera era abrir incidencia por incidencia."""
         with self.session_factory() as session:
             stmt = select(Incidencia).order_by(Incidencia.fecha_creacion.desc())
             if cliente_id is not None:
                 stmt = stmt.where(Incidencia.cliente_id == cliente_id)
             if estado is not None:
                 stmt = stmt.where(Incidencia.estado == estado)
+            if equipo_id is not None:
+                stmt = stmt.where(Incidencia.equipo_id == equipo_id)
             return [_to_dict(i) for i in session.execute(stmt).scalars()]
 
     def get(self, incidencia_id: int) -> dict | None:
@@ -159,10 +168,45 @@ class IncidenciaRepository:
             return _to_dict(i)
 
     def delete(self, incidencia_id: int) -> None:
+        """Borra el ticket con su actividad y su auditoria de estado, y
+        **desvincula** los movimientos de equipo que causo.
+
+        Los `ondelete=CASCADE` declarados en los modelos **no alcanzan**:
+        el engine de SQLAlchemy de LibraDesk no activa
+        `PRAGMA foreign_keys` (verificado con `PRAGMA foreign_keys` sobre
+        una conexion real, da 0), asi que hasta ahora un DELETE dejaba
+        `actividades_incidencia` e `incidencias_estados_log` huerfanas —
+        justo lo contrario de lo que dice el dialogo de confirmacion de la
+        UI. Se hace explicito aca en vez de prender el pragma, que es un
+        cambio de comportamiento global sobre una base de produccion y
+        merece decidirse aparte.
+
+        Los movimientos NO se borran: el equipo salio de Admision de
+        verdad, y ese hecho fisico sobrevive al ticket. Solo pierden el
+        link."""
         with self.session_factory() as session:
             i = session.get(Incidencia, incidencia_id)
             if i is None:
                 raise KeyError(incidencia_id)
+
+            # Import local: `equipos` no importa a `incidencias`, y de este
+            # modo se mantiene asi (sin ciclo) aunque la dependencia exista
+            # en esta direccion.
+            from .equipos import EquipoMovimiento
+
+            session.execute(
+                update(EquipoMovimiento)
+                .where(EquipoMovimiento.incidencia_id == incidencia_id)
+                .values(incidencia_id=None)
+            )
+            session.execute(
+                delete(ActividadIncidencia)
+                .where(ActividadIncidencia.incidencia_id == incidencia_id)
+            )
+            session.execute(
+                delete(IncidenciaEstadoLog)
+                .where(IncidenciaEstadoLog.incidencia_id == incidencia_id)
+            )
             session.delete(i)
             session.commit()
 

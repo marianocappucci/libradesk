@@ -3,7 +3,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
-import { api, ApiError, type Cliente, type Equipo, type EquipoMovimiento } from '../api'
+import { Link } from 'react-router-dom'
+import {
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS as ESTADO_INCIDENCIA_LABELS,
+  MOVIMIENTO_LABELS, describirEquipo, ubicacionTexto,
+  type Cliente, type Equipo, type EquipoMovimiento, type Incidencia,
+} from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,18 +26,9 @@ import {
 } from '@/components/ui/dialog'
 import { History, Pencil, Trash2 } from 'lucide-react'
 
-const MOV_LABELS: Record<string, string> = {
-  alta: 'Alta', baja: 'Baja', traslado: 'Traslado',
-  en_reparacion: 'Reparación', almacenado: 'Almacenado', activo: 'Reactivado',
-}
-
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
   return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-function ubicacionTexto(sector: string | null, ubicacion: string | null): string | null {
-  return [sector, ubicacion].filter(Boolean).join(' · ') || null
 }
 
 const equipoSchema = z.object({
@@ -60,9 +56,6 @@ const EMPTY_VALUES: EquipoFormValues = {
 }
 
 const ESTADOS_EQUIPO = ['activo', 'en_reparacion', 'almacenado', 'baja']
-const ESTADO_LABELS: Record<string, string> = {
-  activo: 'Activo', en_reparacion: 'En reparación', almacenado: 'En depósito', baja: 'Baja',
-}
 
 export function Equipos() {
   const { user } = useAuth()
@@ -76,6 +69,7 @@ export function Equipos() {
   const [saving, setSaving] = useState(false)
   const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
+  const [incidenciasDelEquipo, setIncidenciasDelEquipo] = useState<Incidencia[] | null>(null)
 
   const form = useForm<EquipoFormValues>({
     resolver: zodResolver(equipoSchema),
@@ -173,8 +167,17 @@ export function Equipos() {
   async function verHistorial(equipo: Equipo) {
     setHistorialDe(equipo)
     setMovimientos(null)
+    setIncidenciasDelEquipo(null)
     try {
-      setMovimientos(await api.get<EquipoMovimiento[]>(`/api/equipos/${equipo.id}/movimientos`))
+      // Las dos mitades de la ficha: qué le pasó al equipo (incidencias) y
+      // dónde estuvo (movimientos). Antes solo se veía la segunda, así que
+      // "¿cuántas veces falló este equipo?" no tenía respuesta.
+      const [movs, incs] = await Promise.all([
+        api.get<EquipoMovimiento[]>(`/api/equipos/${equipo.id}/movimientos`),
+        api.get<Incidencia[]>(`/api/incidencias?equipo_id=${equipo.id}`),
+      ])
+      setMovimientos(movs)
+      setIncidenciasDelEquipo(incs)
     } catch (err) {
       setError(describeError(err))
       setHistorialDe(null)
@@ -205,7 +208,7 @@ export function Equipos() {
         minSize: 90,
         cell: ({ row }) => (
           <Badge variant={row.original.estado === 'activo' ? 'default' : 'outline'}>
-            {ESTADO_LABELS[row.original.estado] ?? row.original.estado}
+            {ESTADO_EQUIPO_LABELS[row.original.estado] ?? row.original.estado}
           </Badge>
         ),
       },
@@ -325,7 +328,7 @@ export function Equipos() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {ESTADOS_EQUIPO.map((e) => <SelectItem key={e} value={e}>{ESTADO_LABELS[e]}</SelectItem>)}
+                        {ESTADOS_EQUIPO.map((e) => <SelectItem key={e} value={e}>{ESTADO_EQUIPO_LABELS[e]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -367,13 +370,43 @@ export function Equipos() {
       <Dialog open={historialDe !== null} onOpenChange={(open) => !open && setHistorialDe(null)}>
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Historial de movimientos</DialogTitle>
+            <DialogTitle>Historial del equipo</DialogTitle>
             <DialogDescription>
-              {historialDe && [historialDe.tipo, historialDe.marca, historialDe.modelo].filter(Boolean).join(' ')}
+              {historialDe && describirEquipo(historialDe)}
               {historialDe?.serial ? ` — ${historialDe.serial}` : ''}
             </DialogDescription>
           </DialogHeader>
 
+          <div className="grid gap-2">
+            <h4 className="text-sm font-semibold">
+              Incidencias{incidenciasDelEquipo ? ` (${incidenciasDelEquipo.length})` : ''}
+            </h4>
+            {incidenciasDelEquipo === null ? (
+              <p className="text-sm text-muted-foreground">Cargando…</p>
+            ) : incidenciasDelEquipo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Este equipo nunca falló.</p>
+            ) : (
+              incidenciasDelEquipo.map((i) => (
+                <Link
+                  key={i.id}
+                  to={`/incidencias/${i.id}`}
+                  className="grid gap-0.5 rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={i.estado === 'cerrado' || i.estado === 'resuelta' ? 'default' : 'outline'}>
+                      {ESTADO_INCIDENCIA_LABELS[i.estado] ?? i.estado}
+                    </Badge>
+                    <span className="font-medium">{i.titulo}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    #{i.id} · {formatFecha(i.fecha_creacion)}
+                  </span>
+                </Link>
+              ))
+            )}
+          </div>
+
+          <h4 className="text-sm font-semibold">Movimientos</h4>
           {movimientos === null ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
           ) : movimientos.length === 0 ? (
@@ -384,23 +417,36 @@ export function Equipos() {
             <div className="grid gap-2">
               {movimientos.map((m) => {
                 const origen = ubicacionTexto(m.sector_origen, m.ubicacion_origen)
+                // Un cambio de estado no tiene destino: la ubicación viaja
+                // como origen (de dónde sale el equipo). Dibujar la flecha
+                // igual mostraría "Service → sin ubicación", como si se
+                // hubiera movido a ninguna parte.
+                const tieneDestino = Boolean(m.sector_destino || m.ubicacion_destino)
                 const destino = ubicacionTexto(m.sector_destino, m.ubicacion_destino)
                 return (
                   <div key={m.id} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={m.tipo === 'baja' ? 'destructive' : 'outline'}>
-                        {MOV_LABELS[m.tipo] ?? m.tipo}
+                        {MOVIMIENTO_LABELS[m.tipo] ?? m.tipo}
                       </Badge>
                       <span className="font-medium">{m.descripcion ?? '—'}</span>
                     </div>
-                    {(origen || destino) && (
-                      <span className="text-xs text-muted-foreground">
-                        {origen ?? 'sin ubicación'} → {destino ?? 'sin ubicación'}
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {tieneDestino ? `${origen} → ${destino}` : `en ${origen}`}
+                    </span>
                     {m.motivo && <span className="text-xs text-muted-foreground">Motivo: {m.motivo}</span>}
                     <span className="text-xs text-muted-foreground">
                       {m.usuario} · {formatFecha(m.fecha)}
+                      {/* El "por qué" del movimiento: sin esto el historial dice
+                          que salió de Admisión pero no de qué ticket vino. */}
+                      {m.incidencia_id && (
+                        <>
+                          {' · '}
+                          <Link to={`/incidencias/${m.incidencia_id}`} className="underline">
+                            Incidencia #{m.incidencia_id}
+                          </Link>
+                        </>
+                      )}
                     </span>
                   </div>
                 )
