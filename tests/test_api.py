@@ -94,6 +94,33 @@ def test_usuarios_requires_admin(client):
     assert r.status_code == 200  # admin logueado
 
 
+def test_usuario_duplicado_devuelve_409(client):
+    """Bug latente que estuvo vivo desde el dia 1 y no tenia test.
+
+    Un username repetido tiene que dar 409, no 500. Con el pin viejo de
+    libraauth (`v0.1.0`) el duplicado propagaba el `IntegrityError` de
+    SQLAlchemy; desde `v0.1.1` levanta `UsernameTaken`, que **no hereda de
+    ValueError**, asi que el `except ValueError` del router tampoco lo
+    agarraba: bumpear el pin solo no arreglaba nada. Ver
+    wiki/entities/libraauth.md.
+    """
+    _login(client)
+    alta = {"username": "repetido", "name": "Repetido", "password": "secreta123",
+            "role": "admin"}
+    assert client.post("/api/usuarios", json=alta).status_code == 201
+    assert client.post("/api/usuarios", json=alta).status_code == 409
+
+
+def test_usuario_con_rol_invalido_devuelve_422(client):
+    """El otro camino del mismo `try`: que el `except UsernameTaken` nuevo no
+    se coma el 422 que ya existia."""
+    _login(client)
+    r = client.post("/api/usuarios", json={
+        "username": "rolmalo", "name": "Rol Malo", "password": "secreta123",
+        "role": "rol-que-no-existe"})
+    assert r.status_code == 422
+
+
 def test_export_xlsx(client):
     _login(client)
     client.post("/api/clientes", json={"nombre": "Cliente XLSX"})

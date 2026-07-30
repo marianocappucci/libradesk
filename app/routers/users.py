@@ -4,7 +4,7 @@ autoincrement)."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from libraauth.repository import UserRepository
+from libraauth.repository import UsernameTaken, UserRepository
 
 from ..dependencies import get_user_repository
 
@@ -36,6 +36,13 @@ class UsuarioOut(BaseModel):
 def create_usuario(data: UsuarioCreate, users: UserRepository = Depends(get_user_repository)):
     try:
         return users.create(data.username, data.name, data.password, data.role)
+    # Excepcion de dominio de libraauth (v0.1.1+), no la del motor de storage.
+    # Sin este `except`, un username duplicado propagaba el IntegrityError de
+    # SQLAlchemy y salia 500 -- `UsernameTaken` NO hereda de ValueError, asi
+    # que el `except` de abajo no alcanza. Mismo criterio que Gestiolibra y
+    # MedLibra.
+    except UsernameTaken:
+        raise HTTPException(409, "usuario already exists")
     except ValueError as exc:
         raise HTTPException(422, str(exc))
 
