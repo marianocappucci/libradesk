@@ -1,0 +1,65 @@
+# Plantilla del compose de una instancia de CLIENTE.
+#
+# Copiar a `clientes/<slug>/docker-compose.yml` en el VPS (ese directorio esta
+# gitignored: tiene los datos del cliente y su `.env` con secretos) y ajustar
+# slug, puerto y version de imagen. `scripts/deploy_cliente.sh` se encarga
+# despues de construir la imagen y repinear la linea `image:`.
+#
+# Las tres diferencias con el compose de dev, y por que:
+#
+# 1. `image:` con una VERSION CONCRETA y sin `build:`. La instancia corre un
+#    artefacto fijo, asi que un `git pull` o un rebuild de dev no la tocan.
+#    Nunca `:latest`: ese tag se mueve, y con el la instancia se saltaria de
+#    codigo en su proximo `up -d` sin que nadie lo pidiera.
+# 2. `name:` explicito. Compose deriva el nombre de proyecto del nombre del
+#    directorio, asi que sin esto dos instancias con directorios parecidos
+#    pueden terminar en el mismo proyecto — y ahi un `down` en una apaga la
+#    otra (paso de verdad en el PACS del hospital).
+# 3. Datos en `./data`, relativo a este archivo.
+
+name: libradesk-<slug>
+
+services:
+  libradesk:
+    image: libradesk:v2026.01.01-0000
+    container_name: libradesk-<slug>
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 192m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "8087:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:?falta SECRET_KEY}
+      - LIBRADESK_ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - LIBRADESK_ADMIN_PASSWORD=${ADMIN_PASSWORD:?falta ADMIN_PASSWORD}
+      - DATA_DIR=/app/data
+      - ENV=production
+      # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
+      # igual y POST /auth/forgot-password devuelve 503.
+      #
+      # `LIBRADESK_RESET_URL_BASE` tiene que apuntar al dominio DE ESTA
+      # instancia: es el link que recibe el usuario por mail, y un token de
+      # este sistema no existe en ningun otro.
+      - LIBRADESK_RESET_URL_BASE=${RESET_URL_BASE:?falta RESET_URL_BASE}
+      - LIBRAAUTH_SMTP_HOST=${SMTP_HOST:-}
+      - LIBRAAUTH_SMTP_PORT=${SMTP_PORT:-587}
+      - LIBRAAUTH_SMTP_USER=${SMTP_USER:-}
+      - LIBRAAUTH_SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - LIBRAAUTH_SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - LIBRAAUTH_SMTP_FROM_NAME=${SMTP_FROM_NAME:-LibraDesk}
+    networks:
+      - stack-net
+
+networks:
+  stack-net:
+    external: true
+    name: stack_stack-net

@@ -1,3 +1,18 @@
+# Compose de la instancia de DESARROLLO — dev.libradesk.com.ar
+#
+# Las instancias de cliente NO se declaran aca: cada una vive en su propio
+# `clientes/<slug>/docker-compose.yml` (gitignored, solo en el VPS), corriendo
+# una imagen ya construida y pineada por version — ver `clientes.example.yml`
+# y `scripts/deploy_cliente.sh`.
+#
+# Por que: mientras dev y el cliente compartian este archivo y el mismo
+# `build:`, un `git pull` movia el codigo de los dos a la vez y un
+# `docker compose build` sin nombrar servicio reconstruia las dos imagenes.
+# No habia forma de tocar dev sin dejar la instancia del cliente cargada con
+# el codigo nuevo, esperando su proximo arranque. Ahora el cliente corre una
+# imagen fija: solo se mueve cuando alguien la construye y la repinea a
+# proposito.
+
 x-libradesk-build: &libradesk-build
   context: .
   # Un id SSH por paquete privado, mismo patron que el resto de la
@@ -50,32 +65,6 @@ services:
       - LIBRAAUTH_SMTP_PASSWORD=${LIBRAAUTH_SMTP_PASSWORD:-}
       - LIBRAAUTH_SMTP_FROM_EMAIL=${LIBRAAUTH_SMTP_FROM_EMAIL:-}
       - LIBRAAUTH_SMTP_FROM_NAME=${LIBRAAUTH_SMTP_FROM_NAME:-LibraDesk}
-
-  # Cliente real de produccion — compulibra.libradesk.com.ar
-  libradesk-compulibra:
-    <<: *libradesk-common
-    build: *libradesk-build
-    container_name: libradesk-compulibra
-    ports:
-      - "8087:8000"
-    volumes:
-      - ./data-compulibra:/app/data
-    environment:
-      - SECRET_KEY=${COMPULIBRA_SECRET_KEY:?falta COMPULIBRA_SECRET_KEY}
-      - LIBRADESK_ADMIN_USERNAME=${COMPULIBRA_ADMIN_USERNAME:-admin}
-      - LIBRADESK_ADMIN_PASSWORD=${COMPULIBRA_ADMIN_PASSWORD:?falta COMPULIBRA_ADMIN_PASSWORD}
-      - DATA_DIR=/app/data
-      - ENV=production
-      # El link del mail tiene que apuntar al dominio DE ESTA instancia: si
-      # heredara el de dev, el cliente recibiria un enlace a un sistema que no
-      # es el suyo (y donde su token no existe).
-      - LIBRADESK_RESET_URL_BASE=${COMPULIBRA_RESET_URL_BASE:-https://compulibra.libradesk.com.ar/reset-password}
-      - LIBRAAUTH_SMTP_HOST=${COMPULIBRA_SMTP_HOST:-}
-      - LIBRAAUTH_SMTP_PORT=${COMPULIBRA_SMTP_PORT:-587}
-      - LIBRAAUTH_SMTP_USER=${COMPULIBRA_SMTP_USER:-}
-      - LIBRAAUTH_SMTP_PASSWORD=${COMPULIBRA_SMTP_PASSWORD:-}
-      - LIBRAAUTH_SMTP_FROM_EMAIL=${COMPULIBRA_SMTP_FROM_EMAIL:-}
-      - LIBRAAUTH_SMTP_FROM_NAME=${COMPULIBRA_SMTP_FROM_NAME:-LibraDesk}
 
 networks:
   stack-net:
