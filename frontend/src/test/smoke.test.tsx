@@ -13,6 +13,29 @@ import App from '../App'
 import { AuthProvider } from '../context/AuthContext'
 
 const RUTA_PROTEGIDA = '/dashboard'
+const PRODUCTO = 'LibraDesk'
+
+// El dashboard es la primera pantalla protegida y NO tolera un resumen al que
+// le falten campos: hace Object.entries() sobre ellos y revienta con "Cannot
+// convert undefined or null to object", tumbando el arbol de React entero.
+//
+// Con el mock generico (`json([])` para todo lo que no fuera la sesion) eso
+// pasaba en silencio: el error cae FUERA del await del test, asi que los 6
+// tests seguian en verde y lo unico que lo delataba era la cobertura, que
+// saltaba entre corridas identicas segun si la pantalla alcanzaba a montar.
+//
+// La forma sale del tipo DashboardSummary de src/api.ts. Si ese tipo cambia y
+// esto no, el dashboard vuelve a reventar aca -- que es exactamente lo que se
+// quiere que pase, en el CI y no en el navegador.
+const RUTA_DASHBOARD = '/api/dashboard'
+const RESUMEN_DASHBOARD = {
+  incidencias_por_estado: { abierta: 2, cerrada: 1 },
+  incidencias_por_prioridad_abiertas: { alta: 1, media: 1 },
+  incidencias_en_rango: 3,
+  total_clientes_activos: 4,
+  total_equipos: 7,
+  horas_totales_invertidas: 12.5,
+}
 const RUTA_SESION = '/auth/me'
 
 let fetchMock: ReturnType<typeof vi.fn>
@@ -44,7 +67,9 @@ function conSesion() {
             // sidebar con `modulos`.
             nombre: 'Ana', modulos: [], empresa_nombre: 'Prueba', mp_pending_count: 0,
           })
-        : json([]),
+        : String(url).includes(RUTA_DASHBOARD)
+          ? json(RESUMEN_DASHBOARD)
+          : json([]),
     ),
   )
 }
@@ -88,8 +113,24 @@ describe('guard de rutas', () => {
   it('con sesion, la ruta protegida se muestra', async () => {
     conSesion()
     montar(RUTA_PROTEGIDA)
-    // Ya no esta el formulario de login: entro.
-    await waitFor(() => expect(screen.queryByLabelText('Usuario')).not.toBeInTheDocument())
+    // Se afirma que el shell autenticado RENDERIZO, no solo que el login
+    // desaparecio. Entre uno y otro hay un instante en que no esta ninguno de
+    // los dos (AuthContext todavia resolviendo /auth/me), y esperar unicamente
+    // la ausencia del login daba por bueno ese instante intermedio: el test
+    // pasaba aunque la pantalla protegida no llegara a montar nunca.
+    //
+    // No es teorico. Se vio al medir cobertura el 2026-07-31: en LibraDesk
+    // saltaba entre 412 y 462 lineas cubiertas en corridas identicas, con los
+    // 6 tests en verde siempre. Esas ~50 lineas eran la pantalla protegida,
+    // que a veces alcanzaba a renderizar y a veces no.
+    //
+    // `findAllByText` y no `findByText`: el Layout de libra-ui pinta el nombre
+    // del producto dos veces (sidebar y pie), y la forma singular tira error
+    // si hay mas de una coincidencia.
+    expect(await screen.findAllByText(PRODUCTO)).not.toHaveLength(0)
+    // Y que el usuario de la sesion llego hasta la UI, no solo que hubo shell.
+    expect(await screen.findAllByText('Ana')).not.toHaveLength(0)
+    expect(screen.queryByLabelText('Usuario')).not.toBeInTheDocument()
   })
 })
 
