@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useAuth } from './context/AuthContext'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
+import { ForgotPassword, ResetPassword } from './pages/PasswordReset'
 import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
 import { Equipos } from './pages/Equipos'
@@ -32,6 +33,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Públicas a propósito: quien las necesita no puede iniciar sesión. */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />

@@ -43,6 +43,19 @@ services:
       - LIBRADESK_ADMIN_PASSWORD=${ADMIN_PASSWORD:?falta ADMIN_PASSWORD}
       - DATA_DIR=/app/data
       - ENV=production
+      # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
+      # igual y POST /auth/forgot-password devuelve 503.
+      #
+      # `LIBRADESK_RESET_URL_BASE` tiene que apuntar al dominio DE ESTA
+      # instancia: es el link que recibe el usuario por mail, y un token de
+      # este sistema no existe en ningun otro.
+      - LIBRADESK_RESET_URL_BASE=${RESET_URL_BASE:?falta RESET_URL_BASE}
+      - LIBRAAUTH_SMTP_HOST=${SMTP_HOST:-}
+      - LIBRAAUTH_SMTP_PORT=${SMTP_PORT:-587}
+      - LIBRAAUTH_SMTP_USER=${SMTP_USER:-}
+      - LIBRAAUTH_SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - LIBRAAUTH_SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - LIBRAAUTH_SMTP_FROM_NAME=${SMTP_FROM_NAME:-LibraDesk}
     networks:
       - stack-net
 
