@@ -10,7 +10,7 @@ import {
   type Cliente, type Equipo, type EquipoMovimiento, type Incidencia,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -22,9 +22,11 @@ import {
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { History, Pencil, Trash2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { History, Monitor, Pencil, Plus, Trash2 } from 'lucide-react'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -69,8 +71,16 @@ export function Equipos() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
+  // mismo patrón que Contalibra. Antes era una card sobre la tabla: al cargar
+  // un equipo quedaban a la vista el formulario, la lista entera y el filtro,
+  // los tres compitiendo por la atención.
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editando, setEditando] = useState<Equipo | null>(null)
   const [saving, setSaving] = useState(false)
+  // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
+  const [formError, setFormError] = useState<string | null>(null)
+  const [aBorrar, setABorrar] = useState<Equipo | null>(null)
   const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
   const [incidenciasDelEquipo, setIncidenciasDelEquipo] = useState<Incidencia[] | null>(null)
@@ -137,13 +147,18 @@ export function Equipos() {
     }
   }
 
-  function startCreate() {
-    setEditingId('new')
-    form.reset(EMPTY_VALUES)
+  function abrirNuevo() {
+    setEditando(null)
+    setFormError(null)
+    // Si hay un cliente filtrado, el alta ya viene con ése elegido: es el
+    // caso normal (se filtra por cliente y se le carga un equipo).
+    form.reset({ ...EMPTY_VALUES, cliente_id: filtroCliente === TODOS ? '' : filtroCliente })
+    setDialogOpen(true)
   }
 
-  function startEdit(equipo: Equipo) {
-    setEditingId(equipo.id)
+  function abrirEditar(equipo: Equipo) {
+    setEditando(equipo)
+    setFormError(null)
     form.reset({
       cliente_id: String(equipo.cliente_id),
       tipo: equipo.tipo,
@@ -157,16 +172,12 @@ export function Equipos() {
       observaciones: equipo.observaciones ?? '',
       motivo: '',
     })
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    form.reset(EMPTY_VALUES)
+    setDialogOpen(true)
   }
 
   async function handleSubmit(values: EquipoFormValues) {
     setSaving(true)
-    setError(null)
+    setFormError(null)
     const payload = {
       cliente_id: Number(values.cliente_id),
       tipo: values.tipo,
@@ -183,17 +194,17 @@ export function Equipos() {
       garantia_vence: values.garantia_vence || null,
     }
     try {
-      if (editingId === 'new') {
+      if (editando === null) {
         await api.post('/api/equipos', payload)
-      } else if (editingId) {
-        await api.put(`/api/equipos/${editingId}`, { ...payload, motivo: values.motivo || null })
+      } else {
+        await api.put(`/api/equipos/${editando.id}`, { ...payload, motivo: values.motivo || null })
       }
-      cancelEdit()
+      setDialogOpen(false)
       // Solo los equipos: la lista de clientes no cambió, y recargarla
       // apagaría la tabla un instante y con ella la búsqueda escrita.
       await loadEquipos()
     } catch (err) {
-      setError(describeError(err))
+      setFormError(describeError(err))
     } finally {
       setSaving(false)
     }
@@ -258,8 +269,8 @@ export function Equipos() {
           <Button size="icon" variant="outline" title="Ver historial de movimientos" aria-label="Ver historial de movimientos" onClick={() => verHistorial(row.original)}><History /></Button>
           {isAdmin && (
             <>
-              <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => startEdit(row.original)}><Pencil /></Button>
-              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
+              <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
+              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
             </>
           )}
         </div>
@@ -273,21 +284,21 @@ export function Equipos() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Equipos</h2>
-        {isAdmin && editingId === null && (
-          <Button onClick={startCreate}>+ Nuevo equipo</Button>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {isAdmin && editingId !== null && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{editingId === 'new' ? 'Nuevo equipo' : 'Editar equipo'}</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {isAdmin && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={abrirNuevo}><Plus />Nuevo equipo</Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Monitor className="size-4" />
+                  {editando === null ? 'Nuevo equipo' : `Editar equipo — ${describirEquipo(editando)}`}
+                </DialogTitle>
+              </DialogHeader>
             <Form {...form}>
               <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
+                {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
@@ -369,7 +380,7 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                {editingId !== 'new' && (
+                {editando !== null && (
                   <FormField control={form.control} name="motivo" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Motivo del movimiento</FormLabel>
@@ -380,17 +391,20 @@ export function Equipos() {
                     </FormItem>
                   )} />
                 )}
-                <div className="flex gap-2 pt-6">
+                <DialogFooter className="w-full">
+                  <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                   <Button type="submit" disabled={saving}>
-                    {saving ? 'Guardando…' : editingId === 'new' ? 'Crear' : 'Guardar'}
+                    {saving ? 'Guardando…' : editando === null ? 'Crear equipo' : 'Guardar'}
                   </Button>
-                  <Button type="button" variant="outline" onClick={cancelEdit}>Cancelar</Button>
-                </div>
+                </DialogFooter>
               </form>
             </Form>
-          </CardContent>
-        </Card>
-      )}
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
@@ -521,6 +535,17 @@ export function Equipos() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={aBorrar !== null}
+        onOpenChange={(open) => !open && setABorrar(null)}
+        title={`¿Eliminar ${describirEquipo(aBorrar ?? undefined)}?`}
+        // Describe lo que el repositorio hace de verdad: los `ondelete` de los
+        // modelos no corren (el pragma está apagado), así que el borrado del
+        // historial y la desasignación se hacen explícitos en el backend.
+        description="Se borra también su historial de movimientos. Las incidencias que lo tengan asignado quedan sin equipo, no se borran. Esta acción no se puede deshacer."
+        onConfirm={() => { const e = aBorrar; setABorrar(null); if (e) handleDelete(e) }}
+      />
     </div>
   )
 }

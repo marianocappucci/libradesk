@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func, select
+from sqlalchemy import Boolean, DateTime, String, func, select, update
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -61,9 +61,26 @@ class TecnicoRepository:
             return _to_dict(t)
 
     def delete(self, tecnico_id: int) -> None:
+        """Borra el tecnico y **desasigna** las incidencias que tenia.
+
+        Mismo caso que `SectorRepository.delete`: `incidencias.tecnico_id`
+        declara `ondelete="SET NULL"` y ese ondelete no corre nunca, porque
+        el engine no activa `PRAGMA foreign_keys`. Sin esto, borrar un
+        tecnico dejaba tickets apuntando a un id inexistente y el reporte
+        "Por tecnico" —que agrupa por esa FK— los perdia de vista sin decir
+        por que.
+        """
         with self.session_factory() as session:
             t = session.get(Tecnico, tecnico_id)
             if t is None:
                 raise KeyError(tecnico_id)
+
+            from .incidencias import Incidencia
+
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.tecnico_id == tecnico_id)
+                .values(tecnico_id=None)
+            )
             session.delete(t)
             session.commit()

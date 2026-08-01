@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { api, ApiError, type Cliente, type Sector } from '../api'
 import { useAuth } from '../context/AuthContext'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -17,10 +17,11 @@ import {
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, MapPin, Pencil, Trash2, X } from 'lucide-react'
+import { Check, MapPin, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -46,8 +47,16 @@ export function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
+  // mismo patrón que Contalibra. Antes el formulario era una card que se abría
+  // ARRIBA de la tabla y la empujaba hacia abajo, dejando la lista entera a la
+  // vista mientras se cargaba un cliente.
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editando, setEditando] = useState<Cliente | null>(null)
   const [saving, setSaving] = useState(false)
+  // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
+  const [formError, setFormError] = useState<string | null>(null)
+  const [clienteABorrar, setClienteABorrar] = useState<Cliente | null>(null)
 
   // --- sectores del cliente -------------------------------------------
   // El backend los tenía completos desde la migración (tabla propia con FK
@@ -89,13 +98,16 @@ export function Clientes() {
     }
   }
 
-  function startCreate() {
-    setEditingId('new')
+  function abrirNuevo() {
+    setEditando(null)
+    setFormError(null)
     form.reset(EMPTY_VALUES)
+    setDialogOpen(true)
   }
 
-  function startEdit(cliente: Cliente) {
-    setEditingId(cliente.id)
+  function abrirEditar(cliente: Cliente) {
+    setEditando(cliente)
+    setFormError(null)
     form.reset({
       nombre: cliente.nombre,
       empresa: cliente.empresa ?? '',
@@ -105,16 +117,12 @@ export function Clientes() {
       observaciones: cliente.observaciones ?? '',
       tipo_facturacion: cliente.tipo_facturacion,
     })
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    form.reset(EMPTY_VALUES)
+    setDialogOpen(true)
   }
 
   async function handleSubmit(values: ClienteFormValues) {
     setSaving(true)
-    setError(null)
+    setFormError(null)
     const payload = {
       nombre: values.nombre,
       empresa: values.empresa || null,
@@ -123,18 +131,20 @@ export function Clientes() {
       ciudad: values.ciudad || null,
       observaciones: values.observaciones || null,
       tipo_facturacion: values.tipo_facturacion,
-      activo: true,
+      // Al editar se conserva el estado real del cliente: antes iba `true`
+      // fijo, así que guardar un cliente inactivo lo reactivaba de callado.
+      activo: editando?.activo ?? true,
     }
     try {
-      if (editingId === 'new') {
+      if (editando === null) {
         await api.post('/api/clientes', payload)
-      } else if (editingId) {
-        await api.put(`/api/clientes/${editingId}`, payload)
+      } else {
+        await api.put(`/api/clientes/${editando.id}`, payload)
       }
-      cancelEdit()
+      setDialogOpen(false)
       await loadClientes()
     } catch (err) {
-      setError(describeError(err))
+      setFormError(describeError(err))
     } finally {
       setSaving(false)
     }
@@ -236,8 +246,8 @@ export function Clientes() {
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
             <Button size="icon" variant="outline" title="Sectores del cliente" aria-label="Sectores del cliente" onClick={() => abrirSectores(row.original)}><MapPin /></Button>
-            <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => startEdit(row.original)}><Pencil /></Button>
-            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar cliente" aria-label="Eliminar cliente" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
+            <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
+            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar cliente" aria-label="Eliminar cliente" onClick={() => setClienteABorrar(row.original)}><Trash2 /></Button>
           </div>
         ),
       })
@@ -250,21 +260,21 @@ export function Clientes() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Clientes</h2>
-        {isAdmin && editingId === null && (
-          <Button onClick={startCreate}>+ Nuevo cliente</Button>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {isAdmin && editingId !== null && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{editingId === 'new' ? 'Nuevo cliente' : 'Editar cliente'}</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {isAdmin && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={abrirNuevo}><Plus />Nuevo cliente</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Users className="size-4" />
+                  {editando === null ? 'Nuevo cliente' : `Editar cliente — ${editando.nombre}`}
+                </DialogTitle>
+              </DialogHeader>
             <Form {...form}>
               <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
+                {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="nombre" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nombre</FormLabel>
@@ -317,17 +327,20 @@ export function Clientes() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <div className="flex gap-2 pt-6">
+                <DialogFooter className="w-full">
+                  <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                   <Button type="submit" disabled={saving}>
-                    {saving ? 'Guardando…' : editingId === 'new' ? 'Crear' : 'Guardar'}
+                    {saving ? 'Guardando…' : editando === null ? 'Crear cliente' : 'Guardar'}
                   </Button>
-                  <Button type="button" variant="outline" onClick={cancelEdit}>Cancelar</Button>
-                </div>
+                </DialogFooter>
               </form>
             </Form>
-          </CardContent>
-        </Card>
-      )}
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Card>
         <CardContent>
@@ -424,6 +437,20 @@ export function Clientes() {
         // se hace explícita en el repositorio.
         description="Las incidencias que lo tengan asignado quedan sin sector. No se borra ninguna incidencia."
         onConfirm={() => { const s = aBorrar; setABorrar(null); if (s) borrarSector(s) }}
+      />
+
+      <ConfirmDialog
+        open={clienteABorrar !== null}
+        onOpenChange={(open) => !open && setClienteABorrar(null)}
+        title={`¿Eliminar el cliente "${clienteABorrar?.nombre}"?`}
+        // ⚠️ Redactado con cuidado a propósito: acá el backend NO limpia nada.
+        // Los `ondelete` de equipos/incidencias/sectores no se ejecutan (el
+        // pragma está apagado) y decidir si un cliente arrastra su inventario
+        // es una regla de negocio sin resolver — ver pendiente 17 en el wiki.
+        // Mientras tanto el diálogo avisa en vez de prometer una limpieza que
+        // no ocurre.
+        description="Sus equipos, incidencias y sectores NO se borran y quedan sin cliente. Esta acción no se puede deshacer."
+        onConfirm={() => { const c = clienteABorrar; setClienteABorrar(null); if (c) handleDelete(c) }}
       />
     </div>
   )
