@@ -1134,3 +1134,74 @@ def test_borrar_un_equipo_borra_su_historial_y_desasigna_sus_incidencias(client)
     assert client.get(f"/api/equipos/{equipo_id}/movimientos").json() == []
     # El historial del otro equipo queda intacto: se borro lo suyo y nada mas.
     assert len(client.get(f"/api/equipos/{otro_equipo}/movimientos").json()) >= 1
+
+
+# --- Baja logica de clientes ----------------------------------------------
+#
+# Decidido el 2026-08-01: un cliente no se borra, se desactiva (como en
+# Contalibra). Eso disuelve el problema de los huerfanos en vez de resolverlo.
+
+
+def test_desactivar_y_reactivar_un_cliente_no_toca_su_historial(client):
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Test"}).json()["id"]
+    equipo_id = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Impresora",
+    }).json()["id"]
+    incidencia_id = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "titulo": "No imprime",
+    }).json()["id"]
+
+    r = client.post(f"/api/clientes/{cliente_id}/desactivar")
+    assert r.status_code == 200
+    assert r.json()["activo"] is False
+
+    # Lo que importa: el historial sigue entero y apuntando al cliente.
+    assert client.get(f"/api/equipos/{equipo_id}").json()["cliente_id"] == cliente_id
+    assert client.get(f"/api/incidencias/{incidencia_id}").json()["cliente_id"] == cliente_id
+
+    # Y el listado lo filtra o no segun se pida.
+    assert cliente_id not in [c["id"] for c in client.get("/api/clientes?solo_activos=true").json()]
+    assert cliente_id in [c["id"] for c in client.get("/api/clientes").json()]
+
+    # Es reversible, que es la razon de ser de la baja logica.
+    r = client.post(f"/api/clientes/{cliente_id}/activar")
+    assert r.status_code == 200
+    assert r.json()["activo"] is True
+    assert cliente_id in [c["id"] for c in client.get("/api/clientes?solo_activos=true").json()]
+
+
+def test_no_se_puede_borrar_un_cliente_con_historial(client):
+    """El router SIEMPRE declaro este 409 en un `except IntegrityError`, pero
+    esa rama no se ejecutaba nunca: sin `PRAGMA foreign_keys` la base no
+    levanta el error y el DELETE pasaba, dejando todo huerfano. Ahora el
+    chequeo es explicito."""
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Test"}).json()["id"]
+    equipo_id = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Impresora",
+    }).json()["id"]
+
+    r = client.delete(f"/api/clientes/{cliente_id}")
+    assert r.status_code == 409
+    assert "1 equipos" in r.json()["detail"]
+    assert "esactiva" in r.json()["detail"]  # sugiere la salida correcta
+
+    # El cliente y su equipo siguen ahi: no se borro nada a medias.
+    assert client.get(f"/api/clientes/{cliente_id}").status_code == 200
+    assert client.get(f"/api/equipos/{equipo_id}").status_code == 200
+
+
+def test_un_cliente_vacio_si_se_puede_borrar(client):
+    """El caso de uso que justifica conservar el DELETE: uno cargado por error."""
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cargado por error"}).json()["id"]
+
+    assert client.delete(f"/api/clientes/{cliente_id}").status_code == 204
+    assert client.get(f"/api/clientes/{cliente_id}").status_code == 404
+
+
+def test_activar_desactivar_un_cliente_inexistente_da_404(client):
+    _login(client)
+    assert client.post("/api/clientes/9999/desactivar").status_code == 404
+    assert client.post("/api/clientes/9999/activar").status_code == 404

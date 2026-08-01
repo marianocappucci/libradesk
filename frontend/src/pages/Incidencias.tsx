@@ -76,6 +76,13 @@ export function Incidencias() {
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
   const equipoNombre = (id: number | null) => id ? (equipos.find((e) => e.id === id)?.tipo ?? `#${id}`) : '—'
 
+  // Un cliente desactivado no se ofrece para tickets nuevos. Se contempla el
+  // preseleccionado por el filtro para que el formulario nunca arranque
+  // apuntando a una opción que no existe en su propia lista.
+  const clientesElegibles = clientes.filter(
+    (c) => c.activo || String(c.id) === form.watch('cliente_id'),
+  )
+
   async function loadAll() {
     setLoading(true)
     setError(null)
@@ -200,7 +207,7 @@ export function Incidencias() {
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger className="w-44"><SelectValue placeholder="Cliente…" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                        {clientesElegibles.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />

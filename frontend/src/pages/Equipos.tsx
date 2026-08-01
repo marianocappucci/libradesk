@@ -116,6 +116,14 @@ export function Equipos() {
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
 
+  // Clientes ofrecibles en el formulario: sólo los activos, **más el que ya
+  // tiene el equipo que se está editando** aunque esté desactivado. Sin esa
+  // excepción, abrir un equipo de un cliente dado de baja mostraría el
+  // selector vacío y guardarlo lo movería de cliente sin querer.
+  const clientesElegibles = clientes.filter(
+    (c) => c.activo || String(c.id) === form.watch('cliente_id'),
+  )
+
   // El filtro lo resuelve el backend (`?cliente_id=`, ya existía y no lo usaba
   // nadie), no un filter local: es lo que escala cuando el parque crezca.
   const rutaEquipos = () =>
@@ -309,7 +317,7 @@ export function Equipos() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                        {clientesElegibles.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />

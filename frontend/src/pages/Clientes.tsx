@@ -21,7 +21,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, MapPin, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
+import { Check, MapPin, Pencil, Plus, Trash2, Undo2, Users, X } from 'lucide-react'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -56,7 +56,7 @@ export function Clientes() {
   const [saving, setSaving] = useState(false)
   // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
   const [formError, setFormError] = useState<string | null>(null)
-  const [clienteABorrar, setClienteABorrar] = useState<Cliente | null>(null)
+  const [clienteADesactivar, setClienteADesactivar] = useState<Cliente | null>(null)
 
   // --- sectores del cliente -------------------------------------------
   // El backend los tenía completos desde la migración (tabla propia con FK
@@ -150,10 +150,16 @@ export function Clientes() {
     }
   }
 
-  async function handleDelete(cliente: Cliente) {
+  // Un cliente NO se borra: se desactiva. Es la baja lógica de Contalibra,
+  // decidida el 2026-08-01 — así el problema de dejar equipos e incidencias
+  // huérfanos deja de existir en vez de resolverse, y además es reversible.
+  // El endpoint `DELETE` sigue existiendo para un cliente vacío (uno cargado
+  // por error), pero ya no lo llama ninguna pantalla.
+  async function toggleActivo(cliente: Cliente) {
     setError(null)
     try {
-      await api.del(`/api/clientes/${cliente.id}`)
+      const ruta = cliente.activo ? 'desactivar' : 'activar'
+      await api.post(`/api/clientes/${cliente.id}/${ruta}`)
       await loadClientes()
     } catch (err) {
       setError(describeError(err))
@@ -247,7 +253,13 @@ export function Clientes() {
           <div className="flex justify-end gap-1">
             <Button size="icon" variant="outline" title="Sectores del cliente" aria-label="Sectores del cliente" onClick={() => abrirSectores(row.original)}><MapPin /></Button>
             <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
-            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar cliente" aria-label="Eliminar cliente" onClick={() => setClienteABorrar(row.original)}><Trash2 /></Button>
+            {/* El tacho desactiva, no borra; y un cliente inactivo ofrece
+                reactivarse. Mismo par de botones que Contalibra. */}
+            {row.original.activo ? (
+              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Desactivar cliente" aria-label="Desactivar cliente" onClick={() => setClienteADesactivar(row.original)}><Trash2 /></Button>
+            ) : (
+              <Button size="icon" variant="outline" title="Reactivar cliente" aria-label="Reactivar cliente" onClick={() => toggleActivo(row.original)}><Undo2 /></Button>
+            )}
           </div>
         ),
       })
@@ -440,17 +452,16 @@ export function Clientes() {
       />
 
       <ConfirmDialog
-        open={clienteABorrar !== null}
-        onOpenChange={(open) => !open && setClienteABorrar(null)}
-        title={`¿Eliminar el cliente "${clienteABorrar?.nombre}"?`}
-        // ⚠️ Redactado con cuidado a propósito: acá el backend NO limpia nada.
-        // Los `ondelete` de equipos/incidencias/sectores no se ejecutan (el
-        // pragma está apagado) y decidir si un cliente arrastra su inventario
-        // es una regla de negocio sin resolver — ver pendiente 17 en el wiki.
-        // Mientras tanto el diálogo avisa en vez de prometer una limpieza que
-        // no ocurre.
-        description="Sus equipos, incidencias y sectores NO se borran y quedan sin cliente. Esta acción no se puede deshacer."
-        onConfirm={() => { const c = clienteABorrar; setClienteABorrar(null); if (c) handleDelete(c) }}
+        open={clienteADesactivar !== null}
+        onOpenChange={(open) => !open && setClienteADesactivar(null)}
+        title={`¿Desactivar a "${clienteADesactivar?.nombre}"?`}
+        // Dice lo que pasa de verdad, y lo que pasa ahora es reversible.
+        // Contalibra titula "¿Eliminar a X?" aunque desactive; acá se prefiere
+        // nombrar la operación real, porque el botón de al lado ofrece
+        // reactivar y "eliminar" haría dudar de si eso es posible.
+        description="Deja de aparecer en los selectores de equipos e incidencias nuevas. Su historial queda intacto y podés reactivarlo cuando quieras."
+        confirmLabel="Desactivar"
+        onConfirm={() => { const c = clienteADesactivar; setClienteADesactivar(null); if (c) toggleActivo(c) }}
       />
     </div>
   )
