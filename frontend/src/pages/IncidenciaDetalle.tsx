@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, describirEquipo, ubicacionTexto,
+  opcionesCliente, opcionesEquipo, opcionesPorNombre,
   type Actividad, type Cliente, type DestinoReemplazo, type Equipo,
   type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
   type Sector, type Tecnico,
@@ -15,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -398,42 +400,45 @@ export function IncidenciaDetalle() {
               </div>
               <div className="grid gap-1.5">
                 <Label>Cliente</Label>
-                <Select value={String(incidencia.cliente_id)} onValueChange={(v) => actualizarCampo({ cliente_id: Number(v), equipo_id: null })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  value={String(incidencia.cliente_id)}
+                  onChange={(v) => actualizarCampo({ cliente_id: Number(v), equipo_id: null })}
+                  opciones={opcionesCliente(clientes)}
+                  ariaLabel="Cliente"
+                  className="w-full"
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label>Equipo</Label>
-                <Select value={incidencia.equipo_id ? String(incidencia.equipo_id) : NONE} onValueChange={(v) => actualizarCampo({ equipo_id: v === NONE ? null : Number(v) })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sin equipo</SelectItem>
-                    {equiposDelCliente.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.tipo}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  value={incidencia.equipo_id ? String(incidencia.equipo_id) : NONE}
+                  onChange={(v) => actualizarCampo({ equipo_id: v === NONE ? null : Number(v) })}
+                  opciones={[{ value: NONE, label: 'Sin equipo' }, ...opcionesEquipo(equiposDelCliente)]}
+                  ariaLabel="Equipo"
+                  className="w-full"
+                  emptyMessage="Ese cliente no tiene equipos."
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label>Técnico</Label>
-                <Select value={incidencia.tecnico_id ? String(incidencia.tecnico_id) : NONE} onValueChange={(v) => actualizarCampo({ tecnico_id: v === NONE ? null : Number(v) })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sin asignar</SelectItem>
-                    {tecnicos.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  value={incidencia.tecnico_id ? String(incidencia.tecnico_id) : NONE}
+                  onChange={(v) => actualizarCampo({ tecnico_id: v === NONE ? null : Number(v) })}
+                  opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(tecnicos)]}
+                  ariaLabel="Técnico"
+                  className="w-full"
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label>Sector</Label>
-                <Select value={incidencia.sector_id ? String(incidencia.sector_id) : NONE} onValueChange={(v) => actualizarCampo({ sector_id: v === NONE ? null : Number(v) })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sin sector</SelectItem>
-                    {sectores.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  value={incidencia.sector_id ? String(incidencia.sector_id) : NONE}
+                  onChange={(v) => actualizarCampo({ sector_id: v === NONE ? null : Number(v) })}
+                  opciones={[{ value: NONE, label: 'Sin sector' }, ...opcionesPorNombre(sectores)]}
+                  ariaLabel="Sector"
+                  className="w-full"
+                  emptyMessage="Ese cliente no tiene sectores."
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label>Horas invertidas</Label>
