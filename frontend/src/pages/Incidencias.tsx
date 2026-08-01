@@ -287,6 +287,16 @@ export function Incidencias() {
               data={incidenciasFiltradas}
               emptyMessage="Sin incidencias todavía."
               onRowClick={(i) => navigate(`/incidencias/${i.id}`)}
+              search={{
+                // El número de ticket entra a propósito: es como se lo nombra
+                // por teléfono ("fijate el 14"), y sin él habría que acordarse
+                // del título para encontrarlo.
+                campos: (i) => [
+                  i.id, i.titulo, i.descripcion,
+                  clienteNombre(i.cliente_id), equipoNombre(i.equipo_id),
+                ],
+                placeholder: 'Buscar por número, título, descripción, cliente o equipo',
+              }}
             />
           )}
         </CardContent>

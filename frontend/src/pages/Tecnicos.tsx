@@ -179,7 +179,12 @@ export function Tecnicos() {
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
           ) : (
-            <DataTable columns={columns} data={tecnicos} emptyMessage="Sin técnicos todavía." />
+            <DataTable
+              columns={columns}
+              data={tecnicos}
+              emptyMessage="Sin técnicos todavía."
+              search={{ campos: (t) => [t.nombre], placeholder: 'Buscar por nombre' }}
+            />
           )}
         </CardContent>
       </Card>
