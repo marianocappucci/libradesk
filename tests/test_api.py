@@ -1060,3 +1060,77 @@ def test_sectores_exige_sesion(client):
     tambien, que es la clase de cosa que ya se habia escapado una vez."""
     assert client.get("/api/sectores").status_code == 401
     assert client.post("/api/sectores", json={"cliente_id": 1, "nombre": "X"}).status_code == 401
+
+
+# --- Borrados que tienen que limpiar lo suyo ------------------------------
+#
+# Los `ondelete` declarados en los modelos NO se ejecutan: el engine no activa
+# `PRAGMA foreign_keys`. Cada repositorio lo hace explicito. Estos tests fijan
+# ese contrato, que ademas es lo que prometen los dialogos de confirmacion de
+# la UI -- la vez pasada el dialogo prometia una cascada que no ocurria.
+
+
+def test_borrar_un_tecnico_desasigna_sus_incidencias_y_no_las_borra(client):
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Test"}).json()["id"]
+    tecnico_id = client.post("/api/tecnicos", json={"nombre": "Mariano"}).json()["id"]
+    otro = client.post("/api/tecnicos", json={"nombre": "Tomas"}).json()["id"]
+
+    suya = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "tecnico_id": tecnico_id, "titulo": "No imprime",
+    }).json()["id"]
+    ajena = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "tecnico_id": otro, "titulo": "Sin red",
+    }).json()["id"]
+
+    assert client.delete(f"/api/tecnicos/{tecnico_id}").status_code == 204
+
+    r = client.get(f"/api/incidencias/{suya}")
+    assert r.status_code == 200
+    assert r.json()["tecnico_id"] is None
+    # No se lleva puesto el tecnico de las demas.
+    assert client.get(f"/api/incidencias/{ajena}").json()["tecnico_id"] == otro
+
+
+def test_borrar_un_equipo_borra_su_historial_y_desasigna_sus_incidencias(client):
+    """El caso que ya se habia demostrado solo en dev el 2026-07-30: un script
+    borro sus equipos de prueba por la API y los 10 movimientos sobrevivieron
+    huerfanos."""
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Test"}).json()["id"]
+    equipo_id = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Impresora", "sector": "Admision",
+    }).json()["id"]
+    otro_equipo = client.post("/api/equipos", json={
+        "cliente_id": cliente_id, "tipo": "Notebook",
+    }).json()["id"]
+
+    # El alta genera un movimiento, y el traslado otro.
+    client.put(f"/api/equipos/{equipo_id}", json={
+        "cliente_id": cliente_id, "tipo": "Impresora", "sector": "Deposito",
+        "estado": "activo", "motivo": "Se movio",
+    })
+    assert len(client.get(f"/api/equipos/{equipo_id}/movimientos").json()) >= 2
+
+    incidencia_id = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "equipo_id": equipo_id, "titulo": "No imprime",
+    }).json()["id"]
+    ajena = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "equipo_id": otro_equipo, "titulo": "Sin red",
+    }).json()["id"]
+
+    assert client.delete(f"/api/equipos/{equipo_id}").status_code == 204
+
+    # El ticket sobrevive, sin equipo.
+    r = client.get(f"/api/incidencias/{incidencia_id}")
+    assert r.status_code == 200
+    assert r.json()["equipo_id"] is None
+    assert client.get(f"/api/incidencias/{ajena}").json()["equipo_id"] == otro_equipo
+
+    # Y el historial del equipo borrado no sobrevive huerfano. El endpoint
+    # filtra por equipo_id sin chequear que el equipo exista, asi que si
+    # quedaran filas colgadas las devolveria igual -- es la comprobacion
+    # directa de lo que paso en dev.
+    assert client.get(f"/api/equipos/{equipo_id}/movimientos").json() == []
+    # El historial del otro equipo queda intacto: se borro lo suyo y nada mas.
+    assert len(client.get(f"/api/equipos/{otro_equipo}/movimientos").json()) >= 1

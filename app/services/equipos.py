@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, select
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, delete, func, select, update
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -245,10 +245,37 @@ class EquipoRepository:
             return _to_dict(e)
 
     def delete(self, equipo_id: int) -> None:
+        """Borra el equipo con **su historial de movimientos** y
+        **desasigna** las incidencias que lo tenian.
+
+        Los dos `ondelete` declarados en los modelos (CASCADE en
+        `equipos_movimientos`, SET NULL en `incidencias.equipo_id`) no se
+        ejecutan nunca: el engine no activa `PRAGMA foreign_keys`. **No es
+        teorico** — el 2026-07-30 un script de verificacion borro sus
+        equipos de prueba por la API y los 10 movimientos sobrevivieron
+        huerfanos en dev, y hubo que limpiarlos a mano.
+
+        Los movimientos SI se borran aca, a diferencia de los del ticket
+        (ver `IncidenciaRepository.delete`, donde solo pierden el link):
+        son el historial *del equipo*, y sin el equipo no describen nada.
+        """
         with self.session_factory() as session:
             e = session.get(Equipo, equipo_id)
             if e is None:
                 raise KeyError(equipo_id)
+
+            # Import local, mismo criterio que en el resto: evita el ciclo
+            # con `incidencias`, que si importa cosas de este modulo.
+            from .incidencias import Incidencia
+
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.equipo_id == equipo_id)
+                .values(equipo_id=None)
+            )
+            session.execute(
+                delete(EquipoMovimiento).where(EquipoMovimiento.equipo_id == equipo_id)
+            )
             session.delete(e)
             session.commit()
 

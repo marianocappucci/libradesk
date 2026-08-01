@@ -8,7 +8,7 @@ import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
   type Cliente, type Equipo, type Incidencia,
 } from '../api'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,11 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
+import {
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog'
+import { CircleAlert, Plus } from 'lucide-react'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -43,8 +48,12 @@ export function Incidencias() {
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // El alta vive en un Dialog (antes era una card sobre la tabla), mismo
+  // patrón que Contalibra y que el resto de las pantallas del producto.
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
+  // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
+  const [formError, setFormError] = useState<string | null>(null)
 
   const [filtroEstado, setFiltroEstado] = useState(TODOS)
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
@@ -88,17 +97,14 @@ export function Incidencias() {
 
   function startCreate() {
     setCreating(true)
-    form.reset(EMPTY_VALUES)
-  }
-
-  function cancelCreate() {
-    setCreating(false)
-    form.reset(EMPTY_VALUES)
+    setFormError(null)
+    // Si hay un cliente filtrado, el alta arranca con ése elegido.
+    form.reset({ ...EMPTY_VALUES, cliente_id: filtroCliente === TODOS ? '' : filtroCliente })
   }
 
   async function handleSubmit(values: IncidenciaFormValues) {
     setSaving(true)
-    setError(null)
+    setFormError(null)
     const payload = {
       cliente_id: Number(values.cliente_id),
       equipo_id: values.equipo_id && values.equipo_id !== NONE ? Number(values.equipo_id) : null,
@@ -116,10 +122,10 @@ export function Incidencias() {
     }
     try {
       const nueva = await api.post<Incidencia>('/api/incidencias', payload)
-      cancelCreate()
+      setCreating(false)
       navigate(`/incidencias/${nueva.id}`)
     } catch (err) {
-      setError(describeError(err))
+      setFormError(describeError(err))
     } finally {
       setSaving(false)
     }
@@ -171,19 +177,23 @@ export function Incidencias() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Incidencias</h2>
-        {!creating && <Button onClick={startCreate}>+ Nueva incidencia</Button>}
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {creating && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Nueva incidencia</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Dialog open={creating} onOpenChange={setCreating}>
+          <DialogTrigger asChild>
+            <Button onClick={startCreate}><Plus />Nueva incidencia</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CircleAlert className="size-4" />Nueva incidencia
+              </DialogTitle>
+              <DialogDescription>
+                El resto de los campos —prioridad, técnico, sector, horas— se
+                asignan después desde el ticket.
+              </DialogDescription>
+            </DialogHeader>
             <Form {...form}>
               <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
+                {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
@@ -225,15 +235,17 @@ export function Incidencias() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <div className="flex gap-2 pt-6">
-                  <Button type="submit" disabled={saving}>{saving ? 'Creando…' : 'Crear'}</Button>
-                  <Button type="button" variant="outline" onClick={cancelCreate}>Cancelar</Button>
-                </div>
+                <DialogFooter className="w-full">
+                  <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+                  <Button type="submit" disabled={saving}>{saving ? 'Creando…' : 'Crear incidencia'}</Button>
+                </DialogFooter>
               </form>
             </Form>
-          </CardContent>
-        </Card>
-      )}
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
