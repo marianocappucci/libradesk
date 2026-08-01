@@ -6,10 +6,8 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SelectBuscable } from '@/components/select-buscable'
 import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { Download, FileSpreadsheet } from 'lucide-react'
 
 const TODOS = '__todos__'
@@ -208,15 +206,16 @@ function TarjetaReporte({ reporte, clientes, sectores }: {
           return (
             <div key={campo.name} className="grid gap-1.5">
               <Label htmlFor={id}>{campo.label}</Label>
-              <Select value={valores[campo.name] ?? TODOS} onValueChange={(v) => set(campo.name, v)}>
-                <SelectTrigger id={id} className="w-48"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={TODOS}>{todosLabel}</SelectItem>
-                  {opciones.map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                value={valores[campo.name] ?? TODOS}
+                onChange={(v) => set(campo.name, v)}
+                opciones={[
+                  { value: TODOS, label: todosLabel },
+                  ...opciones.map(([value, label]) => ({ value, label })),
+                ]}
+                ariaLabel={campo.label}
+                className="w-48"
+              />
             </div>
           )
         })}

@@ -77,10 +77,65 @@ class ClienteRepository:
             session.refresh(c)
             return _to_dict(c)
 
-    def delete(self, cliente_id: int) -> None:
+    def set_activo(self, cliente_id: int, activo: bool) -> dict:
+        """Baja/alta logica. **Es la operacion normal**: un cliente no se
+        borra, se desactiva — igual que en Contalibra, decidido el
+        2026-08-01.
+
+        Asi el problema de los huerfanos deja de existir en vez de
+        resolverse: si no hay DELETE, no hay nada que quede colgado, y
+        ademas la baja es reversible."""
         with self.session_factory() as session:
             c = session.get(Cliente, cliente_id)
             if c is None:
                 raise KeyError(cliente_id)
-            session.delete(c)
+            c.activo = activo
+            session.commit()
+            session.refresh(c)
+            return _to_dict(c)
+
+    def dependencias(self, cliente_id: int) -> dict[str, int]:
+        """Cuenta lo que cuelga del cliente, para poder negarse a borrarlo."""
+        from .equipos import Equipo
+        from .incidencias import Incidencia
+        from .sectores import Sector
+
+        with self.session_factory() as session:
+            return {
+                "equipos": session.execute(
+                    select(func.count()).select_from(Equipo).where(Equipo.cliente_id == cliente_id)
+                ).scalar_one(),
+                "incidencias": session.execute(
+                    select(func.count()).select_from(Incidencia).where(Incidencia.cliente_id == cliente_id)
+                ).scalar_one(),
+                "sectores": session.execute(
+                    select(func.count()).select_from(Sector).where(Sector.cliente_id == cliente_id)
+                ).scalar_one(),
+            }
+
+    def delete(self, cliente_id: int) -> None:
+        """Borra un cliente **solo si no tiene nada colgando**.
+
+        El router siempre declaro un `409 "cliente tiene equipos/incidencias
+        asociadas"` en un `except IntegrityError`, pero **esa rama nunca se
+        ejecutaba**: el engine no activa `PRAGMA foreign_keys`, asi que la
+        base jamas levantaba el IntegrityError y el DELETE se llevaba puesto
+        al cliente dejando equipos, incidencias y sectores apuntando a un id
+        inexistente. La promesa estaba escrita en el codigo desde el dia 1 y
+        no la cumplia nadie.
+
+        Ahora el chequeo es explicito. Para dar de baja a un cliente **con**
+        historial esta `set_activo`, que es el camino normal.
+        """
+        with self.session_factory() as session:
+            c = session.get(Cliente, cliente_id)
+            if c is None:
+                raise KeyError(cliente_id)
+
+        colgando = self.dependencias(cliente_id)
+        if any(colgando.values()):
+            raise ValueError(colgando)
+
+        with self.session_factory() as session:
+            session.delete(session.get(Cliente, cliente_id))
             session.commit()

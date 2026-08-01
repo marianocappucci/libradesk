@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
-  api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
+  api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
   type Cliente, type Equipo, type Incidencia,
 } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +19,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -75,6 +76,13 @@ export function Incidencias() {
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
   const equipoNombre = (id: number | null) => id ? (equipos.find((e) => e.id === id)?.tipo ?? `#${id}`) : '—'
+
+  // Un cliente desactivado no se ofrece para tickets nuevos. Se contempla el
+  // preseleccionado por el filtro para que el formulario nunca arranque
+  // apuntando a una opción que no existe en su propia lista.
+  const clientesElegibles = clientes.filter(
+    (c) => c.activo || String(c.id) === form.watch('cliente_id'),
+  )
 
   async function loadAll() {
     setLoading(true)
@@ -197,25 +205,41 @@ export function Incidencias() {
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl><SelectTrigger className="w-44"><SelectValue placeholder="Cliente…" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SelectBuscable
+                        value={field.value}
+                        onChange={field.onChange}
+                        opciones={opcionesCliente(clientesElegibles)}
+                        placeholder="Cliente…"
+                        ariaLabel="Cliente"
+                        className="w-44"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="equipo_id" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Equipo</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl><SelectTrigger className="w-44"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>Sin equipo</SelectItem>
-                        {equipos.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.tipo} — {clienteNombre(e.cliente_id)}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SelectBuscable
+                        value={field.value ?? NONE}
+                        onChange={field.onChange}
+                        // Sólo los equipos del cliente elegido: ofrecer el
+                        // parque entero de todos los clientes es lo que hacía
+                        // esta lista inmanejable, y además deja elegir un
+                        // equipo que no es de ese cliente.
+                        opciones={[
+                          { value: NONE, label: 'Sin equipo' },
+                          ...opcionesEquipo(
+                            equipos.filter((e) => String(e.cliente_id) === form.watch('cliente_id')),
+                          ),
+                        ]}
+                        ariaLabel="Equipo"
+                        className="w-44"
+                        emptyMessage="Ese cliente no tiene equipos."
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -274,13 +298,13 @@ export function Incidencias() {
         </div>
         <div className="grid gap-1.5">
           <span className="text-xs text-muted-foreground">Cliente</span>
-          <Select value={filtroCliente} onValueChange={setFiltroCliente}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos</SelectItem>
-              {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SelectBuscable
+            value={filtroCliente}
+            onChange={setFiltroCliente}
+            opciones={[{ value: TODOS, label: 'Todos' }, ...opcionesCliente(clientes)]}
+            ariaLabel="Filtrar por cliente"
+            className="w-48"
+          />
         </div>
         {(filtroEstado !== TODOS || filtroPrioridad !== TODOS || filtroCliente !== TODOS) && (
           <Button variant="ghost" size="sm" onClick={() => { setFiltroEstado(TODOS); setFiltroPrioridad(TODOS); setFiltroCliente(TODOS) }}>

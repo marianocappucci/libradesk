@@ -10,6 +10,7 @@ import { ESTADO_PRESUPUESTO_LABELS } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { SelectBuscable } from '@/components/select-buscable'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -140,16 +141,20 @@ export function ComprobanteForm({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="grid gap-2">
               <Label>Cliente</Label>
-              <Select value={draft.client_id} onValueChange={(v) => set('client_id', v)}>
-                <SelectTrigger><SelectValue placeholder="Elegí un cliente" /></SelectTrigger>
-                <SelectContent>
-                  {clientes.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.empresa || c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                value={draft.client_id}
+                onChange={(v) => set('client_id', v)}
+                // Acá la etiqueta es la empresa cuando existe (es lo que va en
+                // el comprobante), pero el nombre entra igual en la búsqueda.
+                opciones={clientes.map((c) => ({
+                  value: String(c.id),
+                  label: c.empresa || c.nombre,
+                  hint: c.empresa ? c.nombre : c.ciudad ?? undefined,
+                }))}
+                placeholder="Elegí un cliente"
+                ariaLabel="Cliente"
+                className="w-full"
+              />
             </div>
 
             <div className="grid gap-2">

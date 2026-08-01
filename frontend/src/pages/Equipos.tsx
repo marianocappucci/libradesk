@@ -6,7 +6,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS as ESTADO_INCIDENCIA_LABELS,
-  MOVIMIENTO_LABELS, describirEquipo, ubicacionTexto,
+  MOVIMIENTO_LABELS, describirEquipo, ubicacionTexto, opcionesCliente,
   type Cliente, type Equipo, type EquipoMovimiento, type Incidencia,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
@@ -21,6 +21,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -115,6 +116,14 @@ export function Equipos() {
   }
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
+
+  // Clientes ofrecibles en el formulario: sólo los activos, **más el que ya
+  // tiene el equipo que se está editando** aunque esté desactivado. Sin esa
+  // excepción, abrir un equipo de un cliente dado de baja mostraría el
+  // selector vacío y guardarlo lo movería de cliente sin querer.
+  const clientesElegibles = clientes.filter(
+    (c) => c.activo || String(c.id) === form.watch('cliente_id'),
+  )
 
   // El filtro lo resuelve el backend (`?cliente_id=`, ya existía y no lo usaba
   // nadie), no un filter local: es lo que escala cuando el parque crezca.
@@ -302,16 +311,16 @@ export function Equipos() {
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Cliente…" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SelectBuscable
+                        value={field.value}
+                        onChange={field.onChange}
+                        opciones={opcionesCliente(clientesElegibles)}
+                        placeholder="Cliente…"
+                        ariaLabel="Cliente"
+                        className="w-48"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -409,13 +418,13 @@ export function Equipos() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
           <span className="text-xs text-muted-foreground">Cliente</span>
-          <Select value={filtroCliente} onValueChange={setFiltroCliente}>
-            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos</SelectItem>
-              {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SelectBuscable
+            value={filtroCliente}
+            onChange={setFiltroCliente}
+            opciones={[{ value: TODOS, label: 'Todos' }, ...opcionesCliente(clientes)]}
+            ariaLabel="Filtrar por cliente"
+            className="w-56"
+          />
         </div>
         {filtroCliente !== TODOS && (
           <Button variant="ghost" size="sm" onClick={() => setFiltroCliente(TODOS)}>

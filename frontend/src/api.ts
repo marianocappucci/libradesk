@@ -7,6 +7,8 @@
 
 export { api, ApiError, type User } from 'libra-ui/api-client'
 
+import type { OpcionSelect } from 'libra-ui/SelectBuscable'
+
 export type Cliente = {
   id: number
   nombre: string
@@ -85,6 +87,40 @@ export type ResultadoReemplazo = {
 export function describirEquipo(e: Equipo | undefined): string {
   if (!e) return 'Equipo'
   return [e.tipo, e.marca, e.modelo].filter(Boolean).join(' ')
+}
+
+// --- opciones para los selects con búsqueda --------------------------------
+//
+// Viven acá, junto a los tipos, para que las cinco pantallas que eligen un
+// cliente lo muestren y lo busquen igual. El `hint` no es decorativo: además
+// de desambiguar dos clientes de nombre parecido, **entra en la búsqueda**,
+// así se puede tipear la ciudad o la empresa.
+
+export function opcionesCliente(clientes: Cliente[]): OpcionSelect[] {
+  return clientes.map((c) => ({
+    value: String(c.id),
+    label: c.nombre,
+    hint: [c.empresa, c.ciudad, c.activo ? null : 'inactivo']
+      .filter(Boolean).join(' · ') || undefined,
+  }))
+}
+
+export function opcionesEquipo(
+  equipos: Equipo[],
+  nombreCliente?: (id: number) => string,
+): OpcionSelect[] {
+  return equipos.map((e) => ({
+    value: String(e.id),
+    label: describirEquipo(e),
+    // El serial es lo que se lee de la etiqueta del aparato cuando hay tres
+    // impresoras del mismo modelo; el cliente, para no confundir parques.
+    hint: [nombreCliente?.(e.cliente_id), e.serial].filter(Boolean).join(' · ') || undefined,
+  }))
+}
+
+/** Para las entidades que sólo tienen nombre: técnicos y sectores. */
+export function opcionesPorNombre(items: { id: number; nombre: string }[]): OpcionSelect[] {
+  return items.map((i) => ({ value: String(i.id), label: i.nombre }))
 }
 
 export function ubicacionTexto(sector: string | null, ubicacion: string | null): string {
