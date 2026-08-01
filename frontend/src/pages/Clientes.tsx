@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
-import { api, ApiError, type Cliente } from '../api'
+import { api, ApiError, type Cliente, type Sector } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,11 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
-import { Pencil, Trash2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Check, MapPin, Pencil, Trash2, X } from 'lucide-react'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -44,6 +48,19 @@ export function Clientes() {
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // --- sectores del cliente -------------------------------------------
+  // El backend los tenía completos desde la migración (tabla propia con FK
+  // al cliente, router con alta/baja/renombrado y 15 filas reales), pero no
+  // había ninguna pantalla: el único lugar del sistema donde se veían era el
+  // selector de filtro del reporte de incidencias.
+  const [sectoresDe, setSectoresDe] = useState<Cliente | null>(null)
+  const [sectores, setSectores] = useState<Sector[] | null>(null)
+  const [errorSector, setErrorSector] = useState<string | null>(null)
+  const [nuevoSector, setNuevoSector] = useState('')
+  const [guardandoSector, setGuardandoSector] = useState(false)
+  const [renombrando, setRenombrando] = useState<{ id: number; nombre: string } | null>(null)
+  const [aBorrar, setABorrar] = useState<Sector | null>(null)
 
   const form = useForm<ClienteFormValues>({
     resolver: zodResolver(clienteSchema),
@@ -133,6 +150,66 @@ export function Clientes() {
     }
   }
 
+  async function abrirSectores(cliente: Cliente) {
+    setSectoresDe(cliente)
+    setSectores(null)
+    setErrorSector(null)
+    setNuevoSector('')
+    setRenombrando(null)
+    await recargarSectores(cliente.id)
+  }
+
+  async function recargarSectores(clienteId: number) {
+    try {
+      setSectores(await api.get<Sector[]>(`/api/sectores?cliente_id=${clienteId}`))
+    } catch (err) {
+      setErrorSector(describeError(err))
+    }
+  }
+
+  async function crearSector() {
+    if (!sectoresDe || !nuevoSector.trim()) return
+    setGuardandoSector(true)
+    setErrorSector(null)
+    try {
+      await api.post('/api/sectores', { cliente_id: sectoresDe.id, nombre: nuevoSector.trim() })
+      setNuevoSector('')
+      await recargarSectores(sectoresDe.id)
+    } catch (err) {
+      // El 409 del backend (unique cliente_id + nombre) llega con su propio
+      // detalle: "sector ya existe para este cliente".
+      setErrorSector(describeError(err))
+    } finally {
+      setGuardandoSector(false)
+    }
+  }
+
+  async function renombrarSector() {
+    if (!sectoresDe || !renombrando || !renombrando.nombre.trim()) return
+    setGuardandoSector(true)
+    setErrorSector(null)
+    try {
+      await api.put(`/api/sectores/${renombrando.id}`, { nombre: renombrando.nombre.trim() })
+      setRenombrando(null)
+      await recargarSectores(sectoresDe.id)
+    } catch (err) {
+      setErrorSector(describeError(err))
+    } finally {
+      setGuardandoSector(false)
+    }
+  }
+
+  async function borrarSector(sector: Sector) {
+    if (!sectoresDe) return
+    setErrorSector(null)
+    try {
+      await api.del(`/api/sectores/${sector.id}`)
+      await recargarSectores(sectoresDe.id)
+    } catch (err) {
+      setErrorSector(describeError(err))
+    }
+  }
+
   const columns = useMemo<ColumnDef<Cliente>[]>(() => {
     const base: ColumnDef<Cliente>[] = [
       { accessorKey: 'nombre', header: sortableHeader('Nombre'), size: 180, minSize: 120, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.nombre}>{row.original.nombre}</span> },
@@ -158,6 +235,7 @@ export function Clientes() {
         header: () => <div className="text-right">Acciones</div>,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            <Button size="icon" variant="outline" title="Sectores del cliente" aria-label="Sectores del cliente" onClick={() => abrirSectores(row.original)}><MapPin /></Button>
             <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => startEdit(row.original)}><Pencil /></Button>
             <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar cliente" aria-label="Eliminar cliente" onClick={() => handleDelete(row.original)}><Trash2 /></Button>
           </div>
@@ -256,10 +334,97 @@ export function Clientes() {
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
           ) : (
-            <DataTable columns={columns} data={clientes} emptyMessage="Sin clientes todavía." />
+            <DataTable
+              columns={columns}
+              data={clientes}
+              emptyMessage="Sin clientes todavía."
+              search={{
+                campos: (c) => [c.nombre, c.empresa, c.email, c.telefono, c.ciudad],
+                placeholder: 'Buscar por nombre, empresa, email, teléfono o ciudad',
+              }}
+            />
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={sectoresDe !== null} onOpenChange={(open) => !open && setSectoresDe(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Sectores</DialogTitle>
+            <DialogDescription>
+              {sectoresDe?.nombre} — las áreas del cliente, para clasificar
+              las incidencias por sector de origen.
+            </DialogDescription>
+          </DialogHeader>
+
+          {errorSector && <p className="text-sm text-destructive">{errorSector}</p>}
+
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(e) => { e.preventDefault(); crearSector() }}
+          >
+            <div className="grid flex-1 gap-1.5">
+              <span className="text-xs text-muted-foreground">Nuevo sector</span>
+              <Input
+                value={nuevoSector}
+                onChange={(e) => setNuevoSector(e.target.value)}
+                placeholder="Administración, Depósito, Consultorios…"
+                aria-label="Nombre del sector nuevo"
+              />
+            </div>
+            <Button type="submit" disabled={guardandoSector || !nuevoSector.trim()}>Agregar</Button>
+          </form>
+
+          {sectores === null ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : sectores.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              Este cliente todavía no tiene sectores.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {sectores.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 px-3 py-2">
+                  {renombrando?.id === s.id ? (
+                    <>
+                      <Input
+                        value={renombrando.nombre}
+                        onChange={(e) => setRenombrando({ id: s.id, nombre: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); renombrarSector() }
+                          if (e.key === 'Escape') setRenombrando(null)
+                        }}
+                        aria-label={`Nuevo nombre para ${s.nombre}`}
+                        autoFocus
+                        className="h-8 flex-1"
+                      />
+                      <Button size="icon" variant="outline" className="size-8" title="Guardar" aria-label="Guardar nombre" disabled={guardandoSector || !renombrando.nombre.trim()} onClick={renombrarSector}><Check /></Button>
+                      <Button size="icon" variant="ghost" className="size-8" title="Cancelar" aria-label="Cancelar renombrado" onClick={() => setRenombrando(null)}><X /></Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm">{s.nombre}</span>
+                      <Button size="icon" variant="outline" className="size-8" title="Renombrar sector" aria-label={`Renombrar ${s.nombre}`} onClick={() => setRenombrando({ id: s.id, nombre: s.nombre })}><Pencil /></Button>
+                      <Button size="icon" variant="outline" className="size-8 text-destructive hover:text-destructive" title="Eliminar sector" aria-label={`Eliminar ${s.nombre}`} onClick={() => setABorrar(s)}><Trash2 /></Button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={aBorrar !== null}
+        onOpenChange={(open) => !open && setABorrar(null)}
+        title={`¿Eliminar el sector "${aBorrar?.nombre}"?`}
+        // Es lo que hace el backend de verdad: el ondelete="SET NULL" del
+        // modelo no corre (el pragma está apagado), así que la desasignación
+        // se hace explícita en el repositorio.
+        description="Las incidencias que lo tengan asignado quedan sin sector. No se borra ninguna incidencia."
+        onConfirm={() => { const s = aBorrar; setABorrar(null); if (s) borrarSector(s) }}
+      />
     </div>
   )
 }

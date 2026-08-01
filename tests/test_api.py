@@ -969,3 +969,94 @@ def test_config_empresa_no_expone_ni_pisa_secretos(client):
 
     client.put("/api/config-empresa", json={"empresa_nombre": "Compulibra"})
     assert config_manager.load()["mp_access_token"] == "TOKEN-QUE-NO-SE-DEBE-PERDER"
+
+
+# --- Sectores -------------------------------------------------------------
+#
+# El router existia desde la migracion desde el Node.js viejo (con 15 filas
+# reales en produccion) y no tenia un solo test, porque hasta el 2026-07-31
+# no habia ninguna pantalla que lo llamara: se llegaba nada mas que desde el
+# selector de filtro de un reporte.
+
+
+def test_sectores_crud_por_cliente(client):
+    _login(client)
+    a = client.post("/api/clientes", json={"nombre": "Cliente A"}).json()["id"]
+    b = client.post("/api/clientes", json={"nombre": "Cliente B"}).json()["id"]
+
+    r = client.post("/api/sectores", json={"cliente_id": a, "nombre": "Admision"})
+    assert r.status_code == 201
+    sector_id = r.json()["id"]
+    client.post("/api/sectores", json={"cliente_id": a, "nombre": "Deposito"})
+    client.post("/api/sectores", json={"cliente_id": b, "nombre": "Admision"})
+
+    # El listado filtra por cliente: un sector es de un cliente y de uno solo.
+    de_a = client.get(f"/api/sectores?cliente_id={a}").json()
+    assert [s["nombre"] for s in de_a] == ["Admision", "Deposito"]
+    assert len(client.get(f"/api/sectores?cliente_id={b}").json()) == 1
+    assert len(client.get("/api/sectores").json()) == 3
+
+    r = client.put(f"/api/sectores/{sector_id}", json={"nombre": "Admision y Guardia"})
+    assert r.status_code == 200
+    assert r.json()["nombre"] == "Admision y Guardia"
+
+    assert client.delete(f"/api/sectores/{sector_id}").status_code == 204
+    assert [s["nombre"] for s in client.get(f"/api/sectores?cliente_id={a}").json()] == ["Deposito"]
+
+
+def test_sector_repetido_en_el_mismo_cliente_da_409_pero_no_entre_clientes(client):
+    """El nombre es unico POR cliente: dos clientes distintos pueden tener
+    los dos su "Administracion", que es el caso normal."""
+    _login(client)
+    a = client.post("/api/clientes", json={"nombre": "Cliente A"}).json()["id"]
+    b = client.post("/api/clientes", json={"nombre": "Cliente B"}).json()["id"]
+
+    assert client.post("/api/sectores", json={"cliente_id": a, "nombre": "Administracion"}).status_code == 201
+    assert client.post("/api/sectores", json={"cliente_id": a, "nombre": "Administracion"}).status_code == 409
+    assert client.post("/api/sectores", json={"cliente_id": b, "nombre": "Administracion"}).status_code == 201
+
+
+def test_borrar_un_sector_desasigna_sus_incidencias_y_no_las_borra(client):
+    """El `ondelete="SET NULL"` de `incidencias.sector_id` NO se ejecuta: el
+    engine no activa `PRAGMA foreign_keys`. Sin la desasignacion explicita del
+    repositorio, el ticket quedaba apuntando a un sector inexistente y el
+    reporte de Incidencias --que resuelve el sector por join-- lo mostraba
+    vacio sin forma de saber por que."""
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "Cliente Test"}).json()["id"]
+    sector_id = client.post(
+        "/api/sectores", json={"cliente_id": cliente_id, "nombre": "Admision"}
+    ).json()["id"]
+    otro_sector = client.post(
+        "/api/sectores", json={"cliente_id": cliente_id, "nombre": "Deposito"}
+    ).json()["id"]
+
+    con_sector = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "sector_id": sector_id, "titulo": "No imprime",
+    }).json()["id"]
+    intacta = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "sector_id": otro_sector, "titulo": "Sin red",
+    }).json()["id"]
+
+    assert client.delete(f"/api/sectores/{sector_id}").status_code == 204
+
+    # La incidencia sigue existiendo -- borrar un sector no borra tickets.
+    r = client.get(f"/api/incidencias/{con_sector}")
+    assert r.status_code == 200
+    assert r.json()["sector_id"] is None
+
+    # Y no se lleva puesto el sector de las demas.
+    assert client.get(f"/api/incidencias/{intacta}").json()["sector_id"] == otro_sector
+
+
+def test_sector_inexistente_da_404(client):
+    _login(client)
+    assert client.put("/api/sectores/9999", json={"nombre": "X"}).status_code == 404
+    assert client.delete("/api/sectores/9999").status_code == 404
+
+
+def test_sectores_exige_sesion(client):
+    """Todos los routers de dominio van detras de `require_staff` -- este
+    tambien, que es la clase de cosa que ya se habia escapado una vez."""
+    assert client.get("/api/sectores").status_code == 401
+    assert client.post("/api/sectores", json={"cliente_id": 1, "nombre": "X"}).status_code == 401

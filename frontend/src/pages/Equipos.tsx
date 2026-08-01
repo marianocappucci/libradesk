@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -57,6 +57,10 @@ const EMPTY_VALUES: EquipoFormValues = {
 
 const ESTADOS_EQUIPO = ['activo', 'en_reparacion', 'almacenado', 'baja']
 
+// Radix no admite un <SelectItem value="">, así que el "sin filtro" necesita
+// un valor propio (misma convención que Incidencias.tsx).
+const TODOS = 'todos'
+
 export function Equipos() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -70,15 +74,30 @@ export function Equipos() {
   const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
   const [incidenciasDelEquipo, setIncidenciasDelEquipo] = useState<Incidencia[] | null>(null)
+  const [filtroCliente, setFiltroCliente] = useState(TODOS)
 
   const form = useForm<EquipoFormValues>({
     resolver: zodResolver(equipoSchema),
     defaultValues: EMPTY_VALUES,
   })
 
+  const montado = useRef(false)
+
   useEffect(() => {
     loadAll()
   }, [])
+
+  // El filtro por cliente recarga SOLO los equipos y sin pasar por `loading`:
+  // si la tabla se desmontara para mostrar "Cargando…", el buscador (que vive
+  // dentro de DataTable) perdería lo escrito en cada cambio de cliente.
+  useEffect(() => {
+    if (!montado.current) {
+      montado.current = true
+      return
+    }
+    loadEquipos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroCliente])
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -87,12 +106,26 @@ export function Equipos() {
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
 
+  // El filtro lo resuelve el backend (`?cliente_id=`, ya existía y no lo usaba
+  // nadie), no un filter local: es lo que escala cuando el parque crezca.
+  const rutaEquipos = () =>
+    filtroCliente === TODOS ? '/api/equipos' : `/api/equipos?cliente_id=${filtroCliente}`
+
+  async function loadEquipos() {
+    setError(null)
+    try {
+      setEquipos(await api.get<Equipo[]>(rutaEquipos()))
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
   async function loadAll() {
     setLoading(true)
     setError(null)
     try {
       const [eq, cl] = await Promise.all([
-        api.get<Equipo[]>('/api/equipos'),
+        api.get<Equipo[]>(rutaEquipos()),
         api.get<Cliente[]>('/api/clientes'),
       ])
       setEquipos(eq)
@@ -156,7 +189,9 @@ export function Equipos() {
         await api.put(`/api/equipos/${editingId}`, { ...payload, motivo: values.motivo || null })
       }
       cancelEdit()
-      await loadAll()
+      // Solo los equipos: la lista de clientes no cambió, y recargarla
+      // apagaría la tabla un instante y con ella la búsqueda escrita.
+      await loadEquipos()
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -188,7 +223,7 @@ export function Equipos() {
     setError(null)
     try {
       await api.del(`/api/equipos/${equipo.id}`)
-      await loadAll()
+      await loadEquipos()
     } catch (err) {
       setError(describeError(err))
     }
@@ -357,12 +392,43 @@ export function Equipos() {
         </Card>
       )}
 
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-1.5">
+          <span className="text-xs text-muted-foreground">Cliente</span>
+          <Select value={filtroCliente} onValueChange={setFiltroCliente}>
+            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos</SelectItem>
+              {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {filtroCliente !== TODOS && (
+          <Button variant="ghost" size="sm" onClick={() => setFiltroCliente(TODOS)}>
+            Limpiar filtro
+          </Button>
+        )}
+      </div>
+
       <Card>
         <CardContent>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
           ) : (
-            <DataTable columns={columns} data={equipos} emptyMessage="Sin equipos todavía." />
+            <DataTable
+              columns={columns}
+              data={equipos}
+              emptyMessage={filtroCliente === TODOS
+                ? 'Sin equipos todavía.'
+                : 'Este cliente no tiene equipos cargados.'}
+              search={{
+                campos: (e) => [
+                  e.tipo, e.marca, e.modelo, e.serial,
+                  e.sector, e.ubicacion_oficina, clienteNombre(e.cliente_id),
+                ],
+                placeholder: 'Buscar por tipo, marca, modelo, serial, sector o cliente',
+              }}
+            />
           )}
         </CardContent>
       </Card>

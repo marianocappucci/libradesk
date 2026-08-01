@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select, update
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -60,9 +60,34 @@ class SectorRepository:
             return _to_dict(s)
 
     def delete(self, sector_id: int) -> None:
+        """Borra el sector y **desasigna** las incidencias que lo usaban.
+
+        `incidencias.sector_id` declara `ondelete="SET NULL"`, pero ese
+        ondelete no se ejecuta nunca: el engine de SQLAlchemy de LibraDesk
+        no activa `PRAGMA foreign_keys` (medido sobre una conexion real, da
+        0 — ver el mismo caso en `IncidenciaRepository.delete`). Sin esto,
+        borrar un sector dejaba tickets apuntando a un id inexistente, y el
+        reporte de Incidencias resuelve el sector por join: la fila
+        aparecia sin sector y sin forma de saber por que.
+
+        Se hace explicito aca, como en el borrado de incidencias, en vez de
+        prender el pragma para todo el engine — eso es un cambio de
+        comportamiento global sobre una base de produccion y merece
+        decidirse aparte.
+        """
         with self.session_factory() as session:
             s = session.get(Sector, sector_id)
             if s is None:
                 raise KeyError(sector_id)
+
+            # Import local para no crear un ciclo: `incidencias` ya importa
+            # cosas de este modulo en la direccion contraria.
+            from .incidencias import Incidencia
+
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.sector_id == sector_id)
+                .values(sector_id=None)
+            )
             session.delete(s)
             session.commit()
