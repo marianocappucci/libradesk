@@ -13,7 +13,7 @@ from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 
 from . import database
-from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
+from .auth import build_session_auth, require_admin_o_servicio, require_staff
 from .database import Base, configure, get_engine, get_session_factory
 from .migrations import run_migrations
 from .modules_gate import require_module
@@ -104,7 +104,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # recuperación de contraseña de todos los usuarios.
     app.include_router(build_smtp_settings_router())
 
-    admin_only = [Depends(require_admin)]
+    # Sin `admin_only`: el unico router admin-only de LibraDesk era el de
+    # usuarios, y ahora usa `require_admin_o_servicio`. Dejar la lista sin
+    # consumidores hacia fallar el lint (F841).
     staff_or_admin = [Depends(require_staff)]
 
     # Usuarios acepta ADEMÁS el token de servicio (libraauth v0.7.0): es lo
