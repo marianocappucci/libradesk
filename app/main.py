@@ -9,6 +9,8 @@ import os
 from libraauth.models import Base as AuthBase
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
+from libraauth.session_auth import build_smtp_settings_router
+from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 
 from . import database
 from .auth import build_session_auth, require_admin, require_staff
@@ -63,12 +65,20 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # el mismo archivo que su dominio, así que la FK de la tabla de tokens
     # resuelve igual. Sin SMTP configurado la app levanta igual y el endpoint
     # devuelve 503.
+    # Config SMTP editable por backoffice (libraauth v0.6.0), con la contraseña
+    # cifrada en reposo. Mismo `sessions` que el resto del motor.
+    app.state.smtp_settings = SmtpSettingsRepository(sessions)
     app.state.password_reset = PasswordResetService(
         sessions,
         product_name="LibraDesk",
         reset_url_base=os.environ.get(
             "LIBRADESK_RESET_URL_BASE", "https://dev.libradesk.com.ar/reset-password"
         ),
+        # CALLABLE, no un valor: se resuelve en cada envío. Con un valor fijo,
+        # guardar el SMTP por pantalla no tendría efecto hasta recrear el
+        # contenedor. Sin nada guardado cae a las variables de entorno, así que
+        # la instancia se comporta igual que antes hasta que se cargue algo.
+        smtp_config=lambda: resolver_smtp_config(sessions),
     )
     app.state.clientes = ClienteRepository(sessions)
     app.state.equipos = EquipoRepository(sessions)
@@ -84,6 +94,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth_router.router)
+    # `GET`/`PUT`/`DELETE /admin/smtp`. El router exige rol admin por dentro:
+    # quien pueda escribir ahí puede redirigir a dónde salen los enlaces de
+    # recuperación de contraseña de todos los usuarios.
+    app.include_router(build_smtp_settings_router())
 
     admin_only = [Depends(require_admin)]
     # Sin planes/gating (instancia unica): cualquier usuario logueado

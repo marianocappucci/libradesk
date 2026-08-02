@@ -9,7 +9,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "itsdangerous>=2.2.0",
     "openpyxl>=3.1.0",
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.5.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.6.2",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
