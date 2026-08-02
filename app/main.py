@@ -13,7 +13,7 @@ from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 
 from . import database
-from .auth import build_session_auth, require_admin, require_staff
+from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
 from .database import Base, configure, get_engine, get_session_factory
 from .migrations import run_migrations
 from .modules_gate import require_module
@@ -107,9 +107,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     admin_only = [Depends(require_admin)]
     staff_or_admin = [Depends(require_staff)]
 
+    # Usuarios acepta ADEMÁS el token de servicio (libraauth v0.7.0): es lo
+    # único que el backoffice de la suite necesita y que no puede salir del
+    # motor, porque el router de usuarios es propio de cada producto.
+    #
+    # Deliberadamente sólo éste: el resto de los routers admin-only siguen
+    # exigiendo sesión de un usuario del producto. El backoffice no tiene por
+    # qué poder tocar el resto del dominio, y colgar la dependencia de
+    # `admin_only` sería ampliar el permiso sin necesidad.
+    app.include_router(users.router, dependencies=[Depends(require_admin_o_servicio)])
+
     # El core de tickets NO se gatea: un LibraDesk sin incidencias no es un
     # plan más barato, es otra cosa. Mismo criterio que "turnos" en Contalibra.
-    app.include_router(users.router, dependencies=admin_only)
     app.include_router(clientes.router, dependencies=staff_or_admin)
     app.include_router(equipos.router, dependencies=staff_or_admin)
     app.include_router(incidencias.router, dependencies=staff_or_admin)
