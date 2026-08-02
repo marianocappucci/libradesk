@@ -16,6 +16,7 @@ from . import database
 from .auth import build_session_auth, require_admin, require_staff
 from .database import Base, configure, get_engine, get_session_factory
 from .migrations import run_migrations
+from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     clientes, config_empresa, dashboard, equipos, health, incidencias,
@@ -25,6 +26,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.modules import ModuleRepository
 from .services.reemplazo import ReemplazoService
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
@@ -56,6 +58,8 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
     ensure_default_admin(user_repository)
+    module_repository = ModuleRepository(sessions)
+    module_repository.ensure_seeded()
 
     app = FastAPI(title="LibraDesk")
     app.state.users = user_repository
@@ -90,6 +94,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.reportes = ReportesService(sessions)
     app.state.remitos = rp_service.RemitoService()
     app.state.presupuestos = rp_service.PresupuestoService()
+    app.state.modules = module_repository
     app.state.data_dir = data_dir
 
     app.include_router(health.router)
@@ -100,20 +105,33 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(build_smtp_settings_router())
 
     admin_only = [Depends(require_admin)]
-    # Sin planes/gating (instancia unica): cualquier usuario logueado
-    # (admin o staff) lee y opera el dominio; solo el ABM de usuarios es
-    # admin-only.
     staff_or_admin = [Depends(require_staff)]
+
+    # El core de tickets NO se gatea: un LibraDesk sin incidencias no es un
+    # plan más barato, es otra cosa. Mismo criterio que "turnos" en Contalibra.
     app.include_router(users.router, dependencies=admin_only)
     app.include_router(clientes.router, dependencies=staff_or_admin)
     app.include_router(equipos.router, dependencies=staff_or_admin)
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)
-    app.include_router(dashboard.router, dependencies=staff_or_admin)
-    app.include_router(reportes.router, dependencies=staff_or_admin)
-    app.include_router(remitos.router, dependencies=staff_or_admin)
-    app.include_router(presupuestos.router, dependencies=staff_or_admin)
+
+    # Lo que sí depende del plan (ver `plans.py`). Las instancias que ya
+    # existen no se enteran: sin plan asignado, `ModuleRepository` deja todo
+    # habilitado.
+    app.include_router(
+        dashboard.router, dependencies=staff_or_admin + [Depends(require_module("dashboard"))]
+    )
+    app.include_router(
+        reportes.router, dependencies=staff_or_admin + [Depends(require_module("reportes"))]
+    )
+    app.include_router(
+        remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]
+    )
+    app.include_router(
+        presupuestos.router,
+        dependencies=staff_or_admin + [Depends(require_module("presupuestos"))],
+    )
     # Datos de la empresa (encabezado de los PDF): los edita solo admin,
     # el resto del staff los lee para previsualizar.
     app.include_router(config_empresa.router, dependencies=staff_or_admin)
