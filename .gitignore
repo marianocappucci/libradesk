@@ -59,3 +59,10 @@ frontend/coverage/
 # Scripts one-off de migracion, descartables por definicion (ver el
 # docstring de migrate.py). No forman parte del repo.
 scripts_temp/
+
+# ── Solo-VPS (agregado 2026-08-02 al desplegar el backoffice de la suite) ────
+# Nada de esto se versiona: son archivos que solo existen en el servidor y
+# varios llevan secretos. Un untracked con credenciales adentro esta a un
+# `git add -A` de entrar al repo.
+admin/
+.venv-scripts/
