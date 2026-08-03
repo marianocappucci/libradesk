@@ -231,72 +231,46 @@ def test_el_reporte_acepta_el_filtro_por_categoria(client, catalogo, tickets):
 
 # ── La migración ────────────────────────────────────────────────────────────
 
-# Schema de `incidencias` ANTES de la categoría, tal cual lo genera SQLAlchemy
-# (dumpeado, no escrito a mano). Es el que tienen las dos instancias reales.
-_INCIDENCIAS_VIEJA = """
-CREATE TABLE incidencias (
-	id INTEGER NOT NULL,
-	cliente_id INTEGER NOT NULL,
-	equipo_id INTEGER,
-	tecnico_id INTEGER,
-	sector_id INTEGER,
-	titulo VARCHAR(255) NOT NULL,
-	descripcion TEXT,
-	estado VARCHAR(50) NOT NULL,
-	prioridad VARCHAR(20) NOT NULL,
-	horas_invertidas NUMERIC(5, 2),
-	notas TEXT,
-	resolucion TEXT,
-	estado_facturacion VARCHAR(20),
-	activo BOOLEAN NOT NULL,
-	fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	fecha_cierre DATETIME,
-	PRIMARY KEY (id),
-	FOREIGN KEY(cliente_id) REFERENCES clientes (id) ON DELETE CASCADE,
-	FOREIGN KEY(equipo_id) REFERENCES equipos (id) ON DELETE SET NULL,
-	FOREIGN KEY(tecnico_id) REFERENCES tecnicos (id) ON DELETE SET NULL,
-	FOREIGN KEY(sector_id) REFERENCES sectores (id) ON DELETE SET NULL
-)
-"""
-
-_COLUMNAS_VIEJAS = (
-    "id, cliente_id, equipo_id, tecnico_id, sector_id, titulo, descripcion, "
-    "estado, prioridad, horas_invertidas, notas, resolucion, "
-    "estado_facturacion, activo, fecha_creacion, fecha_cierre"
-)
+# El schema anterior de `incidencias` estaba escrito acá como una constante,
+# para reconstruir la tabla a mano antes de correr la migración. Se fue el
+# 2026-08-03 con el paso a Alembic: `downgrade` deja ese mismo estado sin que
+# haya que transcribirlo, y una transcripción es justo lo que se desactualiza en
+# silencio cuando el modelo cambia. El schema real de producción sí sigue
+# escrito, como ancla de regresión, en tests/test_alembic.py.
 
 
 def test_la_migracion_agrega_la_categoria_a_una_base_vieja(client, catalogo, tickets):
     """El caso real del deploy: `compulibra` tiene sus 23 incidencias desde la
-    migración del Node.js, y `create_all()` **no altera tablas existentes** —
-    sin la migración, `categoria_id` jamás llegaría ahí.
+    migración del Node.js, y el schema propio ya no lo crea `create_all()` sino
+    la cadena de Alembic — sin la revisión 0002, `categoria_id` jamás llegaría
+    ahí.
 
-    Se reconstruye la tabla con el schema anterior (con datos adentro) y se
-    corre la migración sobre esa base. No se puede simular con `DROP COLUMN`:
-    SQLite lo rechaza cuando la columna participa de una FK, que es justamente
-    el caso — mismo motivo que en el test de `equipos_movimientos`.
+    La base se lleva al baseline con un `downgrade` real, que es lo que deja el
+    estado exacto anterior a la revisión —incluida la desaparición de la tabla
+    `categorias_incidencia`— y de paso ejercita el camino inverso. Reconstruir
+    la tabla a mano no alcanzaba: `categoria_id` participa de una FK, así que
+    `DROP COLUMN` no sirve, y retroceder sólo el número de versión dejaba la
+    tabla del catálogo en pie y hacía fallar el `create_table` del upgrade.
+
+    Esto verifica el efecto por la API; el mecanismo de la adopción está
+    cubierto en tests/test_alembic.py.
     """
+    from alembic import command
     from sqlalchemy import text
 
     from app import database
-    from app.migrations import run_migrations
+    from app.schema import BASELINE, _config, ensure_schema
 
     engine = database.get_engine()
 
     with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS ix_incidencias_categoria_id"))
-        conn.execute(text("ALTER TABLE incidencias RENAME TO _inc_con_columna"))
-        conn.execute(text(_INCIDENCIAS_VIEJA))
-        conn.execute(text(
-            f"INSERT INTO incidencias SELECT {_COLUMNAS_VIEJAS} FROM _inc_con_columna"
-        ))
-        conn.execute(text("DROP TABLE _inc_con_columna"))
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(incidencias)")).all()}
         filas_antes = conn.execute(text("SELECT COUNT(*) FROM incidencias")).scalar()
+        command.downgrade(_config(conn), BASELINE)
+        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(incidencias)")).all()}
     assert "categoria_id" not in columnas
     assert filas_antes == 4  # los 4 tickets del fixture
 
-    assert run_migrations(engine) == ["incidencias.categoria_id"]
+    assert ensure_schema(engine) == "upgrade"
 
     with engine.begin() as conn:
         columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(incidencias)")).all()}
@@ -310,7 +284,7 @@ def test_la_migracion_agrega_la_categoria_a_una_base_vieja(client, catalogo, tic
     assert filas_despues == filas_antes
     assert client.get(f"/api/incidencias/{tickets['impresora']}").json()["categoria_id"] is None
 
-    assert run_migrations(engine) == []  # idempotente
+    assert ensure_schema(engine) == "upgrade"  # idempotente
 
     # Y la base migrada acepta escribir la columna nueva, que es el punto.
     inc = client.get(f"/api/incidencias/{tickets['impresora']}").json()

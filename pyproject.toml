@@ -7,6 +7,10 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy>=2.0",
+    # Runtime, no dev: las migraciones corren en el arranque de la app
+    # (app/schema.py), no en un paso aparte del deploy. Un contenedor sin
+    # alembic no levanta.
+    "alembic>=1.13",
     "itsdangerous>=2.2.0",
     "openpyxl>=3.1.0",
     "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.7.0",

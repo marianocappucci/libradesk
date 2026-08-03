@@ -137,16 +137,19 @@ def test_cliente_guarda_cuit_y_domicilio(client):
 
 def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
     """Mismo caso real que la columna de `equipos_movimientos`: los 9 clientes
-    de `compulibra` existen desde la migracion del Node.js y `create_all()` no
-    altera tablas que ya existen.
+    de `compulibra` existen desde la migracion del Node.js, y el schema propio
+    ya no lo crea `create_all()` sino la cadena de Alembic.
 
-    Aca si se puede usar `DROP COLUMN` (a diferencia del otro test): son
-    columnas sueltas, sin indice ni FK, que es justo lo que SQLite rechaza.
+    La base se lleva al baseline con un `downgrade` real, no con `DROP COLUMN` a
+    mano: asi el estado de partida es exactamente el que produce la cadena, y de
+    paso se ejercita el camino inverso de la revision. Ver tests/test_alembic.py
+    para la cobertura del mecanismo; esto verifica el efecto por la API.
     """
+    from alembic import command
     from sqlalchemy import text
 
     from app import database
-    from app.migrations import run_migrations
+    from app.schema import BASELINE, _config, ensure_schema
 
     _login(client)
     cliente_id = client.post("/api/clientes", json={
@@ -155,13 +158,14 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
     engine = database.get_engine()
 
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE clientes DROP COLUMN cuit"))
-        conn.execute(text("ALTER TABLE clientes DROP COLUMN domicilio"))
+        command.downgrade(_config(conn), BASELINE)
         columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
         filas_antes = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
     assert "cuit" not in columnas and "domicilio" not in columnas
+    # El downgrade recrea `clientes` en batch: la fila tiene que sobrevivir.
+    assert filas_antes == 1
 
-    assert run_migrations(engine) == ["clientes.cuit", "clientes.domicilio"]
+    assert ensure_schema(engine) == "upgrade"
 
     with engine.begin() as conn:
         columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
@@ -172,7 +176,7 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
     ficha = client.get(f"/api/clientes/{cliente_id}").json()
     assert ficha["ciudad"] == "Suipacha" and ficha["cuit"] is None
 
-    assert run_migrations(engine) == []  # idempotente
+    assert ensure_schema(engine) == "upgrade"  # idempotente
 
     # Y la base migrada acepta escribir las columnas nuevas, que es el punto.
     r = client.put(f"/api/clientes/{cliente_id}", json={
@@ -616,84 +620,13 @@ def test_borrar_la_incidencia_borra_su_actividad_y_su_auditoria(client):
     assert contar("incidencias_estados_log") == 0
 
 
-# El `CREATE TABLE` de `equipos_movimientos` ANTES de esta ronda: es el
-# schema que hoy tienen las dos instancias desplegadas. Se escribe
-# completo a proposito — el test de migracion tiene que correr contra el
-# estado real de produccion, no contra una aproximacion.
-_DDL_MOVIMIENTOS_VIEJO = """
-CREATE TABLE equipos_movimientos (
-    id INTEGER NOT NULL,
-    equipo_id INTEGER NOT NULL,
-    tipo VARCHAR(50) NOT NULL,
-    descripcion TEXT,
-    sector_origen VARCHAR(255),
-    sector_destino VARCHAR(255),
-    ubicacion_origen VARCHAR(255),
-    ubicacion_destino VARCHAR(255),
-    motivo VARCHAR(500),
-    usuario VARCHAR(255) NOT NULL,
-    fecha DATETIME DEFAULT (CURRENT_TIMESTAMP),
-    PRIMARY KEY (id),
-    FOREIGN KEY(equipo_id) REFERENCES equipos (id) ON DELETE CASCADE
-)
-"""
-
-_COLUMNAS_VIEJAS = (
-    "id, equipo_id, tipo, descripcion, sector_origen, sector_destino, "
-    "ubicacion_origen, ubicacion_destino, motivo, usuario, fecha"
-)
+# El test que cubria `app/migrations.py` (el `ALTER TABLE ADD COLUMN` a mano)
+# se fue con ese modulo el 2026-08-03, cuando el schema propio paso a Alembic.
+# Su sucesor vive en tests/test_alembic.py: alli se reconstruye el schema real
+# de produccion —el mismo `CREATE TABLE` que estaba escrito aca— y se verifica
+# que `ensure_schema()` lo adopte sin tocar el schema ni perder filas.
 
 
-def test_la_migracion_agrega_la_columna_a_una_base_vieja(client):
-    """El caso real del deploy: `compulibra` ya existe con sus 75
-    movimientos, y `create_all()` **no altera tablas existentes** — sin la
-    migracion, la columna nueva jamas llegaria ahi.
-
-    Se reconstruye la tabla con el schema anterior (con datos adentro) y
-    se corre la migracion sobre esa base. No se puede simular con `DROP
-    COLUMN`: SQLite lo rechaza cuando la columna esta en una FK.
-    """
-    from sqlalchemy import text
-
-    from app import database
-    from app.migrations import run_migrations
-
-    _login(client)
-    esc = _escenario_impresora(client)  # deja movimientos de alta reales
-    engine = database.get_engine()
-
-    with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS ix_equipos_movimientos_incidencia_id"))
-        conn.execute(text("ALTER TABLE equipos_movimientos RENAME TO _mov_con_columna"))
-        conn.execute(text(_DDL_MOVIMIENTOS_VIEJO))
-        conn.execute(text(
-            f"INSERT INTO equipos_movimientos SELECT {_COLUMNAS_VIEJAS} FROM _mov_con_columna"
-        ))
-        conn.execute(text("DROP TABLE _mov_con_columna"))
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
-        filas_antes = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
-    assert "incidencia_id" not in columnas
-    assert filas_antes == 2  # las altas de la HP y la Pantum
-
-    assert run_migrations(engine) == ["equipos_movimientos.incidencia_id"]
-
-    with engine.begin() as conn:
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
-        indices = {f[1] for f in conn.execute(text("PRAGMA index_list(equipos_movimientos)")).all()}
-        filas_despues = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
-    assert "incidencia_id" in columnas
-    assert "ix_equipos_movimientos_incidencia_id" in indices
-    # El historial migrado no se pierde ni se toca: queda en NULL.
-    assert filas_despues == filas_antes
-    assert client.get(f"/api/equipos/{esc['hp']}/movimientos").json()[0]["incidencia_id"] is None
-
-    # Idempotente: correrla de nuevo no hace nada.
-    assert run_migrations(engine) == []
-
-    # Y la base migrada acepta escribir la columna nueva, que es el punto.
-    assert client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
-        "equipo_retirado_id": esc["hp"], "destino": "service",
-    }).status_code == 201
 
 
 def _armar_datos_para_reportes(client) -> dict:
