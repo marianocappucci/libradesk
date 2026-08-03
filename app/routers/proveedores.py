@@ -119,10 +119,10 @@ def delete_proveedor(
     except KeyError:
         raise HTTPException(404, "proveedor not found")
     except ValueError as e:
-        colgando = e.args[0]
+        n = e.args[0]["reparaciones"]
         raise HTTPException(
             409,
-            f"Tiene {colgando['reparaciones']} reparaciones registradas. "
+            f"Tiene {n} {'reparación registrada' if n == 1 else 'reparaciones registradas'}. "
             f"Desactivalo en vez de borrarlo.",
         )
     return Response(status_code=204)

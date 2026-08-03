@@ -10,6 +10,7 @@ import { ClienteDetalle } from './pages/ClienteDetalle'
 import { Equipos } from './pages/Equipos'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
+import { Reparaciones } from './pages/Reparaciones'
 import { Tecnicos } from './pages/Tecnicos'
 import { Remitos } from './pages/Remitos'
 import { Presupuestos } from './pages/Presupuestos'
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
+      <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
       <Route path="/remitos" element={<ProtectedRoute><Remitos /></ProtectedRoute>} />

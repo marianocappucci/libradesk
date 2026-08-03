@@ -218,7 +218,7 @@ def test_un_proveedor_con_reparaciones_no_se_borra_y_el_409_dice_cuantas(client,
     _enviar_a_service(client, escenario)
     r = client.delete(f"/api/proveedores/{escenario['proveedor']['id']}")
     assert r.status_code == 409
-    assert "1 reparaciones" in r.json()["detail"]
+    assert "1 reparación registrada" in r.json()["detail"]
 
     # Y la reparacion sigue apuntando a un proveedor que existe.
     assert client.get("/api/reparaciones").json()[0]["proveedor_nombre"] == "Compu Service SRL"
