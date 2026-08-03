@@ -18,7 +18,11 @@ dependencies = [
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.6.0",
+    # v1.7.0 trae el arreglo del PDF: hasta v1.6.0 un guion largo en el nombre
+    # de empresa, en un item o en las observaciones tumbaba la generacion con un
+    # 500 (libracore PR #6). La superficie de libracore que toca a este producto
+    # no cambio entre v1.6.0 y v1.7.0: el unico delta es ese fix.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.7.0",
 ]
 
 [project.optional-dependencies]

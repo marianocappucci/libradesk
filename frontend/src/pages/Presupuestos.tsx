@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Download, FileCheck, Pencil, Trash2 } from 'lucide-react'
 import {
@@ -34,6 +35,8 @@ const VARIANTE: Record<EstadoPresupuesto, 'default' | 'secondary' | 'outline' | 
 const TODOS = '__todos__'
 
 export function Presupuestos() {
+  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [resumen, setResumen] = useState<Record<string, number>>({})
@@ -55,6 +58,20 @@ export function Presupuestos() {
     cargar(busqueda, filtroEstado)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEstado])
+
+  // `?editar=<id>` abre el formulario sobre ese presupuesto. Es como el
+  // "Editar" de la pantalla de detalle vuelve acá: el formulario vive en esta
+  // pantalla, no en una ruta propia (a diferencia de Contalibra). El
+  // parámetro se consume — se saca de la URL — para que recargar la página o
+  // volver con el botón "atrás" no reabra el formulario solo.
+  useEffect(() => {
+    const aEditar = params.get('editar')
+    if (!aEditar || !presupuestos.length) return
+    const p = presupuestos.find((x) => x.id === Number(aEditar))
+    setParams({}, { replace: true })
+    if (p) startEdit(p)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, presupuestos])
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -227,9 +244,13 @@ export function Presupuestos() {
         const convertible = !yaConvertido && p.status !== 'vencido' && p.status !== 'rechazado'
         return (
           <div className="flex justify-end gap-1">
-            <Button size="icon" variant="outline" title="Descargar PDF" aria-label="Descargar PDF"
-                    onClick={() => window.open(`/api/presupuestos/${p.id}/pdf`, '_blank')}>
-              <Download />
+            {/* Ancla y no window.open(): es una descarga con cookie de sesion,
+                y el ancla no depende de que el navegador permita popups. */}
+            <Button asChild size="icon" variant="outline"
+                    title="Descargar PDF" aria-label="Descargar PDF">
+              <a href={`/api/presupuestos/${p.id}/pdf`} target="_blank" rel="noreferrer">
+                <Download />
+              </a>
             </Button>
             <Button size="icon" variant="outline"
                     title={yaConvertido
@@ -337,7 +358,9 @@ export function Presupuestos() {
               {loading ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
               ) : (
-                <DataTable columns={columns} data={presupuestos} emptyMessage="Sin presupuestos todavía." />
+                <DataTable columns={columns} data={presupuestos}
+                           emptyMessage="Sin presupuestos todavía."
+                           onRowClick={(p) => navigate(`/presupuestos/${p.id}`)} />
               )}
             </CardContent>
           </Card>

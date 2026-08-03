@@ -971,6 +971,42 @@ def test_presupuesto_pdf_es_un_pdf_real(client):
     assert len(r.content) > 1000
 
 
+def test_el_pdf_no_se_cae_con_un_guion_largo(client):
+    """Regresión del 500 del 2026-08-03, y **guarda del pin de libracore**.
+
+    En `libradesk-dev` el nombre de empresa era ``"Compulibra — Soporte IT"`` y
+    **todo** PDF de presupuesto devolvía 500: las fuentes core de fpdf2 se
+    codificaban en latin-1, donde el guión largo no entra. El arreglo está en
+    libracore >= v1.7.0.
+
+    Los dos tests de PDF de acá arriba no lo agarraban porque usan texto ASCII.
+    Éste vive en este repo y no sólo en libracore a propósito: lo que puede
+    volver a romperse desde acá es **el pin**, y un pin viejo lo pone en rojo.
+
+    Se cubren los tres orígenes del texto —empresa, ítem y observaciones—
+    porque los tres llegan al PDF por caminos distintos.
+    """
+    _login(client)
+    client.put("/api/config-empresa", json={"empresa_nombre": "Compulibra — Soporte IT"})
+    cliente_id = _cliente_para_comprobantes(client)
+    pid = client.post("/api/presupuestos", json={
+        "client_id": cliente_id,
+        "observations": "Reparación “urgente” — entrega en 48 h…",
+        "items": [{"description": "Mano de obra — diagnóstico", "qty": 1, "unit_price": 1000}],
+    }).json()["id"]
+
+    r = client.get(f"/api/presupuestos/{pid}/pdf")
+    assert r.status_code == 200, r.text
+    assert r.content.startswith(b"%PDF")
+
+    # Y el remito, que arma el encabezado por el mismo camino.
+    rid = client.post("/api/remitos", json={
+        "client_id": cliente_id,
+        "items": [{"description": "Notebook — reemplazo", "qty": 1, "unit_price": 1000}],
+    }).json()["id"]
+    assert client.get(f"/api/remitos/{rid}/pdf").status_code == 200
+
+
 def test_config_empresa_ida_y_vuelta(client):
     """El encabezado de los PDF. Sin esto salen con la empresa en blanco."""
     _login(client)
