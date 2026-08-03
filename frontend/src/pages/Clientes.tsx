@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -43,6 +44,7 @@ const EMPTY_VALUES: ClienteFormValues = {
 export function Clientes() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const navigate = useNavigate()
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -363,6 +365,11 @@ export function Clientes() {
               columns={columns}
               data={clientes}
               emptyMessage="Sin clientes todavía."
+              // Click en la fila → ficha del cliente, misma convención que
+              // Incidencias. A diferencia de esa pantalla, acá las acciones se
+              // quedan en la tabla: `onRowClick` ignora los clicks sobre
+              // botones y links de la celda de acciones (ver libra-ui).
+              onRowClick={(c) => navigate(`/clientes/${c.id}`)}
               search={{
                 campos: (c) => [c.nombre, c.empresa, c.email, c.telefono, c.ciudad],
                 placeholder: 'Buscar por nombre, empresa, email, teléfono o ciudad',

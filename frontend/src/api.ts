@@ -259,3 +259,44 @@ export type DashboardSummary = {
   total_equipos: number
   horas_totales_invertidas: number
 }
+
+// --- ficha del cliente (`/clientes/:id`) -----------------------------------
+//
+// El backend arma esto de una sola vez (GET /api/dashboard/cliente/{id}): son
+// agregados y dos listas ya acotadas, no las tablas enteras a filtrar acá.
+
+export type IncidenciaAbierta = {
+  id: number
+  titulo: string
+  estado: EstadoIncidencia
+  prioridad: PrioridadIncidencia
+  fecha_creacion: string | null
+  equipo_id: number | null
+  equipo: string | null
+  tecnico: string | null
+}
+
+export type GarantiaEquipo = {
+  id: number
+  descripcion: string
+  serial: string | null
+  sector: string | null
+  ubicacion_oficina: string | null
+  estado: string
+  garantia_vence: string
+  // Negativo si ya venció. El backend incluye las vencidas a propósito.
+  dias_restantes: number
+}
+
+export type ClienteResumen = {
+  cliente: Cliente
+  equipos_por_estado: Record<string, number>
+  total_equipos: number
+  incidencias_por_estado: Record<string, number>
+  total_incidencias: number
+  incidencias_abiertas: IncidenciaAbierta[]
+  garantias: GarantiaEquipo[]
+  dias_garantia: number
+  total_sectores: number
+  horas_invertidas: number
+}

@@ -83,6 +83,31 @@ def test_cliente_equipo_incidencia_flow(client):
     assert dash["total_clientes_activos"] == 1
 
 
+def test_dashboard_prioridad_abiertas(client):
+    """`incidencias_por_prioridad_abiertas` no tenia ningun test: se podia
+    romper el filtro de estados y toda la suite seguia en verde. Aparecio al
+    verificar la ficha del cliente (2026-08-02), que comparte con el resumen
+    global la constante `ESTADOS_ABIERTOS` — si se rompe ahi, se rompen los
+    dos y este es el unico que lo ve del lado global."""
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={"nombre": "C", "email": "c@t.com"}).json()["id"]
+
+    for titulo, prioridad in (("Urgente", "alta"), ("Otra", "alta"), ("Menor", "baja")):
+        client.post("/api/incidencias", json={
+            "cliente_id": cliente_id, "titulo": titulo, "prioridad": prioridad,
+        })
+    # Una cerrada, que NO tiene que contarse aunque sea de prioridad alta.
+    cerrada = client.post("/api/incidencias", json={
+        "cliente_id": cliente_id, "titulo": "Cerrada", "prioridad": "alta",
+    }).json()["id"]
+    client.put(f"/api/incidencias/{cerrada}", json={
+        "cliente_id": cliente_id, "titulo": "Cerrada", "prioridad": "alta", "estado": "cerrado",
+    })
+
+    dash = client.get("/api/dashboard").json()
+    assert dash["incidencias_por_prioridad_abiertas"] == {"alta": 2, "baja": 1}
+
+
 def test_incidencias_requires_auth(client):
     r = client.get("/api/incidencias")
     assert r.status_code == 401

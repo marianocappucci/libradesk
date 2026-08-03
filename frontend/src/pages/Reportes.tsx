@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SelectBuscable } from '@/components/select-buscable'
 import { Label } from '@/components/ui/label'
-import { Download, FileSpreadsheet } from 'lucide-react'
+import {
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { ChevronRight, Download, FileSpreadsheet, Monitor, Ticket, Wallet } from 'lucide-react'
 
 const TODOS = '__todos__'
 
@@ -44,14 +48,40 @@ type Campo =
   | { tipo: 'cliente'; name: string; label: string }
   | { tipo: 'sector'; name: string; label: string }
 
+type Grupo = 'equipos' | 'incidencias' | 'administracion'
+
 type Reporte = {
   slug: string
   titulo: string
   descripcion: string
+  grupo: Grupo
   campos: Campo[]
   // Valores iniciales; los que no estén acá arrancan vacíos (= sin filtrar).
   inicial?: Record<string, string>
 }
+
+// El índice se arma a partir de esto, no de una lista aparte: agregar un
+// reporte es agregarle su `grupo` y ya aparece en la sección que le toca.
+const GRUPOS: { id: Grupo; titulo: string; descripcion: string; icono: React.ReactNode }[] = [
+  {
+    id: 'equipos',
+    titulo: 'Equipos',
+    descripcion: 'El parque instalado: qué hay, dónde está y qué se le vence.',
+    icono: <Monitor className="size-4" />,
+  },
+  {
+    id: 'incidencias',
+    titulo: 'Incidencias',
+    descripcion: 'Los tickets del período y cómo se reparte el trabajo.',
+    icono: <Ticket className="size-4" />,
+  },
+  {
+    id: 'administracion',
+    titulo: 'Administración',
+    descripcion: 'Lo que hay para facturar.',
+    icono: <Wallet className="size-4" />,
+  },
+]
 
 const PERIODO: Campo[] = [
   { tipo: 'fecha', name: 'desde', label: 'Desde' },
@@ -63,6 +93,7 @@ const REPORTES: Reporte[] = [
     slug: 'equipamiento',
     titulo: 'Equipamiento',
     descripcion: 'Parque instalado por cliente, con cantidad de incidencias y garantías vencidas resaltadas.',
+    grupo: 'equipos',
     campos: [
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
       { tipo: 'opciones', name: 'estado', label: 'Estado', opciones: ESTADO_EQUIPO_LABELS },
@@ -73,6 +104,7 @@ const REPORTES: Reporte[] = [
     slug: 'incidencias-periodo',
     titulo: 'Incidencias por período',
     descripcion: 'Detalle de incidencias del período con totales de actividades y promedio de horas de resolución.',
+    grupo: 'incidencias',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -86,6 +118,7 @@ const REPORTES: Reporte[] = [
     slug: 'facturacion',
     titulo: 'Facturación',
     descripcion: 'Incidencias cerradas de clientes por servicio, agrupadas por cliente. Los clientes con abono mensual no aparecen.',
+    grupo: 'administracion',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -96,6 +129,7 @@ const REPORTES: Reporte[] = [
     slug: 'garantias',
     titulo: 'Garantías por vencer',
     descripcion: 'Equipos cuya garantía vence dentro del plazo indicado. Marca las ya vencidas y las que vencen en 14 días o menos.',
+    grupo: 'equipos',
     campos: [
       { tipo: 'numero', name: 'dias', label: 'Próximos (días)' },
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -106,12 +140,14 @@ const REPORTES: Reporte[] = [
     slug: 'tecnico',
     titulo: 'Por técnico',
     descripcion: 'Carga de trabajo por técnico: totales por estado, porcentaje de resolución y promedio de horas.',
+    grupo: 'incidencias',
     campos: PERIODO,
   },
   {
     slug: 'movimientos',
     titulo: 'Movimientos de equipos',
     descripcion: 'Historial de altas, bajas y traslados, con sector y ubicación de origen y destino.',
+    grupo: 'equipos',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -139,7 +175,10 @@ function valoresIniciales(r: Reporte): Record<string, string> {
   return { ...base, ...r.inicial }
 }
 
-function TarjetaReporte({ reporte, clientes, sectores }: {
+/** Los filtros de UN reporte, ya dentro del diálogo. Se monta con `key` =
+ *  slug, así cada reporte que se abre arranca con sus valores iniciales y no
+ *  con los del anterior. */
+function FormularioReporte({ reporte, clientes, sectores }: {
   reporte: Reporte
   clientes: Cliente[]
   sectores: Sector[]
@@ -169,15 +208,8 @@ function TarjetaReporte({ reporte, clientes, sectores }: {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <FileSpreadsheet className="size-4 text-primary" />
-          {reporte.titulo}
-        </CardTitle>
-        <CardDescription>{reporte.descripcion}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-end gap-3">
+    <>
+      <div className="flex flex-wrap items-end gap-3">
         {reporte.campos.map((campo) => {
           const id = `${reporte.slug}-${campo.name}`
           if (campo.tipo === 'fecha' || campo.tipo === 'numero' || campo.tipo === 'texto') {
@@ -219,9 +251,12 @@ function TarjetaReporte({ reporte, clientes, sectores }: {
             </div>
           )
         })}
+      </div>
+      <DialogFooter>
+        <DialogClose asChild><Button type="button" variant="outline">Cerrar</Button></DialogClose>
         <Button onClick={descargar}><Download />Descargar Excel</Button>
-      </CardContent>
-    </Card>
+      </DialogFooter>
+    </>
   )
 }
 
@@ -230,6 +265,11 @@ export function Reportes() {
   const [sectores, setSectores] = useState<Sector[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // La pantalla es un índice: los seis reportes se listan agrupados y los
+  // filtros de cada uno viven en este único diálogo. Antes las seis tarjetas
+  // estaban una debajo de otra con TODOS sus formularios desplegados, así que
+  // encontrar un reporte era scrollear la página entera.
+  const [abierto, setAbierto] = useState<Reporte | null>(null)
 
   useEffect(() => {
     cargar()
@@ -261,9 +301,40 @@ export function Reportes() {
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <>
-          {REPORTES.map((r) => (
-            <TarjetaReporte key={r.slug} reporte={r} clientes={clientes} sectores={sectores} />
-          ))}
+          {GRUPOS.map((grupo) => {
+            const delGrupo = REPORTES.filter((r) => r.grupo === grupo.id)
+            if (delGrupo.length === 0) return null
+            return (
+              <Card key={grupo.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    {grupo.icono}{grupo.titulo}
+                  </CardTitle>
+                  <CardDescription>{grupo.descripcion}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y rounded-md border">
+                    {delGrupo.map((r) => (
+                      <li key={r.slug}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50"
+                          onClick={() => setAbierto(r)}
+                        >
+                          <FileSpreadsheet className="size-4 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{r.titulo}</p>
+                            <p className="text-xs text-muted-foreground">{r.descripcion}</p>
+                          </div>
+                          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )
+          })}
 
           <Card>
             <CardHeader>
@@ -286,6 +357,26 @@ export function Reportes() {
           </Card>
         </>
       )}
+
+      <Dialog open={abierto !== null} onOpenChange={(open) => !open && setAbierto(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="size-4 text-primary" />
+              {abierto?.titulo}
+            </DialogTitle>
+            <DialogDescription>{abierto?.descripcion}</DialogDescription>
+          </DialogHeader>
+          {abierto && (
+            <FormularioReporte
+              key={abierto.slug}
+              reporte={abierto}
+              clientes={clientes}
+              sectores={sectores}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
