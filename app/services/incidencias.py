@@ -194,7 +194,9 @@ class IncidenciaRepository:
 
         Los movimientos NO se borran: el equipo salio de Admision de
         verdad, y ese hecho fisico sobrevive al ticket. Solo pierden el
-        link."""
+        link. **Lo mismo vale para las reparaciones**: el equipo estuvo en
+        service, con su remito y su RMA, aunque el ticket que lo origino ya
+        no exista."""
         with self.session_factory() as session:
             i = session.get(Incidencia, incidencia_id)
             if i is None:
@@ -204,10 +206,16 @@ class IncidenciaRepository:
             # modo se mantiene asi (sin ciclo) aunque la dependencia exista
             # en esta direccion.
             from .equipos import EquipoMovimiento
+            from .reparaciones import Reparacion
 
             session.execute(
                 update(EquipoMovimiento)
                 .where(EquipoMovimiento.incidencia_id == incidencia_id)
+                .values(incidencia_id=None)
+            )
+            session.execute(
+                update(Reparacion)
+                .where(Reparacion.incidencia_id == incidencia_id)
                 .values(incidencia_id=None)
             )
             session.execute(

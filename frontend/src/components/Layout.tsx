@@ -2,7 +2,7 @@
 // branding + navItems propios de LibraDesk — Agenda/Tareas eliminadas).
 import {
   AlertCircle, FileSpreadsheet, FileText, LayoutDashboard, Monitor, Receipt,
-  Settings, UserCog, Users,
+  Settings, UserCog, Users, Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
@@ -14,6 +14,9 @@ export const Layout = createLayout({
     { to: '/clientes', label: 'Clientes', icon: Users },
     { to: '/equipos', label: 'Equipos', icon: Monitor },
     { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
+    // Después de Equipos e Incidencias porque es la intersección de las dos:
+    // un activo que sale a reparar por un ticket.
+    { to: '/reparaciones', label: 'Reparaciones', icon: Wrench },
     // Presupuesto antes que remito: es el orden real del trabajo (se
     // presupuesta, se acepta, se remite).
     { to: '/presupuestos', label: 'Presupuestos', icon: FileText },

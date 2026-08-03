@@ -86,6 +86,62 @@ export type ResultadoReemplazo = {
   sustituto: Equipo | null
   movimientos: EquipoMovimiento[]
   actividades: Actividad[]
+  // La reparación que abrió el envío a service, y la que cerró la vuelta.
+  // Las dos null cuando el reemplazo no tuvo nada que ver con service.
+  reparacion: Reparacion | null
+  reparacion_cerrada: Reparacion | null
+}
+
+// --- service / RMA ---------------------------------------------------------
+
+export type Proveedor = {
+  id: number
+  nombre: string
+  contacto: string | null
+  telefono: string | null
+  email: string | null
+  observaciones: string | null
+  activo: boolean
+}
+
+export type Reparacion = {
+  id: number
+  equipo_id: number
+  incidencia_id: number | null
+  proveedor_id: number
+  // Resueltos por el backend, para que la lista no pida dos endpoints más
+  // sólo para escribir un renglón.
+  proveedor_nombre: string | null
+  equipo_descripcion: string | null
+  equipo_serial: string | null
+  cliente_id: number | null
+  fecha_envio: string | null
+  // Null = el equipo sigue en service. El estado se deriva de esta fecha y no
+  // hay columna `estado` que pueda contradecirla.
+  fecha_retorno: string | null
+  abierta: boolean
+  // Con la reparación abierta se cuenta contra hoy: en la lista de abiertas
+  // lo que interesa mirar es cuál se está demorando.
+  dias_afuera: number | null
+  remito_salida: string | null
+  rma: string | null
+  en_garantia: boolean
+  costo: number | null
+  diagnostico: string | null
+  observaciones: string | null
+  usuario: string
+  // El sello con milisegundos, para ordenar la reparación dentro del timeline
+  // del ticket. `fecha_envio` es un date que carga el usuario y puede ser de
+  // hace una semana.
+  created_at: string | null
+}
+
+export function opcionesProveedor(proveedores: Proveedor[]): OpcionSelect[] {
+  return proveedores.map((p) => ({
+    value: String(p.id),
+    label: p.nombre,
+    hint: [p.contacto, p.telefono].filter(Boolean).join(' · ') || undefined,
+  }))
 }
 
 export function describirEquipo(e: Equipo | undefined): string {
