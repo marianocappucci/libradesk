@@ -258,29 +258,22 @@ export function Presupuestos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [busqueda, filtroEstado])
 
+  const editando = editingId !== null
+
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Presupuestos</h2>
-        {editingId === null && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
-      </div>
-
-      {/* El resumen dispara el vencimiento automatico del lado del backend,
-          asi que estos numeros ya cuentan los que acaban de vencer. */}
-      <div className="flex flex-wrap gap-2">
-        {ESTADOS.map((e) => (
-          <Badge key={e} variant={filtroEstado === e ? VARIANTE[e] : 'outline'}
-                 className="cursor-pointer"
-                 onClick={() => setFiltroEstado(filtroEstado === e ? TODOS : e)}>
-            {ESTADO_PRESUPUESTO_LABELS[e]}: {resumen[e] ?? 0}
-          </Badge>
-        ))}
+        {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {aviso && <p className="text-sm text-muted-foreground">{aviso}</p>}
 
-      {editingId !== null && (
+      {/* El formulario REEMPLAZA al listado, no se le suma arriba: cargar un
+          comprobante con el resumen y la tabla de los anteriores debajo mezcla
+          dos tareas en la misma pantalla. Mismo criterio que Contalibra, que
+          para esto navega a una ruta propia. */}
+      {editando ? (
         <ComprobanteForm
           tipo="presupuesto"
           titulo={editingId === 'new' ? 'Nuevo presupuesto' : 'Editar presupuesto'}
@@ -292,48 +285,64 @@ export function Presupuestos() {
           saving={saving}
           numeroPreview={numeroPreview}
         />
+      ) : (
+        <>
+          {/* El resumen dispara el vencimiento automatico del lado del backend,
+              asi que estos numeros ya cuentan los que acaban de vencer. */}
+          <div className="flex flex-wrap gap-2">
+            {ESTADOS.map((e) => (
+              <Badge key={e} variant={filtroEstado === e ? VARIANTE[e] : 'outline'}
+                     className="cursor-pointer"
+                     onClick={() => setFiltroEstado(filtroEstado === e ? TODOS : e)}>
+                {ESTADO_PRESUPUESTO_LABELS[e]}: {resumen[e] ?? 0}
+              </Badge>
+            ))}
+          </div>
+
+          {aviso && <p className="text-sm text-muted-foreground">{aviso}</p>}
+
+          <Card>
+            <CardContent className="grid gap-3">
+              <form
+                className="flex flex-wrap gap-2"
+                onSubmit={(e) => { e.preventDefault(); cargar(busqueda, filtroEstado) }}
+              >
+                <Input
+                  value={busqueda}
+                  placeholder="Buscar por número, cliente u observaciones"
+                  aria-label="Buscar presupuestos"
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="max-w-md"
+                />
+                <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+                  <SelectTrigger className="w-40" aria-label="Filtrar por estado">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODOS}>Todos los estados</SelectItem>
+                    {ESTADOS.map((e) => (
+                      <SelectItem key={e} value={e}>{ESTADO_PRESUPUESTO_LABELS[e]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="submit" variant="outline">Buscar</Button>
+                {(busqueda || filtroEstado !== TODOS) && (
+                  <Button type="button" variant="ghost"
+                          onClick={() => { setBusqueda(''); setFiltroEstado(TODOS); cargar('', TODOS) }}>
+                    Limpiar
+                  </Button>
+                )}
+              </form>
+
+              {loading ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+              ) : (
+                <DataTable columns={columns} data={presupuestos} emptyMessage="Sin presupuestos todavía." />
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
-
-      <Card>
-        <CardContent className="grid gap-3">
-          <form
-            className="flex flex-wrap gap-2"
-            onSubmit={(e) => { e.preventDefault(); cargar(busqueda, filtroEstado) }}
-          >
-            <Input
-              value={busqueda}
-              placeholder="Buscar por número, cliente u observaciones"
-              aria-label="Buscar presupuestos"
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="max-w-md"
-            />
-            <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-              <SelectTrigger className="w-40" aria-label="Filtrar por estado">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODOS}>Todos los estados</SelectItem>
-                {ESTADOS.map((e) => (
-                  <SelectItem key={e} value={e}>{ESTADO_PRESUPUESTO_LABELS[e]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button type="submit" variant="outline">Buscar</Button>
-            {(busqueda || filtroEstado !== TODOS) && (
-              <Button type="button" variant="ghost"
-                      onClick={() => { setBusqueda(''); setFiltroEstado(TODOS); cargar('', TODOS) }}>
-                Limpiar
-              </Button>
-            )}
-          </form>
-
-          {loading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-          ) : (
-            <DataTable columns={columns} data={presupuestos} emptyMessage="Sin presupuestos todavía." />
-          )}
-        </CardContent>
-      </Card>
 
       <ConfirmDialog
         open={aConvertir !== null}
