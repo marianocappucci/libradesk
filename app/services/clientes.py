@@ -21,6 +21,13 @@ class Cliente(Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
     telefono: Mapped[str | None] = mapped_column(String(20))
     ciudad: Mapped[str | None] = mapped_column(String(100))
+    # CUIT y domicilio (2026-08-02). Hasta ahora el cliente solo tenia
+    # `ciudad`, asi que los dos datos fiscales se tipeaban a mano **en cada
+    # comprobante** aunque fueran siempre los mismos. Nullable porque las 9
+    # filas reales de `compulibra` existen desde la migracion del Node.js
+    # viejo y no los tienen — ver app/migrations.py.
+    cuit: Mapped[str | None] = mapped_column(String(20))
+    domicilio: Mapped[str | None] = mapped_column(String(255))
     observaciones: Mapped[str | None] = mapped_column(Text)
     tipo_facturacion: Mapped[str] = mapped_column(String(20), nullable=False, default="por_servicio")
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -35,6 +42,8 @@ def _to_dict(c: Cliente) -> dict:
         "email": c.email,
         "telefono": c.telefono,
         "ciudad": c.ciudad,
+        "cuit": c.cuit,
+        "domicilio": c.domicilio,
         "observaciones": c.observaciones,
         "tipo_facturacion": c.tipo_facturacion,
         "activo": c.activo,

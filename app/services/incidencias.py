@@ -29,6 +29,14 @@ class Incidencia(Base):
     equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id", ondelete="SET NULL"), index=True)
     tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("tecnicos.id", ondelete="SET NULL"))
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectores.id", ondelete="SET NULL"))
+    # Que clase de problema es ("Hardware -> Impresoras"). Apunta siempre a la
+    # HOJA del catalogo; el padre se deriva. Nullable y sin `ondelete`: las 23
+    # incidencias reales de `compulibra` son previas al catalogo, y el pragma
+    # de FKs esta apagado, asi que el desenlace lo hace explicitamente
+    # `CategoriaRepository.delete()`. Ver services/categorias.py y migrations.py.
+    categoria_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categorias_incidencia.id"), index=True,
+    )
     titulo: Mapped[str] = mapped_column(String(255), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
     estado: Mapped[str] = mapped_column(String(50), nullable=False, default="abierto", index=True)
@@ -70,6 +78,7 @@ def _to_dict(i: Incidencia) -> dict:
         "equipo_id": i.equipo_id,
         "tecnico_id": i.tecnico_id,
         "sector_id": i.sector_id,
+        "categoria_id": i.categoria_id,
         "titulo": i.titulo,
         "descripcion": i.descripcion,
         "estado": i.estado,
@@ -123,7 +132,7 @@ class IncidenciaRepository:
             return _to_dict(i)
 
     def list(self, cliente_id: int | None = None, estado: str | None = None,
-             equipo_id: int | None = None) -> list[dict]:
+             equipo_id: int | None = None, categoria_id: int | None = None) -> list[dict]:
         """`equipo_id` es lo que hace contestable "¿cuántas veces falló
         este equipo?": el dato estaba desde la migracion, pero no habia
         forma de pedirlo — el listado solo filtraba por cliente y estado,
@@ -136,6 +145,8 @@ class IncidenciaRepository:
                 stmt = stmt.where(Incidencia.estado == estado)
             if equipo_id is not None:
                 stmt = stmt.where(Incidencia.equipo_id == equipo_id)
+            if categoria_id is not None:
+                stmt = stmt.where(Incidencia.categoria_id == categoria_id)
             return [_to_dict(i) for i in session.execute(stmt).scalars()]
 
     def get(self, incidencia_id: int) -> dict | None:

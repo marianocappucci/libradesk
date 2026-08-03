@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -29,6 +30,8 @@ const clienteSchema = z.object({
   email: z.string().trim().email('Email inválido').optional().or(z.literal('')),
   telefono: z.string().trim().optional(),
   ciudad: z.string().trim().optional(),
+  cuit: z.string().trim().optional(),
+  domicilio: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
   tipo_facturacion: z.enum(['mensual', 'por_servicio']),
 })
@@ -36,13 +39,14 @@ const clienteSchema = z.object({
 type ClienteFormValues = z.infer<typeof clienteSchema>
 
 const EMPTY_VALUES: ClienteFormValues = {
-  nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '',
-  tipo_facturacion: 'por_servicio',
+  nombre: '', empresa: '', email: '', telefono: '', ciudad: '', cuit: '',
+  domicilio: '', observaciones: '', tipo_facturacion: 'por_servicio',
 }
 
 export function Clientes() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const navigate = useNavigate()
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +118,8 @@ export function Clientes() {
       email: cliente.email ?? '',
       telefono: cliente.telefono ?? '',
       ciudad: cliente.ciudad ?? '',
+      cuit: cliente.cuit ?? '',
+      domicilio: cliente.domicilio ?? '',
       observaciones: cliente.observaciones ?? '',
       tipo_facturacion: cliente.tipo_facturacion,
     })
@@ -129,6 +135,8 @@ export function Clientes() {
       email: values.email || null,
       telefono: values.telefono || null,
       ciudad: values.ciudad || null,
+      cuit: values.cuit || null,
+      domicilio: values.domicilio || null,
       observaciones: values.observaciones || null,
       tipo_facturacion: values.tipo_facturacion,
       // Al editar se conserva el estado real del cliente: antes iba `true`
@@ -322,6 +330,23 @@ export function Clientes() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {/* CUIT y domicilio: los usan los remitos y presupuestos.
+                    Antes había que tipearlos en cada comprobante porque el
+                    cliente no los guardaba. */}
+                <FormField control={form.control} name="cuit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CUIT / DNI</FormLabel>
+                    <FormControl><Input {...field} className="w-40" placeholder="20-12345678-9" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="domicilio" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Domicilio</FormLabel>
+                    <FormControl><Input {...field} className="w-52" placeholder="Av. Siempreviva 742" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="tipo_facturacion" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Facturación</FormLabel>
@@ -363,6 +388,11 @@ export function Clientes() {
               columns={columns}
               data={clientes}
               emptyMessage="Sin clientes todavía."
+              // Click en la fila → ficha del cliente, misma convención que
+              // Incidencias. A diferencia de esa pantalla, acá las acciones se
+              // quedan en la tabla: `onRowClick` ignora los clicks sobre
+              // botones y links de la celda de acciones (ver libra-ui).
+              onRowClick={(c) => navigate(`/clientes/${c.id}`)}
               search={{
                 campos: (c) => [c.nombre, c.empresa, c.email, c.telefono, c.ciudad],
                 placeholder: 'Buscar por nombre, empresa, email, teléfono o ciudad',

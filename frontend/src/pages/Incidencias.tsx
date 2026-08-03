@@ -6,7 +6,8 @@ import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
-  type Cliente, type Equipo, type Incidencia,
+  opcionesCategoria,
+  type CategoriaIncidencia, type Cliente, type Equipo, type Incidencia,
 } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,7 @@ export function Incidencias() {
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [equipos, setEquipos] = useState<Equipo[]>([])
+  const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // El alta vive en un Dialog (antes era una card sobre la tabla), mismo
@@ -59,6 +61,7 @@ export function Incidencias() {
   const [filtroEstado, setFiltroEstado] = useState(TODOS)
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
+  const [filtroCategoria, setFiltroCategoria] = useState(TODOS)
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -76,6 +79,7 @@ export function Incidencias() {
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
   const equipoNombre = (id: number | null) => id ? (equipos.find((e) => e.id === id)?.tipo ?? `#${id}`) : '—'
+  const categoriaRuta = (id: number | null) => id ? (categorias.find((c) => c.id === id)?.ruta ?? `#${id}`) : '—'
 
   // Un cliente desactivado no se ofrece para tickets nuevos. Se contempla el
   // preseleccionado por el filtro para que el formulario nunca arranque
@@ -88,14 +92,16 @@ export function Incidencias() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq] = await Promise.all([
+      const [inc, cl, eq, cat] = await Promise.all([
         api.get<Incidencia[]>('/api/incidencias'),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
+        api.get<CategoriaIncidencia[]>('/api/categorias'),
       ])
       setIncidencias(inc)
       setClientes(cl)
       setEquipos(eq)
+      setCategorias(cat)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -118,6 +124,9 @@ export function Incidencias() {
       equipo_id: values.equipo_id && values.equipo_id !== NONE ? Number(values.equipo_id) : null,
       tecnico_id: null,
       sector_id: null,
+      // Se clasifica desde el ticket, igual que técnico y sector: el alta se
+      // dejó en 4 campos a propósito (decisión del usuario, 2026-07-29).
+      categoria_id: null,
       titulo: values.titulo,
       descripcion: values.descripcion || null,
       estado: 'abierto' as const,
@@ -139,16 +148,40 @@ export function Incidencias() {
     }
   }
 
+  // Filtrar por una categoría RAÍZ trae también las de sus subcategorías:
+  // "Hardware" tiene que contestar por impresoras y notebooks juntas, que es
+  // la pregunta que se hace de verdad. Mismo criterio que el reporte.
+  function coincideCategoria(i: Incidencia): boolean {
+    if (filtroCategoria === TODOS) return true
+    const buscada = Number(filtroCategoria)
+    if (i.categoria_id === buscada) return true
+    const suya = categorias.find((c) => c.id === i.categoria_id)
+    return suya?.parent_id === buscada
+  }
+
   const incidenciasFiltradas = useMemo(() => incidencias.filter((i) =>
     (filtroEstado === TODOS || i.estado === filtroEstado)
     && (filtroPrioridad === TODOS || i.prioridad === filtroPrioridad)
-    && (filtroCliente === TODOS || i.cliente_id === Number(filtroCliente)),
-  ), [incidencias, filtroEstado, filtroPrioridad, filtroCliente])
+    && (filtroCliente === TODOS || i.cliente_id === Number(filtroCliente))
+    && coincideCategoria(i),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [incidencias, categorias, filtroEstado, filtroPrioridad, filtroCliente, filtroCategoria])
 
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
     { accessorKey: 'titulo', header: sortableHeader('Título'), size: 240, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.titulo}>{row.original.titulo}</span> },
     { accessorKey: 'cliente_id', header: 'Cliente', size: 150, minSize: 110, cell: ({ row }) => clienteNombre(row.original.cliente_id) },
     { accessorKey: 'equipo_id', header: 'Equipo', size: 130, minSize: 100, cell: ({ row }) => equipoNombre(row.original.equipo_id) },
+    {
+      accessorKey: 'categoria_id',
+      header: 'Categoría',
+      size: 150,
+      minSize: 110,
+      cell: ({ row }) => (
+        <span className="block truncate text-muted-foreground" title={categoriaRuta(row.original.categoria_id)}>
+          {categoriaRuta(row.original.categoria_id)}
+        </span>
+      ),
+    },
     {
       accessorKey: 'prioridad',
       header: sortableHeader('Prioridad'),
@@ -179,7 +212,7 @@ export function Incidencias() {
       cell: ({ row }) => row.original.fecha_creacion ? new Date(row.original.fecha_creacion).toLocaleDateString('es-AR') : '—',
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [clientes, equipos])
+  ], [clientes, equipos, categorias])
 
   return (
     <div className="grid gap-4">
@@ -195,8 +228,8 @@ export function Incidencias() {
                 <CircleAlert className="size-4" />Nueva incidencia
               </DialogTitle>
               <DialogDescription>
-                El resto de los campos —prioridad, técnico, sector, horas— se
-                asignan después desde el ticket.
+                El resto de los campos —categoría, prioridad, técnico, sector,
+                horas— se asignan después desde el ticket.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -306,8 +339,23 @@ export function Incidencias() {
             className="w-48"
           />
         </div>
-        {(filtroEstado !== TODOS || filtroPrioridad !== TODOS || filtroCliente !== TODOS) && (
-          <Button variant="ghost" size="sm" onClick={() => { setFiltroEstado(TODOS); setFiltroPrioridad(TODOS); setFiltroCliente(TODOS) }}>
+        {/* Acá se ofrecen TODAS las categorías, raíces incluidas: elegir una
+            raíz es el caso interesante ("todo lo de Hardware"). En cambio
+            asignarle una a un ticket usa sólo las hojas. */}
+        {categorias.length > 0 && (
+          <div className="grid gap-1.5">
+            <span className="text-xs text-muted-foreground">Categoría</span>
+            <SelectBuscable
+              value={filtroCategoria}
+              onChange={setFiltroCategoria}
+              opciones={[{ value: TODOS, label: 'Todas' }, ...opcionesCategoria(categorias)]}
+              ariaLabel="Filtrar por categoría"
+              className="w-48"
+            />
+          </div>
+        )}
+        {(filtroEstado !== TODOS || filtroPrioridad !== TODOS || filtroCliente !== TODOS || filtroCategoria !== TODOS) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFiltroEstado(TODOS); setFiltroPrioridad(TODOS); setFiltroCliente(TODOS); setFiltroCategoria(TODOS) }}>
             Limpiar filtros
           </Button>
         )}
@@ -330,8 +378,9 @@ export function Incidencias() {
                 campos: (i) => [
                   i.id, i.titulo, i.descripcion,
                   clienteNombre(i.cliente_id), equipoNombre(i.equipo_id),
+                  categoriaRuta(i.categoria_id),
                 ],
-                placeholder: 'Buscar por número, título, descripción, cliente o equipo',
+                placeholder: 'Buscar por número, título, descripción, cliente, equipo o categoría',
               }}
             />
           )}

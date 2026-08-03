@@ -12,16 +12,16 @@ from libraauth.repository import UserRepository
 from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 
-from . import database
+from . import database, schema
 from .auth import build_session_auth, require_admin_o_servicio, require_staff
-from .database import Base, configure, get_engine, get_session_factory
-from .migrations import run_migrations
+from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    clientes, config_empresa, dashboard, equipos, health, incidencias,
+    categorias, clientes, config_empresa, dashboard, equipos, health, incidencias,
     presupuestos, remitos, reportes, sectores, tecnicos, users,
 )
+from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
@@ -38,20 +38,22 @@ from .services.users import ensure_default_admin
 def create_app(database_url: str, data_dir: str) -> FastAPI:
     configure(database_url)
     engine = get_engine()
-    # Dos metadatas contra el mismo engine: el dominio propio de LibraDesk
-    # y el de libraauth (tabla `usuarios`) — conviven en el mismo archivo
-    # SQLite, sin una segunda base de datos separada.
-    Base.metadata.create_all(engine)
-    # `create_all()` no altera tablas que ya existen: sin esto, una columna
-    # nueva solo aparece en bases creadas desde cero y nunca llega a
-    # produccion. Ver app/migrations.py.
-    run_migrations(engine)
+    # Tres esquemas contra el mismo engine, en este orden y por este motivo.
+    #
+    # 1. El dominio propio, por Alembic (`migrations/`). Reemplaza al par
+    #    `create_all()` + `app/migrations.py` que habia hasta el 2026-08-03:
+    #    `create_all()` no altera tablas existentes, asi que todo cambio de
+    #    schema que no fuera una columna nullable no tenia camino a produccion.
+    #    Una base anterior a Alembic se adopta sola en el primer arranque; ver
+    #    app/schema.py.
+    schema.ensure_schema(engine)
+    # 2. `libraauth` (tabla `usuarios`) sigue con `create_all()`: su schema lo
+    #    versiona el motor, no este producto.
     AuthBase.metadata.create_all(engine)
 
-    # Tercera capa sobre el MISMO archivo SQLite: `libracore.db` en sqlite3
-    # crudo, para reusar el dominio de remitos/presupuestos tal cual. Va
-    # despues de los `create_all()` a proposito — `remitos`/`presupuestos`
-    # declaran una FK a `usuarios`, que crea `libraauth`.
+    # 3. `libracore.db` en sqlite3 crudo, para reusar el dominio de remitos/
+    #    presupuestos tal cual. Va ultimo a proposito — `remitos`/`presupuestos`
+    #    declaran una FK a `usuarios`, que crea `libraauth` en el paso 2.
     rp_service.configure(database_url, data_dir)
     rp_service.ensure_schema()
 
@@ -90,6 +92,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.reemplazos = ReemplazoService(sessions)
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)
+    app.state.categorias = CategoriaRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
     app.state.remitos = rp_service.RemitoService()
@@ -126,6 +129,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)
+    # Categorias: parte del core por el mismo motivo que sectores — clasificar
+    # un ticket no es una feature de plan, es como se usa una mesa de ayuda.
+    app.include_router(categorias.router, dependencies=staff_or_admin)
 
     # Lo que sí depende del plan (ver `plans.py`). Las instancias que ya
     # existen no se enteran: sin plan asignado, `ModuleRepository` deja todo

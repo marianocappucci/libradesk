@@ -6,6 +6,7 @@ import { Login } from './pages/Login'
 import { ForgotPassword, ResetPassword } from './pages/PasswordReset'
 import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
+import { ClienteDetalle } from './pages/ClienteDetalle'
 import { Equipos } from './pages/Equipos'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+      <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalle /></ProtectedRoute>} />
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
