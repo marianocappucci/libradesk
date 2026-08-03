@@ -148,16 +148,22 @@ export function Remitos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [])
 
+  const editando = editingId !== null
+
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Remitos</h2>
-        {editingId === null && <Button onClick={startCreate}>+ Nuevo remito</Button>}
+        {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {editingId !== null && (
+      {/* El formulario REEMPLAZA al listado, no se le suma arriba: cargar un
+          comprobante con la tabla de los anteriores debajo mezcla dos tareas
+          en la misma pantalla. Mismo criterio que Contalibra, que para esto
+          navega a una ruta propia. */}
+      {editando ? (
         <ComprobanteForm
           tipo="remito"
           titulo={editingId === 'new' ? 'Nuevo remito' : 'Editar remito'}
@@ -169,37 +175,37 @@ export function Remitos() {
           saving={saving}
           numeroPreview={numeroPreview}
         />
-      )}
+      ) : (
+        <Card>
+          <CardContent className="grid gap-3">
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => { e.preventDefault(); cargar(busqueda) }}
+            >
+              <Input
+                value={busqueda}
+                placeholder="Buscar por número, cliente u observaciones"
+                aria-label="Buscar remitos"
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="max-w-md"
+              />
+              <Button type="submit" variant="outline">Buscar</Button>
+              {busqueda && (
+                <Button type="button" variant="ghost"
+                        onClick={() => { setBusqueda(''); cargar('') }}>
+                  Limpiar
+                </Button>
+              )}
+            </form>
 
-      <Card>
-        <CardContent className="grid gap-3">
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => { e.preventDefault(); cargar(busqueda) }}
-          >
-            <Input
-              value={busqueda}
-              placeholder="Buscar por número, cliente u observaciones"
-              aria-label="Buscar remitos"
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="max-w-md"
-            />
-            <Button type="submit" variant="outline">Buscar</Button>
-            {busqueda && (
-              <Button type="button" variant="ghost"
-                      onClick={() => { setBusqueda(''); cargar('') }}>
-                Limpiar
-              </Button>
+            {loading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+            ) : (
+              <DataTable columns={columns} data={remitos} emptyMessage="Sin remitos todavía." />
             )}
-          </form>
-
-          {loading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-          ) : (
-            <DataTable columns={columns} data={remitos} emptyMessage="Sin remitos todavía." />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={aBorrar !== null}
