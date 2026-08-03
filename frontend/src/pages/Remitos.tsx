@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Download, Pencil, Trash2 } from 'lucide-react'
 import { api, ApiError, type Cliente, type Remito } from '../api'
@@ -13,6 +14,8 @@ import {
 } from '@/components/comprobante-form'
 
 export function Remitos() {
+  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const [remitos, setRemitos] = useState<Remito[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,6 +30,16 @@ export function Remitos() {
   useEffect(() => {
     cargar()
   }, [])
+
+  // `?editar=<id>`: ver el comentario equivalente en `Presupuestos.tsx`.
+  useEffect(() => {
+    const aEditar = params.get('editar')
+    if (!aEditar || !remitos.length) return
+    const r = remitos.find((x) => x.id === Number(aEditar))
+    setParams({}, { replace: true })
+    if (r) startEdit(r)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, remitos])
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -128,10 +141,13 @@ export function Remitos() {
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
           {/* PDF por navegacion directa: es una descarga con cookie de
-              sesion, no una llamada JSON. */}
-          <Button size="icon" variant="outline" title="Descargar PDF" aria-label="Descargar PDF"
-                  onClick={() => window.open(`/api/remitos/${row.original.id}/pdf`, '_blank')}>
-            <Download />
+              sesion, no una llamada JSON. Ancla y no window.open(), que
+              depende de que el navegador permita popups. */}
+          <Button asChild size="icon" variant="outline"
+                  title="Descargar PDF" aria-label="Descargar PDF">
+            <a href={`/api/remitos/${row.original.id}/pdf`} target="_blank" rel="noreferrer">
+              <Download />
+            </a>
           </Button>
           <Button size="icon" variant="outline" title="Editar remito" aria-label="Editar remito"
                   onClick={() => startEdit(row.original)}>
@@ -201,7 +217,9 @@ export function Remitos() {
             {loading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
             ) : (
-              <DataTable columns={columns} data={remitos} emptyMessage="Sin remitos todavía." />
+              <DataTable columns={columns} data={remitos}
+                         emptyMessage="Sin remitos todavía."
+                         onRowClick={(r) => navigate(`/remitos/${r.id}`)} />
             )}
           </CardContent>
         </Card>

@@ -13,7 +13,9 @@ import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
 import { Tecnicos } from './pages/Tecnicos'
 import { Remitos } from './pages/Remitos'
+import { RemitoDetalle } from './pages/RemitoDetalle'
 import { Presupuestos } from './pages/Presupuestos'
+import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
 import { Reportes } from './pages/Reportes'
 import { Configuracion } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
@@ -47,7 +49,9 @@ export default function App() {
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
+      <Route path="/presupuestos/:id" element={<ProtectedRoute><PresupuestoDetalle /></ProtectedRoute>} />
       <Route path="/remitos" element={<ProtectedRoute><Remitos /></ProtectedRoute>} />
+      <Route path="/remitos/:id" element={<ProtectedRoute><RemitoDetalle /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />

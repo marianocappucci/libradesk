@@ -10,11 +10,17 @@
 // ademas que al cancelar el listado vuelve (si el formulario lo escondiera
 // para siempre, la pantalla quedaria inutil y un test que solo mire el alta
 // no lo notaria).
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as renderRTL, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Presupuestos } from '../pages/Presupuestos'
 import { Remitos } from '../pages/Remitos'
+
+// Las dos pantallas usan `useNavigate`/`useSearchParams` desde que el click en
+// la fila abre la ficha del comprobante, así que necesitan un router.
+const render = (ui: ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
 
 const CLIENTE = {
   id: 1, nombre: 'Compulibra', empresa: 'Compulibra SRL', email: null, telefono: null,

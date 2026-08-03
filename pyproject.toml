@@ -18,7 +18,14 @@ dependencies = [
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.2.0",
+    # v1.7.0 trae el arreglo del PDF: hasta v1.6.0 un guion largo en el nombre
+    # de empresa, en un item o en las observaciones tumbaba la generacion con un
+    # 500 (libracore PR #6). El salto desde v1.2.0 son cinco versiones pero la
+    # superficie que toca a este producto no cambio: db/remitos_presupuestos,
+    # db/core, modules_gate y config_manager estan identicos entre los dos tags,
+    # y lo unico previo a este fix en pdf_generator son dos lineas muertas de
+    # generate_pdf_recibo, que LibraDesk no llama. Verificado con git diff.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.7.0",
 ]
 
 [project.optional-dependencies]
