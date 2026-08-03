@@ -9,7 +9,9 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.proveedores import ProveedorRepository
 from .services.reemplazo import ReemplazoService
+from .services.reparaciones import ReparacionRepository
 from .services.remitos_presupuestos import PresupuestoService, RemitoService
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -46,6 +48,14 @@ def get_sector_repository(request: Request) -> SectorRepository:
 
 def get_categoria_repository(request: Request) -> CategoriaRepository:
     return request.app.state.categorias
+
+
+def get_proveedor_repository(request: Request) -> ProveedorRepository:
+    return request.app.state.proveedores
+
+
+def get_reparacion_repository(request: Request) -> ReparacionRepository:
+    return request.app.state.reparaciones
 
 
 def get_dashboard_service(request: Request) -> DashboardService:
