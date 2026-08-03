@@ -20,11 +20,8 @@ dependencies = [
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
     # v1.7.0 trae el arreglo del PDF: hasta v1.6.0 un guion largo en el nombre
     # de empresa, en un item o en las observaciones tumbaba la generacion con un
-    # 500 (libracore PR #6). El salto desde v1.2.0 son cinco versiones pero la
-    # superficie que toca a este producto no cambio: db/remitos_presupuestos,
-    # db/core, modules_gate y config_manager estan identicos entre los dos tags,
-    # y lo unico previo a este fix en pdf_generator son dos lineas muertas de
-    # generate_pdf_recibo, que LibraDesk no llama. Verificado con git diff.
+    # 500 (libracore PR #6). La superficie de libracore que toca a este producto
+    # no cambio entre v1.6.0 y v1.7.0: el unico delta es ese fix.
     "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.7.0",
 ]
 
@@ -34,6 +31,12 @@ dev = [
     "ruff>=0.13",
     "pytest>=8.0",
     "httpx>=0.27",
+    # Solo para tests: leer de vuelta el texto de los PDF del informe. Sin
+    # esto el unico chequeo posible es la firma `%PDF-`, que un documento
+    # vacio o con los datos equivocados pasa igual — mismo motivo por el que
+    # los reportes xlsx se verifican abriendolos con openpyxl y no mirando el
+    # content-type.
+    "pypdf>=5.0",
 ]
 
 [build-system]
