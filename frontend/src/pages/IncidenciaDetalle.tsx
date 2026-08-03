@@ -4,9 +4,10 @@ import {
   api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
+  opcionesProveedor,
   type Actividad, type CategoriaIncidencia, type Cliente, type DestinoReemplazo,
   type Equipo, type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
-  type Sector, type Tecnico,
+  type Proveedor, type Reparacion, type Sector, type Tecnico,
 } from '../api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, ArrowLeftRight, History, MessageSquare, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft, ArrowLeftRight, History, MessageSquare, PackageCheck, ShieldCheck,
+  Trash2, Wrench,
+} from 'lucide-react'
 
 const NONE = '__none__'
 
@@ -32,6 +36,11 @@ type TimelineEntry =
   // timeline solo tenía notas y cambios de estado, así que "se retiró la
   // impresora" aparecía únicamente si alguien lo escribía a mano.
   | { tipo: 'movimiento'; fecha: string; data: EquipoMovimiento }
+  // Cuarta fuente: el paso por service. Se ancla en `created_at` y no en
+  // `fecha_envio`, que es un date que carga el usuario y puede ser de hace una
+  // semana — ordenar por ahí pondría la salida a service antes del retiro que
+  // la causó.
+  | { tipo: 'reparacion'; fecha: string; data: Reparacion }
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -52,6 +61,12 @@ export function IncidenciaDetalle() {
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [estados, setEstados] = useState<IncidenciaEstadoLog[]>([])
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[]>([])
+  const [reparaciones, setReparaciones] = useState<Reparacion[]>([])
+  // Las abiertas de TODOS los tickets, no sólo las de éste: el equipo que
+  // vuelve de service pudo haber salido por otro ticket, y en ese caso su
+  // reparación no está en `reparaciones` — el diálogo no ofrecería cerrarla.
+  const [abiertas, setAbiertas] = useState<Reparacion[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
@@ -61,6 +76,14 @@ export function IncidenciaDetalle() {
   const [reemplazando, setReemplazando] = useState(false)
   const [reemplazo, setReemplazo] = useState({
     retirado: NONE, sustituto: NONE, destino: 'service' as DestinoReemplazo, motivo: '',
+    // Bloque de service: sólo viaja con destino "service". El backend rechaza
+    // lo contrario en vez de ignorarlo en silencio — quien cargó proveedor y
+    // RMA creía que iban a alguna parte.
+    proveedor: NONE, fechaEnvio: '', remito: '', rma: '', enGarantia: false,
+    // Y la vuelta, que se ofrece cuando el equipo que ENTRA tiene una
+    // reparación abierta: la vuelta del service es este mismo reemplazo al
+    // revés, así que el que vuelve es el sustituto.
+    cerrarService: true, fechaRetorno: '', diagnostico: '', costo: '',
   })
 
   useEffect(() => {
@@ -77,7 +100,7 @@ export function IncidenciaDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq, te, se, cat, act, est, mov] = await Promise.all([
+      const [inc, cl, eq, te, se, cat, act, est, mov, rep, abi, prov] = await Promise.all([
         api.get<Incidencia>(`/api/incidencias/${incidenciaId}`),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
@@ -87,6 +110,9 @@ export function IncidenciaDetalle() {
         api.get<Actividad[]>(`/api/incidencias/${incidenciaId}/actividades`),
         api.get<IncidenciaEstadoLog[]>(`/api/incidencias/${incidenciaId}/estados`),
         api.get<EquipoMovimiento[]>(`/api/incidencias/${incidenciaId}/movimientos`),
+        api.get<Reparacion[]>(`/api/reparaciones?incidencia_id=${incidenciaId}`),
+        api.get<Reparacion[]>('/api/reparaciones?abiertas=true'),
+        api.get<Proveedor[]>('/api/proveedores?solo_activos=true'),
       ])
       setIncidencia(inc)
       setClientes(cl)
@@ -97,6 +123,9 @@ export function IncidenciaDetalle() {
       setActividades(act)
       setEstados(est)
       setMovimientos(mov)
+      setReparaciones(rep)
+      setAbiertas(abi)
+      setProveedores(prov)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -178,11 +207,12 @@ export function IncidenciaDetalle() {
   // orden de concatenación (que además viene DESC de la API) y la historia
   // se lee al revés. El id ascendente dentro de cada fuente es el orden real
   // de inserción.
-  const rangoPorTipo = { actividad: 0, movimiento: 1, estado: 2 }
+  const rangoPorTipo = { actividad: 0, reparacion: 1, movimiento: 2, estado: 3 }
   const timeline: TimelineEntry[] = [
     ...actividades.map((a): TimelineEntry => ({ tipo: 'actividad', fecha: a.fecha ?? '', data: a })),
     ...estados.map((e): TimelineEntry => ({ tipo: 'estado', fecha: e.fecha ?? '', data: e })),
     ...movimientos.map((m): TimelineEntry => ({ tipo: 'movimiento', fecha: m.fecha ?? '', data: m })),
+    ...reparaciones.map((r): TimelineEntry => ({ tipo: 'reparacion', fecha: r.created_at ?? '', data: r })),
   ].sort((a, b) =>
     new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
     || rangoPorTipo[a.tipo] - rangoPorTipo[b.tipo]
@@ -195,13 +225,26 @@ export function IncidenciaDetalle() {
   const categoriasElegibles = categoriasAsignables(categorias)
   const equipoPorId = (id: number) => equipos.find((e) => e.id === id)
 
+  // El bloque de service sólo tiene sentido si el equipo efectivamente sale a
+  // reparar. Con "volver a depósito" o "dar de baja", cargar proveedor y RMA
+  // describiría algo que no pasó — y el backend lo rechaza, no lo ignora.
+  const mostrarBloqueService = reemplazo.destino === 'service'
+  // La vuelta: si el equipo que ENTRA está hoy en service, es porque está
+  // volviendo. No hay que preguntarlo, se deduce del estado del inventario.
+  const reparacionDelSustituto = reemplazo.sustituto === NONE
+    ? undefined
+    : abiertas.find((r) => r.equipo_id === Number(reemplazo.sustituto))
+
   function abrirReemplazo() {
+    const hoy = new Date().toISOString().slice(0, 10)
     setReemplazo({
       // Por defecto se retira el equipo del ticket, que es el caso normal.
       retirado: incidencia?.equipo_id ? String(incidencia.equipo_id) : NONE,
       sustituto: NONE,
       destino: 'service',
       motivo: '',
+      proveedor: NONE, fechaEnvio: hoy, remito: '', rma: '', enGarantia: false,
+      cerrarService: true, fechaRetorno: hoy, diagnostico: '', costo: '',
     })
     setReemplazoAbierto(true)
   }
@@ -216,6 +259,21 @@ export function IncidenciaDetalle() {
         equipo_sustituto_id: reemplazo.sustituto === NONE ? null : Number(reemplazo.sustituto),
         destino: reemplazo.destino,
         motivo: reemplazo.motivo.trim() || null,
+        // El proveedor es lo único obligatorio del bloque: sin él la reparación
+        // no identifica a dónde fue el equipo, que es todo el punto de
+        // registrarla. Sin proveedor elegido el reemplazo funciona como antes.
+        service: mostrarBloqueService && reemplazo.proveedor !== NONE ? {
+          proveedor_id: Number(reemplazo.proveedor),
+          fecha_envio: reemplazo.fechaEnvio,
+          remito_salida: reemplazo.remito.trim() || null,
+          rma: reemplazo.rma.trim() || null,
+          en_garantia: reemplazo.enGarantia,
+        } : null,
+        cierre_service: reparacionDelSustituto && reemplazo.cerrarService ? {
+          fecha_retorno: reemplazo.fechaRetorno,
+          diagnostico: reemplazo.diagnostico.trim() || null,
+          costo: reemplazo.costo ? Number(reemplazo.costo) : null,
+        } : null,
       })
       setReemplazoAbierto(false)
       // Recarga completa: la operación tocó equipos, movimientos y actividad.
@@ -301,9 +359,46 @@ export function IncidenciaDetalle() {
                       >
                         {entry.tipo === 'estado' ? <History className="mt-0.5 size-3.5 shrink-0" />
                           : entry.tipo === 'movimiento' ? <ArrowLeftRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                          : entry.tipo === 'reparacion' ? <Wrench className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                           : <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                         <div className="grid gap-0.5">
-                          {entry.tipo === 'movimiento' ? (
+                          {entry.tipo === 'reparacion' ? (
+                            <>
+                              {/* La tarjeta describe el ENVÍO, porque está
+                                  anclada en `created_at`, que es cuando el
+                                  equipo salió. Decir "Volvió de service" acá
+                                  —como hacía la primera versión— deja el
+                                  renglón que anuncia la vuelta ARRIBA del que
+                                  anuncia la salida: la historia al revés, el
+                                  mismo defecto que ya pagó el timeline de este
+                                  repo. La vuelta la narra su propia actividad,
+                                  en su lugar; acá sólo se refleja en el badge
+                                  de estado y en la fecha de retorno. */}
+                              <span className="flex flex-wrap items-center gap-2">
+                                <Badge variant={entry.data.abierta ? 'default' : 'outline'}>
+                                  {entry.data.abierta ? 'En service' : 'Pasó por service'}
+                                </Badge>
+                                <strong>{entry.data.equipo_descripcion}</strong>
+                                {entry.data.en_garantia && (
+                                  <Badge variant="outline" className="gap-1">
+                                    <ShieldCheck className="size-3" />Garantía
+                                  </Badge>
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {[
+                                  entry.data.proveedor_nombre,
+                                  entry.data.remito_salida ? `remito ${entry.data.remito_salida}` : null,
+                                  entry.data.rma ? `RMA ${entry.data.rma}` : null,
+                                ].filter(Boolean).join(' · ')}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {entry.data.abierta
+                                  ? `Enviado el ${entry.data.fecha_envio} · ${entry.data.dias_afuera} días afuera`
+                                  : `Enviado el ${entry.data.fecha_envio}, volvió el ${entry.data.fecha_retorno} · ${entry.data.dias_afuera} días${entry.data.diagnostico ? ` · ${entry.data.diagnostico}` : ''}`}
+                              </span>
+                            </>
+                          ) : entry.tipo === 'movimiento' ? (
                             <>
                               <span className="flex flex-wrap items-center gap-2">
                                 <Badge variant={entry.data.tipo === 'baja' ? 'destructive' : 'outline'}>
@@ -555,6 +650,119 @@ export function IncidenciaDetalle() {
                 onChange={(e) => setReemplazo({ ...reemplazo, motivo: e.target.value })}
               />
             </div>
+
+            {/* Bloque de service (pendiente 18). Hasta acá, "a quién se lo
+                mandamos" y "con qué RMA" sólo podían vivir dentro del texto
+                del motivo, de donde no se pueden listar ni sumar. */}
+            {mostrarBloqueService && (
+              <div className="grid gap-3 rounded-md border border-dashed p-3">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Wrench className="size-4" />Datos del service
+                </span>
+
+                <div className="grid gap-1.5">
+                  <Label>Proveedor</Label>
+                  <SelectBuscable
+                    value={reemplazo.proveedor}
+                    onChange={(v) => setReemplazo({ ...reemplazo, proveedor: v })}
+                    opciones={[
+                      { value: NONE, label: 'No registrar la reparación' },
+                      ...opcionesProveedor(proveedores),
+                    ]}
+                    placeholder="Elegí el proveedor…"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {proveedores.length === 0
+                      ? 'No hay proveedores cargados. Se cargan en Configuración.'
+                      : 'Sin proveedor el equipo se mueve igual, pero no queda registro del service.'}
+                  </span>
+                </div>
+
+                {reemplazo.proveedor !== NONE && (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-1.5">
+                        <Label>Fecha de envío</Label>
+                        <Input
+                          type="date" value={reemplazo.fechaEnvio}
+                          onChange={(e) => setReemplazo({ ...reemplazo, fechaEnvio: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label>Remito</Label>
+                        <Input
+                          value={reemplazo.remito} placeholder="R-0001"
+                          onChange={(e) => setReemplazo({ ...reemplazo, remito: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label>RMA</Label>
+                        <Input
+                          value={reemplazo.rma} placeholder="RMA-99"
+                          onChange={(e) => setReemplazo({ ...reemplazo, rma: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox" checked={reemplazo.enGarantia}
+                        onChange={(e) => setReemplazo({ ...reemplazo, enGarantia: e.target.checked })}
+                      />
+                      <ShieldCheck className="size-4" />
+                      Entra por garantía
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* La vuelta del service. No se pregunta si el equipo está
+                volviendo: se deduce de que el que entra tenga una reparación
+                abierta. */}
+            {reparacionDelSustituto && (
+              <div className="grid gap-3 rounded-md border border-dashed p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox" checked={reemplazo.cerrarService}
+                    onChange={(e) => setReemplazo({ ...reemplazo, cerrarService: e.target.checked })}
+                  />
+                  <PackageCheck className="size-4" />
+                  Cerrar la reparación en {reparacionDelSustituto.proveedor_nombre}
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Salió el {reparacionDelSustituto.fecha_envio}
+                  {reparacionDelSustituto.rma ? ` · RMA ${reparacionDelSustituto.rma}` : ''}
+                  {' '}· {reparacionDelSustituto.dias_afuera} días afuera.
+                </span>
+
+                {reemplazo.cerrarService && (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-1.5">
+                      <Label>Fecha de retorno</Label>
+                      <Input
+                        type="date" value={reemplazo.fechaRetorno}
+                        onChange={(e) => setReemplazo({ ...reemplazo, fechaRetorno: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Diagnóstico</Label>
+                      <Input
+                        value={reemplazo.diagnostico} placeholder="Se cambió el fusor…"
+                        onChange={(e) => setReemplazo({ ...reemplazo, diagnostico: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Costo</Label>
+                      <Input
+                        type="number" min="0" step="0.01" value={reemplazo.costo}
+                        placeholder={reparacionDelSustituto.en_garantia ? 'Por garantía' : '0'}
+                        onChange={(e) => setReemplazo({ ...reemplazo, costo: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>

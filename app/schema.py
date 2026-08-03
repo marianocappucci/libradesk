@@ -47,6 +47,8 @@ from .services import clientes as _clientes  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import modules as _modules  # noqa: F401
+from .services import proveedores as _proveedores  # noqa: F401
+from .services import reparaciones as _reparaciones  # noqa: F401
 from .services import sectores as _sectores  # noqa: F401
 from .services import tecnicos as _tecnicos  # noqa: F401
 

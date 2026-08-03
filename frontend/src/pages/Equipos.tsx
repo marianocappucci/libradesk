@@ -8,6 +8,7 @@ import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS as ESTADO_INCIDENCIA_LABELS,
   MOVIMIENTO_LABELS, describirEquipo, ubicacionTexto, opcionesCliente,
   type Cliente, type Equipo, type EquipoMovimiento, type Incidencia,
+  type Reparacion,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,7 +28,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { History, Monitor, Pencil, Plus, Trash2 } from 'lucide-react'
+import { History, Monitor, Pencil, Plus, ShieldCheck, Trash2, Wrench } from 'lucide-react'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -85,6 +86,7 @@ export function Equipos() {
   const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
   const [incidenciasDelEquipo, setIncidenciasDelEquipo] = useState<Incidencia[] | null>(null)
+  const [reparacionesDelEquipo, setReparacionesDelEquipo] = useState<Reparacion[] | null>(null)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
 
   const form = useForm<EquipoFormValues>({
@@ -223,16 +225,21 @@ export function Equipos() {
     setHistorialDe(equipo)
     setMovimientos(null)
     setIncidenciasDelEquipo(null)
+    setReparacionesDelEquipo(null)
     try {
-      // Las dos mitades de la ficha: qué le pasó al equipo (incidencias) y
-      // dónde estuvo (movimientos). Antes solo se veía la segunda, así que
-      // "¿cuántas veces falló este equipo?" no tenía respuesta.
-      const [movs, incs] = await Promise.all([
+      // Las tres mitades de la ficha: qué le pasó al equipo (incidencias),
+      // dónde estuvo (movimientos) y cuántas veces salió a reparar
+      // (reparaciones). Antes sólo se veía la segunda, así que ni "¿cuántas
+      // veces falló?" ni "¿cuánto llevamos gastado en este aparato?" tenían
+      // respuesta.
+      const [movs, incs, reps] = await Promise.all([
         api.get<EquipoMovimiento[]>(`/api/equipos/${equipo.id}/movimientos`),
         api.get<Incidencia[]>(`/api/incidencias?equipo_id=${equipo.id}`),
+        api.get<Reparacion[]>(`/api/reparaciones?equipo_id=${equipo.id}`),
       ])
       setMovimientos(movs)
       setIncidenciasDelEquipo(incs)
+      setReparacionesDelEquipo(reps)
     } catch (err) {
       setError(describeError(err))
       setHistorialDe(null)
@@ -492,6 +499,69 @@ export function Equipos() {
                   </span>
                 </Link>
               ))
+            )}
+          </div>
+
+          <div className="grid gap-2">
+            <h4 className="text-sm font-semibold">
+              Reparaciones{reparacionesDelEquipo ? ` (${reparacionesDelEquipo.length})` : ''}
+            </h4>
+            {reparacionesDelEquipo === null ? (
+              <p className="text-sm text-muted-foreground">Cargando…</p>
+            ) : reparacionesDelEquipo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nunca salió a service.</p>
+            ) : (
+              <>
+                {reparacionesDelEquipo.map((r) => (
+                  <div key={r.id} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={r.abierta ? 'default' : 'outline'}>
+                        {r.abierta ? 'En service' : 'Volvió'}
+                      </Badge>
+                      <span className="font-medium">{r.proveedor_nombre}</span>
+                      {r.en_garantia && (
+                        <Badge variant="outline" className="gap-1">
+                          <ShieldCheck className="size-3" />Garantía
+                        </Badge>
+                      )}
+                      {r.incidencia_id !== null && (
+                        <Link
+                          to={`/incidencias/${r.incidencia_id}`}
+                          className="text-xs underline underline-offset-2"
+                        >
+                          Incidencia #{r.incidencia_id}
+                        </Link>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {[
+                        r.abierta
+                          ? `Salió el ${r.fecha_envio} · ${r.dias_afuera} días afuera`
+                          : `${r.fecha_envio} → ${r.fecha_retorno} · ${r.dias_afuera} días`,
+                        r.remito_salida ? `remito ${r.remito_salida}` : null,
+                        r.rma ? `RMA ${r.rma}` : null,
+                        r.costo !== null ? `$ ${r.costo.toLocaleString('es-AR')}` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                    {r.diagnostico && (
+                      <span className="text-xs text-muted-foreground">{r.diagnostico}</span>
+                    )}
+                  </div>
+                ))}
+                {/* Lo que ninguna fila suelta contesta: cuánto lleva gastado
+                    este aparato. Con eso al lado del precio de uno nuevo, la
+                    decisión de reemplazarlo deja de ser una corazonada. */}
+                {(() => {
+                  const gastado = reparacionesDelEquipo
+                    .reduce((suma, r) => suma + (r.costo ?? 0), 0)
+                  return gastado > 0 ? (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Wrench className="size-3" />
+                      Gastado en reparaciones: <strong>$ {gastado.toLocaleString('es-AR')}</strong>
+                    </p>
+                  ) : null
+                })()}
+              </>
             )}
           </div>
 

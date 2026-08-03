@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -7,7 +9,9 @@ from ..dependencies import (
 )
 from ..services.equipos import EquipoRepository
 from ..services.incidencias import IncidenciaRepository
-from ..services.reemplazo import DESTINOS, ReemplazoService
+from ..services.reemplazo import (
+    DESTINOS, CierreService, DatosService, ReemplazoService,
+)
 
 router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 
@@ -139,6 +143,24 @@ def list_movimientos_de_la_incidencia(
     return equipos.list_movimientos_por_incidencia(incidencia_id)
 
 
+class ServiceIn(BaseModel):
+    """Datos del envio a reparar. Solo con `destino="service"`."""
+    proveedor_id: int
+    fecha_envio: date
+    remito_salida: str | None = None
+    rma: str | None = None
+    en_garantia: bool = False
+    observaciones: str | None = None
+
+
+class CierreServiceIn(BaseModel):
+    """La vuelta: cierra la reparacion abierta del equipo **sustituto**, que es
+    el que entra. Ver `CierreService` en services/reemplazo.py."""
+    fecha_retorno: date
+    diagnostico: str | None = None
+    costo: float | None = None
+
+
 class ReemplazoIn(BaseModel):
     equipo_retirado_id: int
     equipo_sustituto_id: int | None = None
@@ -148,6 +170,11 @@ class ReemplazoIn(BaseModel):
     # la ubicacion queda vacia — ver `DESTINOS` en services/reemplazo.py.
     sector_destino: str | None = None
     ubicacion_destino: str | None = None
+    # Los dos opcionales: un reemplazo puede no tener nada que ver con service
+    # (se cambia un equipo por otro y listo), que es como funcionaba hasta el
+    # 2026-08-03. Sin ellos el comportamiento es exactamente el de antes.
+    service: ServiceIn | None = None
+    cierre_service: CierreServiceIn | None = None
 
 
 @router.post("/{incidencia_id}/reemplazar-equipo", status_code=201)
@@ -172,6 +199,11 @@ def reemplazar_equipo(
             sector_destino=data.sector_destino,
             ubicacion_destino=data.ubicacion_destino,
             usuario_actor=user["username"],
+            service=DatosService(**data.service.model_dump()) if data.service else None,
+            cierre_service=(
+                CierreService(**data.cierre_service.model_dump())
+                if data.cierre_service else None
+            ),
         )
     except KeyError as err:
         que, cual = err.args[0]
