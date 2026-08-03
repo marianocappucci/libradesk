@@ -39,6 +39,21 @@ _COLUMNAS = [
         "INTEGER REFERENCES incidencias(id)",
         True,
     ),
+    # Categoria del ticket ("Hardware -> Impresoras"), 2026-08-02. Apunta a la
+    # hoja del catalogo; ver services/categorias.py. La tabla
+    # `categorias_incidencia` es **nueva**, asi que la crea `create_all()` —
+    # lo que hay que migrar es solo esta columna, sobre una tabla que ya
+    # existe en las dos instancias.
+    (
+        "incidencias",
+        "categoria_id",
+        "INTEGER REFERENCES categorias_incidencia(id)",
+        True,
+    ),
+    # CUIT y domicilio del cliente, 2026-08-02. Sin estos dos, los datos
+    # fiscales se tipeaban a mano en cada remito y cada presupuesto.
+    ("clientes", "cuit", "VARCHAR(20)", False),
+    ("clientes", "domicilio", "VARCHAR(255)", False),
 ]
 
 

@@ -19,9 +19,10 @@ from .migrations import run_migrations
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    clientes, config_empresa, dashboard, equipos, health, incidencias,
+    categorias, clientes, config_empresa, dashboard, equipos, health, incidencias,
     presupuestos, remitos, reportes, sectores, tecnicos, users,
 )
+from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
@@ -90,6 +91,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.reemplazos = ReemplazoService(sessions)
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)
+    app.state.categorias = CategoriaRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
     app.state.remitos = rp_service.RemitoService()
@@ -126,6 +128,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)
+    # Categorias: parte del core por el mismo motivo que sectores — clasificar
+    # un ticket no es una feature de plan, es como se usa una mesa de ayuda.
+    app.include_router(categorias.router, dependencies=staff_or_admin)
 
     # Lo que sí depende del plan (ver `plans.py`). Las instancias que ya
     # existen no se enteran: sin plan asignado, `ModuleRepository` deja todo

@@ -108,6 +108,79 @@ def test_dashboard_prioridad_abiertas(client):
     assert dash["incidencias_por_prioridad_abiertas"] == {"alta": 2, "baja": 1}
 
 
+def test_cliente_guarda_cuit_y_domicilio(client):
+    """Pendiente 16 (2026-08-02): antes `clientes` solo tenia `ciudad`, asi
+    que los dos datos fiscales se tipeaban **en cada comprobante** aunque
+    fueran siempre los mismos."""
+    _login(client)
+    r = client.post("/api/clientes", json={
+        "nombre": "Fiscal", "email": "f@t.com",
+        "cuit": "30-71234567-8", "domicilio": "Av. Siempreviva 742",
+    })
+    assert r.status_code == 201
+    cliente_id = r.json()["id"]
+    assert r.json()["cuit"] == "30-71234567-8"
+    assert r.json()["domicilio"] == "Av. Siempreviva 742"
+
+    # Sobreviven al GET y se pueden vaciar.
+    assert client.get(f"/api/clientes/{cliente_id}").json()["cuit"] == "30-71234567-8"
+    r = client.put(f"/api/clientes/{cliente_id}", json={
+        "nombre": "Fiscal", "email": "f@t.com", "cuit": None, "domicilio": None,
+    })
+    assert r.json()["cuit"] is None
+
+    # Y son opcionales: un cliente sin datos fiscales se crea igual.
+    r = client.post("/api/clientes", json={"nombre": "Sin datos", "email": "s@t.com"})
+    assert r.status_code == 201
+    assert r.json()["cuit"] is None and r.json()["domicilio"] is None
+
+
+def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
+    """Mismo caso real que la columna de `equipos_movimientos`: los 9 clientes
+    de `compulibra` existen desde la migracion del Node.js y `create_all()` no
+    altera tablas que ya existen.
+
+    Aca si se puede usar `DROP COLUMN` (a diferencia del otro test): son
+    columnas sueltas, sin indice ni FK, que es justo lo que SQLite rechaza.
+    """
+    from sqlalchemy import text
+
+    from app import database
+    from app.migrations import run_migrations
+
+    _login(client)
+    cliente_id = client.post("/api/clientes", json={
+        "nombre": "Viejo", "email": "v@t.com", "ciudad": "Suipacha",
+    }).json()["id"]
+    engine = database.get_engine()
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE clientes DROP COLUMN cuit"))
+        conn.execute(text("ALTER TABLE clientes DROP COLUMN domicilio"))
+        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
+        filas_antes = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
+    assert "cuit" not in columnas and "domicilio" not in columnas
+
+    assert run_migrations(engine) == ["clientes.cuit", "clientes.domicilio"]
+
+    with engine.begin() as conn:
+        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
+        filas_despues = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
+    assert {"cuit", "domicilio"} <= columnas
+    # El cliente migrado no se pierde: queda con los campos nuevos en NULL.
+    assert filas_despues == filas_antes
+    ficha = client.get(f"/api/clientes/{cliente_id}").json()
+    assert ficha["ciudad"] == "Suipacha" and ficha["cuit"] is None
+
+    assert run_migrations(engine) == []  # idempotente
+
+    # Y la base migrada acepta escribir las columnas nuevas, que es el punto.
+    r = client.put(f"/api/clientes/{cliente_id}", json={
+        "nombre": "Viejo", "email": "v@t.com", "cuit": "20-11111111-2",
+    })
+    assert r.json()["cuit"] == "20-11111111-2"
+
+
 def test_incidencias_requires_auth(client):
     r = client.get("/api/incidencias")
     assert r.status_code == 401

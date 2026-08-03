@@ -16,6 +16,10 @@ export type Cliente = {
   email: string | null
   telefono: string | null
   ciudad: string | null
+  // Datos fiscales, para que los comprobantes no obliguen a tipearlos cada
+  // vez. Nulos en los 9 clientes migrados del Node.js viejo.
+  cuit: string | null
+  domicilio: string | null
   observaciones: string | null
   tipo_facturacion: 'mensual' | 'por_servicio'
   activo: boolean
@@ -149,6 +153,9 @@ export type Incidencia = {
   equipo_id: number | null
   tecnico_id: number | null
   sector_id: number | null
+  // Hoja del catálogo de categorías ("Hardware → Impresoras"). Null en las
+  // incidencias previas al catálogo.
+  categoria_id: number | null
   titulo: string
   descripcion: string | null
   estado: EstadoIncidencia
@@ -189,6 +196,35 @@ export type Sector = {
   id: number
   cliente_id: number
   nombre: string
+}
+
+// Catálogo de tipos de incidencia, de dos niveles y global (no por cliente,
+// a diferencia de los sectores). `parent_id: null` = categoría raíz; una
+// incidencia se clasifica siempre en una **hoja**.
+export type CategoriaIncidencia = {
+  id: number
+  parent_id: number | null
+  nombre: string
+  parent_nombre: string | null
+  // "Hardware · Impresoras" ya armado por el backend, para no rearmar el
+  // árbol en cada pantalla que sólo quiere mostrar el nombre completo.
+  ruta: string
+}
+
+/** Sólo las hojas: es lo único que se puede asignar a un ticket. Si una raíz
+ *  no tiene hijas todavía, se ofrece ella misma — si no, crear la categoría y
+ *  no poder usarla hasta agregarle una subcategoría desconcierta. */
+export function categoriasAsignables(categorias: CategoriaIncidencia[]): CategoriaIncidencia[] {
+  const conHijas = new Set(categorias.map((c) => c.parent_id).filter((id): id is number => id !== null))
+  return categorias.filter((c) => c.parent_id !== null || !conHijas.has(c.id))
+}
+
+export function opcionesCategoria(categorias: CategoriaIncidencia[]): OpcionSelect[] {
+  return categorias.map((c) => ({
+    value: String(c.id),
+    label: c.nombre,
+    hint: c.parent_nombre ?? undefined,
+  }))
 }
 
 // Remitos y presupuestos. Las columnas vienen tal cual de las tablas de

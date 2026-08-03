@@ -70,8 +70,10 @@ def test_los_planes_son_crecientes():
 
 
 def test_el_core_de_tickets_no_es_gateable():
-    """Clientes, equipos, incidencias, técnicos y sectores definen el producto."""
-    core = {"clientes", "equipos", "incidencias", "tecnicos", "sectores"}
+    """Clientes, equipos, incidencias, técnicos, sectores y categorías definen
+    el producto. `categorias` se sumó el 2026-08-02 con el catálogo de tipos:
+    clasificar un ticket no es una feature de plan."""
+    core = {"clientes", "equipos", "incidencias", "tecnicos", "sectores", "categorias"}
     assert core & TODOS_LOS_MODULOS == set()
 
 

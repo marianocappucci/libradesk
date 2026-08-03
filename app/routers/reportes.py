@@ -12,9 +12,10 @@ Dos familias, deliberadamente distintas:
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import (
-    get_cliente_repository, get_equipo_repository, get_incidencia_repository,
-    get_reportes_service,
+    get_categoria_repository, get_cliente_repository, get_equipo_repository,
+    get_incidencia_repository, get_reportes_service,
 )
+from ..services.categorias import CategoriaRepository
 from ..services.clientes import ClienteRepository
 from ..services.equipos import EquipoRepository
 from ..services.incidencias import IncidenciaRepository
@@ -110,12 +111,15 @@ def incidencias_periodo_xlsx(
     prioridad: str | None = None,
     sector_id: int | None = None,
     keyword: str | None = None,
+    categoria_id: int | None = None,
     reportes: ReportesService = Depends(get_reportes_service),
     clientes: ClienteRepository = Depends(get_cliente_repository),
+    categorias: CategoriaRepository = Depends(get_categoria_repository),
 ):
     data = reportes.incidencias(
         desde=desde, hasta=hasta, cliente_id=cliente_id, estado=estado,
         prioridad=prioridad, sector_id=sector_id, keyword=keyword,
+        categoria_id=categoria_id,
     )
 
     filtros = [f"Período: {fmt_date(desde)} – {fmt_date(hasta)}"]
@@ -125,13 +129,15 @@ def incidencias_periodo_xlsx(
         filtros.append(f"Estado: {ESTADO_LABEL.get(estado, estado)}")
     if prioridad:
         filtros.append(f"Prioridad: {PRIO_LABEL.get(prioridad, prioridad)}")
+    if categoria_id and (cat := categorias.get(categoria_id)):
+        filtros.append(f"Categoría: {cat['ruta']}")
     if keyword:
         filtros.append(f'Búsqueda: "{keyword}"')
 
     # Sin columna "Tar.": la tabla incidencia_tareas ya no existe.
-    headers = ["#", "Cliente", "Sector", "Título", "Descripción", "Estado",
+    headers = ["#", "Cliente", "Sector", "Categoría", "Título", "Descripción", "Estado",
                "Prioridad", "Técnico", "Creación", "Cierre", "Act.", "Hs.", "Cobro"]
-    widths = [6, 24, 18, 30, 38, 14, 11, 20, 12, 12, 6, 6, 16]
+    widths = [6, 24, 18, 24, 30, 38, 14, 11, 20, 12, 12, 6, 6, 16]
     wb, ws, fila = _hoja("Incidencias", filtros, headers, widths)
 
     for i, r in enumerate(data):
@@ -146,7 +152,8 @@ def incidencias_periodo_xlsx(
             cobro_text, cobro_color = None, None
 
         add_data_row(ws, fila + i, [
-            r["id"], r["cliente"], r["sector"], r["titulo"], r["descripcion"],
+            r["id"], r["cliente"], r["sector"], r["categoria"],
+            r["titulo"], r["descripcion"],
             ESTADO_LABEL.get(r["estado"], r["estado"]),
             PRIO_LABEL.get(r["prioridad"], r["prioridad"]),
             r["tecnico"],
@@ -155,7 +162,7 @@ def incidencias_periodo_xlsx(
             f"{r['horas_resolucion']}h" if r["horas_resolucion"] is not None else None,
             cobro_text,
         ], [
-            None, None, None, None, None,
+            None, None, None, None, None, None,
             ESTADO_COLOR.get(r["estado"]),
             PRIO_COLOR.get(r["prioridad"]),
             None, None, None, None, None,
@@ -166,7 +173,7 @@ def incidencias_periodo_xlsx(
     con_horas = [r["horas_resolucion"] for r in data if r["horas_resolucion"] is not None]
     prom = f"{round(sum(con_horas) / len(con_horas))}h prom" if con_horas else None
     add_totals_row(ws, fila + len(data), [
-        None, None, None, None, None, None, None, None,
+        None, None, None, None, None, None, None, None, None,
         f"{len(data)} incidencias", None, total_act, prom, None,
     ])
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
-  type Cliente, type Sector,
+  type CategoriaIncidencia, type Cliente, type Sector,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,6 +47,7 @@ type Campo =
   | { tipo: 'opciones'; name: string; label: string; opciones: Record<string, string>; todosLabel?: string }
   | { tipo: 'cliente'; name: string; label: string }
   | { tipo: 'sector'; name: string; label: string }
+  | { tipo: 'categoria'; name: string; label: string; todosLabel?: string }
 
 type Grupo = 'equipos' | 'incidencias' | 'administracion'
 
@@ -111,6 +112,9 @@ const REPORTES: Reporte[] = [
       { tipo: 'opciones', name: 'estado', label: 'Estado', opciones: ESTADO_LABELS },
       { tipo: 'opciones', name: 'prioridad', label: 'Prioridad', opciones: PRIORIDAD_LABELS, todosLabel: 'Todas' },
       { tipo: 'sector', name: 'sector_id', label: 'Sector' },
+      // Elegir una categoría raíz trae también sus subcategorías — lo resuelve
+      // el backend, ver ReportesService.incidencias().
+      { tipo: 'categoria', name: 'categoria_id', label: 'Categoría', todosLabel: 'Todas' },
       { tipo: 'texto', name: 'keyword', label: 'Búsqueda', placeholder: 'Título o descripción' },
     ],
   },
@@ -166,7 +170,10 @@ function valoresIniciales(r: Reporte): Record<string, string> {
   for (const campo of r.campos) {
     if (campo.tipo === 'fecha') {
       base[campo.name] = campo.name === 'desde' ? firstOfMonthIso() : todayIso()
-    } else if (campo.tipo === 'cliente' || campo.tipo === 'sector' || campo.tipo === 'opciones') {
+    } else if (
+      campo.tipo === 'cliente' || campo.tipo === 'sector'
+      || campo.tipo === 'categoria' || campo.tipo === 'opciones'
+    ) {
       base[campo.name] = TODOS
     } else {
       base[campo.name] = ''
@@ -178,10 +185,11 @@ function valoresIniciales(r: Reporte): Record<string, string> {
 /** Los filtros de UN reporte, ya dentro del diálogo. Se monta con `key` =
  *  slug, así cada reporte que se abre arranca con sus valores iniciales y no
  *  con los del anterior. */
-function FormularioReporte({ reporte, clientes, sectores }: {
+function FormularioReporte({ reporte, clientes, sectores, categorias }: {
   reporte: Reporte
   clientes: Cliente[]
   sectores: Sector[]
+  categorias: CategoriaIncidencia[]
 }) {
   const [valores, setValores] = useState<Record<string, string>>(() => valoresIniciales(reporte))
 
@@ -232,8 +240,14 @@ function FormularioReporte({ reporte, clientes, sectores }: {
             ? clientes.map((c) => [String(c.id), c.empresa || c.nombre] as const)
             : campo.tipo === 'sector'
               ? sectoresVisibles.map((s) => [String(s.id), s.nombre] as const)
-              : Object.entries(campo.opciones)
-          const todosLabel = campo.tipo === 'opciones' ? (campo.todosLabel ?? 'Todos') : 'Todos'
+              : campo.tipo === 'categoria'
+                // La ruta completa: en un desplegable sin jerarquía visual,
+                // "Impresoras" solo no dice de qué categoría cuelga.
+                ? categorias.map((c) => [String(c.id), c.ruta] as const)
+                : Object.entries(campo.opciones)
+          const todosLabel = campo.tipo === 'opciones' || campo.tipo === 'categoria'
+            ? (campo.todosLabel ?? 'Todos')
+            : 'Todos'
 
           return (
             <div key={campo.name} className="grid gap-1.5">
@@ -263,6 +277,7 @@ function FormularioReporte({ reporte, clientes, sectores }: {
 export function Reportes() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sectores, setSectores] = useState<Sector[]>([])
+  const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   // La pantalla es un índice: los seis reportes se listan agrupados y los
@@ -278,12 +293,14 @@ export function Reportes() {
   async function cargar() {
     setLoading(true)
     try {
-      const [cl, se] = await Promise.all([
+      const [cl, se, cat] = await Promise.all([
         api.get<Cliente[]>('/api/clientes'),
         api.get<Sector[]>('/api/sectores'),
+        api.get<CategoriaIncidencia[]>('/api/categorias'),
       ])
       setClientes(cl)
       setSectores(se)
+      setCategorias(cat)
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Error de conexión.')
     } finally {
@@ -373,6 +390,7 @@ export function Reportes() {
               reporte={abierto}
               clientes={clientes}
               sectores={sectores}
+              categorias={categorias}
             />
           )}
         </DialogContent>
