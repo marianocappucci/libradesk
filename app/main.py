@@ -19,14 +19,15 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     categorias, clientes, config_empresa, dashboard, equipos, health, incidencias,
-    presupuestos, proveedores, remitos, reparaciones, reportes, sectores, tecnicos,
-    users,
+    informes, presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
+    tecnicos, users,
 )
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
 from .services.reemplazo import ReemplazoService
@@ -100,6 +101,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
+    app.state.informes = InformeService(sessions)
     app.state.remitos = rp_service.RemitoService()
     app.state.presupuestos = rp_service.PresupuestoService()
     app.state.modules = module_repository
@@ -153,6 +155,14 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     )
     app.include_router(
         reportes.router, dependencies=staff_or_admin + [Depends(require_module("reportes"))]
+    )
+    # El informe para el cliente cuelga del MISMO modulo que los reportes
+    # internos, aunque sea un router aparte. Reusar el modulo existente en vez
+    # de inventar uno nuevo evita tomar una decision comercial que nadie tomo:
+    # si "reportes" separa a Basico de Estandar, poder emitirle un informe al
+    # cliente cae del mismo lado de esa linea.
+    app.include_router(
+        informes.router, dependencies=staff_or_admin + [Depends(require_module("reportes"))]
     )
     app.include_router(
         remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]
