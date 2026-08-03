@@ -125,7 +125,7 @@ export function ClienteDetalle() {
 
   const { cliente, garantias, incidencias_abiertas: abiertas } = resumen
   const vencidas = garantias.filter((g) => g.dias_restantes < 0).length
-  const contacto = [cliente.telefono, cliente.email, cliente.ciudad].filter(Boolean)
+  const contacto = [cliente.telefono, cliente.email, cliente.domicilio, cliente.ciudad].filter(Boolean)
 
   return (
     <div className="grid gap-4">
@@ -142,9 +142,12 @@ export function ClienteDetalle() {
             </p>
           </div>
         </div>
-        <Badge variant="secondary">
-          {cliente.tipo_facturacion === 'mensual' ? 'Abono mensual' : 'Factura por servicio'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {cliente.cuit && <Badge variant="outline">CUIT {cliente.cuit}</Badge>}
+          <Badge variant="secondary">
+            {cliente.tipo_facturacion === 'mensual' ? 'Abono mensual' : 'Factura por servicio'}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

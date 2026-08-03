@@ -4,6 +4,7 @@ from fastapi import Request
 
 from libraauth.repository import UserRepository
 
+from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
@@ -41,6 +42,10 @@ def get_tecnico_repository(request: Request) -> TecnicoRepository:
 
 def get_sector_repository(request: Request) -> SectorRepository:
     return request.app.state.sectores
+
+
+def get_categoria_repository(request: Request) -> CategoriaRepository:
+    return request.app.state.categorias
 
 
 def get_dashboard_service(request: Request) -> DashboardService:

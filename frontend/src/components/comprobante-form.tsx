@@ -97,6 +97,33 @@ export function ComprobanteForm({
     onChange({ ...draft, [campo]: valor })
   }
 
+  /** Al elegir cliente, trae su CUIT y su domicilio (2026-08-02). Antes había
+   *  que tipearlos en cada comprobante porque la tabla `clientes` no los
+   *  guardaba.
+   *
+   *  **Lo que decide si se pisa el valor no es si está vacío, sino de dónde
+   *  vino.** Si lo que hay es exactamente lo del cliente anterior, lo puso
+   *  esta función y se reemplaza —incluso por vacío, si el cliente nuevo no
+   *  tiene el dato—; si el usuario escribió otra cosa, se respeta. Sin esa
+   *  distinción, pasar de un cliente con CUIT a uno sin CUIT dejaba el
+   *  comprobante del segundo **con el CUIT del primero**, que es peor que
+   *  dejarlo en blanco. */
+  function elegirCliente(valor: string) {
+    const nuevo = clientes.find((c) => String(c.id) === valor)
+    const anterior = clientes.find((c) => String(c.id) === draft.client_id)
+
+    const heredar = (
+      actual: string, deAnterior: string | null | undefined, deNuevo: string | null | undefined,
+    ) => (actual === '' || actual === (deAnterior ?? '') ? (deNuevo ?? '') : actual)
+
+    onChange({
+      ...draft,
+      client_id: valor,
+      client_cuit: heredar(draft.client_cuit, anterior?.cuit, nuevo?.cuit),
+      client_address: heredar(draft.client_address, anterior?.domicilio, nuevo?.domicilio),
+    })
+  }
+
   function setItem(index: number, campo: keyof ItemDraft, valor: string) {
     const items = draft.items.map((item, i) => (i === index ? { ...item, [campo]: valor } : item))
     onChange({ ...draft, items })
@@ -143,7 +170,7 @@ export function ComprobanteForm({
               <Label>Cliente</Label>
               <SelectBuscable
                 value={draft.client_id}
-                onChange={(v) => set('client_id', v)}
+                onChange={elegirCliente}
                 // Acá la etiqueta es la empresa cuando existe (es lo que va en
                 // el comprobante), pero el nombre entra igual en la búsqueda.
                 opciones={clientes.map((c) => ({
@@ -185,8 +212,9 @@ export function ComprobanteForm({
             )}
 
             <div className="grid gap-2">
-              {/* LibraDesk no guarda CUIT ni domicilio por cliente (la tabla
-                  clientes solo tiene ciudad), asi que van por comprobante. */}
+              {/* Se completan solos con los del cliente al elegirlo (ver
+                  `elegirCliente`), y siguen siendo editables: un comprobante
+                  puede ir a nombre de otra razon social. */}
               <Label htmlFor="cf-cuit">CUIT / DNI</Label>
               <Input id="cf-cuit" value={draft.client_cuit} placeholder="20-12345678-9"
                      onChange={(e) => set('client_cuit', e.target.value)} />

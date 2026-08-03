@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
-  PRIORIDAD_LABELS, describirEquipo, ubicacionTexto,
-  opcionesCliente, opcionesEquipo, opcionesPorNombre,
-  type Actividad, type Cliente, type DestinoReemplazo, type Equipo,
-  type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
+  PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
+  opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
+  type Actividad, type CategoriaIncidencia, type Cliente, type DestinoReemplazo,
+  type Equipo, type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
   type Sector, type Tecnico,
 } from '../api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,6 +48,7 @@ export function IncidenciaDetalle() {
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
   const [sectores, setSectores] = useState<Sector[]>([])
+  const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([])
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [estados, setEstados] = useState<IncidenciaEstadoLog[]>([])
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[]>([])
@@ -76,12 +77,13 @@ export function IncidenciaDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq, te, se, act, est, mov] = await Promise.all([
+      const [inc, cl, eq, te, se, cat, act, est, mov] = await Promise.all([
         api.get<Incidencia>(`/api/incidencias/${incidenciaId}`),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
         api.get<Tecnico[]>('/api/tecnicos'),
         api.get<Sector[]>('/api/sectores'),
+        api.get<CategoriaIncidencia[]>('/api/categorias'),
         api.get<Actividad[]>(`/api/incidencias/${incidenciaId}/actividades`),
         api.get<IncidenciaEstadoLog[]>(`/api/incidencias/${incidenciaId}/estados`),
         api.get<EquipoMovimiento[]>(`/api/incidencias/${incidenciaId}/movimientos`),
@@ -91,6 +93,7 @@ export function IncidenciaDetalle() {
       setEquipos(eq)
       setTecnicos(te)
       setSectores(se)
+      setCategorias(cat)
       setActividades(act)
       setEstados(est)
       setMovimientos(mov)
@@ -126,6 +129,7 @@ export function IncidenciaDetalle() {
         equipo_id: actualizado.equipo_id,
         tecnico_id: actualizado.tecnico_id,
         sector_id: actualizado.sector_id,
+        categoria_id: actualizado.categoria_id,
         titulo: actualizado.titulo,
         descripcion: actualizado.descripcion,
         estado: actualizado.estado,
@@ -186,6 +190,9 @@ export function IncidenciaDetalle() {
   )
 
   const equiposDelCliente = incidencia ? equipos.filter((e) => e.cliente_id === incidencia.cliente_id) : []
+  // Sólo hojas: un ticket se clasifica en "Impresoras", no en "Hardware" a
+  // secas. La única excepción son las raíces que todavía no tienen hijas.
+  const categoriasElegibles = categoriasAsignables(categorias)
   const equipoPorId = (id: number) => equipos.find((e) => e.id === id)
 
   function abrirReemplazo() {
@@ -398,6 +405,24 @@ export function IncidenciaDetalle() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Sólo si hay catálogo: hasta que alguien cargue categorías en
+                  Configuración, un select con una única opción "Sin categoría"
+                  sería ruido. */}
+              {categoriasElegibles.length > 0 && (
+                <div className="grid gap-1.5">
+                  <Label>Categoría</Label>
+                  <SelectBuscable
+                    value={incidencia.categoria_id ? String(incidencia.categoria_id) : NONE}
+                    onChange={(v) => actualizarCampo({ categoria_id: v === NONE ? null : Number(v) })}
+                    opciones={[
+                      { value: NONE, label: 'Sin categoría' },
+                      ...opcionesCategoria(categoriasElegibles),
+                    ]}
+                    ariaLabel="Categoría"
+                    className="w-full"
+                  />
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label>Cliente</Label>
                 <SelectBuscable

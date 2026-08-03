@@ -20,6 +20,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 from app.schema import (
@@ -81,9 +82,16 @@ def _engine(tmp_path, nombre="libradesk.db"):
     return create_engine(f"sqlite:///{tmp_path / nombre}")
 
 
-def _upgrade(engine) -> None:
+def _upgrade(engine, hasta="head") -> None:
     with engine.begin() as conn:
-        command.upgrade(alembic_config(conn), "head")
+        command.upgrade(alembic_config(conn), hasta)
+
+
+def _head() -> str:
+    """La ultima revision, leida de la cadena y no escrita a mano: asi agregar
+    una revision no obliga a tocar los tests."""
+    with create_engine("sqlite://").connect() as conn:
+        return ScriptDirectory.from_config(alembic_config(conn)).get_current_head()
 
 
 def _ejecutar(engine, sentencias) -> None:
@@ -170,12 +178,16 @@ def test_el_baseline_describe_la_base_real_de_produccion(tmp_path):
     Stampear es afirmar "esta base ya esta en esta revision" sin ejecutar nada.
     Si `compulibra` no fuera igual al baseline, esa afirmacion seria falsa y la
     proxima migracion correria sobre un schema que no es el que cree.
+
+    Se compara contra `BASELINE` y no contra `head` a proposito: lo que se
+    stampea es el baseline. Las revisiones que vienen despues describen cambios
+    que produccion todavia no tiene — de eso se encargan, justamente.
     """
     real = _engine(tmp_path, "produccion.db")
     _ejecutar(real, _DDL_PRODUCCION)
 
     del_baseline = _engine(tmp_path, "baseline.db")
-    _upgrade(del_baseline)
+    _upgrade(del_baseline, BASELINE)
 
     assert _radiografia(real) == _radiografia(del_baseline)
 
@@ -223,10 +235,10 @@ def test_una_base_anterior_a_alembic_se_adopta_sin_perder_datos(tmp_path):
     """El caso real del deploy: `compulibra` existe desde la migracion del
     Node.js viejo, tiene datos, y no tiene tabla de version.
 
-    Lo que se exige: que quede stampeada en `head`, que no se le toque el
-    schema, y que las filas sigan ahi. Sin esto, el arranque con Alembic
-    intentaria correr el baseline sobre tablas que ya existen y fallaria con
-    `table clientes already exists`.
+    Lo que se exige: que se la stampee en el baseline, que **desde ahi corra el
+    resto de la cadena**, y que ni una fila se pierda en el camino. Sin la
+    adopcion, el arranque intentaria correr el baseline sobre tablas que ya
+    existen y fallaria con `table clientes already exists`.
     """
     engine = _engine(tmp_path)
     _ejecutar(engine, _DDL_PRODUCCION)
@@ -234,17 +246,35 @@ def test_una_base_anterior_a_alembic_se_adopta_sin_perder_datos(tmp_path):
         "INSERT INTO clientes (id, nombre, tipo_facturacion, activo) "
         "VALUES (1, 'Compulibra', 'por_servicio', 1)",
         "INSERT INTO equipos (id, cliente_id, tipo, estado) VALUES (1, 1, 'Impresora', 'activo')",
+        "INSERT INTO incidencias (id, cliente_id, titulo, estado, prioridad, activo) "
+        "VALUES (1, 1, 'La impresora hace ruido', 'abierto', 'media', 1)",
     ])
-    antes = _radiografia(engine)
+    columnas_antes = _radiografia(engine)["clientes"]["columnas"]
 
     assert _version(engine) is None
     assert ensure_schema(engine) == "stamp+upgrade"
 
-    assert _version(engine) == BASELINE
-    assert _radiografia(engine) == antes
+    # Queda en head, no en el baseline: la adopcion stampea y sigue.
+    assert _version(engine) == _head() != BASELINE
+
+    despues = _radiografia(engine)
+    # Lo que ya estaba sigue igual, con el mismo tipo y la misma nullability...
+    for nombre, definicion in columnas_antes.items():
+        assert despues["clientes"]["columnas"][nombre] == definicion
+    # ...y lo que agrego la 0002 esta.
+    assert {"cuit", "domicilio"} <= set(despues["clientes"]["columnas"])
+    assert "categoria_id" in despues["incidencias"]["columnas"]
+    assert despues["categorias_incidencia"]["columnas"]
+
     with engine.connect() as conn:
         assert conn.execute(text("SELECT nombre FROM clientes")).scalar() == "Compulibra"
         assert conn.execute(text("SELECT COUNT(*) FROM equipos")).scalar() == 1
+        # La fila de incidencias sobrevivio al ADD COLUMN de `categoria_id`, que
+        # es el punto donde un `create_foreign_key` en batch habria reconstruido
+        # la tabla entera (ver el docstring de la revision 0002).
+        assert conn.execute(text("SELECT titulo FROM incidencias")).scalar() == \
+            "La impresora hace ruido"
+        assert conn.execute(text("SELECT categoria_id FROM incidencias")).scalar() is None
 
 
 def test_una_base_vacia_se_construye_entera(tmp_path):
@@ -252,7 +282,7 @@ def test_una_base_vacia_se_construye_entera(tmp_path):
 
     assert ensure_schema(engine) == "creacion"
 
-    assert _version(engine) == BASELINE
+    assert _version(engine) == _head()
     assert _diferencias(engine) == []
 
 
@@ -262,7 +292,7 @@ def test_una_base_ya_adoptada_solo_hace_upgrade(tmp_path):
     ensure_schema(engine)
 
     assert ensure_schema(engine) == "upgrade"
-    assert _version(engine) == BASELINE
+    assert _version(engine) == _head()
 
 
 def test_no_se_stampea_una_base_que_no_coincide_con_el_baseline(tmp_path):

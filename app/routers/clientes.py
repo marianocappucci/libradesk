@@ -14,6 +14,8 @@ class ClienteIn(BaseModel):
     email: str | None = None
     telefono: str | None = None
     ciudad: str | None = None
+    cuit: str | None = None
+    domicilio: str | None = None
     observaciones: str | None = None
     tipo_facturacion: str = "por_servicio"
     activo: bool = True

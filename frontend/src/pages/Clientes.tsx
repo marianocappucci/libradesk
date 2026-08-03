@@ -30,6 +30,8 @@ const clienteSchema = z.object({
   email: z.string().trim().email('Email inválido').optional().or(z.literal('')),
   telefono: z.string().trim().optional(),
   ciudad: z.string().trim().optional(),
+  cuit: z.string().trim().optional(),
+  domicilio: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
   tipo_facturacion: z.enum(['mensual', 'por_servicio']),
 })
@@ -37,8 +39,8 @@ const clienteSchema = z.object({
 type ClienteFormValues = z.infer<typeof clienteSchema>
 
 const EMPTY_VALUES: ClienteFormValues = {
-  nombre: '', empresa: '', email: '', telefono: '', ciudad: '', observaciones: '',
-  tipo_facturacion: 'por_servicio',
+  nombre: '', empresa: '', email: '', telefono: '', ciudad: '', cuit: '',
+  domicilio: '', observaciones: '', tipo_facturacion: 'por_servicio',
 }
 
 export function Clientes() {
@@ -116,6 +118,8 @@ export function Clientes() {
       email: cliente.email ?? '',
       telefono: cliente.telefono ?? '',
       ciudad: cliente.ciudad ?? '',
+      cuit: cliente.cuit ?? '',
+      domicilio: cliente.domicilio ?? '',
       observaciones: cliente.observaciones ?? '',
       tipo_facturacion: cliente.tipo_facturacion,
     })
@@ -131,6 +135,8 @@ export function Clientes() {
       email: values.email || null,
       telefono: values.telefono || null,
       ciudad: values.ciudad || null,
+      cuit: values.cuit || null,
+      domicilio: values.domicilio || null,
       observaciones: values.observaciones || null,
       tipo_facturacion: values.tipo_facturacion,
       // Al editar se conserva el estado real del cliente: antes iba `true`
@@ -321,6 +327,23 @@ export function Clientes() {
                   <FormItem>
                     <FormLabel>Ciudad</FormLabel>
                     <FormControl><Input {...field} className="w-36" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {/* CUIT y domicilio: los usan los remitos y presupuestos.
+                    Antes había que tipearlos en cada comprobante porque el
+                    cliente no los guardaba. */}
+                <FormField control={form.control} name="cuit" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CUIT / DNI</FormLabel>
+                    <FormControl><Input {...field} className="w-40" placeholder="20-12345678-9" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="domicilio" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Domicilio</FormLabel>
+                    <FormControl><Input {...field} className="w-52" placeholder="Av. Siempreviva 742" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

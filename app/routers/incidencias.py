@@ -17,6 +17,9 @@ class IncidenciaIn(BaseModel):
     equipo_id: int | None = None
     tecnico_id: int | None = None
     sector_id: int | None = None
+    # Hoja del catalogo de categorias ("Hardware -> Impresoras"), 2026-08-02.
+    # Opcional a proposito: las 23 incidencias reales son previas al catalogo.
+    categoria_id: int | None = None
     titulo: str
     descripcion: str | None = None
     estado: str = "abierto"
@@ -67,10 +70,13 @@ def create_incidencia(
 @router.get("", response_model=list[IncidenciaOut])
 def list_incidencias(
     cliente_id: int | None = None, estado: str | None = None,
-    equipo_id: int | None = None,
+    equipo_id: int | None = None, categoria_id: int | None = None,
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
 ):
-    return incidencias.list(cliente_id=cliente_id, estado=estado, equipo_id=equipo_id)
+    return incidencias.list(
+        cliente_id=cliente_id, estado=estado, equipo_id=equipo_id,
+        categoria_id=categoria_id,
+    )
 
 
 @router.get("/{incidencia_id}", response_model=IncidenciaOut)

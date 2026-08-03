@@ -31,7 +31,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import inspect
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
 
 from .database import Base
@@ -42,6 +42,7 @@ from .database import Base
 # al autogenerate por el solo hecho de estar importado en esta linea. Si en su
 # lugar env.py tuviera su propia lista, agregar un modelo y olvidarse de una de
 # las dos daria una tabla sin migracion, en silencio.
+from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
@@ -112,26 +113,48 @@ def _version_actual(connection) -> str | None:
     ).get_current_revision()
 
 
+def _schema_del_baseline() -> dict[str, set[str]]:
+    """Tablas y columnas que crea la revision baseline, corriendola en memoria.
+
+    **Contra el baseline y no contra `metadata`**, que es la diferencia entre
+    que esto funcione o tire abajo el arranque de produccion. `metadata` refleja
+    los modelos de HOY, o sea el `head` de la cadena; una base anterior a
+    Alembic esta —por definicion— en el baseline y le faltan todas las columnas
+    que agregaron las revisiones posteriores. Compararla contra `metadata`
+    hacia fallar la verificacion en cuanto existio la primera revision real, y
+    con ella el arranque de las dos instancias. Lo agarro
+    `test_una_base_anterior_a_alembic_se_adopta_sin_perder_datos` al sumarse la
+    0002.
+    """
+    memoria = create_engine("sqlite://")
+    with memoria.begin() as conn:
+        command.upgrade(_config(conn), BASELINE)
+        inspector = inspect(conn)
+        return {
+            t: {c["name"] for c in inspector.get_columns(t)}
+            for t in inspector.get_table_names()
+            if not t.startswith("alembic_version")
+        }
+
+
 def _verificar_baseline(connection) -> None:
     """Comprueba que la base preexistente tenga de verdad el schema del baseline.
 
-    Solo mira columnas FALTANTES respecto de la metadata. Una columna de mas no
-    aborta: puede ser una tabla de otro dueno del archivo, o una base que quedo
-    adelantada, y ninguno de esos casos rompe la cadena. Una columna de menos
-    si: significa que el baseline no describe esta base.
+    Solo mira lo que FALTA. Una columna de mas no aborta: puede ser de otro
+    dueno del archivo, o una base que quedo adelantada, y ninguno de esos casos
+    rompe la cadena. Una de menos si: significa que el baseline no describe esta
+    base y stamparla seria registrar algo falso.
     """
     inspector = inspect(connection)
     presentes = set(inspector.get_table_names())
     faltantes: list[str] = []
 
-    for nombre, tabla in metadata.tables.items():
-        if nombre not in presentes:
-            faltantes.append(f"tabla {nombre}")
+    for tabla, columnas in _schema_del_baseline().items():
+        if tabla not in presentes:
+            faltantes.append(f"tabla {tabla}")
             continue
-        reales = {c["name"] for c in inspector.get_columns(nombre)}
-        for columna in tabla.columns:
-            if columna.name not in reales:
-                faltantes.append(f"{nombre}.{columna.name}")
+        reales = {c["name"] for c in inspector.get_columns(tabla)}
+        faltantes.extend(f"{tabla}.{c}" for c in columnas - reales)
 
     if faltantes:
         raise SchemaInesperado(

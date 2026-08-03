@@ -15,8 +15,9 @@ Lectura pura, sin tablas propias — mismo criterio que `DashboardService`.
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import aliased, sessionmaker
 
+from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .equipos import Equipo, EquipoMovimiento
 from .incidencias import ActividadIncidencia, Incidencia
@@ -36,6 +37,15 @@ def _inicio_del_dia(fecha: str) -> datetime:
 
 def _nombre_cliente(c: Cliente) -> str:
     return c.empresa or c.nombre
+
+
+def _ruta_categoria(cat: CategoriaIncidencia | None, padre: CategoriaIncidencia | None) -> str | None:
+    """"Hardware · Impresoras", o solo el nombre si el ticket quedo clasificado
+    en una categoria raiz. `None` si no tiene ninguna — que es el caso de las
+    23 incidencias reales, previas al catalogo."""
+    if cat is None:
+        return None
+    return f"{padre.nombre} · {cat.nombre}" if padre else cat.nombre
 
 
 def _horas_resolucion(i: Incidencia) -> int | None:
@@ -95,13 +105,20 @@ class ReportesService:
     # ── Incidencias por periodo ─────────────────────────────────────
     def incidencias(self, desde: str, hasta: str, cliente_id: int | None = None,
                     estado: str | None = None, prioridad: str | None = None,
-                    sector_id: int | None = None, keyword: str | None = None) -> list[dict]:
+                    sector_id: int | None = None, keyword: str | None = None,
+                    categoria_id: int | None = None) -> list[dict]:
         with self.session_factory() as session:
+            # Alias sobre la MISMA tabla para traer el padre de la categoria:
+            # el catalogo es de dos niveles con auto-referencia, asi que
+            # "Hardware · Impresoras" sale de un solo join contra si misma.
+            Padre = aliased(CategoriaIncidencia)
             stmt = (
-                select(Incidencia, Cliente, Tecnico, Sector)
+                select(Incidencia, Cliente, Tecnico, Sector, CategoriaIncidencia, Padre)
                 .join(Cliente, Incidencia.cliente_id == Cliente.id)
                 .outerjoin(Tecnico, Incidencia.tecnico_id == Tecnico.id)
                 .outerjoin(Sector, Incidencia.sector_id == Sector.id)
+                .outerjoin(CategoriaIncidencia, Incidencia.categoria_id == CategoriaIncidencia.id)
+                .outerjoin(Padre, CategoriaIncidencia.parent_id == Padre.id)
                 .where(Incidencia.fecha_creacion >= _inicio_del_dia(desde))
                 .where(Incidencia.fecha_creacion <= _fin_del_dia(hasta))
             )
@@ -113,6 +130,14 @@ class ReportesService:
                 stmt = stmt.where(Incidencia.prioridad == prioridad)
             if sector_id:
                 stmt = stmt.where(Incidencia.sector_id == sector_id)
+            if categoria_id:
+                # Elegir una categoria RAIZ trae todo lo que cuelga de ella:
+                # "Hardware" contesta por impresoras, notebooks y red juntas,
+                # que es la pregunta que se hace de verdad.
+                stmt = stmt.where(
+                    (Incidencia.categoria_id == categoria_id)
+                    | (CategoriaIncidencia.parent_id == categoria_id)
+                )
             if keyword:
                 like = f"%{keyword}%"
                 stmt = stmt.where(
@@ -133,6 +158,7 @@ class ReportesService:
                     "cliente": _nombre_cliente(c),
                     "tipo_facturacion": c.tipo_facturacion,
                     "sector": s.nombre if s else None,
+                    "categoria": _ruta_categoria(cat, padre),
                     "titulo": i.titulo,
                     "descripcion": i.descripcion,
                     "estado": i.estado,
@@ -144,7 +170,7 @@ class ReportesService:
                     "actividades_count": actividades.get(i.id, 0),
                     "horas_resolucion": _horas_resolucion(i),
                 }
-                for i, c, t, s in session.execute(stmt).all()
+                for i, c, t, s, cat, padre in session.execute(stmt).all()
             ]
 
     # ── Facturacion ─────────────────────────────────────────────────
