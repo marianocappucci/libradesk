@@ -18,7 +18,7 @@ dependencies = [
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.2.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.6.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +27,12 @@ dev = [
     "ruff>=0.13",
     "pytest>=8.0",
     "httpx>=0.27",
+    # Solo para tests: leer de vuelta el texto de los PDF del informe. Sin
+    # esto el unico chequeo posible es la firma `%PDF-`, que un documento
+    # vacio o con los datos equivocados pasa igual — mismo motivo por el que
+    # los reportes xlsx se verifican abriendolos con openpyxl y no mirando el
+    # content-type.
+    "pypdf>=5.0",
 ]
 
 [build-system]
