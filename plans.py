@@ -67,10 +67,10 @@ def aplicar_plan_en_db(db_path: str, plan: str) -> None:
     para asignar el plan de una instancia sin depender del contenedor.
 
     Shim sobre `libracore.provisioning.apply_plan_modules`, igual que en los
-    otros cinco productos. Requiere que la tabla `modulos` ya exista — acá la
-    crea `Base.metadata.create_all()` al arrancar la instancia, sin migración
-    propia, porque es una tabla nueva y no una columna nueva (ver
-    `app/migrations.py` para por qué esa distinción importa en SQLite).
+    otros cinco productos. Requiere que la tabla `modulos` ya exista — la crea
+    la cadena de Alembic (`migrations/`) al arrancar la instancia, junto con el
+    resto del schema propio. Hasta el 2026-08-03 la creaba
+    `Base.metadata.create_all()`; ver `app/schema.py`.
     """
     if plan not in PLAN_MODULOS:
         raise ValueError(f"Plan desconocido: {plan!r}")
