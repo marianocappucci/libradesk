@@ -543,84 +543,13 @@ def test_borrar_la_incidencia_borra_su_actividad_y_su_auditoria(client):
     assert contar("incidencias_estados_log") == 0
 
 
-# El `CREATE TABLE` de `equipos_movimientos` ANTES de esta ronda: es el
-# schema que hoy tienen las dos instancias desplegadas. Se escribe
-# completo a proposito — el test de migracion tiene que correr contra el
-# estado real de produccion, no contra una aproximacion.
-_DDL_MOVIMIENTOS_VIEJO = """
-CREATE TABLE equipos_movimientos (
-    id INTEGER NOT NULL,
-    equipo_id INTEGER NOT NULL,
-    tipo VARCHAR(50) NOT NULL,
-    descripcion TEXT,
-    sector_origen VARCHAR(255),
-    sector_destino VARCHAR(255),
-    ubicacion_origen VARCHAR(255),
-    ubicacion_destino VARCHAR(255),
-    motivo VARCHAR(500),
-    usuario VARCHAR(255) NOT NULL,
-    fecha DATETIME DEFAULT (CURRENT_TIMESTAMP),
-    PRIMARY KEY (id),
-    FOREIGN KEY(equipo_id) REFERENCES equipos (id) ON DELETE CASCADE
-)
-"""
-
-_COLUMNAS_VIEJAS = (
-    "id, equipo_id, tipo, descripcion, sector_origen, sector_destino, "
-    "ubicacion_origen, ubicacion_destino, motivo, usuario, fecha"
-)
+# El test que cubria `app/migrations.py` (el `ALTER TABLE ADD COLUMN` a mano)
+# se fue con ese modulo el 2026-08-03, cuando el schema propio paso a Alembic.
+# Su sucesor vive en tests/test_alembic.py: alli se reconstruye el schema real
+# de produccion —el mismo `CREATE TABLE` que estaba escrito aca— y se verifica
+# que `ensure_schema()` lo adopte sin tocar el schema ni perder filas.
 
 
-def test_la_migracion_agrega_la_columna_a_una_base_vieja(client):
-    """El caso real del deploy: `compulibra` ya existe con sus 75
-    movimientos, y `create_all()` **no altera tablas existentes** — sin la
-    migracion, la columna nueva jamas llegaria ahi.
-
-    Se reconstruye la tabla con el schema anterior (con datos adentro) y
-    se corre la migracion sobre esa base. No se puede simular con `DROP
-    COLUMN`: SQLite lo rechaza cuando la columna esta en una FK.
-    """
-    from sqlalchemy import text
-
-    from app import database
-    from app.migrations import run_migrations
-
-    _login(client)
-    esc = _escenario_impresora(client)  # deja movimientos de alta reales
-    engine = database.get_engine()
-
-    with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS ix_equipos_movimientos_incidencia_id"))
-        conn.execute(text("ALTER TABLE equipos_movimientos RENAME TO _mov_con_columna"))
-        conn.execute(text(_DDL_MOVIMIENTOS_VIEJO))
-        conn.execute(text(
-            f"INSERT INTO equipos_movimientos SELECT {_COLUMNAS_VIEJAS} FROM _mov_con_columna"
-        ))
-        conn.execute(text("DROP TABLE _mov_con_columna"))
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
-        filas_antes = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
-    assert "incidencia_id" not in columnas
-    assert filas_antes == 2  # las altas de la HP y la Pantum
-
-    assert run_migrations(engine) == ["equipos_movimientos.incidencia_id"]
-
-    with engine.begin() as conn:
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(equipos_movimientos)")).all()}
-        indices = {f[1] for f in conn.execute(text("PRAGMA index_list(equipos_movimientos)")).all()}
-        filas_despues = conn.execute(text("SELECT COUNT(*) FROM equipos_movimientos")).scalar()
-    assert "incidencia_id" in columnas
-    assert "ix_equipos_movimientos_incidencia_id" in indices
-    # El historial migrado no se pierde ni se toca: queda en NULL.
-    assert filas_despues == filas_antes
-    assert client.get(f"/api/equipos/{esc['hp']}/movimientos").json()[0]["incidencia_id"] is None
-
-    # Idempotente: correrla de nuevo no hace nada.
-    assert run_migrations(engine) == []
-
-    # Y la base migrada acepta escribir la columna nueva, que es el punto.
-    assert client.post(f"/api/incidencias/{esc['incidencia_id']}/reemplazar-equipo", json={
-        "equipo_retirado_id": esc["hp"], "destino": "service",
-    }).status_code == 201
 
 
 def _armar_datos_para_reportes(client) -> dict:
