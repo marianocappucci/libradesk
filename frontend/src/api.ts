@@ -544,6 +544,8 @@ export type Tecnico = {
   es_tecnico: boolean
   es_recepcionista: boolean
   es_vendedor: boolean
+  /** Quien manda un equipo de trabajo (pedido 42). */
+  es_responsable: boolean
   /** Derivado por el backend, para no armar el texto en cada fila. */
   roles: string[]
 }
@@ -552,6 +554,57 @@ export const ROL_LABELS: Record<string, string> = {
   tecnico: 'Técnico',
   recepcionista: 'Recepcionista',
   vendedor: 'Vendedor',
+  responsable: 'Responsable de equipo',
+}
+
+// --- equipos de trabajo y flota (pedido 42, fase A) -----------------------
+
+export type EquipoTrabajo = {
+  id: number
+  nombre: string
+  responsable_id: number | null
+  responsable_nombre: string | null
+  observaciones: string | null
+  activo: boolean
+  created_at: string | null
+  integrantes: { id: number; nombre: string }[]
+  /** Plural aunque hoy lo normal sea uno: nada impide que una cuadrilla salga
+   *  con dos vehículos, y el modelo ya lo admite. */
+  vehiculos: Vehiculo[]
+}
+
+export type Vehiculo = {
+  id: number
+  patente: string
+  marca: string | null
+  modelo: string | null
+  anio: number | null
+  /** `asignado` NO se setea a mano: lo escribe la asignación a un equipo. */
+  estado: string
+  equipo_id: number | null
+  equipo_nombre: string | null
+  descripcion: string
+  observaciones: string | null
+  created_at: string | null
+}
+
+export const ESTADO_VEHICULO_LABELS: Record<string, string> = {
+  disponible: 'Disponible',
+  asignado: 'Asignado',
+  en_taller: 'En taller',
+  baja: 'Baja',
+}
+
+/** Los que un formulario puede elegir — `asignado` queda afuera. */
+export const ESTADOS_VEHICULO_MANUALES = Object.keys(ESTADO_VEHICULO_LABELS)
+  .filter((e) => e !== 'asignado')
+
+export function opcionesVehiculo(vehiculos: Vehiculo[]): OpcionSelect[] {
+  return vehiculos.map((v) => ({
+    value: String(v.id),
+    label: v.patente,
+    hint: v.descripcion !== v.patente ? v.descripcion : undefined,
+  }))
 }
 
 export type Sector = {

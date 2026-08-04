@@ -11,6 +11,7 @@ from .services.contratos import ContratoRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
+from .services.equipos_trabajo import EquipoTrabajoRepository
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.proveedores import ProveedorRepository
@@ -64,6 +65,10 @@ def get_proveedor_repository(request: Request) -> ProveedorRepository:
 
 def get_reparacion_repository(request: Request) -> ReparacionRepository:
     return request.app.state.reparaciones
+
+
+def get_equipo_trabajo_repository(request: Request) -> EquipoTrabajoRepository:
+    return request.app.state.equipos_trabajo
 
 
 def get_activo_repository(request: Request) -> ActivoRepository:

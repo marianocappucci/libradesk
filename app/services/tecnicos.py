@@ -40,7 +40,11 @@ from ..database import Base
 
 # Los papeles que una persona puede cumplir. Se guardan como banderas
 # independientes: la misma persona puede tener varias.
-ROLES = ("tecnico", "recepcionista", "vendedor")
+# `responsable` se sumo el 2026-08-04 con el pedido 42: es quien manda un equipo
+# de trabajo. Entra como una bandera mas y no como una tabla de coordinadores —
+# que es exactamente lo que el pedido 41 dejo anticipado, porque en una empresa
+# chica el responsable de la cuadrilla tambien es tecnico.
+ROLES = ("tecnico", "recepcionista", "vendedor", "responsable")
 
 
 class Tecnico(Base):
@@ -68,6 +72,12 @@ class Tecnico(Base):
     es_vendedor: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0"),
     )
+    # Quien manda un equipo de trabajo (pedido 42). Mismo patron que los otros
+    # tres, incluido el `server_default` que necesita la migracion para poder
+    # agregar la columna `NOT NULL` sobre una tabla con filas.
+    es_responsable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0"),
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -77,35 +87,48 @@ def _to_dict(t: Tecnico) -> dict:
         "id": t.id,
         "nombre": t.nombre,
         "activo": t.activo,
-        "es_tecnico": bool(t.es_tecnico),
-        "es_recepcionista": bool(t.es_recepcionista),
-        "es_vendedor": bool(t.es_vendedor),
+        # Las banderas salen de `ROLES` y no escritas a mano: sumar un rol —
+        # `responsable` fue el cuarto— tocaba ocho lugares distintos y era
+        # cuestión de tiempo que uno quedara sin actualizar.
+        **{f"es_{r}": bool(getattr(t, f"es_{r}")) for r in ROLES},
         # Derivado, para que la lista no tenga que armar el texto en cada fila.
         "roles": [r for r in ROLES if getattr(t, f"es_{r}")],
     }
 
 
-def _exigir_un_rol(es_tecnico: bool, es_recepcionista: bool, es_vendedor: bool) -> None:
+def _exigir_un_rol(**banderas: bool) -> None:
     """Una persona sin ningún rol no aparecería en ningún selector: estaría
     cargada y sería invisible, que se lee como un bug del sistema y no como un
     dato mal puesto."""
-    if not (es_tecnico or es_recepcionista or es_vendedor):
+    if not any(banderas.values()):
         raise ValueError("La persona tiene que tener al menos un rol")
+
+
+def _banderas(datos: dict, actual: Tecnico | None = None) -> dict[str, bool]:
+    """Las banderas de rol resueltas: lo que vino, o lo que ya tenía.
+
+    `actual=None` es un alta, y ahí el default es `es_tecnico` — que es como se
+    comportaba la tabla antes de que existieran los roles.
+    """
+    salida = {}
+    for r in ROLES:
+        campo = f"es_{r}"
+        valor = datos.get(campo)
+        if valor is None:
+            valor = getattr(actual, campo) if actual is not None else (r == "tecnico")
+        salida[campo] = bool(valor)
+    return salida
 
 
 class TecnicoRepository:
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
 
-    def create(self, nombre: str, activo: bool = True, *,
-               es_tecnico: bool = True, es_recepcionista: bool = False,
-               es_vendedor: bool = False) -> dict:
-        _exigir_un_rol(es_tecnico, es_recepcionista, es_vendedor)
+    def create(self, nombre: str, activo: bool = True, **roles) -> dict:
+        banderas = _banderas(roles)
+        _exigir_un_rol(**banderas)
         with self.session_factory() as session:
-            t = Tecnico(
-                nombre=nombre.strip(), activo=activo, es_tecnico=es_tecnico,
-                es_recepcionista=es_recepcionista, es_vendedor=es_vendedor,
-            )
+            t = Tecnico(nombre=nombre.strip(), activo=activo, **banderas)
             session.add(t)
             session.commit()
             session.refresh(t)
@@ -129,20 +152,12 @@ class TecnicoRepository:
             t = session.get(Tecnico, tecnico_id)
             return _to_dict(t) if t else None
 
-    def update(self, tecnico_id: int, nombre: str, activo: bool, *,
-               es_tecnico: bool | None = None, es_recepcionista: bool | None = None,
-               es_vendedor: bool | None = None) -> dict:
+    def update(self, tecnico_id: int, nombre: str, activo: bool, **roles) -> dict:
         with self.session_factory() as session:
             t = session.get(Tecnico, tecnico_id)
             if t is None:
                 raise KeyError(tecnico_id)
-            nuevos = {
-                "es_tecnico": t.es_tecnico if es_tecnico is None else es_tecnico,
-                "es_recepcionista": (
-                    t.es_recepcionista if es_recepcionista is None else es_recepcionista
-                ),
-                "es_vendedor": t.es_vendedor if es_vendedor is None else es_vendedor,
-            }
+            nuevos = _banderas(roles, actual=t)
             _exigir_un_rol(**nuevos)
             t.nombre = nombre.strip()
             t.activo = activo
