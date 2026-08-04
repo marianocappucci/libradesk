@@ -9,6 +9,7 @@ from .services.clientes import ClienteRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
+from .services.informes import InformeService
 from .services.proveedores import ProveedorRepository
 from .services.reemplazo import ReemplazoService
 from .services.reparaciones import ReparacionRepository
@@ -64,6 +65,10 @@ def get_dashboard_service(request: Request) -> DashboardService:
 
 def get_reportes_service(request: Request) -> ReportesService:
     return request.app.state.reportes
+
+
+def get_informe_service(request: Request) -> InformeService:
+    return request.app.state.informes
 
 
 def get_remito_service(request: Request) -> RemitoService:
