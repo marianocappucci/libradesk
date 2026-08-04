@@ -515,6 +515,100 @@ def test_una_fila_de_dos_renglones_ocupa_el_alto_de_dos(client):
         )
 
 
+def _informe_sintetico(n_incidencias: int, n_garantias: int, n_service: int) -> dict:
+    """Un informe armado a mano, para barrer tamaños sin pagar el costo de
+    crear todo por la API."""
+    return {
+        "cliente": {"id": 1, "nombre": "Prueba SA", "contacto": None,
+                    "cuit": None, "domicilio": None, "ciudad": None,
+                    "email": None, "telefono": None},
+        "periodo": {"desde": DESDE, "hasta": HASTA, "emitido": "2026-02-01"},
+        "resumen": {"recibidas": n_incidencias, "resueltas": 0,
+                    "pendientes": n_incidencias, "horas": 0.0, "actividades": 0,
+                    "promedio_resolucion_horas": None, "por_categoria": []},
+        "incidencias": [
+            {"id": i, "titulo": f"Incidencia {i} con un asunto de dos renglones",
+             "categoria": None, "equipo": "PC de escritorio Lenovo ThinkCentre",
+             "sector": None, "fecha_creacion": datetime(2026, 1, 5, 9),
+             "fecha_cierre": None, "cerrada": False, "resuelta_en_periodo": False,
+             "creada_en_periodo": True, "horas": 0.0, "actividades": 0,
+             "resolucion": None}
+            for i in range(n_incidencias)],
+        "parque": {"por_estado": {"activo": 8}, "total": 8, "bajas": 0,
+                   "por_sector": [("Sector A", 8)], "por_tipo": [("PC", 8)]},
+        "garantias": [
+            {"equipo": f"Equipo con nombre largo {i}", "serial": f"S-{i}",
+             "sector": "Administración",
+             "garantia_vence": datetime(2026, 3, 1).date(), "dias_restantes": 29}
+            for i in range(n_garantias)],
+        "service": [
+            {"equipo": f"Equipo en service {i}", "serial": f"SVC-{i}",
+             "proveedor": "Compu Service", "fecha_envio": datetime(2026, 1, 10).date(),
+             "fecha_retorno": None, "abierta": True, "dias_afuera": 9,
+             "rma": None, "diagnostico": None}
+            for i in range(n_service)],
+        "dias_garantia": 60,
+    }
+
+
+def test_la_ultima_seccion_y_el_aviso_nunca_quedan_partidos():
+    """🔴 Regresión de dos defectos encontrados mirando el PDF desplegado.
+
+    1. El aviso de "documento no válido como factura" se dibujaba **a caballo**
+       entre dos carillas: `_draw_no_fiscal_notice` traza las cuatro líneas
+       punteadas y recién después escribe el texto, así que el salto automático
+       dejaba el recuadro en una página y su contenido en la otra. Medido: en
+       **2 de 3** informes reales de dev.
+    2. Al reservarle lugar, apareció el otro: la sección de service quedaba con
+       su título y su encabezado de columnas al pie de una carilla y las filas
+       en la siguiente.
+
+    **Barre el espacio en vez de apostar a un punto.** El defecto aparece sólo
+    cuando la última sección cae cerca del pie, y acertar ese borde a mano ya
+    falló antes en este mismo archivo: un test de paginación se escribió con 12
+    incidencias y pasaba con el defecto puesto porque caía en la zona sana.
+    Acá se prueban todas las combinaciones del rango, así que no hay borde que
+    errar.
+    """
+    from app.services.informe_pdf import generar
+
+    # El rango de `service` llega hasta 14 a propósito: con pocos, la reserva
+    # del **título** ya alcanza para que todo entre, y la de la **tabla** —que
+    # es la que importa cuando las filas obligan a cortar— quedaría sin
+    # ejercitar. Se verificó forzando el fallo: con el tope en 3, revertirla no
+    # ponía nada en rojo.
+    for n_inc in range(0, 13):
+        for n_gar in (0, 3, 6, 9):
+            for n_svc in (0, 1, 3, 14):
+                informe = _informe_sintetico(n_inc, n_gar, n_svc)
+                paginas = [p.extract_text()
+                           for p in PdfReader(BytesIO(generar(informe))).pages]
+                caso = f"{n_inc} incidencias, {n_gar} garantías, {n_svc} service"
+
+                def pagina_con(texto, _p=paginas):
+                    return next((i for i, t in enumerate(_p) if texto in t), None)
+
+                titulo = pagina_con("Equipos en service")
+                aviso = pagina_con("NO VÁLIDO COMO FACTURA")
+                assert titulo is not None, f"falta la sección de service ({caso})"
+
+                # El aviso va con el FINAL de la sección, no con su título: si
+                # la tabla se parte en dos carillas —cosa legítima— el título
+                # queda arriba y el cierre abajo. Exigir que coincidieran con
+                # el título era una aserción mal escrita, y el barrido la
+                # delató con 14 filas de service.
+                ultima = pagina_con(f"SVC-{n_svc - 1}") if n_svc else titulo
+                assert aviso == ultima, (
+                    f"el aviso quedó en la página {aviso} y la última fila de "
+                    f"service en la {ultima} ({caso})")
+
+                if n_svc:
+                    primera = pagina_con("SVC-0")
+                    assert primera == titulo, (
+                        f"el título de service quedó en la página {titulo} y "
+                        f"sus filas arrancan en la {primera} ({caso})")
+
+
 def test_el_informe_hereda_la_base_segura_de_libracore():
     """`InformePDF` extiende `_TextoSeguroPDF`, y de ahí sale que ningún
     carácter pueda tumbar la generación.

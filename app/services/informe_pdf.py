@@ -151,10 +151,18 @@ class InformePDF(_TextoSeguroPDF):
 
 # ── Piezas de maquetado ────────────────────────────────────────────
 
-def _titulo_seccion(pdf: FPDF, texto: str, aclaracion: str | None = None) -> None:
+def _titulo_seccion(pdf: FPDF, texto: str, aclaracion: str | None = None,
+                    reserva: float = 0) -> None:
     """Salta de pagina si el titulo quedaria al pie sin nada debajo: un
-    encabezado solo al final de una carilla es peor que el corte."""
-    if pdf.get_y() + 24 > pdf.h - 20:
+    encabezado solo al final de una carilla es peor que el corte.
+
+    `reserva` son milimetros adicionales que tienen que entrar **despues** del
+    titulo. Sin eso, el titulo cabe pero su tabla no, y quedan el encabezado de
+    seccion y el de columnas huerfanos al pie de una carilla mientras las filas
+    arrancan en la siguiente. Paso al reservarle lugar al aviso no fiscal: el
+    arreglo de un problema destapo este.
+    """
+    if pdf.get_y() + 24 + reserva > pdf.h - 20:
         pdf.add_page()
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 10)
@@ -225,6 +233,16 @@ def _tarjetas_resumen(pdf: FPDF, resumen: dict) -> None:
 _LINEA = 4.6      # alto de una linea de texto dentro de una fila
 _PAD_FILA = 2.9   # aire arriba + abajo de la fila
 
+# Lo que ocupa `_draw_no_fiscal_notice`: 4 mm de aire + recuadro de 10.
+_ALTO_AVISO = 14
+
+# Lo que la ULTIMA seccion tiene que dejar libre para que el aviso entre en su
+# misma carilla. No es `_ALTO_AVISO` a secas: entre el fin de la tabla y el
+# aviso hay un `ln(3)`, y `_tabla` corta en `h - 22` mientras
+# `_asegurar_espacio` exige terminar en `h - 24`. Con 14 justos, el aviso se
+# iba solo a una carilla nueva — lo agarro el barrido del test, no el ojo.
+_RESERVA_CIERRE = _ALTO_AVISO + 6
+
 
 def _lineas_celda(pdf: FPDF, texto: str, ancho: float, maximo: int) -> list[str]:
     """El texto repartido en hasta `maximo` lineas, con elipsis si sobra."""
@@ -236,7 +254,8 @@ def _lineas_celda(pdf: FPDF, texto: str, ancho: float, maximo: int) -> list[str]
 
 
 def _tabla(pdf: FPDF, headers: list[str], widths: list[float], aligns: list[str],
-           filas: list[list[str]], vacia: str, envuelve: tuple[int, ...] = ()) -> None:
+           filas: list[list[str]], vacia: str, envuelve: tuple[int, ...] = (),
+           reserva: float = 0) -> None:
     """Tabla con el mismo lenguaje visual que `_draw_items_table` de LibraCore,
     con repeticion de encabezado al cortar de pagina.
 
@@ -248,6 +267,12 @@ def _tabla(pdf: FPDF, headers: list[str], widths: list[float], aligns: list[str]
     datos que el cliente lee. Dos lineas alcanzan para el caso normal; el alto
     de la fila se calcula **antes** de dibujarla, asi que el corte de pagina
     sigue siendo exacto.
+
+    `reserva` son milimetros extra que la tabla deja libres al pie. Lo usa la
+    **ultima** seccion del informe para que el aviso no fiscal, que va despues,
+    entre en la misma carilla. Sin eso la tabla llega hasta el borde y el aviso
+    -14 mm- no tiene donde ir: medido, en 2 de 3 informes reales quedaba a
+    caballo entre dos paginas.
     """
     th_h = 7
     row_h = _LINEA + _PAD_FILA
@@ -293,7 +318,7 @@ def _tabla(pdf: FPDF, headers: list[str], widths: list[float], aligns: list[str]
         ]
         alto = max(len(p) for p in partidas) * _LINEA + _PAD_FILA
 
-        if pdf.get_y() + alto > pdf.h - 22:
+        if pdf.get_y() + alto > pdf.h - 22 - reserva:
             pdf.add_page()
             encabezado()
 
@@ -483,9 +508,13 @@ def _seccion_garantias(pdf: FPDF, informe: dict) -> None:
 
 def _seccion_service(pdf: FPDF, informe: dict) -> None:
     service = informe["service"]
+    # Lo minimo que tiene que entrar debajo del titulo para que la seccion no
+    # quede partida: encabezado de columnas, una fila de dos renglones, y el
+    # aviso no fiscal que va inmediatamente despues.
     _titulo_seccion(
         pdf, "Equipos en service",
         "Enviados a reparación externa con actividad en el período.",
+        reserva=9 + _LINEA * 2 + _PAD_FILA + _RESERVA_CIERRE,
     )
     filas = [
         [
@@ -506,6 +535,8 @@ def _seccion_service(pdf: FPDF, informe: dict) -> None:
         filas=filas,
         vacia="Ningún equipo pasó por service en el período.",
         envuelve=(0, 2),
+        # Es la ultima seccion: le deja lugar al aviso no fiscal que va abajo.
+        reserva=_RESERVA_CIERRE,
     )
 
 
@@ -542,6 +573,20 @@ def generar(informe: dict) -> bytes:
     _seccion_garantias(pdf, informe)
     _seccion_service(pdf, informe)
 
+    # El aviso se dibuja o entero o en la carilla siguiente, nunca a caballo.
+    # `_draw_no_fiscal_notice` traza las cuatro lineas punteadas y recien
+    # despues escribe el texto: si el salto automatico se dispara en el medio,
+    # el recuadro queda en una pagina y su contenido en la otra. Pasaba de
+    # verdad, en 2 de 3 informes reales de dev.
+    #
+    # ⚠️ **Hoy esta linea es redundante** y se deja igual: la verificacion por
+    # falla forzada confirma que sacarla no pone ningun test en rojo, porque
+    # las reservas de `_seccion_service` ya garantizan el espacio. Se conserva
+    # porque esas reservas son numeros que hay que mantener en sincronia con
+    # el alto del aviso, y esta guarda es categorica: si alguien agrega una
+    # seccion despues de service, o desajusta una reserva, el peor desenlace
+    # pasa a ser una carilla de mas en vez de un recuadro partido al medio.
+    _asegurar_espacio(pdf, _ALTO_AVISO)
     _draw_no_fiscal_notice(
         pdf, "Informe de servicio · documento no válido como factura")
 
