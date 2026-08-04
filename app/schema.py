@@ -42,8 +42,10 @@ from .database import Base
 # al autogenerate por el solo hecho de estar importado en esta linea. Si en su
 # lugar env.py tuviera su propia lista, agregar un modelo y olvidarse de una de
 # las dos daria una tabla sin migracion, en silencio.
+from .services import activos as _activos  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
+from .services import contratos as _contratos  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import modules as _modules  # noqa: F401

@@ -18,12 +18,14 @@ from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    categorias, clientes, config_empresa, dashboard, equipos, health, incidencias,
-    informes, presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
-    tecnicos, users,
+    activos, categorias, clientes, config_empresa, contratos, dashboard, equipos,
+    health, incidencias, informes, presupuestos, proveedores, remitos,
+    reparaciones, reportes, sectores, tecnicos, users,
 )
+from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
+from .services.contratos import ContratoRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
@@ -99,6 +101,8 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
+    app.state.activos = ActivoRepository(sessions)
+    app.state.contratos = ContratoRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
     app.state.informes = InformeService(sessions)
@@ -163,6 +167,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # cliente cae del mismo lado de esa linea.
     app.include_router(
         informes.router, dependencies=staff_or_admin + [Depends(require_module("reportes"))]
+    )
+    # Alquiler y cesión de equipos. SÍ se gatea, a diferencia de reparaciones:
+    # es funcionalidad comercial —contratos, precios, y en la fase 2 las cuotas—
+    # y no la continuación del parque. Un LibraDesk sin alquileres sigue siendo
+    # LibraDesk. Los dos routers cuelgan del MISMO módulo: un activo sin
+    # contratos no tiene para qué existir, así que separarlos ofrecería un
+    # inventario de stock a quien no puede entregarlo.
+    app.include_router(
+        activos.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
+    )
+    app.include_router(
+        contratos.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
     )
     app.include_router(
         remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]

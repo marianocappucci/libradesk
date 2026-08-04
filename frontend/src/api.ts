@@ -149,6 +149,192 @@ export function describirEquipo(e: Equipo | undefined): string {
   return [e.tipo, e.marca, e.modelo].filter(Boolean).join(' ')
 }
 
+// --- alquiler y cesión de equipos ------------------------------------------
+//
+// `Activo` es el equipo NUESTRO, el que se entrega bajo contrato; `Equipo` es
+// el parque del cliente. Son tablas distintas a propósito (ver
+// `app/services/activos.py`): así el informe al cliente y los reportes, que
+// cuentan `equipos`, no se llevan puesto el stock propio.
+
+export type Activo = {
+  id: number
+  tipo: string
+  marca: string | null
+  modelo: string | null
+  serial: string | null
+  codigo_interno: string | null
+  descripcion: string
+  mac: string | null
+  imei: string | null
+  ip: string | null
+  accesorios: string | null
+  estado: string
+  costo_compra: number | null
+  fecha_compra: string | null
+  proveedor_compra_id: number | null
+  valor_reposicion: number | null
+  garantia_vence: string | null
+  observaciones: string | null
+  created_at: string | null
+  // Dónde está colocado, derivado de la línea de contrato abierta. Los cuatro
+  // en null cuando el activo está en depósito.
+  contrato_id: number | null
+  contrato_numero: string | null
+  cliente_id: number | null
+  cliente_nombre: string | null
+}
+
+// `colocado` NO se setea a mano: lo escribe la colocación en un contrato. El
+// backend rechaza un PUT que lo intente.
+export const ESTADO_ACTIVO_LABELS: Record<string, string> = {
+  disponible: 'Disponible',
+  reservado: 'Reservado',
+  en_instalacion: 'En instalación',
+  colocado: 'Colocado',
+  en_reparacion: 'En reparación',
+  retirado_a_revisar: 'Retirado, a revisar',
+  baja: 'Baja',
+  perdido: 'Perdido',
+}
+
+/** Los que un formulario puede elegir — `colocado` queda afuera. */
+export const ESTADOS_ACTIVO_MANUALES = Object.keys(ESTADO_ACTIVO_LABELS)
+  .filter((e) => e !== 'colocado')
+
+export type TipoContrato =
+  | 'alquiler' | 'comodato' | 'prestamo' | 'incluido_en_servicio'
+  | 'leasing' | 'venta_financiada'
+
+export const TIPO_CONTRATO_LABELS: Record<TipoContrato, string> = {
+  alquiler: 'Alquiler',
+  comodato: 'Comodato',
+  prestamo: 'Préstamo temporal',
+  incluido_en_servicio: 'Incluido en el servicio',
+  leasing: 'Leasing',
+  venta_financiada: 'Venta financiada',
+}
+
+/** Los que llevan cuota. Los otros tres se entregan sin cobrar por el equipo,
+ *  así que el backend rechaza un importe. */
+export const TIPOS_CON_CUOTA: TipoContrato[] = ['alquiler', 'leasing', 'venta_financiada']
+
+export const ESTADO_CONTRATO_LABELS: Record<string, string> = {
+  borrador: 'Borrador',
+  activo: 'Activo',
+  suspendido: 'Suspendido',
+  vencido: 'Vencido',
+  rescindido: 'Rescindido',
+  finalizado: 'Finalizado',
+}
+
+export const PERIODICIDAD_LABELS: Record<string, string> = {
+  mensual: 'Mensual', bimestral: 'Bimestral', trimestral: 'Trimestral',
+  semestral: 'Semestral', anual: 'Anual',
+}
+
+export const METODO_ACTUALIZACION_LABELS: Record<string, string> = {
+  fijo: 'Precio fijo',
+  manual: 'Actualización manual',
+  porcentaje: 'Porcentaje cada N meses',
+  // Declarado pero se comporta como manual hasta que se defina de dónde sale
+  // el índice — decisión abierta del diseño.
+  indice: 'Índice configurable',
+  dolar: 'En dólares, convertido al facturar',
+  lista: 'Lista de precios',
+}
+
+export type ContratoLinea = {
+  id: number
+  contrato_id: number
+  activo_id: number
+  activo_descripcion: string | null
+  activo_serial: string | null
+  activo_codigo_interno: string | null
+  fecha_instalacion: string | null
+  // Null = el activo sigue puesto. El estado se deriva de esta fecha.
+  fecha_retiro: string | null
+  vigente: boolean
+  motivo_retiro: string | null
+  // La línea a la que ésta sustituye. Es lo que hace que un reemplazo conserve
+  // el equipo anterior en vez de pisarlo.
+  reemplaza_a_id: number | null
+  tecnico_instalador_id: number | null
+  incidencia_id: number | null
+  ubicacion: string | null
+  observaciones: string | null
+  // Sólo en el historial de un activo.
+  contrato_numero?: string | null
+  tipo_contrato?: string | null
+  cliente_id?: number | null
+  cliente_nombre?: string | null
+}
+
+export type ContratoPrecio = {
+  id: number
+  contrato_id: number
+  vigencia_desde: string | null
+  vigencia_hasta: string | null
+  vigente: boolean
+  importe: number | null
+  moneda: string
+  motivo: string | null
+  usuario: string
+  created_at: string | null
+}
+
+export type Contrato = {
+  id: number
+  numero: string
+  tipo_contrato: TipoContrato
+  cliente_id: number
+  cliente_nombre: string | null
+  propietario_cliente_id: number | null
+  propietario_nombre: string | null
+  sector_id: number | null
+  domicilio_instalacion: string | null
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  renovacion_automatica: boolean
+  periodicidad: string
+  dia_vencimiento: number | null
+  moneda: string
+  metodo_actualizacion: string
+  estado: string
+  responsable: string | null
+  observaciones: string | null
+  archivo_pdf: string | null
+  created_at: string | null
+  // Derivados: el importe NO es una columna del contrato, sale del precio
+  // vigente en `contratos_precios`.
+  importe_vigente: number | null
+  precio_vigente_desde: string | null
+  lleva_cuota: boolean
+  equipos_vigentes: number
+  // Sólo en la ficha (`GET /api/contratos/{id}`), no en el listado.
+  lineas?: ContratoLinea[]
+  precios?: ContratoPrecio[]
+}
+
+export type ResumenActivos = {
+  total: number
+  por_estado: Record<string, number>
+}
+
+export function describirActivo(a: Activo | undefined): string {
+  if (!a) return 'Activo'
+  return a.descripcion || [a.tipo, a.marca, a.modelo].filter(Boolean).join(' ')
+}
+
+export function opcionesActivo(activos: Activo[]): OpcionSelect[] {
+  return activos.map((a) => ({
+    value: String(a.id),
+    label: describirActivo(a),
+    // El serial y el código patrimonial son lo que se lee de la etiqueta
+    // cuando hay seis teléfonos del mismo modelo en el depósito.
+    hint: [a.serial, a.codigo_interno].filter(Boolean).join(' · ') || undefined,
+  }))
+}
+
 // --- opciones para los selects con búsqueda --------------------------------
 //
 // Viven acá, junto a los tipos, para que las cinco pantallas que eligen un
