@@ -19,6 +19,7 @@ from sqlalchemy.orm import aliased, sessionmaker
 
 from .categorias import CategoriaIncidencia
 from .clientes import Cliente
+from .depositos import Deposito, lugar_de
 from .equipos import Equipo, EquipoMovimiento
 from .incidencias import ActividadIncidencia, Incidencia
 from .sectores import Sector
@@ -63,8 +64,9 @@ class ReportesService:
                      tipo: str | None = None) -> list[dict]:
         with self.session_factory() as session:
             stmt = (
-                select(Equipo, Cliente)
+                select(Equipo, Cliente, Deposito.nombre)
                 .join(Cliente, Equipo.cliente_id == Cliente.id)
+                .outerjoin(Deposito, Equipo.deposito_id == Deposito.id)
                 .where(Cliente.activo.is_(True))
             )
             if cliente_id:
@@ -93,13 +95,18 @@ class ReportesService:
                     "modelo": e.modelo,
                     "serial": e.serial,
                     "sector": e.sector,
+                    "deposito": deposito,
+                    # Donde esta de verdad: el deposito si esta guardado, si no
+                    # el sector del cliente. Es lo que se muestra; `sector` se
+                    # conserva aparte porque es de donde salio.
+                    "lugar": lugar_de(deposito, e.sector),
                     "ubicacion_oficina": e.ubicacion_oficina,
                     "estado": e.estado,
                     "garantia_vence": e.garantia_vence,
                     "incidencias_count": conteos.get(e.id, 0),
                     "fecha_adicion": e.fecha_adicion,
                 }
-                for e, c in session.execute(stmt).all()
+                for e, c, deposito in session.execute(stmt).all()
             ]
 
     # ── Incidencias por periodo ─────────────────────────────────────
@@ -215,8 +222,9 @@ class ReportesService:
             hoy = datetime.now()
             limite = hoy + timedelta(days=dias)
             stmt = (
-                select(Equipo, Cliente)
+                select(Equipo, Cliente, Deposito.nombre)
                 .join(Cliente, Equipo.cliente_id == Cliente.id)
+                .outerjoin(Deposito, Equipo.deposito_id == Deposito.id)
                 .where(Equipo.garantia_vence.is_not(None))
                 .where(Equipo.estado != "baja")
                 .where(Equipo.garantia_vence <= limite)
@@ -226,7 +234,7 @@ class ReportesService:
             stmt = stmt.order_by(Equipo.garantia_vence.asc())
 
             filas = []
-            for e, c in session.execute(stmt).all():
+            for e, c, deposito in session.execute(stmt).all():
                 vence = e.garantia_vence
                 if isinstance(vence, datetime):
                     restantes = (vence.date() - hoy.date()).days
@@ -239,6 +247,8 @@ class ReportesService:
                     "modelo": e.modelo,
                     "serial": e.serial,
                     "sector": e.sector,
+                    "deposito": deposito,
+                    "lugar": lugar_de(deposito, e.sector),
                     "estado": e.estado,
                     "garantia_vence": vence,
                     "dias_restantes": restantes,

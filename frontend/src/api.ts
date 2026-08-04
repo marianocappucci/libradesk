@@ -35,10 +35,56 @@ export type Equipo = {
   serial: string | null
   ubicacion_oficina: string | null
   sector: string | null
+  // Dónde está guardado. Null = instalado en el sector del cliente. El nombre
+  // lo resuelve el backend para que la lista no cruce `/api/depositos`.
+  deposito_id: number | null
+  deposito_nombre: string | null
   estado: string
   fecha_adicion: string | null
   garantia_vence: string | null
   observaciones: string | null
+}
+
+// --- depósitos -------------------------------------------------------------
+//
+// `cliente_id: null` es un depósito **propio de la empresa**; con cliente es
+// del cliente. Una sola entidad para los dos casos — ver
+// app/services/depositos.py, que explica por qué.
+
+export type Deposito = {
+  id: number
+  cliente_id: number | null
+  cliente_nombre: string | null
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+  // Sólo entre los propios: es a dónde va un equipo que "vuelve a depósito"
+  // sin que nadie elija cuál.
+  es_default: boolean
+  total_equipos: number | null
+  created_at: string | null
+}
+
+export type EquipoEnDeposito = Equipo & {
+  descripcion: string
+  cliente_nombre: string
+}
+
+export function opcionesDeposito(depositos: Deposito[]): OpcionSelect[] {
+  return depositos.map((d) => ({
+    value: String(d.id),
+    label: d.nombre,
+    // El dueño es lo que desambigua: "Depósito" propio y "Depósito" de un
+    // cliente son dos lugares distintos con el mismo nombre.
+    hint: [d.cliente_nombre ?? 'Empresa', d.activo ? null : 'inactivo']
+      .filter(Boolean).join(' · ') || undefined,
+  }))
+}
+
+/** Dónde está el equipo: el depósito si está guardado, si no su sector.
+ *  Espejo de `lugar_de()` del backend — única definición de "dónde está". */
+export function lugarDe(depositoNombre: string | null, sector: string | null): string | null {
+  return depositoNombre || sector
 }
 
 export type EquipoMovimiento = {
@@ -564,6 +610,98 @@ export type GarantiaEquipo = {
   garantia_vence: string
   // Negativo si ya venció. El backend incluye las vencidas a propósito.
   dias_restantes: number
+}
+
+// --- ficha del equipo (`/equipos/:id`) -------------------------------------
+//
+// Una sola llamada (GET /api/dashboard/equipo/{id}) con las cuatro cosas que
+// la pantalla necesita: el equipo, **de quién es**, los totales y las tres
+// historias. Antes eran tres endpoints y el cliente no venía en ninguno.
+
+export type IncidenciaDeEquipo = {
+  id: number
+  titulo: string
+  estado: EstadoIncidencia
+  prioridad: PrioridadIncidencia
+  categoria: string | null
+  tecnico: string | null
+  horas_invertidas: number
+  fecha_creacion: string | null
+  fecha_cierre: string | null
+  resolucion: string | null
+}
+
+export type EquipoFicha = {
+  equipo: Equipo & {
+    descripcion: string
+    // Dónde está, ya resuelto por el backend (depósito o sector).
+    lugar: string | null
+    dias_garantia_restantes: number | null
+  }
+  cliente: {
+    id: number
+    nombre: string
+    empresa: string | null
+    telefono: string | null
+    email: string | null
+    ciudad: string | null
+    activo: boolean
+  } | null
+  resumen: {
+    total_incidencias: number
+    incidencias_abiertas: number
+    horas_invertidas: number
+    total_reparaciones: number
+    reparaciones_abiertas: number
+    // Lo que contesta "¿lo reemplazo o lo sigo arreglando?".
+    gastado_reparaciones: number
+    dias_en_service: number
+    total_movimientos: number
+  }
+  incidencias: IncidenciaDeEquipo[]
+  reparaciones: Reparacion[]
+  movimientos: EquipoMovimiento[]
+}
+
+// --- reportes en pantalla --------------------------------------------------
+//
+// El backend manda el reporte ya armado (columnas, filas, resaltados y
+// totales) y esta pantalla sólo lo dibuja. Es la MISMA definición con la que
+// se genera el .xlsx — ver app/services/reporte_vista.py: si las columnas se
+// declararan también acá, agregar una al Excel y olvidarse de la pantalla
+// daría dos reportes distintos con el mismo nombre.
+
+export type CeldaReporte = {
+  texto: string | null
+  // Resaltado semántico, no un color: cada salida lo traduce a lo suyo.
+  marca: string | null
+}
+
+export type VistaReporte = {
+  slug: string
+  titulo: string
+  filtros: string[]
+  generado: string
+  cantidad_filas: number
+  columnas: { label: string; numerica: boolean }[]
+  // `etiqueta: null` es la tabla plana; con etiqueta es un bloque agrupado
+  // (hoy sólo Facturación, agrupada por cliente).
+  grupos: { etiqueta: string | null; filas: CeldaReporte[][] }[]
+  totales: CeldaReporte[] | null
+}
+
+/** Las ocho marcas del backend a clases de Tailwind. Los mismos ocho colores
+ *  que el Excel pinta como relleno de celda, para que lo que se ve en pantalla
+ *  y lo que se baja sean reconociblemente el mismo reporte. */
+export const MARCA_CLASE: Record<string, string> = {
+  ok: 'bg-emerald-100 dark:bg-emerald-950/60',
+  peligro: 'bg-red-100 dark:bg-red-950/60',
+  atencion: 'bg-orange-200 dark:bg-orange-950/60',
+  carga: 'bg-orange-100 dark:bg-orange-950/40',
+  urgente: 'bg-yellow-100 dark:bg-yellow-950/60',
+  info: 'bg-violet-100 dark:bg-violet-950/60',
+  nuevo: 'bg-blue-100 dark:bg-blue-950/60',
+  neutro: 'bg-gray-100 dark:bg-gray-800/60',
 }
 
 export type ClienteResumen = {
