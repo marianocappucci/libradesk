@@ -11,6 +11,9 @@ import { Equipos } from './pages/Equipos'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
+import { Activos } from './pages/Activos'
+import { Contratos } from './pages/Contratos'
+import { ContratoDetalle } from './pages/ContratoDetalle'
 import { Tecnicos } from './pages/Tecnicos'
 import { Remitos } from './pages/Remitos'
 import { RemitoDetalle } from './pages/RemitoDetalle'
@@ -47,6 +50,12 @@ export default function App() {
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
+      {/* Ruta propia para la ficha, a diferencia de presupuestos/remitos: acá
+          la ficha tiene acciones que cambian el estado del contrato y conviene
+          poder linkearla desde la fila de un activo. */}
+      <Route path="/contratos" element={<ProtectedRoute><Contratos /></ProtectedRoute>} />
+      <Route path="/contratos/:id" element={<ProtectedRoute><ContratoDetalle /></ProtectedRoute>} />
+      <Route path="/activos" element={<ProtectedRoute><Activos /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
       <Route path="/presupuestos/:id" element={<ProtectedRoute><PresupuestoDetalle /></ProtectedRoute>} />

@@ -4,8 +4,10 @@ from fastapi import Request
 
 from libraauth.repository import UserRepository
 
+from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
+from .services.contratos import ContratoRepository
 from .services.dashboard import DashboardService
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
@@ -57,6 +59,14 @@ def get_proveedor_repository(request: Request) -> ProveedorRepository:
 
 def get_reparacion_repository(request: Request) -> ReparacionRepository:
     return request.app.state.reparaciones
+
+
+def get_activo_repository(request: Request) -> ActivoRepository:
+    return request.app.state.activos
+
+
+def get_contrato_repository(request: Request) -> ContratoRepository:
+    return request.app.state.contratos
 
 
 def get_dashboard_service(request: Request) -> DashboardService:

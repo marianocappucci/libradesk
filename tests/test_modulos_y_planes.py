@@ -44,7 +44,13 @@ RUTAS = {
     "reportes":     "/api/reportes/clientes.xlsx",
     "remitos":      "/api/remitos",
     "presupuestos": "/api/presupuestos",
+    "alquileres":   "/api/contratos",
 }
+
+# El módulo `alquileres` monta DOS routers y el de arriba cubre uno solo. Éste
+# se chequea aparte para que el segundo no quede sin cubrir: un gateo a medias
+# le mostraría el stock propio a quien no puede entregarlo bajo contrato.
+RUTA_ACTIVOS = "/api/activos"
 
 
 def _existe_de_verdad(client, ruta: str) -> bool:
@@ -138,6 +144,24 @@ def test_plan_premium_habilita_todo(client, tmp_path):
 
     for modulo, ruta in RUTAS.items():
         assert client.get(ruta).status_code == 200, modulo
+
+
+def test_los_dos_routers_de_alquileres_van_juntos(client, tmp_path):
+    """Activos y contratos cuelgan del mismo módulo, así que se habilitan y se
+    cortan a la vez. Sin este test, gatear uno solo pasaría desapercibido:
+    `RUTAS` cubre `/api/contratos` y nadie miraría `/api/activos`."""
+    from plans import aplicar_plan_en_db
+
+    assert _existe_de_verdad(client, RUTA_ACTIVOS), f"{RUTA_ACTIVOS} ya no existe"
+
+    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "estandar")
+    _login(client)
+    assert client.get(RUTA_ACTIVOS).status_code == 403
+    assert client.get(RUTAS["alquileres"]).status_code == 403
+
+    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "premium")
+    assert client.get(RUTA_ACTIVOS).status_code == 200
+    assert client.get(RUTAS["alquileres"]).status_code == 200
 
 
 def test_aplicar_un_plan_inexistente_falla_fuerte(tmp_path):

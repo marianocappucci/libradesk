@@ -41,9 +41,17 @@ _BASICO: set[str] = set()
 # Estándar = Básico + visibilidad: el tablero y los reportes exportables.
 _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 
-# Premium = Estándar + lo comercial, que es justo lo que LibraDesk reusa de
-# LibraCore (`libracore.db.remitos_presupuestos` y sus PDF).
-_PREMIUM = _ESTANDAR | {"remitos", "presupuestos"}
+# Premium = Estándar + lo comercial: lo que LibraDesk reusa de LibraCore
+# (`libracore.db.remitos_presupuestos` y sus PDF) más el alquiler y cesión de
+# equipos, agregado el 2026-08-04.
+#
+# `alquileres` cubre los DOS routers del módulo (activos y contratos) a
+# propósito: un inventario de stock propio no le sirve a quien no puede
+# entregarlo bajo contrato, así que gatearlos por separado ofrecería media
+# funcionalidad. Va acá y no en el core —a diferencia de reparaciones, que es la
+# continuación de `equipos`— porque es funcionalidad comercial: un LibraDesk sin
+# alquileres sigue siendo LibraDesk.
+_PREMIUM = _ESTANDAR | {"remitos", "presupuestos", "alquileres"}
 
 PLAN_MODULOS = {
     "basico":   set(_BASICO),
