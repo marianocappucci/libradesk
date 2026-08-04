@@ -33,6 +33,19 @@ class Equipo(Base):
     serial: Mapped[str | None] = mapped_column(String(255))
     ubicacion_oficina: Mapped[str | None] = mapped_column(String(255))
     sector: Mapped[str | None] = mapped_column(String(255))
+    # Donde esta guardado, cuando no esta instalado en el puesto. Con esto en
+    # NULL el equipo esta en el `sector`/`ubicacion_oficina` del cliente; con
+    # un valor, esta **en ese deposito** y el sector es de donde salio. La
+    # ubicacion efectiva la resuelve `depositos.lugar_de()`, que es la unica
+    # definicion de "donde esta" — ver el docstring de `services/depositos.py`.
+    #
+    # Sin `ondelete`: los ondelete no se ejecutan (el pragma `foreign_keys`
+    # esta apagado, ver `delete()` mas abajo) y ademas no haria falta —
+    # `DepositoRepository.delete()` no deja borrar un deposito con equipos
+    # adentro, justamente para que esta columna no quede colgando.
+    deposito_id: Mapped[int | None] = mapped_column(
+        ForeignKey("depositos.id"), index=True,
+    )
     estado: Mapped[str] = mapped_column(String(50), nullable=False, default="activo")
     fecha_adicion: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     garantia_vence: Mapped[date | None] = mapped_column(Date)
@@ -70,7 +83,7 @@ class EquipoMovimiento(Base):
     )
 
 
-def _to_dict(e: Equipo) -> dict:
+def _to_dict(e: Equipo, deposito_nombre: str | None = None) -> dict:
     return {
         "id": e.id,
         "cliente_id": e.cliente_id,
@@ -80,6 +93,10 @@ def _to_dict(e: Equipo) -> dict:
         "serial": e.serial,
         "ubicacion_oficina": e.ubicacion_oficina,
         "sector": e.sector,
+        "deposito_id": e.deposito_id,
+        # Resuelto para que ninguna pantalla tenga que cruzar la lista de
+        # depositos solo para escribir donde esta el equipo.
+        "deposito_nombre": deposito_nombre,
         "estado": e.estado,
         "fecha_adicion": e.fecha_adicion.isoformat() if e.fecha_adicion else None,
         "garantia_vence": e.garantia_vence.isoformat() if e.garantia_vence else None,
@@ -126,18 +143,20 @@ def movimientos_por_cambio(
     ubicacion_previa: str | None,
     estado_previo: str,
     usuario: str,
+    deposito_previo: str | None = None,
+    deposito_actual: str | None = None,
     motivo: str | None = None,
     incidencia_id: int | None = None,
 ) -> list[EquipoMovimiento]:
     """Deriva los movimientos de lo que efectivamente cambio en el equipo.
 
     Unico lugar donde se decide que es un movimiento: lo usan tanto el
-    `PUT /api/equipos/{id}` (edicion manual) como `ReemplazoService`, para
-    que un reemplazo y una edicion a mano produzcan exactamente el mismo
-    historial y no dos dialectos distintos.
+    `PUT /api/equipos/{id}` (edicion manual) como `ReemplazoService` y el
+    movimiento entre depositos, para que las tres operaciones produzcan
+    exactamente el mismo historial y no tres dialectos distintos.
 
-    - **traslado** si cambio `sector` o `ubicacion_oficina`, guardando
-      origen y destino de ambos.
+    - **traslado** si cambio el lugar (sector del cliente **o** deposito) o
+      la `ubicacion_oficina`, guardando origen y destino de ambos.
     - **cambio de estado** con `tipo` = el estado nuevo (asi el reporte lo
       etiqueta 'Baja'/'Reparación'/'Reactivado' via `MOV_LABEL`, igual que
       el sistema viejo).
@@ -145,17 +164,27 @@ def movimientos_por_cambio(
     Los dos pueden darse juntos — el equipo que vuelve del service Y
     cambia de sector genera dos filas, que es lo correcto. Un update que
     solo corrige el serial no genera ninguna.
+
+    **Los depositos entran como nombre, no como id** (`deposito_previo` /
+    `deposito_actual`, que el llamador resuelve): el movimiento describe
+    donde estaba el equipo *entonces*, y guardar la FK haria que renombrar
+    un deposito reescribiera el pasado. Ver `services/depositos.py`.
     """
+    from .depositos import lugar_de
+
     movimientos: list[EquipoMovimiento] = []
 
-    if e.sector != sector_previo or e.ubicacion_oficina != ubicacion_previa:
-        destino = e.sector or e.ubicacion_oficina or "sin ubicación"
+    lugar_previo = lugar_de(deposito_previo, sector_previo)
+    lugar_actual = lugar_de(deposito_actual, e.sector)
+
+    if lugar_previo != lugar_actual or e.ubicacion_oficina != ubicacion_previa:
+        destino = lugar_actual or e.ubicacion_oficina or "sin ubicación"
         movimientos.append(EquipoMovimiento(
             equipo_id=e.id,
             tipo="traslado",
             descripcion=f"Traslado → {destino}",
-            sector_origen=sector_previo,
-            sector_destino=e.sector,
+            sector_origen=lugar_previo,
+            sector_destino=lugar_actual,
             ubicacion_origen=ubicacion_previa,
             ubicacion_destino=e.ubicacion_oficina,
             motivo=motivo,
@@ -170,7 +199,7 @@ def movimientos_por_cambio(
             descripcion=f"Estado cambiado a: {e.estado}",
             # En un cambio de estado sin traslado, la ubicacion es de donde
             # sale: por eso va como origen y no destino.
-            sector_origen=e.sector,
+            sector_origen=lugar_actual,
             ubicacion_origen=e.ubicacion_oficina,
             motivo=motivo,
             usuario=usuario,
@@ -180,6 +209,44 @@ def movimientos_por_cambio(
     return movimientos
 
 
+def _nombres_depositos(session, ids) -> dict[int, str]:
+    """`{id: nombre}` de una tanda, para no consultar el deposito por fila."""
+    from .depositos import Deposito
+
+    ids = {i for i in ids if i is not None}
+    if not ids:
+        return {}
+    return dict(
+        session.execute(
+            select(Deposito.id, Deposito.nombre).where(Deposito.id.in_(ids))
+        ).all()
+    )
+
+
+def _validar_deposito(session, cliente_id: int, deposito_id: int | None) -> str | None:
+    """Devuelve el nombre del deposito, validando que el equipo pueda entrar.
+
+    Un equipo solo puede guardarse en un deposito **propio de la empresa** o
+    en uno **de su propio cliente**. Sin este chequeo, el selector de la
+    pantalla alcanza para dejar el equipo de un cliente en el pañol de otro,
+    y eso no se ve despues en ningun lado: el equipo sigue figurando como del
+    cliente correcto y solo la ubicacion miente.
+    """
+    from .depositos import ClienteAjeno, Deposito
+
+    if deposito_id is None:
+        return None
+    d = session.get(Deposito, deposito_id)
+    if d is None:
+        raise ClienteAjeno("El depósito indicado no existe.")
+    if d.cliente_id is not None and d.cliente_id != cliente_id:
+        raise ClienteAjeno(
+            f"El depósito «{d.nombre}» es de otro cliente: un equipo solo puede "
+            "guardarse en un depósito propio de la empresa o en uno de su cliente."
+        )
+    return d.nombre
+
+
 class EquipoRepository:
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
@@ -187,32 +254,40 @@ class EquipoRepository:
     def create(self, usuario_actor: str | None = None, **data) -> dict:
         with self.session_factory() as session:
             e = Equipo(**data)
+            deposito = _validar_deposito(session, e.cliente_id, e.deposito_id)
             session.add(e)
             session.flush()
             session.add(EquipoMovimiento(
                 equipo_id=e.id,
                 tipo="alta",
                 descripcion=f"Alta: {_descripcion_equipo(e)}",
-                sector_destino=e.sector,
+                sector_destino=deposito or e.sector,
                 ubicacion_destino=e.ubicacion_oficina,
                 motivo="Alta inicial del equipo",
                 usuario=usuario_actor or "Sistema",
             ))
             session.commit()
             session.refresh(e)
-            return _to_dict(e)
+            return _to_dict(e, deposito)
 
-    def list(self, cliente_id: int | None = None) -> list[dict]:
+    def list(self, cliente_id: int | None = None,
+             deposito_id: int | None = None) -> list[dict]:
         with self.session_factory() as session:
             stmt = select(Equipo).order_by(Equipo.tipo)
             if cliente_id is not None:
                 stmt = stmt.where(Equipo.cliente_id == cliente_id)
-            return [_to_dict(e) for e in session.execute(stmt).scalars()]
+            if deposito_id is not None:
+                stmt = stmt.where(Equipo.deposito_id == deposito_id)
+            equipos = list(session.execute(stmt).scalars())
+            nombres = _nombres_depositos(session, (e.deposito_id for e in equipos))
+            return [_to_dict(e, nombres.get(e.deposito_id)) for e in equipos]
 
     def get(self, equipo_id: int) -> dict | None:
         with self.session_factory() as session:
             e = session.get(Equipo, equipo_id)
-            return _to_dict(e) if e else None
+            if e is None:
+                return None
+            return _to_dict(e, _nombres_depositos(session, [e.deposito_id]).get(e.deposito_id))
 
     def update(self, equipo_id: int, usuario_actor: str | None = None,
                motivo: str | None = None, incidencia_id: int | None = None,
@@ -226,8 +301,11 @@ class EquipoRepository:
                 raise KeyError(equipo_id)
 
             sector_previo, ubicacion_previa, estado_previo = e.sector, e.ubicacion_oficina, e.estado
+            nombres = _nombres_depositos(session, [e.deposito_id])
+            deposito_previo = nombres.get(e.deposito_id)
             for key, value in data.items():
                 setattr(e, key, value)
+            deposito_actual = _validar_deposito(session, e.cliente_id, e.deposito_id)
 
             for movimiento in movimientos_por_cambio(
                 e,
@@ -235,6 +313,8 @@ class EquipoRepository:
                 ubicacion_previa=ubicacion_previa,
                 estado_previo=estado_previo,
                 usuario=usuario_actor or "Sistema",
+                deposito_previo=deposito_previo,
+                deposito_actual=deposito_actual,
                 motivo=motivo,
                 incidencia_id=incidencia_id,
             ):
@@ -242,7 +322,52 @@ class EquipoRepository:
 
             session.commit()
             session.refresh(e)
-            return _to_dict(e)
+            return _to_dict(e, deposito_actual)
+
+    def mover_a_deposito(self, equipo_ids: list[int], deposito_id: int | None,
+                         usuario_actor: str | None = None,
+                         motivo: str | None = None) -> list[dict]:
+        """Mueve varios equipos a un deposito de una vez, o los saca de todos
+        (`deposito_id=None`, "vuelve al puesto del cliente").
+
+        **En una transaccion y no un PUT por equipo**: sacar 12 equipos de un
+        deposito que se esta cerrando es un solo hecho, y hacerlo de a uno
+        admite que la mitad quede movida y la otra mitad no, sin nada que
+        diga cual fue el corte.
+
+        El estado no se toca acá a proposito. Un equipo puede entrar al
+        deposito porque se lo retiro (`almacenado`) o porque volvio de service
+        y espera instalacion, y adivinarlo desde el destino escribiria un
+        cambio de estado que nadie pidio. Para eso esta la edicion del equipo,
+        que registra las dos cosas juntas.
+        """
+        with self.session_factory() as session:
+            movidos: list[dict] = []
+            for equipo_id in equipo_ids:
+                e = session.get(Equipo, equipo_id)
+                if e is None:
+                    raise KeyError(equipo_id)
+
+                previo = _nombres_depositos(session, [e.deposito_id]).get(e.deposito_id)
+                sector_previo = e.sector
+                e.deposito_id = deposito_id
+                actual = _validar_deposito(session, e.cliente_id, deposito_id)
+
+                for movimiento in movimientos_por_cambio(
+                    e,
+                    sector_previo=sector_previo,
+                    ubicacion_previa=e.ubicacion_oficina,
+                    estado_previo=e.estado,
+                    usuario=usuario_actor or "Sistema",
+                    deposito_previo=previo,
+                    deposito_actual=actual,
+                    motivo=motivo,
+                ):
+                    session.add(movimiento)
+                movidos.append(_to_dict(e, actual))
+
+            session.commit()
+            return movidos
 
     def delete(self, equipo_id: int) -> None:
         """Borra el equipo con **su historial de movimientos** y

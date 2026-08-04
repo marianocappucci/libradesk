@@ -9,6 +9,7 @@ from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
 from .services.dashboard import DashboardService
+from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
@@ -31,6 +32,10 @@ def get_cliente_repository(request: Request) -> ClienteRepository:
 
 def get_equipo_repository(request: Request) -> EquipoRepository:
     return request.app.state.equipos
+
+
+def get_deposito_repository(request: Request) -> DepositoRepository:
+    return request.app.state.depositos
 
 
 def get_incidencia_repository(request: Request) -> IncidenciaRepository:

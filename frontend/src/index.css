@@ -108,3 +108,76 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* --- Impresión -------------------------------------------------------------
+ *
+ * Qué se imprime: SÓLO lo que está dentro de `#zona-impresion` (ver
+ * `components/imprimible.tsx`). El resto de la página —barra lateral,
+ * encabezado, filtros, botones— se oculta.
+ *
+ * Por `visibility` y no por `display`. Con `display:none` habría que ir
+ * apagando cada contenedor por su cuenta, y el layout viene del paquete
+ * `libra-ui`: cualquier cambio de su estructura interna rompería la regla sin
+ * que nada avise. Con `visibility` alcanza con apagar todo y volver a prender
+ * la rama que interesa, sin saber cómo está armado el resto.
+ *
+ * `print-color-adjust` es lo que conserva los resaltados de las celdas: sin
+ * eso el navegador descarta los fondos al imprimir y el reporte sale sin las
+ * garantías vencidas en rojo, que es la mitad de para qué se lo mira. */
+
+/* Fuera de impresión el encabezado de papel no existe. */
+.solo-impresion {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #zona-impresion,
+  #zona-impresion * {
+    visibility: visible;
+  }
+
+  #zona-impresion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Dentro de la zona impresa también hay cosas que son de pantalla: botones
+   * de acción, links de navegación, controles. Se marcan con esta clase. */
+  .no-imprimir {
+    display: none !important;
+  }
+
+  /* Sólo visible en papel: el encabezado con el título, los filtros aplicados
+   * y la fecha de generación, que en pantalla ya están en la interfaz. */
+  .solo-impresion {
+    display: block !important;
+  }
+
+  * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Una fila partida entre dos carillas es ilegible; un encabezado de grupo
+   * solo al pie de la hoja, también. */
+  tr,
+  .evitar-corte {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}

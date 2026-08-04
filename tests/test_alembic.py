@@ -94,6 +94,11 @@ def _head() -> str:
         return ScriptDirectory.from_config(alembic_config(conn)).get_current_head()
 
 
+def _heads() -> list[str]:
+    with create_engine("sqlite://").connect() as conn:
+        return list(ScriptDirectory.from_config(alembic_config(conn)).get_heads())
+
+
 def _ejecutar(engine, sentencias) -> None:
     with engine.begin() as conn:
         for sql in sentencias:
@@ -200,6 +205,35 @@ def test_los_modelos_no_se_separan_de_la_cadena(tmp_path):
     _upgrade(engine)
 
     assert _diferencias(engine) == []
+
+
+def test_la_cadena_tiene_una_sola_cabeza(tmp_path):
+    """Dos revisiones hermanas rompen el arranque de la app, y **git no lo
+    avisa**: los dos archivos conviven sin conflicto de merge.
+
+    El caso concreto que motiva este test (2026-08-04): dos sesiones en
+    paralelo escribieron cada una su `0004`, las dos colgando de
+    `0003_proveedores_y_reparaciones` — `0004_alquileres` (PR #27) y
+    `0004_depositos`. Con las dos en la rama, `command.upgrade(cfg, "head")`
+    —que es lo que corre `app/schema.py` en cada arranque— falla con "Multiple
+    head revisions are present" y **el contenedor no levanta**. Ninguna de las
+    dos revisiones esta mal; lo que falta es que la segunda cuelgue de la
+    primera.
+
+    Que se ponga en rojo acá es mucho mas barato que descubrirlo en el deploy:
+    el arreglo es una linea (`down_revision` de la que llegue segunda) y un
+    renombre.
+    """
+    cabezas = _heads()
+
+    assert len(cabezas) == 1, (
+        f"la cadena de migraciones tiene {len(cabezas)} cabezas: {cabezas}. "
+        "Alguna revision nueva tiene que colgar de la otra en vez de compartir "
+        "`down_revision` — ver el docstring de este test."
+    )
+    # Y la unica coincide con la que devuelve `get_current_head()`, que es la
+    # que usan el resto de los tests.
+    assert cabezas == [_head()]
 
 
 # --- el filtro protege a las tablas de los otros duenos ----------------------

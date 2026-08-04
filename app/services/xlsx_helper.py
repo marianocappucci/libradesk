@@ -3,8 +3,14 @@ de `xlsxHelper.ts` (backend Node.js viejo) en Python: paleta indigo,
 encabezado con titulo+filtros, header congelado, filas alternadas,
 resaltado por celda, fila de totales y encabezados de grupo. No hay
 precedente de export xlsx en la familia Libra (Gestiolibra no exporta) —
-es una pieza propia de LibraDesk."""
-from datetime import date, datetime
+es una pieza propia de LibraDesk.
+
+**Solo el como, no el que.** Las etiquetas de estado/prioridad/cobro y los
+colores de resaltado vivian aca hasta el 2026-08-04; se mudaron a
+`reporte_vista.py` cuando los reportes empezaron a verse tambien en pantalla,
+porque dejaron de ser del Excel. Este modulo quedo con lo que si es suyo:
+poner celdas en una hoja. Quien lo llama es `reporte_xlsx.py`."""
+from datetime import datetime
 from io import BytesIO
 
 from fastapi.responses import StreamingResponse
@@ -22,51 +28,9 @@ GROUP_FG = "FF3730A3"
 HDR_FG = "FF1E1B4B"
 BORDE_HDR = "FFC7D2FE"
 
-# Resaltados de celda, portados tal cual del helper viejo para que los
-# archivos se sigan viendo igual.
-ESTADO_LABEL = {
-    "activo": "Activo", "baja": "Baja", "en_reparacion": "En reparación",
-    "almacenado": "En depósito",
-    "abierto": "Abierto", "en_progreso": "En progreso",
-    "resuelta": "Resuelta", "cerrado": "Cerrado",
-}
-ESTADO_COLOR = {
-    "activo": "FFD1FAE5", "baja": "FFFEE2E2", "en_reparacion": "FFFED7AA",
-    "almacenado": "FFEDE9FE",
-    "abierto": "FFDBEAFE", "en_progreso": "FFFED7AA",
-    "resuelta": "FFD1FAE5", "cerrado": "FFF3F4F6",
-}
-PRIO_COLOR = {"alta": "FFFEE2E2", "media": "FFFEF9C3", "baja": "FFD1FAE5"}
-PRIO_LABEL = {"alta": "Alta", "media": "Media", "baja": "Baja"}
-FACT_COLOR = {
-    "pendiente_cobro": "FFFEF9C3", "facturada": "FFD1FAE5",
-    "sin_facturar": "FFF3F4F6",
-}
-FACT_LABEL = {"pendiente_cobro": "Pend. cobro", "facturada": "Facturada"}
-MOV_LABEL = {
-    "alta": "Alta", "baja": "Baja", "traslado": "Traslado",
-    "en_reparacion": "Reparación", "almacenado": "Almacenado",
-    "activo": "Reactivado",
-}
-
 _HAIR = Border(bottom=Side(style="hair", color="FFEDEDED"))
 _BOTTOM_HDR = Border(bottom=Side(style="thin", color=BORDE_HDR))
 _TOP_HDR = Border(top=Side(style="thin", color=BORDE_HDR))
-
-
-def fmt_date(value) -> str:
-    """dd/mm/aa, o '—' si no hay valor. Acepta datetime, date o el ISO
-    string que devuelven los repositories."""
-    if not value:
-        return "—"
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value)
-        except ValueError:
-            return value
-    if isinstance(value, (datetime, date)):
-        return value.strftime("%d/%m/%y")
-    return str(value)
 
 
 def _fill(argb: str) -> PatternFill:
@@ -159,17 +123,6 @@ def add_group_header(ws: Worksheet, row_num: int, text: str, col_count: int) -> 
     cell.border = _TOP_HDR
     cell.alignment = Alignment(vertical="center", horizontal="left", indent=1)
     ws.row_dimensions[row_num].height = 18
-
-
-def build_sheet(titulo: str, filtros: list[str], headers: list[str], widths: list[int], rows: list[list]):
-    """Atajo para los reportes simples (volcado plano, sin resaltados ni
-    totales): arma la hoja entera de una."""
-    wb, ws = create_sheet(titulo, filtros)
-    header_row = add_meta_header(ws, titulo, filtros, len(headers))
-    add_header_row(ws, header_row, headers, widths)
-    for i, row_values in enumerate(rows):
-        add_data_row(ws, header_row + 1 + i, row_values, is_alt=i % 2 == 1)
-    return wb
 
 
 def xlsx_response(wb: Workbook, filename: str) -> StreamingResponse:

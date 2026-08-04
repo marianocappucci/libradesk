@@ -8,6 +8,9 @@ import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
 import { ClienteDetalle } from './pages/ClienteDetalle'
 import { Equipos } from './pages/Equipos'
+import { EquipoDetalle } from './pages/EquipoDetalle'
+import { Depositos } from './pages/Depositos'
+import { DepositoDetalle } from './pages/DepositoDetalle'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
@@ -20,6 +23,7 @@ import { RemitoDetalle } from './pages/RemitoDetalle'
 import { Presupuestos } from './pages/Presupuestos'
 import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
 import { Reportes } from './pages/Reportes'
+import { ReporteDetalle } from './pages/ReporteDetalle'
 import { Configuracion } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
 
@@ -47,6 +51,9 @@ export default function App() {
       <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
       <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalle /></ProtectedRoute>} />
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
+      <Route path="/equipos/:id" element={<ProtectedRoute><EquipoDetalle /></ProtectedRoute>} />
+      <Route path="/depositos" element={<ProtectedRoute><Depositos /></ProtectedRoute>} />
+      <Route path="/depositos/:id" element={<ProtectedRoute><DepositoDetalle /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
@@ -62,6 +69,7 @@ export default function App() {
       <Route path="/remitos" element={<ProtectedRoute><Remitos /></ProtectedRoute>} />
       <Route path="/remitos/:id" element={<ProtectedRoute><RemitoDetalle /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
+      <Route path="/reportes/:slug" element={<ProtectedRoute><ReporteDetalle /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
