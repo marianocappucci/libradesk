@@ -8,7 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, ArrowLeft, MapPin, Monitor, ShieldCheck, Ticket } from 'lucide-react'
+import {
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertTriangle, ArrowLeft, FileText, MapPin, Monitor, ShieldCheck, Ticket,
+} from 'lucide-react'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -29,6 +37,89 @@ function textoGarantia(dias: number): string {
   if (dias < 0) return `vencida hace ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'día' : 'días'}`
   if (dias === 0) return 'vence hoy'
   return `vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
+}
+
+/** `YYYY-MM-DD` en hora **local**. `toISOString()` no sirve: pasa a UTC y en
+ *  Argentina (UTC-3) el primer día del mes se convierte en el último del mes
+ *  anterior — el mismo desfasaje que ya obliga a armar las fechas a mano en
+ *  `formatFecha`, arriba. */
+function iso(d: Date): string {
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${dia}`
+}
+
+/** El mes anterior completo, que es el período que se informa: un informe se
+ *  emite cuando el mes ya cerró. `new Date(a, m, 0)` da el último día del mes
+ *  `m-1`, incluidos los febreros bisiestos. */
+function mesAnterior(): { desde: string; hasta: string } {
+  const hoy = new Date()
+  return {
+    desde: iso(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)),
+    hasta: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 0)),
+  }
+}
+
+/** Descarga del informe de servicio del cliente.
+ *
+ *  Es lo único de LibraDesk que se le entrega al cliente, así que vive acá —
+ *  en su ficha— y no en `/reportes`, que son los seis analíticos internos. */
+function DialogoInforme({ clienteId, nombre }: { clienteId: number; nombre: string }) {
+  const [periodo, setPeriodo] = useState(mesAnterior)
+  const invertido = periodo.hasta < periodo.desde
+
+  function descargar() {
+    // Navegación directa, igual que los xlsx de /reportes: el endpoint
+    // responde con Content-Disposition attachment y la cookie de sesión
+    // viaja sola por ser mismo origen.
+    const qs = new URLSearchParams(periodo).toString()
+    window.location.href = `/api/informes/cliente/${clienteId}.pdf?${qs}`
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm"><FileText />Informe</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Informe de servicio</DialogTitle>
+          <DialogDescription>
+            Resumen del período, detalle de incidencias, parque, garantías y equipos en
+            service de {nombre}. Es un documento para entregarle al cliente: no incluye
+            costos, estado de cobro ni técnico asignado.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="informe-desde">Desde</Label>
+            <Input
+              id="informe-desde" type="date" className="w-40" value={periodo.desde}
+              onChange={(e) => setPeriodo((p) => ({ ...p, desde: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="informe-hasta">Hasta</Label>
+            <Input
+              id="informe-hasta" type="date" className="w-40" value={periodo.hasta}
+              onChange={(e) => setPeriodo((p) => ({ ...p, hasta: e.target.value }))}
+            />
+          </div>
+        </div>
+        {invertido && (
+          <p className="text-sm text-destructive">
+            El fin del período es anterior al inicio.
+          </p>
+        )}
+        <DialogFooter>
+          <DialogClose asChild><Button type="button" variant="outline">Cerrar</Button></DialogClose>
+          <Button onClick={descargar} disabled={invertido || !periodo.desde || !periodo.hasta}>
+            <FileText />Descargar PDF
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 /** Tarjeta de conteo con el desglose debajo, mismo formato que el Dashboard
@@ -147,6 +238,7 @@ export function ClienteDetalle() {
           <Badge variant="secondary">
             {cliente.tipo_facturacion === 'mensual' ? 'Abono mensual' : 'Factura por servicio'}
           </Badge>
+          <DialogoInforme clienteId={clienteId} nombre={cliente.nombre} />
         </div>
       </div>
 

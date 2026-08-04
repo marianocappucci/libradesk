@@ -18,7 +18,20 @@ dependencies = [
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
     # fpdf2, qrcode, Pillow, cryptography y jinja2 como transitivas.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.2.0",
+    # v1.7.0 trae el arreglo del PDF: hasta v1.6.0 un guion largo en el nombre
+    # de empresa, en un item o en las observaciones tumbaba la generacion con un
+    # 500 (libracore PR #6). La superficie de libracore que toca a este producto
+    # no cambio entre v1.6.0 y v1.7.0: el unico delta es ese fix.
+    #
+    # v1.8.0 trae la maqueta compacta (libracore PR #8): membrete 51,5 -> 40,3 mm
+    # y tarjetas Emisor/Cliente 65 -> 50,6 mm, con lo que un presupuesto pasa de
+    # 6 a 10 items en la primera hoja y un remito de 10 a 13. **Cambia el
+    # aspecto** de los comprobantes que emite este producto -- es el motivo del
+    # bump, no un efecto lateral. Sin campos eliminados ni tipografias mas
+    # chicas. El delta v1.6.0..v1.8.0 son exactamente esos dos commits, los dos
+    # en los generadores de PDF: `libracore.db` y `provisioning`, que este
+    # producto tambien usa, no se tocaron.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.8.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +40,12 @@ dev = [
     "ruff>=0.13",
     "pytest>=8.0",
     "httpx>=0.27",
+    # Solo para tests: leer de vuelta el texto de los PDF del informe. Sin
+    # esto el unico chequeo posible es la firma `%PDF-`, que un documento
+    # vacio o con los datos equivocados pasa igual — mismo motivo por el que
+    # los reportes xlsx se verifican abriendolos con openpyxl y no mirando el
+    # content-type.
+    "pypdf>=5.0",
 ]
 
 [build-system]
