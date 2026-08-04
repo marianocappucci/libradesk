@@ -476,11 +476,27 @@ export const PRIORIDAD_LABELS: Record<PrioridadIncidencia, string> = {
   baja: 'Baja',
 }
 
+export type ModalidadIncidencia = 'on_site' | 'remoto'
+
+export const MODALIDAD_LABELS: Record<ModalidadIncidencia, string> = {
+  on_site: 'On-site',
+  remoto: 'Remoto',
+}
+
 export type Incidencia = {
   id: number
   cliente_id: number
   equipo_id: number | null
+  // El activo alquilado afectado, si el problema es de un equipo nuestro.
+  activo_id: number | null
+  // Los tres papeles alrededor del ticket: quien lo **ejecuta**, quien lo
+  // **recepciona** y quien **vende**. Los tres apuntan al mismo catálogo de
+  // personal (`/api/tecnicos`), filtrable por rol.
   tecnico_id: number | null
+  recepcionista_id: number | null
+  vendedor_id: number | null
+  // Null en los tickets anteriores al pedido 37: no saben cómo se atendieron.
+  modalidad: ModalidadIncidencia | null
   sector_id: number | null
   // Hoja del catálogo de categorías ("Hardware → Impresoras"). Null en las
   // incidencias previas al catálogo.
@@ -515,10 +531,27 @@ export type Actividad = {
   usuario: string | null
 }
 
+/** El **personal** de la empresa. El tipo conserva el nombre `Tecnico` porque
+ *  la tabla y la ruta (`/api/tecnicos`) también lo conservan — ver el docstring
+ *  de `app/services/tecnicos.py`. En la UI el módulo se llama "Personal".
+ *
+ *  Los roles son banderas independientes: la misma persona puede ser técnica y
+ *  vendedora, que es el caso normal en una empresa chica. */
 export type Tecnico = {
   id: number
   nombre: string
   activo: boolean
+  es_tecnico: boolean
+  es_recepcionista: boolean
+  es_vendedor: boolean
+  /** Derivado por el backend, para no armar el texto en cada fila. */
+  roles: string[]
+}
+
+export const ROL_LABELS: Record<string, string> = {
+  tecnico: 'Técnico',
+  recepcionista: 'Recepcionista',
+  vendedor: 'Vendedor',
 }
 
 export type Sector = {
