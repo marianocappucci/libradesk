@@ -24,7 +24,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, func, select,
+    Boolean, CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text,
+    func, select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -32,11 +33,35 @@ from ..database import Base
 
 
 class Reparacion(Base):
+    """El paso por service de **cualquier** equipo, sea del cliente o propio.
+
+    **Polimorfica desde la fase 4 del modulo de alquileres (2026-08-04):** o
+    `equipo_id` (parque del cliente) o `activo_id` (stock propio), nunca las dos
+    ni ninguna, garantizado por un CHECK — que en SQLite si se ejecuta, a
+    diferencia de las FK.
+
+    La alternativa era una tabla `activos_reparaciones` propia. Se descarto
+    porque partiria en dos la pregunta que justifica registrar el service:
+    *"que tengo hoy afuera"* y *"este proveedor cuanto tarda"* tendrian que unir
+    dos tablas en la pantalla, en el reporte y en el informe. Un equipo en
+    service es el mismo hecho sea de quien sea el equipo.
+    """
+
     __tablename__ = "equipos_reparaciones"
+    __table_args__ = (
+        CheckConstraint(
+            "(equipo_id IS NOT NULL) <> (activo_id IS NOT NULL)",
+            name="ck_reparacion_equipo_xor_activo",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    equipo_id: Mapped[int] = mapped_column(
-        ForeignKey("equipos.id"), nullable=False, index=True,
+    # Nullable desde la fase 4. Exactamente uno de los dos, por el CHECK.
+    equipo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipos.id"), index=True,
+    )
+    activo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("activos.id"), index=True,
     )
     # El ticket que la origino. Nullable porque un equipo puede salir a service
     # sin que haya ticket de por medio (mantenimiento programado), y porque al
@@ -66,10 +91,23 @@ class Reparacion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-def _to_dict(r: Reparacion, *, proveedor=None, equipo=None) -> dict:
+def _to_dict(r: Reparacion, *, proveedor=None, equipo=None, activo=None,
+             cliente_id_activo: int | None = None) -> dict:
+    """`equipo` y `activo` son excluyentes, igual que las columnas.
+
+    Las claves de salida **no** se duplican (`activo_descripcion` etc.): la
+    pantalla de reparaciones muestra "qué está en service", y para eso da igual
+    de quién sea el aparato. Que el consumidor tenga que elegir entre dos juegos
+    de campos convertiria una tabla unificada en dos listas pegadas.
+    """
+    fuente = equipo if equipo is not None else activo
     return {
         "id": r.id,
         "equipo_id": r.equipo_id,
+        "activo_id": r.activo_id,
+        # `equipo` = parque del cliente, `activo` = stock propio alquilado. Lo
+        # necesita la UI para linkear a la ficha correcta.
+        "es_activo": r.activo_id is not None,
         "incidencia_id": r.incidencia_id,
         "proveedor_id": r.proveedor_id,
         # Resueltos para que la lista no tenga que pedir dos endpoints mas solo
@@ -77,11 +115,16 @@ def _to_dict(r: Reparacion, *, proveedor=None, equipo=None) -> dict:
         # categorias.
         "proveedor_nombre": proveedor.nombre if proveedor is not None else None,
         "equipo_descripcion": (
-            " ".join(x for x in (equipo.tipo, equipo.marca, equipo.modelo) if x)
-            if equipo is not None else None
+            " ".join(x for x in (fuente.tipo, fuente.marca, fuente.modelo) if x)
+            if fuente is not None else None
         ),
-        "equipo_serial": equipo.serial if equipo is not None else None,
-        "cliente_id": equipo.cliente_id if equipo is not None else None,
+        "equipo_serial": fuente.serial if fuente is not None else None,
+        # De un activo el cliente no sale del aparato sino del contrato en el
+        # que esta colocado, y puede no haber ninguno (en deposito). Lo resuelve
+        # `resolver()`.
+        "cliente_id": (
+            equipo.cliente_id if equipo is not None else cliente_id_activo
+        ),
         "fecha_envio": r.fecha_envio.isoformat() if r.fecha_envio else None,
         "fecha_retorno": r.fecha_retorno.isoformat() if r.fecha_retorno else None,
         # Derivado, nunca almacenado.
@@ -123,16 +166,73 @@ def resolver(session, r: Reparacion | None) -> dict | None:
     —que fue como salio primero— hace que un test cubra un camino y deje el
     otro sin cubrir, sin que se note.
     """
+    from .activos import Activo
     from .equipos import Equipo
     from .proveedores import Proveedor
 
     if r is None:
         return None
+    activo = session.get(Activo, r.activo_id) if r.activo_id is not None else None
     return _to_dict(
         r,
         proveedor=session.get(Proveedor, r.proveedor_id),
-        equipo=session.get(Equipo, r.equipo_id),
+        equipo=session.get(Equipo, r.equipo_id) if r.equipo_id is not None else None,
+        activo=activo,
+        cliente_id_activo=(
+            _cliente_del_activo(session, activo.id) if activo is not None else None
+        ),
     )
+
+
+def _cliente_del_activo(session, activo_id: int) -> int | None:
+    """En que cliente esta colocado el activo hoy, si esta en alguno.
+
+    Sale de la linea de contrato abierta y no de una columna del activo, por lo
+    mismo que el cliente de una reparacion sale del equipo: duplicarlo abriria
+    la puerta a que digan cosas distintas cuando el activo se mude de contrato.
+    """
+    from .contratos import Contrato, ContratoEquipo
+
+    return session.execute(
+        select(Contrato.cliente_id)
+        .join(ContratoEquipo, ContratoEquipo.contrato_id == Contrato.id)
+        .where(
+            ContratoEquipo.activo_id == activo_id,
+            ContratoEquipo.fecha_retiro.is_(None),
+        )
+    ).scalars().first()
+
+
+def _exigir_uno(equipo_id: int | None, activo_id: int | None) -> None:
+    """Uno de los dos y solo uno — la misma regla que el CHECK de la tabla.
+
+    Se valida acá además de en la base para que el error sea legible: el CHECK
+    levanta un `IntegrityError` crudo que la API traduciría a un 500.
+    """
+    if (equipo_id is None) == (activo_id is None):
+        raise ValueError(
+            "una reparación es de un equipo del cliente o de un activo propio: "
+            "hay que indicar exactamente uno de los dos"
+        )
+
+
+def _abierta(session, *, equipo_id: int | None = None,
+             activo_id: int | None = None) -> Reparacion | None:
+    """La reparación abierta de un equipo o de un activo.
+
+    Un único lugar donde se define "está afuera", usado por el alta (para
+    rechazar la segunda), por la vuelta del service y por la consulta directa.
+    Tenerlo tres veces era lo que hacía que agregar los activos dejara alguno
+    sin cubrir.
+    """
+    q = select(Reparacion).where(Reparacion.fecha_retorno.is_(None))
+    if equipo_id is not None:
+        q = q.where(Reparacion.equipo_id == equipo_id)
+    elif activo_id is not None:
+        q = q.where(Reparacion.activo_id == activo_id)
+    else:
+        return None
+    return session.execute(q.order_by(Reparacion.fecha_envio.desc())).scalars().first()
 
 
 class ReparacionRepository:
@@ -142,22 +242,19 @@ class ReparacionRepository:
     def _resolver(self, session, r: Reparacion) -> dict:
         return resolver(session, r)
 
-    def abierta_de(self, equipo_id: int) -> dict | None:
-        """La reparacion abierta del equipo, si la tiene. La usa la vuelta del
-        service para saber cual cerrar sin que la UI tenga que pasar el id."""
+    def abierta_de(self, equipo_id: int | None = None, *,
+                   activo_id: int | None = None) -> dict | None:
+        """La reparacion abierta del equipo o del activo, si la tiene. La usa la
+        vuelta del service para saber cual cerrar sin que la UI pase el id."""
         with self.session_factory() as session:
-            r = session.execute(
-                select(Reparacion)
-                .where(Reparacion.equipo_id == equipo_id)
-                .where(Reparacion.fecha_retorno.is_(None))
-                .order_by(Reparacion.fecha_envio.desc())
-            ).scalars().first()
+            r = _abierta(session, equipo_id=equipo_id, activo_id=activo_id)
             return self._resolver(session, r) if r is not None else None
 
     def create(
         self,
         *,
-        equipo_id: int,
+        equipo_id: int | None = None,
+        activo_id: int | None = None,
         proveedor_id: int,
         fecha_envio: date,
         incidencia_id: int | None = None,
@@ -167,26 +264,28 @@ class ReparacionRepository:
         observaciones: str | None = None,
         usuario: str = "Sistema",
     ) -> dict:
+        from .activos import Activo
         from .equipos import Equipo
         from .proveedores import Proveedor
 
+        _exigir_uno(equipo_id, activo_id)
+
         with self.session_factory() as session:
-            if session.get(Equipo, equipo_id) is None:
+            if equipo_id is not None and session.get(Equipo, equipo_id) is None:
                 raise KeyError(("equipo", equipo_id))
+            if activo_id is not None and session.get(Activo, activo_id) is None:
+                raise KeyError(("activo", activo_id))
             if session.get(Proveedor, proveedor_id) is None:
                 raise KeyError(("proveedor", proveedor_id))
             # Ver el docstring del modulo: dos reparaciones abiertas sobre el
-            # mismo equipo describen un estado que no puede pasar.
-            ya_abierta = session.execute(
-                select(func.count()).select_from(Reparacion)
-                .where(Reparacion.equipo_id == equipo_id)
-                .where(Reparacion.fecha_retorno.is_(None))
-            ).scalar_one()
-            if ya_abierta:
+            # mismo equipo describen un estado que no puede pasar. Vale igual
+            # para un activo.
+            if _abierta(session, equipo_id=equipo_id, activo_id=activo_id) is not None:
                 raise ValueError("el equipo ya tiene una reparacion abierta")
 
             r = Reparacion(
-                equipo_id=equipo_id, proveedor_id=proveedor_id,
+                equipo_id=equipo_id, activo_id=activo_id,
+                proveedor_id=proveedor_id,
                 fecha_envio=fecha_envio, incidencia_id=incidencia_id,
                 remito_salida=remito_salida, rma=rma, en_garantia=en_garantia,
                 observaciones=observaciones, usuario=usuario,
@@ -200,29 +299,58 @@ class ReparacionRepository:
         self,
         *,
         equipo_id: int | None = None,
+        activo_id: int | None = None,
         incidencia_id: int | None = None,
         proveedor_id: int | None = None,
         cliente_id: int | None = None,
+        solo_activos: bool | None = None,
         abiertas: bool | None = None,
     ) -> list[dict]:
         """Las abiertas primero y, dentro de cada grupo, la mas reciente arriba
-        — que es el orden en que se las mira."""
+        — que es el orden en que se las mira.
+
+        Sin filtros salen **las dos familias juntas**, que es el punto de la
+        tabla unificada: "qué tengo hoy en service" no distingue de quién es el
+        aparato. `solo_activos` separa cuando hace falta.
+        """
+        from .contratos import Contrato, ContratoEquipo
         from .equipos import Equipo
 
         with self.session_factory() as session:
             q = select(Reparacion)
             if equipo_id is not None:
                 q = q.where(Reparacion.equipo_id == equipo_id)
+            if activo_id is not None:
+                q = q.where(Reparacion.activo_id == activo_id)
             if incidencia_id is not None:
                 q = q.where(Reparacion.incidencia_id == incidencia_id)
             if proveedor_id is not None:
                 q = q.where(Reparacion.proveedor_id == proveedor_id)
+            if solo_activos is True:
+                q = q.where(Reparacion.activo_id.is_not(None))
+            elif solo_activos is False:
+                q = q.where(Reparacion.equipo_id.is_not(None))
             if cliente_id is not None:
                 # El cliente lo tiene el equipo, no la reparacion: duplicarlo
                 # aca abriria la puerta a que digan cosas distintas si el
                 # equipo cambia de duenio.
-                q = q.join(Equipo, Equipo.id == Reparacion.equipo_id).where(
-                    Equipo.cliente_id == cliente_id
+                #
+                # Para un activo el cliente sale del contrato donde esta
+                # colocado. Por eso son dos caminos unidos con OR y no un join:
+                # un join contra `equipos` dejaria afuera todas las
+                # reparaciones de activos, en silencio.
+                de_equipos = select(Equipo.id).where(Equipo.cliente_id == cliente_id)
+                de_activos = (
+                    select(ContratoEquipo.activo_id)
+                    .join(Contrato, Contrato.id == ContratoEquipo.contrato_id)
+                    .where(
+                        Contrato.cliente_id == cliente_id,
+                        ContratoEquipo.fecha_retiro.is_(None),
+                    )
+                )
+                q = q.where(
+                    Reparacion.equipo_id.in_(de_equipos)
+                    | Reparacion.activo_id.in_(de_activos)
                 )
             if abiertas is True:
                 q = q.where(Reparacion.fecha_retorno.is_(None))

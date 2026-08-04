@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from ..dependencies import get_contrato_repository
-from ..services.contratos import ContratoRepository
+from ..services.contratos import (
+    CierreServiceActivo, ContratoRepository, DatosServiceActivo,
+)
 
 router = APIRouter(prefix="/api/contratos", tags=["contratos"])
 
@@ -62,6 +64,27 @@ class PrecioIn(BaseModel):
     motivo: str | None = None
 
 
+class ServiceIn(BaseModel):
+    """A dónde se manda el activo que sale. Viaja **dentro** del retiro o del
+    reemplazo, misma forma que `DatosService` en "Reemplazar equipo": sacar el
+    equipo y registrar a dónde se lo mandó son el mismo hecho."""
+
+    proveedor_id: int
+    fecha_envio: date
+    remito_salida: str | None = None
+    rma: str | None = None
+    en_garantia: bool = False
+    observaciones: str | None = None
+
+
+class CierreServiceIn(BaseModel):
+    """La vuelta del activo que entra: cierra su reparación abierta."""
+
+    fecha_retorno: date
+    diagnostico: str | None = None
+    costo: float | None = None
+
+
 class ColocarIn(BaseModel):
     activo_id: int
     fecha_instalacion: date
@@ -69,6 +92,10 @@ class ColocarIn(BaseModel):
     ubicacion: str | None = None
     incidencia_id: int | None = None
     observaciones: str | None = None
+    # Colocar un activo que volvió de reparar: cierra su reparación abierta en
+    # el mismo gesto. Sin esto un activo `en_reparacion` no se puede colocar y
+    # la vuelta del service no tendría camino.
+    cierre_service: CierreServiceIn | None = None
 
 
 class RetirarIn(BaseModel):
@@ -80,6 +107,11 @@ class RetirarIn(BaseModel):
     # en rojo.
     estado_activo: str = "retirado_a_revisar"
     observaciones: str | None = None
+    # Sólo con `estado_activo="en_reparacion"` — el servicio rechaza el resto,
+    # porque una reparación sobre un equipo que va a depósito describiría algo
+    # que no pasó.
+    service: ServiceIn | None = None
+    incidencia_id: int | None = None
 
 
 class ReemplazarIn(BaseModel):
@@ -89,6 +121,8 @@ class ReemplazarIn(BaseModel):
     tecnico_instalador_id: int | None = None
     incidencia_id: int | None = None
     observaciones: str | None = None
+    service: ServiceIn | None = None
+    cierre_service: CierreServiceIn | None = None
 
 
 def _usuario(request) -> str:
@@ -221,11 +255,15 @@ def list_equipos(
 
 @router.post("/{contrato_id}/equipos", status_code=201)
 def colocar_equipo(
-    contrato_id: int, data: ColocarIn,
+    contrato_id: int, data: ColocarIn, request: Request,
     contratos: ContratoRepository = Depends(get_contrato_repository),
 ):
+    campos = data.model_dump(exclude={"cierre_service"})
     try:
-        return contratos.colocar(contrato_id, **data.model_dump())
+        return contratos.colocar(
+            contrato_id, usuario=_usuario(request),
+            cierre_service=_cierre(data.cierre_service), **campos,
+        )
     except KeyError as e:
         que, _id = e.args[0]
         raise HTTPException(404, f"{que} not found")
@@ -233,31 +271,54 @@ def colocar_equipo(
         raise HTTPException(409, str(e))
 
 
+def _service(data) -> DatosServiceActivo | None:
+    return DatosServiceActivo(**data.model_dump()) if data is not None else None
+
+
+def _cierre(data) -> CierreServiceActivo | None:
+    return CierreServiceActivo(**data.model_dump()) if data is not None else None
+
+
 @router.post("/equipos/{linea_id}/retirar")
 def retirar_equipo(
-    linea_id: int, data: RetirarIn,
+    linea_id: int, data: RetirarIn, request: Request,
     contratos: ContratoRepository = Depends(get_contrato_repository),
 ):
     """Cierra la línea y devuelve el activo al stock. **No lo pone
     `disponible`** por defecto: un equipo que vuelve de un cliente queda
-    `retirado_a_revisar` hasta que alguien lo mire."""
+    `retirado_a_revisar` hasta que alguien lo mire.
+
+    Con `service` cargado, además abre la reparación **en la misma
+    transacción** — el activo no puede quedar `en_reparacion` sin una
+    reparación que diga dónde está."""
+    campos = data.model_dump(exclude={"service"})
     try:
-        return contratos.retirar(linea_id, **data.model_dump())
-    except KeyError:
-        raise HTTPException(404, "línea not found")
+        return contratos.retirar(
+            linea_id, service=_service(data.service),
+            usuario=_usuario(request), **campos,
+        )
+    except KeyError as e:
+        que = e.args[0][0] if isinstance(e.args[0], tuple) else "línea"
+        raise HTTPException(404, f"{que} not found")
     except ValueError as e:
         raise HTTPException(409, str(e))
 
 
 @router.post("/equipos/{linea_id}/reemplazar")
 def reemplazar_equipo(
-    linea_id: int, data: ReemplazarIn,
+    linea_id: int, data: ReemplazarIn, request: Request,
     contratos: ContratoRepository = Depends(get_contrato_repository),
 ):
     """Sustituye el equipo **sin borrar el anterior**: devuelve las dos líneas,
-    la que se cerró y la que se abrió."""
+    la que se cerró y la que se abrió, más la reparación que abrió (`service`) y
+    la que cerró (`cierre_service`)."""
+    campos = data.model_dump(exclude={"service", "cierre_service"})
     try:
-        return contratos.reemplazar(linea_id, **data.model_dump())
+        return contratos.reemplazar(
+            linea_id, service=_service(data.service),
+            cierre_service=_cierre(data.cierre_service),
+            usuario=_usuario(request), **campos,
+        )
     except KeyError as e:
         que, _id = e.args[0]
         raise HTTPException(404, f"{que} not found")

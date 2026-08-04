@@ -6,8 +6,9 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
 import {
   api, ApiError, ESTADO_ACTIVO_LABELS, ESTADOS_ACTIVO_MANUALES,
-  type Activo, type ResumenActivos,
+  type Activo, type HitoActivo, type ResumenActivos,
 } from '../api'
+import { fecha } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,9 +26,15 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Boxes, History, Pencil, Plus, Trash2 } from 'lucide-react'
 
 const TODOS = '__todos__'
+
+const HITO_LABELS: Record<HitoActivo['clase'], string> = {
+  contrato: 'Contrato',
+  movimiento: 'Movimiento',
+  service: 'Service',
+}
 
 const activoSchema = z.object({
   tipo: z.string().trim().min(1, 'El tipo es obligatorio'),
@@ -84,6 +91,8 @@ export function Activos() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [aBorrar, setABorrar] = useState<Activo | null>(null)
+  const [verHistorial, setVerHistorial] = useState<Activo | null>(null)
+  const [hitos, setHitos] = useState<HitoActivo[] | null>(null)
 
   const form = useForm<ActivoFormValues>({
     resolver: zodResolver(activoSchema),
@@ -181,6 +190,17 @@ export function Activos() {
     }
   }
 
+  async function abrirHistorial(a: Activo) {
+    setVerHistorial(a)
+    setHitos(null)
+    try {
+      setHitos(await api.get<HitoActivo[]>(`/api/activos/${a.id}/linea-de-tiempo`))
+    } catch (err) {
+      setError(describeError(err))
+      setVerHistorial(null)
+    }
+  }
+
   async function handleDelete(a: Activo) {
     setError(null)
     try {
@@ -247,6 +267,7 @@ export function Activos() {
       header: () => <div className="text-right">Acciones</div>,
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
+          <Button size="icon" variant="outline" title="Ver historial" aria-label="Ver historial" onClick={() => abrirHistorial(row.original)}><History /></Button>
           <Button size="icon" variant="outline" title="Editar activo" aria-label="Editar activo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
           <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar activo" aria-label="Eliminar activo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
         </div>
@@ -398,6 +419,49 @@ export function Activos() {
           )}
         </CardContent>
       </Card>
+
+      {/* La línea de tiempo: contratos, movimientos y pasos por service en una
+          sola secuencia. Es lo que contesta "por dónde anduvo este equipo", que
+          con las tres listas separadas hay que armar a ojo. */}
+      <Dialog open={verHistorial !== null} onOpenChange={(open) => !open && setVerHistorial(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="size-4" />
+              Historial — {verHistorial?.descripcion}
+            </DialogTitle>
+            <DialogDescription>
+              {verHistorial?.serial ?? 'Sin número de serie'}
+            </DialogDescription>
+          </DialogHeader>
+          {hitos === null ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          ) : hitos.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Todavía no pasó nada con este activo.
+            </p>
+          ) : (
+            <ol className="grid gap-3">
+              {hitos.map((h, i) => (
+                <li key={`${h.clase}-${h.linea_id ?? h.movimiento_id ?? h.reparacion_id ?? i}`} className="flex gap-3">
+                  <Badge variant={h.clase === 'service' ? 'default' : 'outline'} className="h-fit shrink-0">
+                    {HITO_LABELS[h.clase]}
+                  </Badge>
+                  <div className="leading-tight">
+                    <div className="text-sm">{h.titulo}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {fecha(h.fecha)}{h.detalle ? ` · ${h.detalle}` : ''}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          <DialogFooter>
+            <DialogClose asChild><Button type="button" variant="outline">Cerrar</Button></DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={aBorrar !== null}

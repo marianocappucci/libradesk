@@ -137,6 +137,20 @@ def historial_activo(
     return contratos.historial_activo(activo_id)
 
 
+@router.get("/{activo_id}/linea-de-tiempo")
+def linea_de_tiempo(
+    activo_id: int,
+    activos: ActivoRepository = Depends(get_activo_repository),
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+):
+    """Todo lo que le pasó, en una sola secuencia: contratos, movimientos y
+    pasos por service. Es lo que `/historial` no puede contestar por sí solo —
+    dice en qué contratos estuvo, pero no qué le pasó entre dos de ellos."""
+    if activos.get(activo_id) is None:
+        raise HTTPException(404, "activo not found")
+    return contratos.linea_de_tiempo(activo_id)
+
+
 @router.put("/{activo_id}", response_model=ActivoOut)
 def update_activo(
     activo_id: int, data: ActivoUpdate,

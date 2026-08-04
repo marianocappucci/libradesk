@@ -152,7 +152,13 @@ export type Proveedor = {
 
 export type Reparacion = {
   id: number
-  equipo_id: number
+  // Uno de los dos y sólo uno (fase 4): `equipo_id` es el parque del cliente,
+  // `activo_id` el stock propio alquilado. `equipo_descripcion` y
+  // `equipo_serial` los resuelve el backend para los dos casos, así que la
+  // pantalla de service no tiene que distinguirlos para escribir un renglón.
+  equipo_id: number | null
+  activo_id: number | null
+  es_activo: boolean
   incidencia_id: number | null
   proveedor_id: number
   // Resueltos por el backend, para que la lista no pida dos endpoints más
@@ -364,6 +370,41 @@ export type Contrato = {
 export type ResumenActivos = {
   total: number
   por_estado: Record<string, number>
+}
+
+/** A dónde se manda el activo que sale. Viaja DENTRO del retiro o del
+ *  reemplazo: sacarlo y registrar a dónde se lo mandó son el mismo hecho. */
+export type ServicePayload = {
+  proveedor_id: number
+  fecha_envio: string
+  remito_salida?: string | null
+  rma?: string | null
+  en_garantia?: boolean
+  observaciones?: string | null
+}
+
+/** La vuelta del que entra: cierra su reparación abierta. */
+export type CierreServicePayload = {
+  fecha_retorno: string
+  diagnostico?: string | null
+  costo?: number | null
+}
+
+/** Un hito de la línea de tiempo de un activo: contrato, movimiento o service.
+ *  Las tres fuentes vienen unidas porque por separado ninguna cuenta el
+ *  recorrido completo. */
+export type HitoActivo = {
+  clase: 'contrato' | 'movimiento' | 'service'
+  fecha: string | null
+  titulo: string | null
+  detalle: string | null
+  contrato_id?: number
+  linea_id?: number
+  movimiento_id?: number
+  reparacion_id?: number
+  incidencia_id?: number | null
+  vigente?: boolean
+  abierta?: boolean
 }
 
 export function describirActivo(a: Activo | undefined): string {
