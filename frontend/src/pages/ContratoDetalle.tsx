@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   api, ApiError, ESTADO_CONTRATO_LABELS, METODO_ACTUALIZACION_LABELS,
-  PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, opcionesActivo,
-  type Activo, type Contrato, type ContratoLinea,
+  PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, opcionesActivo, opcionesProveedor,
+  type Activo, type Contrato, type ContratoLinea, type Proveedor,
 } from '../api'
 import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,6 +45,10 @@ export function ContratoDetalle() {
   const navigate = useNavigate()
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [disponibles, setDisponibles] = useState<Activo[]>([])
+  // Los que están en service: no se pueden colocar salvo que la misma operación
+  // cierre su reparación, así que se ofrecen aparte y marcados.
+  const [enService, setEnService] = useState<Activo[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,6 +64,22 @@ export function ContratoDetalle() {
   const [motivoRetiro, setMotivoRetiro] = useState('devolucion')
   const [estadoActivo, setEstadoActivo] = useState('retirado_a_revisar')
   const [importe, setImporte] = useState('')
+  // Bloque de service del que SALE.
+  const [proveedorId, setProveedorId] = useState('')
+  const [remitoSalida, setRemitoSalida] = useState('')
+  const [rma, setRma] = useState('')
+  const [enGarantia, setEnGarantia] = useState(false)
+  // Bloque de la vuelta del que ENTRA.
+  const [cierreCosto, setCierreCosto] = useState('')
+  const [cierreDiagnostico, setCierreDiagnostico] = useState('')
+
+  // El bloque de service aparece exactamente cuando el activo que sale queda
+  // `en_reparacion` — el backend rechaza los datos de service con cualquier
+  // otro estado, así que ofrecerlos ahí sería ofrecer un 409.
+  const mandaAService = estadoActivo === 'en_reparacion'
+  // Y el de la vuelta, cuando el que entra está en service. Se deriva del
+  // activo elegido, no de un checkbox: el usuario ya lo dijo al elegirlo.
+  const vuelveDeService = enService.some((a) => String(a.id) === activoId)
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -70,12 +90,16 @@ export function ContratoDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [c, libres] = await Promise.all([
+      const [c, libres, reparando, provs] = await Promise.all([
         api.get<Contrato>(`/api/contratos/${id}`),
         api.get<Activo[]>('/api/activos?disponibles=true'),
+        api.get<Activo[]>('/api/activos?estado=en_reparacion'),
+        api.get<Proveedor[]>('/api/proveedores'),
       ])
       setContrato(c)
       setDisponibles(libres)
+      setEnService(reparando)
+      setProveedores(provs)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -94,6 +118,34 @@ export function ContratoDetalle() {
     setMotivoRetiro('devolucion')
     setEstadoActivo('retirado_a_revisar')
     setImporte('')
+    setProveedorId('')
+    setRemitoSalida('')
+    setRma('')
+    setEnGarantia(false)
+    setCierreCosto('')
+    setCierreDiagnostico('')
+  }
+
+  /** Lo que se manda al backend cuando el activo que sale va a service. */
+  function payloadService() {
+    if (!mandaAService || !proveedorId) return null
+    return {
+      proveedor_id: Number(proveedorId),
+      fecha_envio: fechaCampo,
+      remito_salida: remitoSalida || null,
+      rma: rma || null,
+      en_garantia: enGarantia,
+    }
+  }
+
+  /** Y cuando el que entra vuelve de estar reparándose. */
+  function payloadCierre() {
+    if (!vuelveDeService) return null
+    return {
+      fecha_retorno: fechaCampo,
+      diagnostico: cierreDiagnostico || null,
+      costo: cierreCosto ? Number(cierreCosto) : null,
+    }
   }
 
   async function confirmar() {
@@ -106,18 +158,22 @@ export function ContratoDetalle() {
           activo_id: Number(activoId),
           fecha_instalacion: fechaCampo,
           ubicacion: ubicacion || null,
+          cierre_service: payloadCierre(),
         })
       } else if (accion.tipo === 'retirar') {
         await api.post(`/api/contratos/equipos/${accion.linea.id}/retirar`, {
           fecha_retiro: fechaCampo,
           motivo_retiro: motivoRetiro,
           estado_activo: estadoActivo,
+          service: payloadService(),
         })
       } else if (accion.tipo === 'reemplazar') {
         await api.post(`/api/contratos/equipos/${accion.linea.id}/reemplazar`, {
           activo_nuevo_id: Number(activoId),
           fecha: fechaCampo,
           estado_activo_retirado: estadoActivo,
+          service: payloadService(),
+          cierre_service: payloadCierre(),
         })
       } else {
         await api.post(`/api/contratos/${contrato.id}/precios`, {
@@ -324,8 +380,21 @@ export function ContratoDetalle() {
                 <SelectBuscable
                   value={activoId}
                   onChange={setActivoId}
-                  opciones={opcionesActivo(disponibles)}
-                  placeholder={disponibles.length ? 'Elegí un activo' : 'No hay activos disponibles'}
+                  opciones={[
+                    ...opcionesActivo(disponibles),
+                    // Los que están en service se ofrecen marcados: colocarlos
+                    // es válido sólo porque este mismo gesto cierra su
+                    // reparación. Sin listarlos, la vuelta del service no
+                    // tendría camino desde la UI.
+                    ...opcionesActivo(enService).map((o) => ({
+                      ...o, label: `${o.label} — vuelve del service`,
+                    })),
+                  ]}
+                  placeholder={
+                    disponibles.length + enService.length
+                      ? 'Elegí un activo'
+                      : 'No hay activos disponibles'
+                  }
                 />
               </div>
             )}
@@ -380,6 +449,68 @@ export function ContratoDetalle() {
               <div className="grid gap-1.5">
                 <Label>Importe nuevo</Label>
                 <Input type="number" step="0.01" value={importe} onChange={(e) => setImporte(e.target.value)} />
+              </div>
+            )}
+
+            {/* El que SALE va a service. Aparece sólo con estado
+                `en_reparacion`: con cualquier otro el backend rechaza estos
+                datos, así que ofrecerlos sería ofrecer un 409. */}
+            {mandaAService && (accion?.tipo === 'retirar' || accion?.tipo === 'reemplazar') && (
+              <div className="grid gap-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Se manda a service</p>
+                <div className="grid gap-1.5">
+                  <Label>Proveedor</Label>
+                  <SelectBuscable
+                    value={proveedorId}
+                    onChange={setProveedorId}
+                    opciones={opcionesProveedor(proveedores.filter((p) => p.activo))}
+                    placeholder="Elegí un proveedor"
+                  />
+                </div>
+                <div className="grid gap-1.5 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-1.5">
+                    <Label>Remito de salida</Label>
+                    <Input value={remitoSalida} onChange={(e) => setRemitoSalida(e.target.value)} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>RMA</Label>
+                    <Input value={rma} onChange={(e) => setRma(e.target.value)} />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={enGarantia}
+                    onChange={(e) => setEnGarantia(e.target.checked)}
+                  />
+                  Entra por garantía
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Se registra en la misma operación. Si algo falla, el retiro
+                  tampoco ocurre.
+                </p>
+              </div>
+            )}
+
+            {/* Y el que ENTRA vuelve de service: se cierra su reparación. */}
+            {vuelveDeService && (accion?.tipo === 'colocar' || accion?.tipo === 'reemplazar') && (
+              <div className="grid gap-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Vuelve del service</p>
+                <div className="grid gap-1.5">
+                  <Label>Diagnóstico del proveedor</Label>
+                  <Input
+                    value={cierreDiagnostico}
+                    onChange={(e) => setCierreDiagnostico(e.target.value)}
+                    placeholder="Se cambió la fuente"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Costo de la reparación</Label>
+                  <Input
+                    type="number" step="0.01" value={cierreCosto}
+                    onChange={(e) => setCierreCosto(e.target.value)}
+                  />
+                </div>
               </div>
             )}
           </div>

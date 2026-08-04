@@ -19,6 +19,10 @@ router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 class IncidenciaIn(BaseModel):
     cliente_id: int
     equipo_id: int | None = None
+    # El activo alquilado afectado, si el problema es de un equipo NUESTRO
+    # puesto en el cliente. No excluye a `equipo_id`: un ticket puede tocar
+    # legítimamente las dos cosas.
+    activo_id: int | None = None
     tecnico_id: int | None = None
     sector_id: int | None = None
     # Hoja del catalogo de categorias ("Hardware -> Impresoras"), 2026-08-02.
@@ -75,11 +79,12 @@ def create_incidencia(
 def list_incidencias(
     cliente_id: int | None = None, estado: str | None = None,
     equipo_id: int | None = None, categoria_id: int | None = None,
+    activo_id: int | None = None,
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
 ):
     return incidencias.list(
         cliente_id=cliente_id, estado=estado, equipo_id=equipo_id,
-        categoria_id=categoria_id,
+        categoria_id=categoria_id, activo_id=activo_id,
     )
 
 

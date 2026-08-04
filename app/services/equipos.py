@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, delete, func, select, update
+from sqlalchemy import (
+    CheckConstraint, Date, DateTime, ForeignKey, String, Text, delete, func,
+    select, update,
+)
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -53,10 +56,37 @@ class Equipo(Base):
 
 
 class EquipoMovimiento(Base):
+    """El historial de **cualquier** equipo, sea del cliente o propio.
+
+    **Polimorfica desde la fase 4 del modulo de alquileres (2026-08-04):** o
+    tiene `equipo_id` (parque del cliente) o `activo_id` (stock propio), nunca
+    las dos ni ninguna — lo garantiza un CHECK, que en SQLite **si** se ejecuta,
+    a diferencia de las FK (el pragma `foreign_keys` esta apagado).
+
+    Se eligio esto sobre una tabla `activos_movimientos` aparte porque un
+    movimiento es el mismo hecho en los dos casos —esto se movio de aca a alla
+    tal dia, por tal ticket— y duplicarlo obligaria a unir dos tablas en cada
+    listado, cada reporte y cada timeline. El costo se midio antes de decidir:
+    reconstruir una tabla de 77 filas en produccion y 53 en dev.
+    """
+
     __tablename__ = "equipos_movimientos"
+    __table_args__ = (
+        CheckConstraint(
+            "(equipo_id IS NOT NULL) <> (activo_id IS NOT NULL)",
+            name="ck_movimiento_equipo_xor_activo",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    equipo_id: Mapped[int] = mapped_column(ForeignKey("equipos.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Nullable desde la fase 4: el movimiento de un activo propio no tiene
+    # equipo. Exactamente uno de los dos, por el CHECK de arriba.
+    equipo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipos.id", ondelete="CASCADE"), index=True,
+    )
+    activo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("activos.id", ondelete="CASCADE"), index=True,
+    )
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
     sector_origen: Mapped[str | None] = mapped_column(String(255))
@@ -108,6 +138,9 @@ def _mov_to_dict(m: EquipoMovimiento) -> dict:
     return {
         "id": m.id,
         "equipo_id": m.equipo_id,
+        # Exactamente uno de los dos tiene valor. Los consumidores que sólo
+        # miran equipos del cliente pueden seguir ignorando `activo_id`.
+        "activo_id": m.activo_id,
         "tipo": m.tipo,
         "descripcion": m.descripcion,
         "sector_origen": m.sector_origen,

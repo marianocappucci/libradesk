@@ -27,6 +27,18 @@ class Incidencia(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False, index=True)
     equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id", ondelete="SET NULL"), index=True)
+    # El activo alquilado sobre el que se abre el ticket, cuando el problema es
+    # de un equipo NUESTRO puesto en el cliente y no del parque de el.
+    #
+    # Columna aparte y **sin** CHECK de exclusion mutua con `equipo_id`, a
+    # diferencia de `equipos_movimientos` y `equipos_reparaciones`: alla el XOR
+    # dice de quien es el historial y ninguna fila puede ser de los dos. Aca un
+    # ticket puede tocar legitimamente las dos cosas —"el telefono alquilado no
+    # registra en la PC del cliente"— y forzar uno solo obligaria a elegir cual
+    # de los dos se pierde.
+    activo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("activos.id", ondelete="SET NULL"), index=True,
+    )
     tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("tecnicos.id", ondelete="SET NULL"))
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectores.id", ondelete="SET NULL"))
     # Que clase de problema es ("Hardware -> Impresoras"). Apunta siempre a la
@@ -76,6 +88,7 @@ def _to_dict(i: Incidencia) -> dict:
         "id": i.id,
         "cliente_id": i.cliente_id,
         "equipo_id": i.equipo_id,
+        "activo_id": i.activo_id,
         "tecnico_id": i.tecnico_id,
         "sector_id": i.sector_id,
         "categoria_id": i.categoria_id,
@@ -132,11 +145,16 @@ class IncidenciaRepository:
             return _to_dict(i)
 
     def list(self, cliente_id: int | None = None, estado: str | None = None,
-             equipo_id: int | None = None, categoria_id: int | None = None) -> list[dict]:
+             equipo_id: int | None = None, categoria_id: int | None = None,
+             activo_id: int | None = None) -> list[dict]:
         """`equipo_id` es lo que hace contestable "¿cuántas veces falló
         este equipo?": el dato estaba desde la migracion, pero no habia
         forma de pedirlo — el listado solo filtraba por cliente y estado,
-        asi que la unica manera era abrir incidencia por incidencia."""
+        asi que la unica manera era abrir incidencia por incidencia.
+
+        `activo_id` contesta lo mismo para un equipo **nuestro** alquilado, que
+        es la pregunta que decide si conviene seguir alquilandolo o darlo de
+        baja."""
         with self.session_factory() as session:
             stmt = select(Incidencia).order_by(Incidencia.fecha_creacion.desc())
             if cliente_id is not None:
@@ -145,6 +163,8 @@ class IncidenciaRepository:
                 stmt = stmt.where(Incidencia.estado == estado)
             if equipo_id is not None:
                 stmt = stmt.where(Incidencia.equipo_id == equipo_id)
+            if activo_id is not None:
+                stmt = stmt.where(Incidencia.activo_id == activo_id)
             if categoria_id is not None:
                 stmt = stmt.where(Incidencia.categoria_id == categoria_id)
             return [_to_dict(i) for i in session.execute(stmt).scalars()]
@@ -205,12 +225,22 @@ class IncidenciaRepository:
             # Import local: `equipos` no importa a `incidencias`, y de este
             # modo se mantiene asi (sin ciclo) aunque la dependencia exista
             # en esta direccion.
+            from .contratos import ContratoEquipo
             from .equipos import EquipoMovimiento
             from .reparaciones import Reparacion
 
             session.execute(
                 update(EquipoMovimiento)
                 .where(EquipoMovimiento.incidencia_id == incidencia_id)
+                .values(incidencia_id=None)
+            )
+            # Mismo criterio para las lineas de contrato: el equipo se
+            # reemplazo de verdad ese dia, y esa historia le sobrevive al
+            # ticket. Sin esto la linea quedaria apuntando a un ticket que ya
+            # no existe, que es peor que no apuntar a nada.
+            session.execute(
+                update(ContratoEquipo)
+                .where(ContratoEquipo.incidencia_id == incidencia_id)
                 .values(incidencia_id=None)
             )
             session.execute(

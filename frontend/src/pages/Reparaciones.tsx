@@ -156,6 +156,12 @@ export function Reparaciones() {
       cell: ({ row }) => (
         <div className="leading-tight">
           <span className="font-medium">{row.original.equipo_descripcion}</span>
+          {/* Desde la fase 4 esta lista trae las dos familias juntas: el parque
+              del cliente y el stock propio alquilado. Sin la marca, un activo
+              se lee como un equipo del cliente. */}
+          {row.original.es_activo && (
+            <Badge variant="outline" className="ml-2 align-middle">Alquilado</Badge>
+          )}
           {row.original.equipo_serial && (
             <span className="block text-xs text-muted-foreground">{row.original.equipo_serial}</span>
           )}

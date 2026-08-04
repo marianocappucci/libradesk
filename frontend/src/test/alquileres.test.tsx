@@ -92,6 +92,36 @@ const ACTIVO_LIBRE = {
   contrato_id: null, contrato_numero: null, cliente_id: null, cliente_nombre: null,
 }
 
+// Un activo que está en service: no entra en `disponibles=true`, así que la UI
+// lo pide aparte para poder ofrecer la vuelta.
+const ACTIVO_EN_SERVICE = {
+  ...ACTIVO_COLOCADO,
+  id: 4, serial: 'YS-X999', codigo_interno: null,
+  descripcion: 'Central telefónica Yeastar S20', estado: 'en_reparacion',
+  contrato_id: null, contrato_numero: null, cliente_id: null, cliente_nombre: null,
+}
+
+const PROVEEDOR = {
+  id: 1, nombre: 'Compu Service', contacto: null, telefono: null,
+  email: null, observaciones: null, activo: true,
+}
+
+// Las tres clases de hito que une la línea de tiempo.
+const TIMELINE = [
+  {
+    clase: 'service', fecha: '2026-09-14', titulo: 'En service',
+    detalle: 'Compu Service', reparacion_id: 1, abierta: true, incidencia_id: null,
+  },
+  {
+    clase: 'movimiento', fecha: '2026-09-14T10:00:00', titulo: 'Reemplazado en CTR-00000001',
+    detalle: 'Reemplazo por Teléfono IP', movimiento_id: 2, incidencia_id: null,
+  },
+  {
+    clase: 'contrato', fecha: '2026-08-01', titulo: 'Instalado en CTR-00000001',
+    detalle: 'Estudio Contable Sur', contrato_id: 1, linea_id: 10, vigente: false,
+  },
+]
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), {
     status: 200, headers: { 'content-type': 'application/json' },
@@ -105,11 +135,15 @@ beforeEach(() => {
     if (u.includes('/api/activos/resumen')) {
       return Promise.resolve(json({ total: 2, por_estado: { colocado: 1, disponible: 1 } }))
     }
-    if (u.includes('/api/activos')) {
-      return Promise.resolve(json(u.includes('disponibles=true')
-        ? [ACTIVO_LIBRE]
-        : [ACTIVO_COLOCADO, ACTIVO_LIBRE]))
+    if (u.includes('/api/activos') && u.includes('linea-de-tiempo')) {
+      return Promise.resolve(json(TIMELINE))
     }
+    if (u.includes('/api/activos')) {
+      if (u.includes('disponibles=true')) return Promise.resolve(json([ACTIVO_LIBRE]))
+      if (u.includes('estado=en_reparacion')) return Promise.resolve(json([ACTIVO_EN_SERVICE]))
+      return Promise.resolve(json([ACTIVO_COLOCADO, ACTIVO_LIBRE]))
+    }
+    if (u.includes('/api/proveedores')) return Promise.resolve(json([PROVEEDOR]))
     if (u.includes('/api/contratos/1')) return Promise.resolve(json(CONTRATO))
     return Promise.resolve(json([]))
   }))
@@ -187,12 +221,57 @@ describe('Ficha del contrato', () => {
   })
 })
 
+describe('Ficha del contrato — service (fase 4)', () => {
+  it('el bloque de service aparece sólo si el activo que sale queda en reparación', async () => {
+    const user = userEvent.setup()
+    render(<ContratoDetalle />)
+    await screen.findByText('GS-B456')
+
+    await user.click(screen.getByRole('button', { name: 'Retirar equipo' }))
+    await screen.findByText(/vuelve al stock/i)
+    // Con el estado por defecto (`retirado_a_revisar`) NO se ofrece service:
+    // el backend rechaza esos datos, así que ofrecerlos sería ofrecer un 409.
+    expect(screen.queryByText('Se manda a service')).not.toBeInTheDocument()
+  })
+
+  it('el activo que está en service se ofrece marcado, para poder reinstalarlo', async () => {
+    const user = userEvent.setup()
+    render(<ContratoDetalle />)
+    await screen.findByText('GS-B456')
+
+    await user.click(screen.getByRole('button', { name: /Colocar equipo/ }))
+
+    // El selector es un combobox con búsqueda: las opciones no están en el DOM
+    // hasta abrirlo, así que buscarlas de entrada da un falso rojo.
+    const combos = await screen.findAllByRole('combobox')
+    await user.click(combos[0])
+
+    // Sin listarlo, la vuelta del service no tendría camino desde la UI: un
+    // activo `en_reparacion` no entra en `disponibles=true`.
+    expect(await screen.findByText(/vuelve del service/)).toBeInTheDocument()
+  })
+})
+
 describe('Activos', () => {
   it('muestra dónde está colocado cada uno y cuál sigue en depósito', async () => {
     render(<Activos />, '/activos')
 
     expect(await screen.findByText('Estudio Contable Sur')).toBeInTheDocument()
     expect(screen.getByText('En depósito')).toBeInTheDocument()
+  })
+
+  it('el historial une contrato, movimiento y service en una sola secuencia', async () => {
+    const user = userEvent.setup()
+    render(<Activos />, '/activos')
+    await screen.findByText('Estudio Contable Sur')
+
+    await user.click(screen.getAllByRole('button', { name: 'Ver historial' })[0])
+
+    // Las tres clases juntas: es lo que `/historial` no contesta por sí solo.
+    expect(await screen.findByText('Service')).toBeInTheDocument()
+    expect(screen.getByText('Movimiento')).toBeInTheDocument()
+    expect(screen.getByText('Contrato')).toBeInTheDocument()
+    expect(screen.getByText('Reemplazado en CTR-00000001')).toBeInTheDocument()
   })
 
   it('el estado de un activo colocado no se puede editar', async () => {
