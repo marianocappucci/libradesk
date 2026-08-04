@@ -1,45 +1,46 @@
-/** Depósitos **de la empresa**: el taller, el depósito central.
+/** Depósitos **de los clientes**: su pañol, su sala de racks.
  *
- *  Acá va el equipo que se retira de un cliente. Uno de ellos es el
- *  **predeterminado**: el destino de "vuelve a depósito" cuando nadie elige
- *  cuál, y por eso tiene que ser propio — ese equipo puede ser de cualquier
- *  cliente.
+ *  Sólo pueden guardar equipos de ese cliente — el backend lo valida— y ninguno
+ *  puede ser el predeterminado de la empresa, porque ahí van a parar equipos de
+ *  cualquiera.
  *
- *  Pantalla separada de la de clientes desde el 2026-08-04 (pedido 35). Antes
- *  eran dos secciones de una sola, y el formulario tenía que preguntar de quién
- *  era el depósito. Separadas, cada una lo sabe.
+ *  Pantalla separada de la de propios desde el 2026-08-04 (pedido 35). Acá el
+ *  cliente **sí** se elige al crear, que es la diferencia real entre las dos:
+ *  en la de la empresa ese campo no existe.
  *
- *  🔴 **El ABM no está detrás de `isAdmin`**, y eso es un cambio deliberado.
- *  Hasta el 2026-08-04 los botones se le escondían a todo el que no fuera admin
- *  — pero el backend monta este router con `staff_or_admin`, igual que equipos
- *  y sectores. O sea que cualquier staff **ya podía** crear y borrar depósitos
- *  por la API: esconder los botones no restringía nada, sólo hacía que el
- *  módulo se viera roto. Si se decide que esto sea admin-only, el lugar es el
- *  backend (`app/main.py`), no acá.
+ *  El ABM tampoco está detrás de `isAdmin` — ver el comentario de `Depositos`.
  */
-import { useEffect, useState } from 'react'
-import { api, ApiError, type Deposito } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  api, ApiError, opcionesCliente, type Cliente, type Deposito,
+} from '../api'
 import { ConmutadorDepositos, TarjetaDeposito } from '@/components/deposito-piezas'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Building2, Check, Plus } from 'lucide-react'
+import { Check, Plus, Users } from 'lucide-react'
 
-export function Depositos() {
+const TODOS = '__todos__'
+
+export function DepositosClientes() {
   const [depositos, setDepositos] = useState<Deposito[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filtro, setFiltro] = useState(TODOS)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editando, setEditando] = useState<Deposito | null>(null)
   const [nombre, setNombre] = useState('')
   const [descripcion, setDescripcion] = useState('')
+  const [clienteId, setClienteId] = useState('')
   const [activo, setActivo] = useState(true)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -55,10 +56,14 @@ export function Depositos() {
     setLoading(true)
     setError(null)
     try {
-      // `propios=true` lo filtra el backend, no el navegador: con muchos
-      // depósitos de clientes, traerlos todos para descartarlos acá sería
-      // pedir una lista entera para mostrar la mitad.
-      setDepositos(await api.get<Deposito[]>('/api/depositos?propios=true'))
+      const [dep, cl] = await Promise.all([
+        api.get<Deposito[]>('/api/depositos'),
+        api.get<Cliente[]>('/api/clientes'),
+      ])
+      // El backend filtra por un cliente concreto (`?cliente_id=`) o por
+      // propios, pero no tiene un "todos los de clientes": se descarta acá.
+      setDepositos(dep.filter((d) => d.cliente_id !== null))
+      setClientes(cl)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -66,10 +71,20 @@ export function Depositos() {
     }
   }
 
+  const visibles = useMemo(
+    () => filtro === TODOS
+      ? depositos
+      : depositos.filter((d) => String(d.cliente_id) === filtro),
+    [depositos, filtro],
+  )
+
   function abrirNuevo() {
     setEditando(null)
     setNombre('')
     setDescripcion('')
+    // Si hay un cliente filtrado, el alta arranca con ése — mismo criterio que
+    // el alta de incidencias.
+    setClienteId(filtro === TODOS ? '' : filtro)
     setActivo(true)
     setFormError(null)
     setDialogOpen(true)
@@ -79,22 +94,26 @@ export function Depositos() {
     setEditando(d)
     setNombre(d.nombre)
     setDescripcion(d.descripcion ?? '')
+    setClienteId(String(d.cliente_id))
     setActivo(d.activo)
     setFormError(null)
     setDialogOpen(true)
   }
 
   async function guardar() {
-    if (!nombre.trim()) return
+    if (!nombre.trim() || (!editando && !clienteId)) return
     setSaving(true)
     setFormError(null)
     try {
       if (editando) {
+        // El dueño no se edita: mover un depósito a otro cliente arrastraría
+        // los equipos que tiene adentro, que son del cliente actual. Se crea
+        // otro y se transfieren.
         await api.put(`/api/depositos/${editando.id}`, { nombre, descripcion, activo })
       } else {
-        // `cliente_id: null` = de la empresa. Esta pantalla no pregunta de
-        // quién es porque ya lo sabe.
-        await api.post('/api/depositos', { nombre, descripcion, cliente_id: null })
+        await api.post('/api/depositos', {
+          nombre, descripcion, cliente_id: Number(clienteId),
+        })
       }
       setDialogOpen(false)
       await cargar()
@@ -119,40 +138,47 @@ export function Depositos() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Building2 className="size-5" />Depósitos de la empresa
+          <Users className="size-5" />Depósitos de clientes
         </h2>
         <Button onClick={abrirNuevo}><Plus />Nuevo depósito</Button>
       </div>
 
-      <ConmutadorDepositos actual="propios" />
+      <ConmutadorDepositos actual="clientes" />
 
       <p className="text-sm text-muted-foreground">
-        El taller y los depósitos propios. Acá va el equipo que se retira de un
-        cliente, y el <strong>predeterminado</strong> es a dónde va cuando nadie
-        elige destino.
+        El pañol o la sala de racks del propio cliente. Sólo puede guardar
+        equipos <strong>de ese cliente</strong>, y ninguno puede ser el
+        predeterminado de la empresa.
       </p>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
+      <Card>
+        <CardContent className="grid gap-1.5 sm:max-w-sm">
+          <Label>Cliente</Label>
+          <SelectBuscable
+            value={filtro}
+            onChange={setFiltro}
+            opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
+            ariaLabel="Filtrar por cliente"
+          />
+        </CardContent>
+      </Card>
+
       {loading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-      ) : depositos.length === 0 ? (
+      ) : visibles.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No hay depósitos propios todavía. El primero que cargues queda como
-            predeterminado.
+            {depositos.length === 0
+              ? 'Ningún cliente tiene depósitos cargados todavía.'
+              : 'Ese cliente no tiene depósitos.'}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {depositos.map((d) => (
-            <TarjetaDeposito
-              key={d.id}
-              d={d}
-              onEditar={abrirEditar}
-              onBorrar={setABorrar}
-              onPredeterminar={(x) => accion(() => api.post(`/api/depositos/${x.id}/set-default`))}
-            />
+          {visibles.map((d) => (
+            <TarjetaDeposito key={d.id} d={d} onEditar={abrirEditar} onBorrar={setABorrar} />
           ))}
         </div>
       )}
@@ -161,30 +187,45 @@ export function Depositos() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Building2 className="size-4" />
-              {editando ? `Editar «${editando.nombre}»` : 'Nuevo depósito de la empresa'}
+              <Users className="size-4" />
+              {editando ? `Editar «${editando.nombre}»` : 'Nuevo depósito de cliente'}
             </DialogTitle>
             <DialogDescription>
-              Recibe equipos de cualquier cliente. Para un depósito del propio
-              cliente, usá la otra pestaña.
+              {editando
+                ? 'El cliente no se puede cambiar: mover el depósito arrastraría los equipos que tiene adentro.'
+                : 'Sólo va a poder guardar equipos de este cliente.'}
             </DialogDescription>
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="dep-nombre">Nombre</Label>
+              <Label>Cliente</Label>
+              {editando ? (
+                <p className="text-sm">{editando.cliente_nombre}</p>
+              ) : (
+                <SelectBuscable
+                  value={clienteId}
+                  onChange={setClienteId}
+                  opciones={opcionesCliente(clientes.filter((c) => c.activo))}
+                  placeholder="Elegí un cliente"
+                  ariaLabel="Cliente del depósito"
+                />
+              )}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="depc-nombre">Nombre</Label>
               <Input
-                id="dep-nombre" value={nombre} autoFocus
+                id="depc-nombre" value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
-                placeholder="Taller, Depósito central…"
+                placeholder="Pañol, Sala de racks…"
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="dep-desc">Descripción</Label>
+              <Label htmlFor="depc-desc">Descripción</Label>
               <Input
-                id="dep-desc" value={descripcion}
+                id="depc-desc" value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Estantería del fondo, sala de racks…"
+                placeholder="Subsuelo, al lado del tablero…"
               />
             </div>
             {editando && (
@@ -199,7 +240,7 @@ export function Depositos() {
           </div>
           <DialogFooter>
             <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-            <Button disabled={saving || !nombre.trim()} onClick={guardar}>
+            <Button disabled={saving || !nombre.trim() || (!editando && !clienteId)} onClick={guardar}>
               <Check />{saving ? 'Guardando…' : 'Guardar'}
             </Button>
           </DialogFooter>

@@ -10,6 +10,7 @@ import { ClienteDetalle } from './pages/ClienteDetalle'
 import { Equipos } from './pages/Equipos'
 import { EquipoDetalle } from './pages/EquipoDetalle'
 import { Depositos } from './pages/Depositos'
+import { DepositosClientes } from './pages/DepositosClientes'
 import { DepositoDetalle } from './pages/DepositoDetalle'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
@@ -53,6 +54,10 @@ export default function App() {
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
       <Route path="/equipos/:id" element={<ProtectedRoute><EquipoDetalle /></ProtectedRoute>} />
       <Route path="/depositos" element={<ProtectedRoute><Depositos /></ProtectedRoute>} />
+      {/* React Router v6 rankea por especificidad, así que el segmento fijo
+          `clientes` le gana a `:id` sin depender del orden. Va primero de todos
+          modos porque se lee mejor. */}
+      <Route path="/depositos/clientes" element={<ProtectedRoute><DepositosClientes /></ProtectedRoute>} />
       <Route path="/depositos/:id" element={<ProtectedRoute><DepositoDetalle /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
