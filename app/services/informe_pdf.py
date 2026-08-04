@@ -39,7 +39,7 @@ from fpdf import FPDF
 from libracore.pdf_generator import (
     _ACCENT_DARK, _ACCENT_SOFT, _CW, _INK, _LINE, _LX, _MUTED, _RX,
     _draw_emisor_cliente, _draw_header_block, _draw_no_fiscal_notice, _empresa,
-    _rrect, _wrap_text,
+    _rrect, _TextoSeguroPDF, _wrap_text,
 )
 
 # La caja de la letra del membrete ("R" en un remito, "CC" en un resumen de
@@ -49,38 +49,16 @@ from libracore.pdf_generator import (
 _LETRA = "IS"
 _TITULO = "Servicio técnico"
 
-# 🔴 Todo el texto del PDF tiene que caber en **latin-1**. Las fuentes core de
-# fpdf2 (Helvetica, la que usa todo el maquetado de LibraCore) codifican asi, y
-# un caracter fuera del juego no degrada: levanta `UnicodeEncodeError` y tumba
-# la request entera. Los dos que se cuelan solos son la elipsis tipografica
-# (`…`, U+2026) y la raya (`—`, U+2014) — ninguno esta en latin-1, y los dos
-# son los que uno escribe sin pensar al truncar texto o al marcar un dato
-# vacio. Las tildes y el punto medio si estan, asi que el resto del texto en
-# castellano no da problema.
-_ELIPSIS = "..."
-_VACIO = "-"
-
-# Y el texto no lo escribimos solo nosotros: titulos de ticket, nombres de
-# cliente, marcas, seriales y nombres de proveedor son **datos cargados por el
-# usuario**. Alcanza con que alguien pegue un titulo desde Word —que convierte
-# las comillas en tipograficas y los guiones en rayas— para que el endpoint
-# devuelva 500. Por eso todo lo que viene de la base pasa por `_latin1()`.
-_REEMPLAZOS = {
-    "—": "-", "–": "-",            # raya y semirraya
-    "…": _ELIPSIS,
-    "“": '"', "”": '"',            # comillas tipograficas
-    "‘": "'", "’": "'",
-    " ": " ",                            # espacio duro
-    "€": "EUR",
-}
-
-
-def _latin1(texto: str) -> str:
-    """Texto que las fuentes core pueden dibujar. Lo que no tiene equivalente
-    cae en `?`: un caracter degradado es mejor que un informe que no sale."""
-    for original, reemplazo in _REEMPLAZOS.items():
-        texto = texto.replace(original, reemplazo)
-    return texto.encode("latin-1", "replace").decode("latin-1")
+# La elipsis del truncado y el marcador de dato vacio, los dos tipograficos.
+#
+# **Hasta `libracore` v1.7.0 esto no se podia.** Las fuentes core de fpdf2
+# codificaban en latin-1 —donde ni `…` ni `—` existen— y un caracter fuera del
+# juego no degradaba: levantaba `UnicodeEncodeError` y tumbaba la request. Este
+# modulo llego a tener su propio saneo (`...`, `-`, y un `normalize_text` que
+# mandaba el resto a `?`) para no romper. `_TextoSeguroPDF` lo dejo obsoleto en
+# el mismo dia — ver el docstring de `InformePDF`.
+_ELIPSIS = "…"
+_VACIO = "—"
 
 _ESTADO_EQUIPO_LABEL = {
     "activo": "En uso",
@@ -100,14 +78,27 @@ def _iso_a_dmy(valor: str) -> str:
     return f"{valor[8:10]}/{valor[5:7]}/{valor[0:4]}" if valor else ""
 
 
-class InformePDF(FPDF):
+class InformePDF(_TextoSeguroPDF):
     """Membrete completo en la primera pagina y una banda compacta en las
     siguientes.
 
     `ResumenCCPDF` repite el membrete entero en cada pagina, y para un resumen
     de cuenta de una o dos carillas esta bien. Un informe de servicio de un
-    cliente con movimiento se va facil a cuatro o cinco: el bloque de 45 mm
-    repetido cinco veces come mas de una carilla completa en membretes.
+    cliente con movimiento se va facil a cuatro o cinco: el bloque repetido
+    cinco veces come mas de una carilla completa en membretes.
+
+    **Hereda de `_TextoSeguroPDF` y no de `FPDF`**, que es lo que hace que
+    ningun caracter pueda tumbar la generacion. Esa base pone
+    `core_fonts_encoding = "cp1252"` —la codificacion que el PDF ya declaraba—
+    y translitera lo que quede afuera (`™` -> `(TM)`, NFKD, y `?` como ultimo
+    recurso). Importa porque **el texto lo escribe el usuario**: titulos de
+    ticket, nombres de cliente, marcas, seriales. Alcanza con pegar un titulo
+    desde Word para traerse comillas tipograficas y una raya.
+
+    > Este modulo nacio con su propio saneo a latin-1 porque `libracore`
+    > v1.6.0 no tenia esta base. Se reemplazo al bumpear a v1.8.0, y no es
+    > sólo menos codigo: el saneo propio **degradaba** `—` a `-` y `…` a
+    > `...`, mientras que cp1252 los dibuja tal cual.
     """
 
     def __init__(self, cliente: dict, periodo: dict):
@@ -117,22 +108,7 @@ class InformePDF(FPDF):
         self._emp = None
         self.set_margins(_LX, _LX, _LX)
         self.set_auto_page_break(auto=True, margin=20)
-        self.set_title(_latin1(f"Informe de servicio - {cliente['nombre']}"))
-
-    def normalize_text(self, text: str) -> str:
-        """El unico punto por el que pasa **todo** el texto antes de dibujarse,
-        incluido el que dibujan los helpers de LibraCore con nuestros datos.
-
-        Sanear en cada `cell()` era jugar a no olvidarse: la primera version de
-        este archivo se olvido de una semirraya en su propio encabezado y el
-        endpoint devolvia 500. Acá no hay nada que recordar.
-
-        Las llamadas a `_latin1()` que quedan repartidas **no son redundantes**:
-        el ancho se mide con `get_string_width()` antes de llegar hasta acá, y
-        `...` no mide lo mismo que `…`. Esas sanean para medir bien; esta, para
-        no romper.
-        """
-        return super().normalize_text(_latin1(text))
+        self.set_title(f"Informe de servicio — {cliente['nombre']}")
 
     def header(self):
         if self.page_no() == 1:
@@ -149,7 +125,7 @@ class InformePDF(FPDF):
         self.set_y(_LX)
         self.set_font("Helvetica", "B", 8)
         self.set_text_color(*_INK)
-        self.cell(_CW / 2, 5, _latin1(self.cliente["nombre"])[:48], ln=False)
+        self.cell(_CW / 2, 5, self.cliente["nombre"][:48], ln=False)
         self.set_font("Helvetica", "", 7)
         self.set_text_color(*_MUTED)
         self.cell(
@@ -309,7 +285,7 @@ def _tabla(pdf: FPDF, headers: list[str], widths: list[float], aligns: list[str]
         # El alto se resuelve ANTES de dibujar: si se decidiera sobre la
         # marcha, el chequeo de corte de pagina usaria un alto que todavia no
         # es el real y la ultima fila terminaria pisando el pie.
-        celdas = [_latin1(str(val or "")) for val in fila]
+        celdas = [str(val or "") for val in fila]
         maximos = [2 if i in envuelve else 1 for i in range(len(celdas))]
         partidas = [
             _lineas_celda(pdf, texto, w - (2 if a == "L" else 0) - 2, maximo)
@@ -378,7 +354,7 @@ def _lista_conteos(pdf: FPDF, titulo: str, pares: list[tuple[str, int]],
         pdf.set_font("Helvetica", "", 8)
         pdf.set_text_color(*_INK)
         pdf.set_xy(x, y)
-        texto = _latin1(str(etiqueta))
+        texto = str(etiqueta)
         if pdf.get_string_width(texto) > w - 12:
             texto = "".join(_wrap_text(pdf, texto, w - 14)[:1]) + _ELIPSIS
         pdf.cell(w - 10, 5, texto, ln=False)
@@ -548,19 +524,14 @@ def generar(informe: dict) -> bytes:
     pdf.alias_nb_pages()
     pdf.add_page()
 
-    # La tarjeta la dibuja LibraCore, asi que el saneo va **antes** de
-    # entregarle el dato: adentro de su `_draw_card` ya no lo alcanzamos.
     _draw_emisor_cliente(pdf, emp, [
-        (etiqueta, _latin1(valor) if valor else valor)
-        for etiqueta, valor in (
-            ("Cliente", cliente["nombre"]),
-            ("Contacto", cliente["contacto"]),
-            ("CUIT", cliente["cuit"]),
-            ("Domicilio", cliente["domicilio"]),
-            ("Localidad", cliente["ciudad"]),
-            ("Email", cliente["email"]),
-            ("Teléfono", cliente["telefono"]),
-        )
+        ("Cliente", cliente["nombre"]),
+        ("Contacto", cliente["contacto"]),
+        ("CUIT", cliente["cuit"]),
+        ("Domicilio", cliente["domicilio"]),
+        ("Localidad", cliente["ciudad"]),
+        ("Email", cliente["email"]),
+        ("Teléfono", cliente["telefono"]),
     ])
 
     _titulo_seccion(pdf, "Resumen del período")

@@ -375,22 +375,29 @@ def test_un_cliente_sin_movimiento_igual_produce_un_informe(client, escenario):
 
 
 def test_el_texto_cargado_por_el_usuario_no_rompe_el_pdf(client):
-    """Las fuentes core de fpdf2 codifican en latin-1 y **abortan** ante un
-    carácter que no esté ahí. Todo lo que se imprime —título del ticket, nombre
-    del cliente, marca del equipo— lo escribe una persona, y basta pegar desde
-    Word para traerse comillas tipográficas y una raya. Sin saneo esto es un
-    500, no un renglón feo.
+    """Todo lo que se imprime —título del ticket, nombre del cliente, marca del
+    equipo— lo escribe una persona, y basta pegar desde Word para traerse
+    comillas tipográficas y una raya. Con las fuentes core de fpdf2 en su
+    codificación por defecto eso es un **500**, no un renglón feo.
+
+    Desde `libracore` v1.8.0 la base `_TextoSeguroPDF` usa cp1252, así que
+    estos caracteres ya no se degradan: **se dibujan tal como se escribieron**.
+    Antes este mismo test afirmaba que la raya salía como guión.
     """
     _login(client)
     cliente_id = client.post("/api/clientes", json={
         "nombre": "Piñeiro — “Integrales”", "email": "u@test.com",
         "domicilio": "Av. Güemes 1234 – piso 2º",
     }).json()["id"]
-    client.post("/api/equipos", json={
-        "cliente_id": cliente_id, "tipo": "Notebook", "marca": "Aspire™",
-    })
+    equipo_id = client.post("/api/equipos", json={
+        # La flecha no está en cp1252: es el caso que sí necesita traducirse.
+        "cliente_id": cliente_id, "tipo": "Notebook", "marca": "Aspire→5",
+    }).json()["id"]
+    # Con `equipo_id`, para que la marca llegue al detalle del informe: sin el
+    # vínculo la columna EQUIPO va vacía y el test no probaría nada.
     tid = client.post("/api/incidencias", json={
         "cliente_id": cliente_id, "titulo": "Pantalla “azul” — reinicia",
+        "equipo_id": equipo_id,
     }).json()["id"]
     _fechar(client, tid, "2026-01-10T09:00:00", None)
 
@@ -399,12 +406,13 @@ def test_el_texto_cargado_por_el_usuario_no_rompe_el_pdf(client):
 
     assert r.status_code == 200
     texto = _texto_pdf(r.content)
-    # Degradado, no perdido: la raya cae a guion y las comillas a rectas.
-    assert 'Pantalla "azul" - reinicia' in texto
-    assert 'Piñeiro - "Integrales"' in texto
-    # Y lo que no tiene equivalente en latin-1 cae a "?" en vez de tumbar
-    # la request: la marca del equipo entra por el detalle del ticket.
-    assert "™" not in texto
+    # Tal cual se escribieron: cp1252 tiene la raya y las comillas curvas.
+    assert "Pantalla “azul” — reinicia" in texto
+    assert "Piñeiro — “Integrales”" in texto
+    # Y lo que no entra ni en cp1252 se translitera en vez de tumbar la
+    # request: la marca del equipo entra por el detalle del ticket.
+    assert "→" not in texto
+    assert "Aspire->5" in texto
 
 
 def test_un_parque_grande_no_desborda_la_paginacion(client):
@@ -507,20 +515,39 @@ def test_una_fila_de_dos_renglones_ocupa_el_alto_de_dos(client):
         )
 
 
-def test_el_saneo_cubre_tambien_lo_que_dibuja_libracore():
-    """`normalize_text` es el único punto por el que pasa todo el texto antes
-    de dibujarse, incluido el de los helpers de LibraCore. Los `_latin1()`
-    repartidos por el módulo sanean para **medir** bien el ancho; éste es el
-    que evita el 500 cuando una sección futura se olvide de llamarlos.
+def test_el_informe_hereda_la_base_segura_de_libracore():
+    """`InformePDF` extiende `_TextoSeguroPDF`, y de ahí sale que ningún
+    carácter pueda tumbar la generación.
+
+    **Esto reemplazó a un saneo propio de este módulo.** Cuando el informe se
+    escribió, `libracore` estaba pineado en v1.6.0, cuyas fuentes core
+    codificaban en latin-1 y levantaban `UnicodeEncodeError` ante un guión
+    largo; había acá un `_latin1()` que degradaba `—` a `-` y `…` a `...`. La
+    v1.8.0 trae la base con `cp1252`, que los **dibuja**, así que heredar es
+    menos código y además mejor resultado.
+
+    Lo que este test fija es justamente eso: que la herencia siga en pie. Si
+    alguien vuelve a poner `FPDF` como base, un guión largo en el título de un
+    ticket devuelve 500 otra vez.
     """
+    from libracore.pdf_generator import _TextoSeguroPDF
+
     from app.services.informe_pdf import InformePDF
+
+    assert issubclass(InformePDF, _TextoSeguroPDF)
 
     pdf = InformePDF({"nombre": "X"}, {"desde": DESDE, "hasta": HASTA,
                                        "emitido": DESDE})
     pdf.add_page()
 
-    assert pdf.normalize_text("raya — y elipsis …") == "raya - y elipsis ..."
-    assert pdf.normalize_text("símbolo ™") == "símbolo ?"
+    # Se dibujan tal cual: cp1252 los tiene. (El `™` también, en 0x99 — lo que
+    # uno cree que es "raro" a menudo entra; por eso el caso de abajo usa una
+    # flecha, que de verdad no está.)
+    assert pdf.normalize_text("raya — y elipsis …") == "raya \x97 y elipsis \x85"
+    assert pdf.normalize_text("marca ™") == "marca \x99"
+    # Y lo que no entra ni en cp1252 se translitera en vez de romper.
+    assert pdf.normalize_text("flecha →") == "flecha ->"
+    assert pdf.normalize_text("vocal ā") == "vocal a"
 
 
 # ── El contrato con LibraCore ──────────────────────────────────────
