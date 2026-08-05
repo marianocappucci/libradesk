@@ -30,6 +30,7 @@ import {
   Configuracion, ConfiguracionCategorias, ConfiguracionProveedores,
 } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
+import { Logs } from './pages/Logs'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -85,6 +86,10 @@ export default function App() {
       <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
       <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
+      {/* El gateo real es del backend (`require_admin` en `/api/logs`): acá
+          `adminOnly` sólo esconde el ítem del menú. Un staff que escriba la
+          URL a mano ve la pantalla vacía con el error del 403, no los datos. */}
+      <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )

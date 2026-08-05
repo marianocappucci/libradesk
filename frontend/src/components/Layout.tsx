@@ -2,7 +2,7 @@
 // branding + navItems propios de LibraDesk — Agenda/Tareas eliminadas).
 import {
   AlertCircle, Boxes, Building2, Car, FileSignature, FileSpreadsheet, FileText,
-  LayoutDashboard, Monitor, Receipt, Settings, UserCog, Users, Wrench,
+  LayoutDashboard, Monitor, Receipt, ScrollText, Settings, UserCog, Users, Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
@@ -37,6 +37,9 @@ export const Layout = createLayout({
     { to: '/reportes', label: 'Reportes', icon: FileSpreadsheet },
     { to: '/tecnicos', label: 'Técnicos', icon: UserCog, adminOnly: true },
     { to: '/usuarios', label: 'Usuarios', icon: UserCog, adminOnly: true },
+    // Junto a Usuarios y no en Configuración: se mira para responder "quién
+    // hizo esto", que es una pregunta sobre la gente, no sobre los ajustes.
+    { to: '/logs', label: 'Logs', icon: ScrollText, adminOnly: true },
     { to: '/configuracion', label: 'Configuración', icon: Settings },
   ],
 })
