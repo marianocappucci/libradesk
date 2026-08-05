@@ -216,7 +216,11 @@ def generar_pdf_ingreso(datos: dict, *, tipo: str) -> bytes:
         ("Teléfono", cli.get("telefono")),
     ])
 
-    _titulo_seccion(pdf, "Equipo recibido")
+    # "Equipo recibido" sólo en la recepción: en el comprobante de entrega ese
+    # título se lee al revés de lo que pasa —el cliente se lo está llevando— y
+    # en un papel que se firma la palabra importa. Se vio leyendo el PDF de
+    # verdad, no el código.
+    _titulo_seccion(pdf, "Equipo recibido" if tipo == "recepcion" else "Equipo")
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(_CW, 5, datos["equipo_descripcion"] or "—")
     pdf.ln(6)

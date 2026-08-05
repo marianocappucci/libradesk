@@ -277,8 +277,24 @@ def sembrar(api: Api) -> None:
     # elegidas para que la pantalla muestre los tres casos que distingue:
     # bloques seguidos en un mismo equipo, dos equipos a la misma hora, y un
     # ticket sin agendar.
+    # 🔴 El cliente de ejemplo no tenía NINGÚN equipo, y el seed nunca se lo
+    # creaba. Consecuencia: los tickets de ejemplo quedaban con `equipo_id`
+    # null, y el ingreso a reparación "del inventario" (pedido 43) directamente
+    # no se podía sembrar — el caso que muestra el copiado de datos desde
+    # `equipos` era el único que faltaba, justo el que hay que mirar.
+    #
+    # Lo tapaba que `equipo_id = ... if equipos else None` es una expresión
+    # perfectamente válida que no falla ni avisa: seguía sembrando todo lo
+    # demás y reportando éxito.
     equipos = api.get(f"/api/equipos?cliente_id={cliente['id']}") or []
-    equipo_id = equipos[0]["id"] if equipos else None
+    if not equipos:
+        equipos = [api.post("/api/equipos", {
+            "cliente_id": cliente["id"], "tipo": "Notebook", "marca": "Lenovo",
+            "modelo": "ThinkPad T14", "serial": "LN-EJEMPLO-01",
+            "ubicacion_oficina": "Administración",
+        })]
+        contar("equipos", True)
+    equipo_id = equipos[0]["id"]
     lunes = HOY + timedelta(days=(7 - HOY.weekday()) % 7 or 7)
 
     def turno(hora: int, minuto: int = 0) -> str:
@@ -401,6 +417,9 @@ def sembrar(api: Api) -> None:
                 "retirado_por": "Marta Ríos",
                 "trabajo_realizado": "Se actualizó el firmware y se cambió la fuente.",
                 "observaciones_entrega": "Se probó 48 h sin reinicios.",
+                # Se completa el técnico también acá: sin esto el comprobante de
+                # entrega sale con "Técnico: —" y el ejemplo no muestra el campo.
+                "tecnico": "Sofía Núñez",
             },
         },
     ]
@@ -417,8 +436,6 @@ def sembrar(api: Api) -> None:
                if k not in ("del_inventario", "entrega")},
         }
         if spec["del_inventario"]:
-            if not equipos:
-                continue
             cuerpo["equipo_id"] = equipo_id
             # Del inventario salen tipo/marca/modelo/serie, así que el serial
             # con el que se chequea la idempotencia es el de ese equipo.
@@ -430,8 +447,9 @@ def sembrar(api: Api) -> None:
         creado = api.post("/api/ingresos-reparacion", cuerpo)
         contar("ingresos_reparacion", True)
         if spec["entrega"]:
-            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar",
-                     spec["entrega"])
+            entrega = {k: v for k, v in spec["entrega"].items() if k != "tecnico"}
+            entrega["tecnico_entrega_id"] = gente[spec["entrega"]["tecnico"]]["id"]
+            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar", entrega)
             contar("entregas", True)
 
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
