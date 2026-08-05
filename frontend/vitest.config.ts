@@ -17,6 +17,12 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       globals: true,
+      // Zona fija. Sin esto, todo test que compare una fecha depende de la
+      // zona de la máquina: la agenda (pedido 42, fase B) tiene que abrir en
+      // "hoy" **local**, y con TZ=UTC —que es lo que traen el CI y WSL— a las
+      // 22:00 de Argentina eso ya es mañana. Se pone la zona real de los
+      // usuarios, así el test mide lo que le pasa a la empresa.
+      env: { TZ: 'America/Argentina/Buenos_Aires' },
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
       coverage: {

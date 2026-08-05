@@ -1,14 +1,15 @@
-/** Equipos de trabajo y flota de vehículos (pedido 42, fase A).
+/** Equipos de trabajo, agenda del día y flota de vehículos (pedido 42).
  *
- *  Las dos cosas en una pantalla, a diferencia de depósitos: acá **la
+ *  Las tres cosas en una pantalla, a diferencia de depósitos: acá **la
  *  asignación las cruza** — la pregunta que motivó el pedido es "cuando un
  *  equipo tiene un trabajo, ¿en qué vehículo sale?", y separarlas obligaría a
  *  ir y volver para contestarla.
  *
- *  Lo que esta fase **no** hace: agenda. Hoy la incidencia no sabe cuándo se va
- *  a atender, así que "¿está libre el martes a las 10?" no se puede contestar.
- *  La disponibilidad de acá es que un vehículo no esté ya en otro equipo. La
- *  fase B lo resuelve con LibraGenda.
+ *  La fase A dejó el armado (quién está en cada equipo, qué vehículo tiene) y
+ *  la fase B la agenda: cuándo trabaja cada uno, con el motor de turnos
+ *  impidiendo que dos trabajos del mismo equipo se pisen. La fecha se carga en
+ *  el ticket (`IncidenciaDetalle`); acá se **lee** el resultado, que es lo que
+ *  se mira a la mañana para despachar.
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -30,6 +31,7 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { AgendaEquipos } from '@/components/agenda-equipos'
 import {
   Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink, Users,
 } from 'lucide-react'
@@ -284,6 +286,9 @@ export function EquiposYFlota() {
               </div>
             )}
           </div>
+
+          {/* ── Agenda (fase B) ─────────────────────────────────────── */}
+          <AgendaEquipos equipos={equipos} />
 
           {/* ── Flota ───────────────────────────────────────────────── */}
           <div className="grid gap-2">

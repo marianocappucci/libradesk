@@ -6,6 +6,11 @@
 //    ofrezca sólo los disponibles. Un vehículo ya asignado a otro equipo no
 //    puede salir dos veces, y ofrecerlo sería ofrecer un 409.
 // 2. **El responsable sale del catálogo de personal**, filtrado por su rol.
+//
+// Los nombres de equipo se buscan en plural (`findAllByText`) desde la fase B:
+// la pantalla ahora tiene también la agenda del día, con una tarjeta por
+// equipo, así que cada nombre aparece dos veces. Lo que sigue siendo único —
+// los botones, "Sin vehículo asignado." — se busca en singular.
 import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
@@ -93,7 +98,7 @@ describe('Equipos de trabajo', () => {
 
   it('el equipo sin vehículo lo dice, no lo deja en blanco', async () => {
     render(<EquiposYFlota />)
-    await screen.findByText('Cuadrilla Sur')
+    await screen.findAllByText('Cuadrilla Sur')
     expect(screen.getByText('Sin vehículo asignado.')).toBeInTheDocument()
     expect(screen.getByText('Sin integrantes.')).toBeInTheDocument()
   })
@@ -137,7 +142,7 @@ describe('Flota y asignación', () => {
   it('🔴 asignar ofrece sólo los disponibles', async () => {
     const user = userEvent.setup()
     render(<EquiposYFlota />)
-    await screen.findByText('Cuadrilla Sur')
+    await screen.findAllByText('Cuadrilla Sur')
 
     await user.click(screen.getAllByRole('button', { name: /Asignar vehículo/ })[0])
     const dialogo = await screen.findByRole('dialog', { name: /Asignar vehículo/ })
@@ -154,7 +159,7 @@ describe('Flota y asignación', () => {
   it('asignar manda el equipo elegido', async () => {
     const user = userEvent.setup()
     render(<EquiposYFlota />)
-    await screen.findByText('Cuadrilla Sur')
+    await screen.findAllByText('Cuadrilla Sur')
 
     // El segundo botón es el de Cuadrilla Sur.
     await user.click(screen.getAllByRole('button', { name: /Asignar vehículo/ })[1])

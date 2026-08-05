@@ -18,7 +18,7 @@ from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    activos, categorias, clientes, config_empresa, contratos, dashboard,
+    activos, agenda, categorias, clientes, config_empresa, contratos, dashboard,
     depositos, equipos, equipos_trabajo, health, incidencias, informes,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
     tecnicos, users,
@@ -150,6 +150,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # depositos y sectores — es como se organiza el trabajo, no una feature
     # de plan. No se gatea.
     app.include_router(equipos_trabajo.router, dependencies=staff_or_admin)
+    # La agenda cuelga del mismo lado que los equipos: es como se organiza
+    # el trabajo, no una feature de plan.
+    app.include_router(agenda.router, dependencies=staff_or_admin)
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)

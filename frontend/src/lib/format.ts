@@ -25,3 +25,20 @@ export function pesos(v: number | null | undefined, moneda = 'ARS'): string {
 export function fecha(iso: string | null | undefined): string {
   return iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('es-AR') : '—'
 }
+
+// --- fecha y hora para `<input type="datetime-local">` ---------------------
+//
+// El input habla `YYYY-MM-DDTHH:mm` **sin** zona, y el backend guarda un
+// naive datetime (SQLite, hora local de la empresa). Las dos funciones son un
+// recorte de string a propósito: pasar por `new Date().toISOString()` convierte
+// a UTC y la agenda se correría tres horas.
+
+/** Lo que guarda el backend → lo que el input muestra. */
+export function deIsoALocal(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 16) : ''
+}
+
+/** Lo que el input devuelve → lo que se manda. Vacío es "sin agendar". */
+export function deLocalAIso(local: string): string | null {
+  return local ? `${local}:00` : null
+}

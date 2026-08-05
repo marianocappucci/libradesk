@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -33,6 +33,11 @@ class IncidenciaIn(BaseModel):
     # `on_site` | `remoto`. Nullable a propósito: los tickets anteriores al
     # 2026-08-04 no saben cómo se atendieron.
     modalidad: str | None = None
+    # La agenda (pedido 42, fase B). Los tres nullable: agendar es
+    # opcional. El vehículo no viaja acá — sale del equipo asignado.
+    fecha_programada: datetime | None = None
+    duracion_minutos: int | None = None
+    equipo_trabajo_id: int | None = None
     sector_id: int | None = None
     # Hoja del catalogo de categorias ("Hardware -> Impresoras"), 2026-08-02.
     # Opcional a proposito: las 23 incidencias reales son previas al catalogo.

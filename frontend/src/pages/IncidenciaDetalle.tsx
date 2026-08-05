@@ -7,10 +7,12 @@ import {
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
   opcionesProveedor,
   type Actividad, type CategoriaIncidencia, type Cliente, type DestinoReemplazo,
-  type Equipo, type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
+  type Equipo, type EquipoMovimiento, type EquipoTrabajo, type Incidencia,
+  type IncidenciaEstadoLog,
   type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
   type Tecnico,
 } from '../api'
+import { deIsoALocal, deLocalAIso } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,6 +66,7 @@ export function IncidenciaDetalle() {
   const [estados, setEstados] = useState<IncidenciaEstadoLog[]>([])
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[]>([])
   const [reparaciones, setReparaciones] = useState<Reparacion[]>([])
+  const [equiposTrabajo, setEquiposTrabajo] = useState<EquipoTrabajo[]>([])
   // Las abiertas de TODOS los tickets, no sólo las de éste: el equipo que
   // vuelve de service pudo haber salido por otro ticket, y en ese caso su
   // reparación no está en `reparaciones` — el diálogo no ofrecería cerrarla.
@@ -124,7 +127,7 @@ export function IncidenciaDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq, te, se, cat, act, est, mov, rep, abi, prov] = await Promise.all([
+      const [inc, cl, eq, te, se, cat, act, est, mov, rep, abi, prov, et] = await Promise.all([
         api.get<Incidencia>(`/api/incidencias/${incidenciaId}`),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
@@ -137,6 +140,7 @@ export function IncidenciaDetalle() {
         api.get<Reparacion[]>(`/api/reparaciones?incidencia_id=${incidenciaId}`),
         api.get<Reparacion[]>('/api/reparaciones?abiertas=true'),
         api.get<Proveedor[]>('/api/proveedores?solo_activos=true'),
+        api.get<EquipoTrabajo[]>('/api/equipos-trabajo'),
       ])
       setIncidencia(inc)
       setClientes(cl)
@@ -150,6 +154,7 @@ export function IncidenciaDetalle() {
       setReparaciones(rep)
       setAbiertas(abi)
       setProveedores(prov)
+      setEquiposTrabajo(et)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -193,6 +198,13 @@ export function IncidenciaDetalle() {
         recepcionista_id: actualizado.recepcionista_id,
         vendedor_id: actualizado.vendedor_id,
         modalidad: actualizado.modalidad,
+        // Los tres de la agenda tienen que viajar en **todo** PUT, aunque el
+        // cambio no los toque: el backend recibe el objeto entero y lo que no
+        // se manda vuelve a null. Sin esta línea, cambiarle la prioridad a un
+        // ticket lo desagendaba en silencio.
+        fecha_programada: actualizado.fecha_programada,
+        duracion_minutos: actualizado.duracion_minutos,
+        equipo_trabajo_id: actualizado.equipo_trabajo_id,
         sector_id: actualizado.sector_id,
         categoria_id: actualizado.categoria_id,
         titulo: actualizado.titulo,
@@ -681,6 +693,70 @@ export function IncidenciaDetalle() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* La agenda (pedido 42, fase B). Los tres juntos y en este
+                  orden porque se llenan juntos: cuándo, cuánto y quién va.
+                  El vehículo NO se elige acá — sale del equipo, y se muestra
+                  debajo para que quien agenda lo vea sin ir a otra pantalla. */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="fecha-programada">Fecha y hora del trabajo</Label>
+                <Input
+                  id="fecha-programada"
+                  type="datetime-local"
+                  value={deIsoALocal(incidencia.fecha_programada)}
+                  onChange={(e) => actualizarCampo({
+                    fecha_programada: deLocalAIso(e.target.value),
+                  })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="duracion">Duración (minutos)</Label>
+                <Input
+                  id="duracion"
+                  type="number"
+                  min="15"
+                  step="15"
+                  placeholder="60"
+                  value={incidencia.duracion_minutos ?? ''}
+                  onChange={(e) => actualizarCampo({
+                    duracion_minutos: e.target.value ? Number(e.target.value) : null,
+                  })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Equipo de trabajo</Label>
+                <SelectBuscable
+                  value={
+                    incidencia.equipo_trabajo_id ? String(incidencia.equipo_trabajo_id) : NONE
+                  }
+                  onChange={(v) => actualizarCampo({
+                    equipo_trabajo_id: v === NONE ? null : Number(v),
+                  })}
+                  opciones={[
+                    { value: NONE, label: 'Sin asignar' },
+                    ...opcionesPorNombre(equiposTrabajo.filter(
+                      (e) => e.activo || e.id === incidencia.equipo_trabajo_id,
+                    )),
+                  ]}
+                  ariaLabel="Equipo de trabajo"
+                  className="w-full"
+                  emptyMessage="No hay equipos de trabajo cargados."
+                />
+                {(() => {
+                  const equipo = equiposTrabajo.find(
+                    (e) => e.id === incidencia.equipo_trabajo_id,
+                  )
+                  if (!equipo) return null
+                  const patentes = equipo.vehiculos.map((v) => v.patente).join(', ')
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      {patentes
+                        ? `Sale en ${patentes}`
+                        : 'Ese equipo no tiene vehículo asignado.'}
+                      {equipo.responsable_nombre && ` · A cargo: ${equipo.responsable_nombre}`}
+                    </p>
+                  )
+                })()}
+              </div>
               <div className="grid gap-1.5">
                 <Label>Sector</Label>
                 <SelectBuscable
@@ -693,8 +769,11 @@ export function IncidenciaDetalle() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Horas invertidas</Label>
+                {/* `htmlFor`/`id`: el label estaba suelto y no nombraba a su
+                    input para un lector de pantalla. */}
+                <Label htmlFor="horas-invertidas">Horas invertidas</Label>
                 <Input
+                  id="horas-invertidas"
                   type="number"
                   step="0.5"
                   defaultValue={incidencia.horas_invertidas ?? ''}
