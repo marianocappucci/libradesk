@@ -12,6 +12,7 @@ import { EquipoDetalle } from './pages/EquipoDetalle'
 import { Depositos } from './pages/Depositos'
 import { DepositosClientes } from './pages/DepositosClientes'
 import { DepositoDetalle } from './pages/DepositoDetalle'
+import { EquiposYFlota } from './pages/EquiposYFlota'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
@@ -59,6 +60,7 @@ export default function App() {
           modos porque se lee mejor. */}
       <Route path="/depositos/clientes" element={<ProtectedRoute><DepositosClientes /></ProtectedRoute>} />
       <Route path="/depositos/:id" element={<ProtectedRoute><DepositoDetalle /></ProtectedRoute>} />
+      <Route path="/equipos-trabajo" element={<ProtectedRoute><EquiposYFlota /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />

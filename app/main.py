@@ -19,8 +19,9 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, categorias, clientes, config_empresa, contratos, dashboard,
-    depositos, equipos, health, incidencias, informes, presupuestos, proveedores,
-    remitos, reparaciones, reportes, sectores, tecnicos, users,
+    depositos, equipos, equipos_trabajo, health, incidencias, informes,
+    presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
+    tecnicos, users,
 )
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
@@ -29,6 +30,7 @@ from .services.contratos import ContratoRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
+from .services.equipos_trabajo import EquipoTrabajoRepository
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
@@ -103,6 +105,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
+    app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
     app.state.activos = ActivoRepository(sessions)
     app.state.contratos = ContratoRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
@@ -143,6 +146,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # es donde esta un equipo cuando no esta instalado, y el parque es core. No
     # se gatea por plan.
     app.include_router(depositos.router, dependencies=staff_or_admin)
+    # Equipos de trabajo y flota: parte del core por el mismo motivo que
+    # depositos y sectores — es como se organiza el trabajo, no una feature
+    # de plan. No se gatea.
+    app.include_router(equipos_trabajo.router, dependencies=staff_or_admin)
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)

@@ -25,8 +25,9 @@ const tecnicoSchema = z.object({
   es_tecnico: z.boolean(),
   es_recepcionista: z.boolean(),
   es_vendedor: z.boolean(),
+  es_responsable: z.boolean(),
 }).refine(
-  (v) => v.es_tecnico || v.es_recepcionista || v.es_vendedor,
+  (v) => v.es_tecnico || v.es_recepcionista || v.es_vendedor || v.es_responsable,
   // Sin ningún rol la persona quedaría cargada y **fuera de los tres
   // selectores** del ticket: invisible, que se lee como un bug del sistema.
   { message: 'Elegí al menos un rol', path: ['es_tecnico'] },
@@ -38,6 +39,7 @@ const CAMPOS_ROL = [
   { campo: 'es_tecnico', label: 'Técnico', ayuda: 'Ejecuta el trabajo' },
   { campo: 'es_recepcionista', label: 'Recepcionista', ayuda: 'Toma el ticket' },
   { campo: 'es_vendedor', label: 'Vendedor', ayuda: 'Habla con el cliente' },
+  { campo: 'es_responsable', label: 'Responsable de equipo', ayuda: 'Manda una cuadrilla' },
 ] as const
 
 // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
@@ -60,6 +62,7 @@ export function Tecnicos() {
     resolver: zodResolver(tecnicoSchema),
     defaultValues: {
       nombre: '', es_tecnico: true, es_recepcionista: false, es_vendedor: false,
+      es_responsable: false,
     },
   })
 
@@ -90,6 +93,7 @@ export function Tecnicos() {
     setFormError(null)
     form.reset({
       nombre: '', es_tecnico: true, es_recepcionista: false, es_vendedor: false,
+      es_responsable: false,
     })
     setDialogOpen(true)
   }
@@ -102,6 +106,7 @@ export function Tecnicos() {
       es_tecnico: tecnico.es_tecnico,
       es_recepcionista: tecnico.es_recepcionista,
       es_vendedor: tecnico.es_vendedor,
+      es_responsable: tecnico.es_responsable,
     })
     setDialogOpen(true)
   }
@@ -113,6 +118,7 @@ export function Tecnicos() {
       es_tecnico: values.es_tecnico,
       es_recepcionista: values.es_recepcionista,
       es_vendedor: values.es_vendedor,
+      es_responsable: values.es_responsable,
     }
     try {
       if (editando === null) {
@@ -143,6 +149,7 @@ export function Tecnicos() {
         es_tecnico: tecnico.es_tecnico,
         es_recepcionista: tecnico.es_recepcionista,
         es_vendedor: tecnico.es_vendedor,
+        es_responsable: tecnico.es_responsable,
       })
       await loadTecnicos()
     } catch (err) {

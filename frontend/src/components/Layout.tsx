@@ -1,7 +1,7 @@
 // Shim sobre libra-ui/Layout (mismo patron que el resto de la familia,
 // branding + navItems propios de LibraDesk — Agenda/Tareas eliminadas).
 import {
-  AlertCircle, Boxes, Building2, FileSignature, FileSpreadsheet, FileText,
+  AlertCircle, Boxes, Building2, Car, FileSignature, FileSpreadsheet, FileText,
   LayoutDashboard, Monitor, Receipt, Settings, UserCog, Users, Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
@@ -17,6 +17,9 @@ export const Layout = createLayout({
     // está instalado, no una entidad aparte del parque.
     { to: '/depositos', label: 'Depósitos', icon: Building2 },
     { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
+    // Después de Incidencias: quién sale y en qué es una pregunta que se
+    // hace mirando el trabajo pendiente, no antes.
+    { to: '/equipos-trabajo', label: 'Equipos y flota', icon: Car },
     // Después de Equipos e Incidencias porque es la intersección de las dos:
     // un activo que sale a reparar por un ticket.
     { to: '/reparaciones', label: 'Reparaciones', icon: Wrench },

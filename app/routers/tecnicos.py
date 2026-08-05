@@ -25,6 +25,17 @@ class TecnicoIn(BaseModel):
     es_tecnico: bool = True
     es_recepcionista: bool = False
     es_vendedor: bool = False
+    # Quien manda un equipo de trabajo (pedido 42, 2026-08-04).
+    es_responsable: bool = False
+
+
+def _roles(data: "TecnicoIn") -> dict[str, bool]:
+    """Las banderas de rol, sacadas del modelo por nombre.
+
+    Enumerarlas a mano en cada endpoint era lo que hacía que sumar la cuarta
+    tocara ocho lugares; el servicio también las resuelve desde `ROLES`.
+    """
+    return {campo: getattr(data, campo) for campo in vars(data) if campo.startswith("es_")}
 
 
 class TecnicoOut(TecnicoIn):
@@ -36,12 +47,7 @@ class TecnicoOut(TecnicoIn):
 @router.post("", status_code=201, response_model=TecnicoOut)
 def create_tecnico(data: TecnicoIn, tecnicos: TecnicoRepository = Depends(get_tecnico_repository)):
     try:
-        return tecnicos.create(
-            data.nombre, data.activo,
-            es_tecnico=data.es_tecnico,
-            es_recepcionista=data.es_recepcionista,
-            es_vendedor=data.es_vendedor,
-        )
+        return tecnicos.create(data.nombre, data.activo, **_roles(data))
     except ValueError as e:
         raise HTTPException(409, str(e))
     except IntegrityError:
@@ -53,8 +59,9 @@ def list_tecnicos(
     solo_activos: bool = False, rol: str | None = None,
     tecnicos: TecnicoRepository = Depends(get_tecnico_repository),
 ):
-    """`rol` (`tecnico` | `recepcionista` | `vendedor`) es lo que alimenta cada
-    selector del ticket: el de recepcionista sólo ofrece recepcionistas."""
+    """`rol` (`tecnico` | `recepcionista` | `vendedor` | `responsable`) es lo que
+    alimenta cada selector: el de recepcionista del ticket sólo ofrece
+    recepcionistas, y el de responsable del equipo sólo responsables."""
     try:
         return tecnicos.list(solo_activos=solo_activos, rol=rol)
     except ValueError as e:
@@ -64,12 +71,7 @@ def list_tecnicos(
 @router.put("/{tecnico_id}", response_model=TecnicoOut)
 def update_tecnico(tecnico_id: int, data: TecnicoIn, tecnicos: TecnicoRepository = Depends(get_tecnico_repository)):
     try:
-        return tecnicos.update(
-            tecnico_id, data.nombre, data.activo,
-            es_tecnico=data.es_tecnico,
-            es_recepcionista=data.es_recepcionista,
-            es_vendedor=data.es_vendedor,
-        )
+        return tecnicos.update(tecnico_id, data.nombre, data.activo, **_roles(data))
     except KeyError:
         raise HTTPException(404, "tecnico not found")
     except ValueError as e:
