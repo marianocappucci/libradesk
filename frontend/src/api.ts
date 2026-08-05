@@ -615,6 +615,56 @@ export function opcionesVehiculo(vehiculos: Vehiculo[]): OpcionSelect[] {
   }))
 }
 
+// --- ingresos a reparación (pedido 43) ------------------------------------
+//
+// El equipo del cliente en nuestro poder, de la recepción a la entrega. **Una
+// fila por episodio de custodia**, no dos comprobantes enlazados: `fecha_entrega
+// null` es "sigue en el taller" y no puede mentir, y el vínculo entre los dos
+// papeles es estructural en vez de una FK que se puede apuntar mal.
+//
+// Los cuatro campos del equipo están **congelados** en el comprobante, no leídos
+// del inventario: si mañana se corrige el modelo en `equipos`, el papel que el
+// cliente firmó no puede cambiar. Ver `app/services/ingresos.py`.
+
+export type IngresoReparacion = {
+  id: number
+  numero: string
+  fecha_recepcion: string | null
+  cliente_id: number
+  cliente_nombre: string | null
+  contacto: string | null
+  contacto_telefono: string | null
+  /** Null si es un equipo de mostrador que no está en el inventario. */
+  equipo_id: number | null
+  equipo_tipo: string
+  equipo_marca: string | null
+  equipo_modelo: string | null
+  equipo_serial: string | null
+  /** Armada por el backend, para no repetir el join de strings en cada fila. */
+  equipo_descripcion: string
+  accesorios: string | null
+  estado_fisico: string | null
+  falla_declarada: string | null
+  observaciones: string | null
+  tecnico_id: number | null
+  tecnico_nombre: string | null
+  entregado_por: string | null
+  incidencia_id: number | null
+  // La entrega. Todo null mientras el equipo siga acá.
+  numero_entrega: string | null
+  fecha_entrega: string | null
+  retirado_por: string | null
+  trabajo_realizado: string | null
+  observaciones_entrega: string | null
+  tecnico_entrega_id: number | null
+  tecnico_entrega_nombre: string | null
+  /** Derivados por el backend, nunca almacenados. */
+  en_taller: boolean
+  dias_en_taller: number | null
+  usuario: string
+  created_at: string | null
+}
+
 // --- agenda de equipos (pedido 42, fase B) --------------------------------
 //
 // Una fila por trabajo agendado, ya resuelta por el backend: el nombre del

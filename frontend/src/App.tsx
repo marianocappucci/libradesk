@@ -16,6 +16,7 @@ import { EquiposYFlota } from './pages/EquiposYFlota'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
+import { RecepcionesEntregados, RecepcionesTaller } from './pages/Recepciones'
 import { Activos } from './pages/Activos'
 import { Contratos } from './pages/Contratos'
 import { ContratoDetalle } from './pages/ContratoDetalle'
@@ -66,6 +67,11 @@ export default function App() {
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
+      {/* Recepción de equipos (pedido 43). Dos rutas y no un `useState`, mismo
+          criterio que depósitos y configuración: se puede linkear "mirá lo que
+          hay en el taller" y el botón "atrás" funciona. */}
+      <Route path="/recepciones" element={<ProtectedRoute><RecepcionesTaller /></ProtectedRoute>} />
+      <Route path="/recepciones/entregados" element={<ProtectedRoute><RecepcionesEntregados /></ProtectedRoute>} />
       {/* Ruta propia para la ficha, a diferencia de presupuestos/remitos: acá
           la ficha tiene acciones que cambian el estado del contrato y conviene
           poder linkearla desde la fila de un activo. */}

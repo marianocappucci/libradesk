@@ -361,6 +361,79 @@ def sembrar(api: Api) -> None:
         })
         contar("incidencias", True)
 
+    # ── Ingresos a reparación (pedido 43) ─────────────────────────────────
+    # Los tres estados que la pantalla distingue: uno en el taller **con equipo
+    # del inventario**, uno **de mostrador** (sin `equipo_id`, que es el caso
+    # que justifica que la FK sea opcional) y uno **ya entregado**, con sus dos
+    # comprobantes. Con los tres iguales media pantalla queda sin mirarse.
+    ingresos_spec = [
+        {
+            "del_inventario": True,
+            "contacto": "Marta Ríos", "contacto_telefono": "3514567890",
+            "accesorios": "Cargador original, funda negra",
+            "estado_fisico": "Tapa rayada en la esquina inferior derecha",
+            "falla_declarada": "No enciende. Dice que se le cayó agua encima.",
+            "observaciones": "Faltan dos tornillos de la base (preexistente)",
+            "entregado_por": "Marta Ríos",
+            "entrega": None,
+        },
+        {
+            "del_inventario": False,
+            "equipo_tipo": "Impresora", "equipo_marca": "HP",
+            "equipo_modelo": "LaserJet M404", "equipo_serial": "HP-77120",
+            "contacto": "Jorge Peña",
+            "accesorios": "Cable de poder. Sin cable USB.",
+            "estado_fisico": "Bandeja delantera floja",
+            "falla_declarada": "Atasca el papel todo el tiempo",
+            "entregado_por": "Jorge Peña",
+            "entrega": None,
+        },
+        {
+            "del_inventario": False,
+            "equipo_tipo": "Router", "equipo_marca": "TP-Link",
+            "equipo_modelo": "ER605", "equipo_serial": "TP-40881",
+            "contacto": "Marta Ríos",
+            "accesorios": "Fuente y patch cord",
+            "estado_fisico": "Sin daños visibles",
+            "falla_declarada": "Se reinicia solo cada dos horas",
+            "entregado_por": "Marta Ríos",
+            "entrega": {
+                "retirado_por": "Marta Ríos",
+                "trabajo_realizado": "Se actualizó el firmware y se cambió la fuente.",
+                "observaciones_entrega": "Se probó 48 h sin reinicios.",
+            },
+        },
+    ]
+    # Idempotencia por número de serie: es lo único que identifica al equipo
+    # recibido, y los comprobantes no tienen nombre.
+    ya_ingresados = {
+        i["equipo_serial"] for i in (api.get("/api/ingresos-reparacion") or [])
+    }
+    for spec in ingresos_spec:
+        cuerpo = {
+            "cliente_id": cliente["id"],
+            "tecnico_id": gente["Lucía Fernández"]["id"],
+            **{k: v for k, v in spec.items()
+               if k not in ("del_inventario", "entrega")},
+        }
+        if spec["del_inventario"]:
+            if not equipos:
+                continue
+            cuerpo["equipo_id"] = equipo_id
+            # Del inventario salen tipo/marca/modelo/serie, así que el serial
+            # con el que se chequea la idempotencia es el de ese equipo.
+            serial = equipos[0].get("serial")
+        else:
+            serial = spec["equipo_serial"]
+        if serial and serial in ya_ingresados:
+            continue
+        creado = api.post("/api/ingresos-reparacion", cuerpo)
+        contar("ingresos_reparacion", True)
+        if spec["entrega"]:
+            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar",
+                     spec["entrega"])
+            contar("entregas", True)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
 
