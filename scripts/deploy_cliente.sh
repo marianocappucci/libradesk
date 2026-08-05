@@ -9,8 +9,11 @@
 #
 # Construye una version nueva de la imagen, repinea el compose de ESA instancia
 # y la levanta. Equivale a `panel_admin.py actualizar` del resto de la familia,
-# que aca no aplica: LibraDesk no depende de libracore y por lo tanto no tiene
-# `libracore.provisioning`.
+# que aca no aplica: LibraDesk usa libracore para PDFs y config, pero no monta
+# `libracore.provisioning`, que es lo que aquel panel maneja.
+#   (Esta linea decia "LibraDesk no depende de libracore". Es falso —el
+#   pyproject lo pinea desde siempre— y la afirmacion circulo tambien por el
+#   wiki. Lo que no usa es el modulo de provisioning, no el paquete.)
 #
 # El punto de todo esto: la instancia corre una imagen fija y solo se mueve
 # cuando se la nombra. Un `git pull` o un rebuild de dev ya no la tocan.
@@ -189,6 +192,7 @@ DOCKER_BUILDKIT=1 docker build \
   --ssh "default=${LIBRAAUTH_SSH_KEY:-$HOME/.ssh/id_ed25519_libraauth}" \
   --ssh "libraauth=${LIBRAAUTH_SSH_KEY:-$HOME/.ssh/id_ed25519_libraauth}" \
   --ssh "libracore=${LIBRACORE_SSH_KEY:-$HOME/.ssh/id_ed25519_libracore}" \
+  --ssh "libragenda=${LIBRAGENDA_SSH_KEY:-$HOME/.ssh/id_ed25519_libragenda}" \
   --ssh "libra-ui=${LIBRA_UI_SSH_KEY:-$HOME/.ssh/id_ed25519_libra_ui}" \
   --label "org.libra.version=$VERSION" \
   --label "org.libra.commit=$COMMIT" \
