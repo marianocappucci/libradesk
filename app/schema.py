@@ -43,7 +43,6 @@ from .database import Base
 # lugar env.py tuviera su propia lista, agregar un modelo y olvidarse de una de
 # las dos daria una tabla sin migracion, en silencio.
 from .services import activos as _activos  # noqa: F401
-from .services import auditoria as _auditoria  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
 from .services import contratos as _contratos  # noqa: F401
@@ -67,10 +66,16 @@ def include_name(name, type_, parent_names=None) -> bool:
     """Filtro del autogenerate: solo las tablas de LibraDesk.
 
     En este mismo archivo SQLite viven tambien `usuarios`,
-    `password_reset_tokens` y `smtp_settings` (de `libraauth`) y `remitos` y
-    `presupuestos` (de `libracore`, en sqlite3 crudo). Ninguna esta en
-    `metadata`, asi que sin este filtro `--autogenerate` las ve como tablas que
-    sobran y **propone dropearlas**.
+    `password_reset_tokens`, `smtp_settings`, `auth_log` y `actividad_log` (de
+    `libraauth`) y `remitos` y `presupuestos` (de `libracore`, en sqlite3
+    crudo). Ninguna esta en `metadata`, asi que sin este filtro
+    `--autogenerate` las ve como tablas que sobran y **propone dropearlas**.
+
+    > `actividad_log` estuvo en `metadata` un dia: la creo la revision `0010`,
+    > de cuando el log de actividad era codigo de este producto. Al extraerse a
+    > `libraauth.auditoria` (v0.9.0) su schema paso a versionarlo el motor, como
+    > el de `usuarios`. **La revision `0010` se queda** —ya corrio en dev y una
+    > migracion aplicada no se borra—, pero la tabla ya no es de este metadata.
 
     La lista sale de `metadata` y no esta escrita a mano: un modelo nuevo entra
     solo, y una tabla ajena no puede colarse por olvido. Vive aca y no en
