@@ -303,9 +303,50 @@ def sembrar(api: Api) -> None:
         ("Revisión de cableado", "on_site", "Lucía Fernández",
          "Diego Ramos", None, turno(14, 30), 180, sur),
     ]
-    ya_cargadas = {i["titulo"] for i in (api.get("/api/incidencias") or [])}
+    # 🔴 La idempotencia por título tiene un costo que se pagó de verdad: un
+    # ticket de ejemplo cargado por un seed VIEJO no se entera de los campos que
+    # se agregan después. Al desplegar la fase B, "La impresora no toma papel"
+    # ya existía sin agendar, así que el bloque pegado 09:00–11:00 —el caso que
+    # el seed quiere mostrar— no aparecía en la agenda. El seed decía "nada
+    # nuevo" y era cierto; lo que no era cierto es que el ejemplo estuviera
+    # completo.
+    #
+    # Por eso, además de no duplicar, **completa lo que está en null**. Sólo
+    # eso: nunca pisa un valor cargado, así que si alguien movió el turno a mano
+    # para probar algo, el seed no se lo deshace.
+    existentes = {i["titulo"]: i for i in (api.get("/api/incidencias") or [])}
     for titulo, modalidad, recep, tecnico, vendedor, desde, minutos, equipo in tickets:
-        if titulo in ya_cargadas:
+        ya = existentes.get(titulo)
+        if ya is not None:
+            faltantes = {
+                campo: valor
+                for campo, valor in (
+                    ("fecha_programada", desde),
+                    ("duracion_minutos", minutos),
+                    ("equipo_trabajo_id", equipo),
+                    ("modalidad", modalidad),
+                )
+                if valor is not None and ya.get(campo) is None
+            }
+            if faltantes:
+                # El PUT lleva el objeto entero, así que hay que reenviar todo
+                # lo demás o se borra. Los campos se listan explícitamente y no
+                # se manda `ya` crudo: trae `id`, `fecha_creacion` y
+                # `fecha_cierre`, que no son de `IncidenciaIn` — hoy Pydantic
+                # los ignora, pero apoyarse en eso es apoyarse en un default
+                # que se puede cambiar.
+                previos = {
+                    campo: ya.get(campo) for campo in (
+                        "cliente_id", "equipo_id", "activo_id", "tecnico_id",
+                        "recepcionista_id", "vendedor_id", "modalidad",
+                        "fecha_programada", "duracion_minutos",
+                        "equipo_trabajo_id", "sector_id", "categoria_id",
+                        "titulo", "descripcion", "estado", "prioridad",
+                        "horas_invertidas", "notas", "resolucion",
+                    )
+                }
+                api.put(f"/api/incidencias/{ya['id']}", {**previos, **faltantes})
+                contar("incidencias_completadas", True)
             continue
         api.post("/api/incidencias", {
             "cliente_id": cliente["id"], "equipo_id": equipo_id,
