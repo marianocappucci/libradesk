@@ -417,6 +417,9 @@ def sembrar(api: Api) -> None:
                 "retirado_por": "Marta Ríos",
                 "trabajo_realizado": "Se actualizó el firmware y se cambió la fuente.",
                 "observaciones_entrega": "Se probó 48 h sin reinicios.",
+                # Se completa el técnico también acá: sin esto el comprobante de
+                # entrega sale con "Técnico: —" y el ejemplo no muestra el campo.
+                "tecnico": "Sofía Núñez",
             },
         },
     ]
@@ -444,8 +447,9 @@ def sembrar(api: Api) -> None:
         creado = api.post("/api/ingresos-reparacion", cuerpo)
         contar("ingresos_reparacion", True)
         if spec["entrega"]:
-            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar",
-                     spec["entrega"])
+            entrega = {k: v for k, v in spec["entrega"].items() if k != "tecnico"}
+            entrega["tecnico_entrega_id"] = gente[spec["entrega"]["tecnico"]]["id"]
+            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar", entrega)
             contar("entregas", True)
 
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
