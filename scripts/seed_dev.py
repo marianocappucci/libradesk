@@ -16,7 +16,9 @@ de contrato, por ejemplo— y entonces lo que se revisa no es el producto.
 distinguen: una línea de contrato cerrada y una vigente, un precio vencido y el
 vigente, un equipo en service y otro disponible, un ticket on-site y otro
 remoto. Si todo estuviera en el mismo estado, media pantalla quedaría sin
-mirarse.
+mirarse. La agenda (fase B del pedido 42) sigue el mismo criterio: dos trabajos
+**pegados** en el mismo equipo —uno termina 11:00, el otro empieza 11:00—, dos
+**equipos distintos a la misma hora**, y un ticket **sin agendar**.
 
 **Es idempotente por nombre**: si el registro ya existe no lo duplica, así que
 se puede correr después de cada deploy sin ensuciar.
@@ -34,7 +36,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from http.cookiejar import CookieJar
 
 HOY = date.today()
@@ -137,12 +139,16 @@ def sembrar(api: Api) -> None:
          "Zona norte y centro"),
         ("Cuadrilla Sur", "Carla Vega", ["Diego Ramos"], "Zona sur"),
     ]
+    # `cuadrillas` y no `equipos`: más abajo `equipos` son los **equipos del
+    # cliente** (`/api/equipos`), otra entidad entera. El nombre estaba usado
+    # para las dos cosas a cien líneas de distancia, y la segunda pisaba a la
+    # primera sin que se notara hasta necesitarla después.
     equipos_ya = api.get("/api/equipos-trabajo") or []
-    equipos: dict[str, dict] = {e["nombre"]: e for e in equipos_ya}
+    cuadrillas: dict[str, dict] = {e["nombre"]: e for e in equipos_ya}
     for nombre, jefe, integrantes, obs in equipos_spec:
-        if nombre in equipos:
+        if nombre in cuadrillas:
             continue
-        equipos[nombre] = api.post("/api/equipos-trabajo", {
+        cuadrillas[nombre] = api.post("/api/equipos-trabajo", {
             "nombre": nombre,
             "responsable_id": gente[jefe]["id"],
             "integrantes": [gente[n]["id"] for n in integrantes],
@@ -171,7 +177,7 @@ def sembrar(api: Api) -> None:
     kangoo = vehiculos["AB123CD"]
     if kangoo.get("equipo_id") is None and kangoo["estado"] == "disponible":
         api.post(f"/api/equipos-trabajo/vehiculos/{kangoo['id']}/asignar",
-                 {"equipo_id": equipos["Cuadrilla Norte"]["id"]})
+                 {"equipo_id": cuadrillas["Cuadrilla Norte"]["id"]})
         contar("asignaciones", True)
 
     proveedores = api.get("/api/proveedores") or []
@@ -262,17 +268,43 @@ def sembrar(api: Api) -> None:
             "ubicacion": "Rack principal",
         })
 
-    # ── Incidencias con modalidad y los tres papeles (pedidos 37 y 41) ─────
+    # ── Incidencias con modalidad, los tres papeles y agenda ───────────────
+    # (pedidos 37, 41 y 42 fase B)
+    #
+    # Las agendadas van **al próximo lunes**, no a "hoy + N": si cayeran un
+    # domingo la agenda del día laboral siguiente se vería vacía, que es
+    # justamente lo que el usuario abre para revisar. Y las horas están
+    # elegidas para que la pantalla muestre los tres casos que distingue:
+    # bloques seguidos en un mismo equipo, dos equipos a la misma hora, y un
+    # ticket sin agendar.
     equipos = api.get(f"/api/equipos?cliente_id={cliente['id']}") or []
     equipo_id = equipos[0]["id"] if equipos else None
+    lunes = HOY + timedelta(days=(7 - HOY.weekday()) % 7 or 7)
+
+    def turno(hora: int, minuto: int = 0) -> str:
+        return datetime.combine(lunes, time(hora, minuto)).isoformat()
+
+    norte = cuadrillas["Cuadrilla Norte"]["id"]
+    sur = cuadrillas["Cuadrilla Sur"]["id"]
     tickets = [
+        # título, modalidad, recepcionó, técnico, vendedor, desde, minutos, equipo
         ("Se corta el teléfono en recepción", "remoto", "Lucía Fernández",
-         "Diego Ramos", "Sofía Núñez"),
+         "Diego Ramos", "Sofía Núñez", None, None, None),
         ("La impresora no toma papel", "on_site", "Lucía Fernández",
-         "Sofía Núñez", None),
+         "Sofía Núñez", None, turno(9), 120, norte),
+        # Pegado al anterior: termina 11:00, éste empieza 11:00. Es el caso que
+        # una comparación de intervalos mal hecha rechazaría.
+        ("Cambio de switch en el rack", "on_site", "Lucía Fernández",
+         "Diego Ramos", None, turno(11), 90, norte),
+        # Misma hora que el primero, otro equipo: dos cuadrillas trabajan a la
+        # vez, y la pantalla lo tiene que mostrar en dos columnas.
+        ("Instalación de access point", "on_site", "Lucía Fernández",
+         "Sofía Núñez", "Sofía Núñez", turno(9), 60, sur),
+        ("Revisión de cableado", "on_site", "Lucía Fernández",
+         "Diego Ramos", None, turno(14, 30), 180, sur),
     ]
     ya_cargadas = {i["titulo"] for i in (api.get("/api/incidencias") or [])}
-    for titulo, modalidad, recep, tecnico, vendedor in tickets:
+    for titulo, modalidad, recep, tecnico, vendedor, desde, minutos, equipo in tickets:
         if titulo in ya_cargadas:
             continue
         api.post("/api/incidencias", {
@@ -281,6 +313,9 @@ def sembrar(api: Api) -> None:
             "recepcionista_id": gente[recep]["id"],
             "tecnico_id": gente[tecnico]["id"],
             "vendedor_id": gente[vendedor]["id"] if vendedor else None,
+            "fecha_programada": desde,
+            "duracion_minutos": minutos,
+            "equipo_trabajo_id": equipo,
             "descripcion": "Cargada como ejemplo para revisar la pantalla.",
         })
         contar("incidencias", True)
