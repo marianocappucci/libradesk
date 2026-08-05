@@ -26,7 +26,9 @@ import { Presupuestos } from './pages/Presupuestos'
 import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
-import { Configuracion } from './pages/Configuracion'
+import {
+  Configuracion, ConfiguracionCategorias, ConfiguracionProveedores,
+} from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -78,6 +80,10 @@ export default function App() {
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
       <Route path="/reportes/:slug" element={<ProtectedRoute><ReporteDetalle /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />
+      {/* Una ruta por pestaña, no un `useState`: así se puede linkear una
+          sección y el botón "atrás" del navegador hace lo que se espera. */}
+      <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
+      <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
