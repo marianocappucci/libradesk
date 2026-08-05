@@ -6,6 +6,21 @@
 // salen con el encabezado en blanco, porque libracore.config_manager devuelve
 // strings vacios cuando no hay config.json. Solo admin puede guardar (el
 // backend exige el rol).
+//
+// 🔴 **`esAdmin` aplica SÓLO a los datos de la empresa.** Los otros dos
+// catálogos no están detrás de admin, y eso es deliberado (2026-08-04, reporte
+// del usuario: "en configuración no se pueden agregar ni editar ni eliminar
+// proveedores y tipos de incidencia").
+//
+// El motivo es el mismo que en depósitos: `app/main.py` monta
+// `categorias.router` y `proveedores.router` con `staff_or_admin`, así que
+// cualquier staff **ya podía** crear, editar y borrar por la API. Esconderle
+// los botones no restringía nada — sólo hacía que las dos pestañas se vieran
+// rotas para quien no fuera admin. `config-empresa` sí es distinto: su PUT
+// lleva `Depends(require_admin)` de verdad, y ahí el gate se queda.
+//
+// Si se decide que estos catálogos sean admin-only, el lugar es el backend, no
+// esta pantalla.
 import { useEffect, useState } from 'react'
 import {
   api, ApiError, type CategoriaIncidencia, type ConfigEmpresa, type Proveedor,
@@ -55,7 +70,7 @@ const CAMPOS: { key: keyof ConfigEmpresa; label: string; placeholder?: string }[
 /** Catálogo de tipos de incidencia: dos niveles, global (no por cliente).
  *  Vive acá y no en una pantalla propia porque es configuración que se toca
  *  una vez cada mucho, igual que los datos de la empresa. */
-function CategoriasCard({ esAdmin }: { esAdmin: boolean }) {
+function CategoriasCard() {
   const [categorias, setCategorias] = useState<CategoriaIncidencia[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -150,17 +165,13 @@ function CategoriasCard({ esAdmin }: { esAdmin: boolean }) {
       <li className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
         {esHija && <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />}
         <span className={`flex-1 text-sm ${esHija ? '' : 'font-medium'}`}>{c.nombre}</span>
-        {esAdmin && (
-          <>
-            {!esHija && (
-              <Button size="sm" variant="ghost" className="h-8" onClick={() => setNueva({ parent_id: c.id, nombre: '' })}>
-                <Plus />Subcategoría
-              </Button>
-            )}
-            <Button size="icon" variant="outline" className="size-8" title="Renombrar" aria-label={`Renombrar ${c.nombre}`} onClick={() => setRenombrando({ id: c.id, nombre: c.nombre })}><Pencil /></Button>
-            <Button size="icon" variant="outline" className="size-8 text-destructive hover:text-destructive" title="Eliminar" aria-label={`Eliminar ${c.nombre}`} onClick={() => setABorrar(c)}><Trash2 /></Button>
-          </>
+        {!esHija && (
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setNueva({ parent_id: c.id, nombre: '' })}>
+            <Plus />Subcategoría
+          </Button>
         )}
+        <Button size="icon" variant="outline" className="size-8" title="Renombrar" aria-label={`Renombrar ${c.nombre}`} onClick={() => setRenombrando({ id: c.id, nombre: c.nombre })}><Pencil /></Button>
+        <Button size="icon" variant="outline" className="size-8 text-destructive hover:text-destructive" title="Eliminar" aria-label={`Eliminar ${c.nombre}`} onClick={() => setABorrar(c)}><Trash2 /></Button>
       </li>
     )
   }
@@ -179,34 +190,32 @@ function CategoriasCard({ esAdmin }: { esAdmin: boolean }) {
       <CardContent className="grid gap-3">
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {esAdmin && (
-          nueva !== null ? (
-            <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); crear() }}>
-              <div className="grid flex-1 gap-1.5">
-                <span className="text-xs text-muted-foreground">
-                  {nueva.parent_id === null
-                    ? 'Categoría nueva'
-                    : `Subcategoría de "${categorias?.find((c) => c.id === nueva.parent_id)?.nombre}"`}
-                </span>
-                <Input
-                  value={nueva.nombre}
-                  onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setNueva(null) }}
-                  placeholder={nueva.parent_id === null ? 'Hardware, Software, Red…' : 'Impresoras, Notebooks…'}
-                  aria-label="Nombre de la categoría"
-                  autoFocus
-                />
-              </div>
-              <Button type="submit" disabled={guardando || !nueva.nombre.trim()}>Agregar</Button>
-              <Button type="button" variant="outline" onClick={() => setNueva(null)}>Cancelar</Button>
-            </form>
-          ) : (
-            <div>
-              <Button variant="outline" onClick={() => setNueva({ parent_id: null, nombre: '' })}>
-                <Plus />Nueva categoría
-              </Button>
+        {nueva !== null ? (
+          <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); crear() }}>
+            <div className="grid flex-1 gap-1.5">
+              <span className="text-xs text-muted-foreground">
+                {nueva.parent_id === null
+                  ? 'Categoría nueva'
+                  : `Subcategoría de "${categorias?.find((c) => c.id === nueva.parent_id)?.nombre}"`}
+              </span>
+              <Input
+                value={nueva.nombre}
+                onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Escape') setNueva(null) }}
+                placeholder={nueva.parent_id === null ? 'Hardware, Software, Red…' : 'Impresoras, Notebooks…'}
+                aria-label="Nombre de la categoría"
+                autoFocus
+              />
             </div>
-          )
+            <Button type="submit" disabled={guardando || !nueva.nombre.trim()}>Agregar</Button>
+            <Button type="button" variant="outline" onClick={() => setNueva(null)}>Cancelar</Button>
+          </form>
+        ) : (
+          <div>
+            <Button variant="outline" onClick={() => setNueva({ parent_id: null, nombre: '' })}>
+              <Plus />Nueva categoría
+            </Button>
+          </div>
         )}
 
         {categorias === null ? (
@@ -245,7 +254,7 @@ function CategoriasCard({ esAdmin }: { esAdmin: boolean }) {
  *  Un proveedor **con reparaciones no se borra, se desactiva**: la reparación
  *  histórica lo sigue nombrando, y sin él el registro pierde justamente el dato
  *  que lo hacía útil. Mismo criterio que los clientes. */
-function ProveedoresCard({ esAdmin }: { esAdmin: boolean }) {
+function ProveedoresCard() {
   const [proveedores, setProveedores] = useState<Proveedor[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -376,7 +385,7 @@ function ProveedoresCard({ esAdmin }: { esAdmin: boolean }) {
       <CardContent className="grid gap-3">
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {esAdmin && nuevo === null && editando === null && (
+        {nuevo === null && editando === null && (
           <div>
             <Button
               variant="outline"
@@ -421,32 +430,38 @@ function ProveedoresCard({ esAdmin }: { esAdmin: boolean }) {
                       {[p.contacto, p.telefono, p.email].filter(Boolean).join(' · ') || '—'}
                     </span>
                   </div>
+                  {/* El badge alterna activo/inactivo. `aria-pressed` y no sólo
+                      el color: sin él es un `<span>` con onClick, invisible
+                      para el teclado y para un lector de pantalla. */}
                   <Badge
+                    asChild
                     variant={p.activo ? 'default' : 'outline'}
-                    className={esAdmin ? 'cursor-pointer' : undefined}
-                    onClick={() => esAdmin && toggleActivo(p)}
                   >
-                    {p.activo ? 'Activo' : 'Inactivo'}
+                    <button
+                      type="button"
+                      aria-pressed={p.activo}
+                      aria-label={`${p.activo ? 'Desactivar' : 'Activar'} ${p.nombre}`}
+                      className="cursor-pointer"
+                      onClick={() => toggleActivo(p)}
+                    >
+                      {p.activo ? 'Activo' : 'Inactivo'}
+                    </button>
                   </Badge>
-                  {esAdmin && (
-                    <>
-                      <Button
-                        size="icon" variant="outline" className="size-8"
-                        title="Editar" aria-label={`Editar ${p.nombre}`}
-                        onClick={() => setEditando({
-                          id: p.id, nombre: p.nombre,
-                          contacto: p.contacto ?? '', telefono: p.telefono ?? '',
-                          email: p.email ?? '',
-                        })}
-                      ><Pencil /></Button>
-                      <Button
-                        size="icon" variant="outline"
-                        className="size-8 text-destructive hover:text-destructive"
-                        title="Eliminar" aria-label={`Eliminar ${p.nombre}`}
-                        onClick={() => setABorrar(p)}
-                      ><Trash2 /></Button>
-                    </>
-                  )}
+                  <Button
+                    size="icon" variant="outline" className="size-8"
+                    title="Editar" aria-label={`Editar ${p.nombre}`}
+                    onClick={() => setEditando({
+                      id: p.id, nombre: p.nombre,
+                      contacto: p.contacto ?? '', telefono: p.telefono ?? '',
+                      email: p.email ?? '',
+                    })}
+                  ><Pencil /></Button>
+                  <Button
+                    size="icon" variant="outline"
+                    className="size-8 text-destructive hover:text-destructive"
+                    title="Eliminar" aria-label={`Eliminar ${p.nombre}`}
+                    onClick={() => setABorrar(p)}
+                  ><Trash2 /></Button>
                 </li>
               )
             ))}
@@ -581,20 +596,18 @@ function Pantalla({ actual, children }: { actual: string; children: React.ReactN
 
 /** Pestaña de tipos de incidencia. */
 export function ConfiguracionCategorias() {
-  const { user } = useAuth()
   return (
     <Pantalla actual="categorias">
-      <CategoriasCard esAdmin={user?.role === 'admin'} />
+      <CategoriasCard />
     </Pantalla>
   )
 }
 
 /** Pestaña de proveedores de reparación. */
 export function ConfiguracionProveedores() {
-  const { user } = useAuth()
   return (
     <Pantalla actual="proveedores">
-      <ProveedoresCard esAdmin={user?.role === 'admin'} />
+      <ProveedoresCard />
     </Pantalla>
   )
 }
