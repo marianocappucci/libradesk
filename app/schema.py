@@ -42,6 +42,15 @@ from .database import Base
 # al autogenerate por el solo hecho de estar importado en esta linea. Si en su
 # lugar env.py tuviera su propia lista, agregar un modelo y olvidarse de una de
 # las dos daria una tabla sin migracion, en silencio.
+#
+# 🔴 **Olvidarse de agregar una linea aca NO se nota mirando `alembic check`**,
+# y se comprobo el 2026-08-05 con `ingresos` (pedido 43): la tabla estaba creada
+# por su migracion y el modelo existia, pero al no estar importado quedaba fuera
+# de `metadata` — y `include_name` filtra por `metadata`, asi que el autogenerate
+# ni siquiera veia la tabla y reportaba "sin cambios". Un verde por ceguera.
+# Lo agarro `test_sin_el_filtro_si_las_dropearia`, la contraprueba que corre el
+# autogenerate SIN filtro: ahi la tabla aparecia en la lista de las que se
+# dropearian, junto a las cinco ajenas. Esa es la unica senal que hay.
 from .services import activos as _activos  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
@@ -50,6 +59,7 @@ from .services import depositos as _depositos  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import equipos_trabajo as _equipos_trabajo  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
+from .services import ingresos as _ingresos  # noqa: F401
 from .services import modules as _modules  # noqa: F401
 from .services import proveedores as _proveedores  # noqa: F401
 from .services import reparaciones as _reparaciones  # noqa: F401

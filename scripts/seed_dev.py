@@ -277,8 +277,24 @@ def sembrar(api: Api) -> None:
     # elegidas para que la pantalla muestre los tres casos que distingue:
     # bloques seguidos en un mismo equipo, dos equipos a la misma hora, y un
     # ticket sin agendar.
+    # 🔴 El cliente de ejemplo no tenía NINGÚN equipo, y el seed nunca se lo
+    # creaba. Consecuencia: los tickets de ejemplo quedaban con `equipo_id`
+    # null, y el ingreso a reparación "del inventario" (pedido 43) directamente
+    # no se podía sembrar — el caso que muestra el copiado de datos desde
+    # `equipos` era el único que faltaba, justo el que hay que mirar.
+    #
+    # Lo tapaba que `equipo_id = ... if equipos else None` es una expresión
+    # perfectamente válida que no falla ni avisa: seguía sembrando todo lo
+    # demás y reportando éxito.
     equipos = api.get(f"/api/equipos?cliente_id={cliente['id']}") or []
-    equipo_id = equipos[0]["id"] if equipos else None
+    if not equipos:
+        equipos = [api.post("/api/equipos", {
+            "cliente_id": cliente["id"], "tipo": "Notebook", "marca": "Lenovo",
+            "modelo": "ThinkPad T14", "serial": "LN-EJEMPLO-01",
+            "ubicacion_oficina": "Administración",
+        })]
+        contar("equipos", True)
+    equipo_id = equipos[0]["id"]
     lunes = HOY + timedelta(days=(7 - HOY.weekday()) % 7 or 7)
 
     def turno(hora: int, minuto: int = 0) -> str:
@@ -360,6 +376,81 @@ def sembrar(api: Api) -> None:
             "descripcion": "Cargada como ejemplo para revisar la pantalla.",
         })
         contar("incidencias", True)
+
+    # ── Ingresos a reparación (pedido 43) ─────────────────────────────────
+    # Los tres estados que la pantalla distingue: uno en el taller **con equipo
+    # del inventario**, uno **de mostrador** (sin `equipo_id`, que es el caso
+    # que justifica que la FK sea opcional) y uno **ya entregado**, con sus dos
+    # comprobantes. Con los tres iguales media pantalla queda sin mirarse.
+    ingresos_spec = [
+        {
+            "del_inventario": True,
+            "contacto": "Marta Ríos", "contacto_telefono": "3514567890",
+            "accesorios": "Cargador original, funda negra",
+            "estado_fisico": "Tapa rayada en la esquina inferior derecha",
+            "falla_declarada": "No enciende. Dice que se le cayó agua encima.",
+            "observaciones": "Faltan dos tornillos de la base (preexistente)",
+            "entregado_por": "Marta Ríos",
+            "entrega": None,
+        },
+        {
+            "del_inventario": False,
+            "equipo_tipo": "Impresora", "equipo_marca": "HP",
+            "equipo_modelo": "LaserJet M404", "equipo_serial": "HP-77120",
+            "contacto": "Jorge Peña",
+            "accesorios": "Cable de poder. Sin cable USB.",
+            "estado_fisico": "Bandeja delantera floja",
+            "falla_declarada": "Atasca el papel todo el tiempo",
+            "entregado_por": "Jorge Peña",
+            "entrega": None,
+        },
+        {
+            "del_inventario": False,
+            "equipo_tipo": "Router", "equipo_marca": "TP-Link",
+            "equipo_modelo": "ER605", "equipo_serial": "TP-40881",
+            "contacto": "Marta Ríos",
+            "accesorios": "Fuente y patch cord",
+            "estado_fisico": "Sin daños visibles",
+            "falla_declarada": "Se reinicia solo cada dos horas",
+            "entregado_por": "Marta Ríos",
+            "entrega": {
+                "retirado_por": "Marta Ríos",
+                "trabajo_realizado": "Se actualizó el firmware y se cambió la fuente.",
+                "observaciones_entrega": "Se probó 48 h sin reinicios.",
+                # Se completa el técnico también acá: sin esto el comprobante de
+                # entrega sale con "Técnico: —" y el ejemplo no muestra el campo.
+                "tecnico": "Sofía Núñez",
+            },
+        },
+    ]
+    # Idempotencia por número de serie: es lo único que identifica al equipo
+    # recibido, y los comprobantes no tienen nombre.
+    ya_ingresados = {
+        i["equipo_serial"] for i in (api.get("/api/ingresos-reparacion") or [])
+    }
+    for spec in ingresos_spec:
+        cuerpo = {
+            "cliente_id": cliente["id"],
+            "tecnico_id": gente["Lucía Fernández"]["id"],
+            **{k: v for k, v in spec.items()
+               if k not in ("del_inventario", "entrega")},
+        }
+        if spec["del_inventario"]:
+            cuerpo["equipo_id"] = equipo_id
+            # Del inventario salen tipo/marca/modelo/serie, así que el serial
+            # con el que se chequea la idempotencia es el de ese equipo.
+            serial = equipos[0].get("serial")
+        else:
+            serial = spec["equipo_serial"]
+        if serial and serial in ya_ingresados:
+            continue
+        creado = api.post("/api/ingresos-reparacion", cuerpo)
+        contar("ingresos_reparacion", True)
+        if spec["entrega"]:
+            entrega = {k: v for k, v in spec["entrega"].items() if k != "tecnico"}
+            entrega["tecnico_entrega_id"] = gente[spec["entrega"]["tecnico"]]["id"]
+            api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar", entrega)
+            contar("entregas", True)
 
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
