@@ -861,6 +861,48 @@ export const MARCA_CLASE: Record<string, string> = {
   neutro: 'bg-gray-100 dark:bg-gray-800/60',
 }
 
+// --- logs (admin) ----------------------------------------------------------
+//
+// Dos fuentes distintas en una sola respuesta: `actividad` la escribe el flush
+// de SQLAlchemy (app/services/auditoria.py) y `accesos` el router de login del
+// motor (libraauth v0.8.0). Las entidades y las acciones vienen del backend y
+// no se declaran acá a propósito: la lista de lo auditable vive en
+// `auditoria.AUDITABLES`, y agregar una entidad no debería obligar a tocar el
+// frontend para que se vea.
+
+export type ActividadLog = {
+  id: number
+  ts: string
+  usuario: string
+  accion: string
+  entidad: string
+  entidad_id: number | null
+  descripcion: string
+  // `{columna: [antes, despues]}`. Null en altas y bajas: ahí no hay diff que
+  // mostrar, la fila entera es la novedad.
+  cambios: Record<string, [unknown, unknown]> | null
+}
+
+export type AccesoLog = {
+  id: number
+  ts: string
+  evento: 'login' | 'logout' | 'login_fallido' | string
+  username: string
+  ip: string
+  detalle: string
+}
+
+export type LogsData = {
+  actividad: ActividadLog[]
+  total: number
+  total_pages: number
+  page: number
+  entidades: string[]
+  acciones: Record<string, { label: string; color: string }>
+  usuarios: string[]
+  accesos: AccesoLog[]
+}
+
 export type ClienteResumen = {
   cliente: Cliente
   equipos_por_estado: Record<string, number>

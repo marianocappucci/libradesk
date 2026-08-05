@@ -43,6 +43,7 @@ from .database import Base
 # lugar env.py tuviera su propia lista, agregar un modelo y olvidarse de una de
 # las dos daria una tabla sin migracion, en silencio.
 from .services import activos as _activos  # noqa: F401
+from .services import auditoria as _auditoria  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
 from .services import contratos as _contratos  # noqa: F401
