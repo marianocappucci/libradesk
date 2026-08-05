@@ -18,7 +18,11 @@ dependencies = [
     # tres extraidos de este mismo producto para que los otros no los copien.
     # El bump NO es opcional a partir de aca: `main.py` importa de los tres,
     # asi que con un pin anterior la app ni siquiera levanta.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.10.0",
+    #
+    # v0.12.0: un cambio que solo toca columnas ocultas deja fila igual, con el
+    # valor tapado. Antes se descartaba entero — o sea que cambiar SOLO la
+    # contrasena de un usuario no dejaba rastro en el log de este producto.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.12.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
