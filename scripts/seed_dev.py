@@ -93,6 +93,10 @@ def sembrar(api: Api) -> None:
         ("Diego Ramos", {"es_tecnico": True}),
         ("Sofía Núñez", {"es_tecnico": True, "es_vendedor": True}),
         ("Martín Paz", {"es_tecnico": False, "es_vendedor": True}),
+        # Responsable Y técnico: el caso que motivó que los roles sean banderas
+        # y no un campo único (pedido 42).
+        ("Rubén Actis", {"es_tecnico": True, "es_responsable": True}),
+        ("Carla Vega", {"es_tecnico": True, "es_responsable": True}),
     ]
     gente: dict[str, dict] = {}
     for nombre, roles in personal:
@@ -123,6 +127,52 @@ def sembrar(api: Api) -> None:
             "nombre": nombre, "cliente_id": cliente_id, "descripcion": desc,
         })
         contar("depositos", True)
+
+    # ── Equipos de trabajo y flota (pedido 42, fase A) ─────────────────────
+    # Deja los tres estados que la pantalla distingue: un vehículo asignado
+    # (que es la respuesta a "en qué sale el equipo"), uno libre y uno en
+    # taller. Con los tres iguales, media pantalla quedaría sin mirarse.
+    equipos_spec = [
+        ("Cuadrilla Norte", "Rubén Actis", ["Diego Ramos", "Sofía Núñez"],
+         "Zona norte y centro"),
+        ("Cuadrilla Sur", "Carla Vega", ["Diego Ramos"], "Zona sur"),
+    ]
+    equipos_ya = api.get("/api/equipos-trabajo") or []
+    equipos: dict[str, dict] = {e["nombre"]: e for e in equipos_ya}
+    for nombre, jefe, integrantes, obs in equipos_spec:
+        if nombre in equipos:
+            continue
+        equipos[nombre] = api.post("/api/equipos-trabajo", {
+            "nombre": nombre,
+            "responsable_id": gente[jefe]["id"],
+            "integrantes": [gente[n]["id"] for n in integrantes],
+            "observaciones": obs,
+        })
+        contar("equipos_trabajo", True)
+
+    vehiculos_spec = [
+        ("AB123CD", "Renault", "Kangoo", 2019, "disponible"),
+        ("CD456EF", "Volkswagen", "Partner", 2021, "disponible"),
+        ("EF789GH", "Fiat", "Fiorino", 2017, "en_taller"),
+    ]
+    vehiculos_ya = api.get("/api/equipos-trabajo/vehiculos") or []
+    vehiculos: dict[str, dict] = {v["patente"]: v for v in vehiculos_ya}
+    for patente, marca, modelo, anio, estado in vehiculos_spec:
+        if patente in vehiculos:
+            continue
+        vehiculos[patente] = api.post("/api/equipos-trabajo/vehiculos", {
+            "patente": patente, "marca": marca, "modelo": modelo,
+            "anio": anio, "estado": estado,
+        })
+        contar("vehiculos", True)
+
+    # La asignación: es lo que contesta el pedido. Sólo si el vehículo sigue
+    # libre, para que correr el seed dos veces no explote con un 409.
+    kangoo = vehiculos["AB123CD"]
+    if kangoo.get("equipo_id") is None and kangoo["estado"] == "disponible":
+        api.post(f"/api/equipos-trabajo/vehiculos/{kangoo['id']}/asignar",
+                 {"equipo_id": equipos["Cuadrilla Norte"]["id"]})
+        contar("asignaciones", True)
 
     proveedores = api.get("/api/proveedores") or []
     proveedor = proveedores[0] if proveedores else api.post(
