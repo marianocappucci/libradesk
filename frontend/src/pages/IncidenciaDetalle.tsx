@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
+  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MODALIDAD_LABELS,
+  MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
   opcionesProveedor,
   type Actividad, type CategoriaIncidencia, type Cliente, type DestinoReemplazo,
-  type Equipo, type EquipoMovimiento, type Incidencia, type IncidenciaEstadoLog,
-  type Proveedor, type Reparacion, type Sector, type Tecnico,
+  type Equipo, type EquipoMovimiento, type EquipoTrabajo, type Incidencia,
+  type IncidenciaEstadoLog,
+  type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
+  type Tecnico,
 } from '../api'
+import { deIsoALocal, deLocalAIso } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,8 +27,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  ArrowLeft, ArrowLeftRight, History, MessageSquare, PackageCheck, ShieldCheck,
-  Trash2, Wrench,
+  ArrowLeft, ArrowLeftRight, Check, History, MessageSquare, PackageCheck,
+  Printer, ShieldCheck, Trash2, Wrench,
 } from 'lucide-react'
 
 const NONE = '__none__'
@@ -62,6 +66,7 @@ export function IncidenciaDetalle() {
   const [estados, setEstados] = useState<IncidenciaEstadoLog[]>([])
   const [movimientos, setMovimientos] = useState<EquipoMovimiento[]>([])
   const [reparaciones, setReparaciones] = useState<Reparacion[]>([])
+  const [equiposTrabajo, setEquiposTrabajo] = useState<EquipoTrabajo[]>([])
   // Las abiertas de TODOS los tickets, no sólo las de éste: el equipo que
   // vuelve de service pudo haber salido por otro ticket, y en ese caso su
   // reparación no está en `reparaciones` — el diálogo no ofrecería cerrarla.
@@ -71,6 +76,12 @@ export function IncidenciaDetalle() {
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
+  // Estado del guardado automático, para que deje de ser invisible (pedido 40).
+  // `enVuelo` es un ref y no estado porque `guardarYVolver` lo lee dentro de un
+  // bucle: con `useState` leería siempre el valor del render en que se creó.
+  const enVuelo = useRef(0)
+  const [guardando, setGuardando] = useState(false)
+  const [guardadoAt, setGuardadoAt] = useState<Date | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [reemplazoAbierto, setReemplazoAbierto] = useState(false)
   const [reemplazando, setReemplazando] = useState(false)
@@ -96,11 +107,27 @@ export function IncidenciaDetalle() {
     return 'Error de conexión.'
   }
 
+  /** El personal que tiene ese rol, más el que ya está asignado al ticket.
+   *
+   * Lo segundo importa: si a alguien se le saca el rol de vendedor después de
+   * haber quedado en un ticket, el selector mostraría vacío y el dato se vería
+   * como perdido. Se lo sigue ofreciendo mientras esté puesto ahí. */
+  function conRol(rol: 'tecnico' | 'recepcionista' | 'vendedor'): Tecnico[] {
+    const asignado = {
+      tecnico: incidencia?.tecnico_id,
+      recepcionista: incidencia?.recepcionista_id,
+      vendedor: incidencia?.vendedor_id,
+    }[rol]
+    return tecnicos.filter(
+      (t) => t[`es_${rol}` as const] || t.id === asignado,
+    )
+  }
+
   async function cargar() {
     setLoading(true)
     setError(null)
     try {
-      const [inc, cl, eq, te, se, cat, act, est, mov, rep, abi, prov] = await Promise.all([
+      const [inc, cl, eq, te, se, cat, act, est, mov, rep, abi, prov, et] = await Promise.all([
         api.get<Incidencia>(`/api/incidencias/${incidenciaId}`),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Equipo[]>('/api/equipos'),
@@ -113,6 +140,7 @@ export function IncidenciaDetalle() {
         api.get<Reparacion[]>(`/api/reparaciones?incidencia_id=${incidenciaId}`),
         api.get<Reparacion[]>('/api/reparaciones?abiertas=true'),
         api.get<Proveedor[]>('/api/proveedores?solo_activos=true'),
+        api.get<EquipoTrabajo[]>('/api/equipos-trabajo'),
       ])
       setIncidencia(inc)
       setClientes(cl)
@@ -126,6 +154,7 @@ export function IncidenciaDetalle() {
       setReparaciones(rep)
       setAbiertas(abi)
       setProveedores(prov)
+      setEquiposTrabajo(et)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -142,21 +171,40 @@ export function IncidenciaDetalle() {
     setEstados(est)
   }
 
-  // Guarda un campo apenas cambia (sin botón "Guardar" aparte) -- mismo
-  // patrón que el panel de propiedades de Zendesk/Freshdesk. Reconstruye
-  // el payload completo a partir del estado actual porque el backend
-  // (`IncidenciaIn`) espera el objeto entero en el PUT.
+  // Guarda un campo apenas cambia — mismo patrón que el panel de propiedades de
+  // Zendesk/Freshdesk. Reconstruye el payload completo a partir del estado
+  // actual porque el backend (`IncidenciaIn`) espera el objeto entero en el PUT.
+  //
+  // 🔴 **El guardado automático se queda, pero deja de ser invisible.** El
+  // usuario reportó (pedido 40) que "no hay botón de guardar; si salgo queda
+  // guardada, pero no es la idea". El problema no era que no guardara: era que
+  // no había forma de saberlo ni de terminar. Sacar el autoguardado habría
+  // perdido lo tipeado al navegar, así que se suma lo que faltaba — un
+  // indicador de estado y un botón explícito que cierra y vuelve al listado.
   async function actualizarCampo(patch: Partial<Incidencia>) {
     if (!incidencia) return
     setError(null)
     const previo = incidencia
     const actualizado = { ...incidencia, ...patch }
     setIncidencia(actualizado)
+    enVuelo.current += 1
+    setGuardando(true)
     try {
       const guardado = await api.put<Incidencia>(`/api/incidencias/${incidenciaId}`, {
         cliente_id: actualizado.cliente_id,
         equipo_id: actualizado.equipo_id,
+        activo_id: actualizado.activo_id,
         tecnico_id: actualizado.tecnico_id,
+        recepcionista_id: actualizado.recepcionista_id,
+        vendedor_id: actualizado.vendedor_id,
+        modalidad: actualizado.modalidad,
+        // Los tres de la agenda tienen que viajar en **todo** PUT, aunque el
+        // cambio no los toque: el backend recibe el objeto entero y lo que no
+        // se manda vuelve a null. Sin esta línea, cambiarle la prioridad a un
+        // ticket lo desagendaba en silencio.
+        fecha_programada: actualizado.fecha_programada,
+        duracion_minutos: actualizado.duracion_minutos,
+        equipo_trabajo_id: actualizado.equipo_trabajo_id,
         sector_id: actualizado.sector_id,
         categoria_id: actualizado.categoria_id,
         titulo: actualizado.titulo,
@@ -170,11 +218,36 @@ export function IncidenciaDetalle() {
         activo: true,
       })
       setIncidencia(guardado)
+      setGuardadoAt(new Date())
       if (patch.estado) await recargarActividadYEstado()
     } catch (err) {
       setIncidencia(previo)
       setError(describeError(err))
+    } finally {
+      enVuelo.current -= 1
+      if (enVuelo.current === 0) setGuardando(false)
     }
+  }
+
+  /** Cierra la ficha y vuelve al listado, **después** de que termine de guardar.
+   *
+   * Los dos pasos importan y los dos costaron el reporte del usuario:
+   *
+   * 1. El `blur()` fuerza el `onBlur` del campo que tenga el foco. Sin esto, lo
+   *    último tipeado se pierde: el botón navega antes de que ese campo dispare
+   *    su guardado.
+   * 2. La espera a `enVuelo` cubre el PUT ya lanzado. Navegar desmonta el
+   *    componente y la respuesta llega a un componente que ya no existe.
+   */
+  async function guardarYVolver() {
+    (document.activeElement as HTMLElement | null)?.blur()
+    // Un tick para que el `onBlur` corra y alcance a incrementar `enVuelo`.
+    await new Promise((r) => setTimeout(r, 0))
+    // Con tope: si un PUT quedara colgado, la pantalla no puede quedar presa.
+    for (let i = 0; enVuelo.current > 0 && i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    navigate('/incidencias')
   }
 
   async function agregarNota() {
@@ -303,12 +376,38 @@ export function IncidenciaDetalle() {
           )}
         </div>
         {incidencia && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* El estado del guardado automático, a la vista. Sin esto el
+                usuario no tenía forma de saber si lo que tipeó quedó. */}
+            <span className="text-xs text-muted-foreground" aria-live="polite">
+              {guardando
+                ? 'Guardando…'
+                : guardadoAt
+                  ? `Guardado ${guardadoAt.toLocaleTimeString('es-AR', { timeStyle: 'short' })}`
+                  : 'Los cambios se guardan solos'}
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <a href={`/api/incidencias/${incidenciaId}/pdf`} target="_blank" rel="noreferrer">
+                <Printer />Imprimir
+              </a>
+            </Button>
             <Button size="sm" variant="outline" onClick={abrirReemplazo}>
               <ArrowLeftRight />Reemplazar equipo
             </Button>
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 />Eliminar
+            </Button>
+            {/* El botón que faltaba: termina el trabajo y vuelve al listado.
+                🔴 **No lleva `disabled={guardando}`**, aunque parezca lo
+                natural. El click del usuario primero hace `blur` en el campo
+                que estaba editando, ese blur dispara el guardado y `guardando`
+                pasa a true — así que para cuando llega el `click` el botón ya
+                está deshabilitado y el handler **nunca corre**. Es decir: se
+                rompía exactamente en el caso para el que existe (tipear algo y
+                tocar guardar). Lo agarró el test de "espera a que termine el
+                guardado". La espera la hace `guardarYVolver`, no el disabled. */}
+            <Button size="sm" onClick={guardarYVolver}>
+              <Check />{guardando ? 'Guardando…' : 'Guardar y volver'}
             </Button>
           </div>
         )}
@@ -539,15 +638,124 @@ export function IncidenciaDetalle() {
                   emptyMessage="Ese cliente no tiene equipos."
                 />
               </div>
+              {/* Los tres papeles (pedido 41). Cada selector ofrece sólo a
+                  quien tiene ese rol: mostrar el personal entero en los tres
+                  vuelve a dejar la pregunta "quién lo ejecutó" sin contestar. */}
               <div className="grid gap-1.5">
-                <Label>Técnico</Label>
+                <Label>Recepcionó</Label>
+                <SelectBuscable
+                  value={incidencia.recepcionista_id ? String(incidencia.recepcionista_id) : NONE}
+                  onChange={(v) => actualizarCampo({ recepcionista_id: v === NONE ? null : Number(v) })}
+                  opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(conRol('recepcionista'))]}
+                  ariaLabel="Recepcionó"
+                  className="w-full"
+                  emptyMessage="Nadie tiene el rol de recepcionista."
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Técnico (ejecuta)</Label>
                 <SelectBuscable
                   value={incidencia.tecnico_id ? String(incidencia.tecnico_id) : NONE}
                   onChange={(v) => actualizarCampo({ tecnico_id: v === NONE ? null : Number(v) })}
-                  opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(tecnicos)]}
+                  opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(conRol('tecnico'))]}
                   ariaLabel="Técnico"
                   className="w-full"
                 />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Vendedor</Label>
+                <SelectBuscable
+                  value={incidencia.vendedor_id ? String(incidencia.vendedor_id) : NONE}
+                  onChange={(v) => actualizarCampo({ vendedor_id: v === NONE ? null : Number(v) })}
+                  opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(conRol('vendedor'))]}
+                  ariaLabel="Vendedor"
+                  className="w-full"
+                  emptyMessage="Nadie tiene el rol de vendedor."
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Modalidad</Label>
+                <Select
+                  value={incidencia.modalidad ?? NONE}
+                  onValueChange={(v) => actualizarCampo({
+                    modalidad: v === NONE ? null : (v as ModalidadIncidencia),
+                  })}
+                >
+                  <SelectTrigger aria-label="Modalidad"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {/* "Sin definir" es un valor real y no un placeholder: los
+                        tickets anteriores al pedido 37 no saben cómo se
+                        atendieron, y ponerles on-site sería inventarlo. */}
+                    <SelectItem value={NONE}>Sin definir</SelectItem>
+                    {(Object.keys(MODALIDAD_LABELS) as ModalidadIncidencia[]).map((m) => (
+                      <SelectItem key={m} value={m}>{MODALIDAD_LABELS[m]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* La agenda (pedido 42, fase B). Los tres juntos y en este
+                  orden porque se llenan juntos: cuándo, cuánto y quién va.
+                  El vehículo NO se elige acá — sale del equipo, y se muestra
+                  debajo para que quien agenda lo vea sin ir a otra pantalla. */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="fecha-programada">Fecha y hora del trabajo</Label>
+                <Input
+                  id="fecha-programada"
+                  type="datetime-local"
+                  value={deIsoALocal(incidencia.fecha_programada)}
+                  onChange={(e) => actualizarCampo({
+                    fecha_programada: deLocalAIso(e.target.value),
+                  })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="duracion">Duración (minutos)</Label>
+                <Input
+                  id="duracion"
+                  type="number"
+                  min="15"
+                  step="15"
+                  placeholder="60"
+                  value={incidencia.duracion_minutos ?? ''}
+                  onChange={(e) => actualizarCampo({
+                    duracion_minutos: e.target.value ? Number(e.target.value) : null,
+                  })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Equipo de trabajo</Label>
+                <SelectBuscable
+                  value={
+                    incidencia.equipo_trabajo_id ? String(incidencia.equipo_trabajo_id) : NONE
+                  }
+                  onChange={(v) => actualizarCampo({
+                    equipo_trabajo_id: v === NONE ? null : Number(v),
+                  })}
+                  opciones={[
+                    { value: NONE, label: 'Sin asignar' },
+                    ...opcionesPorNombre(equiposTrabajo.filter(
+                      (e) => e.activo || e.id === incidencia.equipo_trabajo_id,
+                    )),
+                  ]}
+                  ariaLabel="Equipo de trabajo"
+                  className="w-full"
+                  emptyMessage="No hay equipos de trabajo cargados."
+                />
+                {(() => {
+                  const equipo = equiposTrabajo.find(
+                    (e) => e.id === incidencia.equipo_trabajo_id,
+                  )
+                  if (!equipo) return null
+                  const patentes = equipo.vehiculos.map((v) => v.patente).join(', ')
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      {patentes
+                        ? `Sale en ${patentes}`
+                        : 'Ese equipo no tiene vehículo asignado.'}
+                      {equipo.responsable_nombre && ` · A cargo: ${equipo.responsable_nombre}`}
+                    </p>
+                  )
+                })()}
               </div>
               <div className="grid gap-1.5">
                 <Label>Sector</Label>
@@ -561,8 +769,11 @@ export function IncidenciaDetalle() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Horas invertidas</Label>
+                {/* `htmlFor`/`id`: el label estaba suelto y no nombraba a su
+                    input para un lector de pantalla. */}
+                <Label htmlFor="horas-invertidas">Horas invertidas</Label>
                 <Input
+                  id="horas-invertidas"
                   type="number"
                   step="0.5"
                   defaultValue={incidencia.horas_invertidas ?? ''}

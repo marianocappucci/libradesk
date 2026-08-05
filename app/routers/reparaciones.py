@@ -19,7 +19,11 @@ router = APIRouter(prefix="/api/reparaciones", tags=["reparaciones"])
 
 
 class ReparacionIn(BaseModel):
-    equipo_id: int
+    # Uno de los dos y sólo uno: `equipo_id` es el parque del cliente,
+    # `activo_id` el stock propio alquilado. El servicio devuelve 409 con el
+    # motivo, y la base además lo garantiza con un CHECK.
+    equipo_id: int | None = None
+    activo_id: int | None = None
     proveedor_id: int
     fecha_envio: date
     incidencia_id: int | None = None
@@ -49,7 +53,10 @@ class ReparacionUpdate(BaseModel):
 
 class ReparacionOut(BaseModel):
     id: int
-    equipo_id: int
+    equipo_id: int | None
+    activo_id: int | None
+    # Para que la UI sepa a qué ficha linkear sin comparar nulls.
+    es_activo: bool
     incidencia_id: int | None
     proveedor_id: int
     proveedor_nombre: str | None
@@ -81,23 +88,30 @@ def create_reparacion(
         que, _id = e.args[0]
         raise HTTPException(404, f"{que} not found")
     except ValueError as e:
+        # Incluye "hay que indicar exactamente uno de los dos" cuando vienen
+        # `equipo_id` y `activo_id` juntos, o ninguno.
         raise HTTPException(409, str(e))
 
 
 @router.get("", response_model=list[ReparacionOut])
 def list_reparaciones(
     equipo_id: int | None = None,
+    activo_id: int | None = None,
     incidencia_id: int | None = None,
     proveedor_id: int | None = None,
     cliente_id: int | None = None,
+    solo_activos: bool | None = None,
     abiertas: bool | None = None,
     reparaciones: ReparacionRepository = Depends(get_reparacion_repository),
 ):
     """`abiertas=true` responde "que tengo hoy en service". Sin filtro salen
-    todas, con las abiertas arriba."""
+    todas, con las abiertas arriba — y desde la fase 4, **las de los equipos del
+    cliente y las de los activos propios juntas**, que es el punto de tenerlas
+    en una sola tabla. `solo_activos` las separa cuando hace falta."""
     return reparaciones.list(
-        equipo_id=equipo_id, incidencia_id=incidencia_id,
-        proveedor_id=proveedor_id, cliente_id=cliente_id, abiertas=abiertas,
+        equipo_id=equipo_id, activo_id=activo_id, incidencia_id=incidencia_id,
+        proveedor_id=proveedor_id, cliente_id=cliente_id,
+        solo_activos=solo_activos, abiertas=abiertas,
     )
 
 

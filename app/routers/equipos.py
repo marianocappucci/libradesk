@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..dependencies import get_equipo_repository
+from ..services.depositos import ClienteAjeno
 from ..services.equipos import EquipoRepository
 
 router = APIRouter(prefix="/api/equipos", tags=["equipos"])
@@ -18,6 +19,8 @@ class EquipoIn(BaseModel):
     serial: str | None = None
     ubicacion_oficina: str | None = None
     sector: str | None = None
+    # Donde esta guardado. None = instalado en el sector del cliente.
+    deposito_id: int | None = None
     estado: str = "activo"
     garantia_vence: date | None = None
     observaciones: str | None = None
@@ -32,6 +35,9 @@ class EquipoUpdate(EquipoIn):
 
 class EquipoOut(EquipoIn):
     id: int
+    # Resuelto por el repositorio: la lista muestra donde esta el equipo sin
+    # cruzar `/api/depositos` en el browser.
+    deposito_nombre: str | None = None
     fecha_adicion: str | None = None
     garantia_vence: str | None = None
 
@@ -58,12 +64,19 @@ def create_equipo(
     equipos: EquipoRepository = Depends(get_equipo_repository),
     user: dict = Depends(get_current_user),
 ):
-    return equipos.create(usuario_actor=user["username"], **data.model_dump())
+    try:
+        return equipos.create(usuario_actor=user["username"], **data.model_dump())
+    except ClienteAjeno as e:
+        raise HTTPException(422, str(e))
 
 
 @router.get("", response_model=list[EquipoOut])
-def list_equipos(cliente_id: int | None = None, equipos: EquipoRepository = Depends(get_equipo_repository)):
-    return equipos.list(cliente_id=cliente_id)
+def list_equipos(
+    cliente_id: int | None = None,
+    deposito_id: int | None = None,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+):
+    return equipos.list(cliente_id=cliente_id, deposito_id=deposito_id)
 
 
 @router.get("/{equipo_id}", response_model=EquipoOut)
@@ -89,6 +102,8 @@ def update_equipo(
         )
     except KeyError:
         raise HTTPException(404, "equipo not found")
+    except ClienteAjeno as e:
+        raise HTTPException(422, str(e))
 
 
 @router.delete("/{equipo_id}", status_code=204)

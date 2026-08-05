@@ -23,6 +23,10 @@ x-libradesk-build: &libradesk-build
     - default=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
     - libraauth=${LIBRAAUTH_SSH_KEY:-~/.ssh/id_ed25519_libraauth}
     - libracore=${LIBRACORE_SSH_KEY:-~/.ssh/id_ed25519_libracore}
+    # Sumada con la fase B del pedido 42 (agenda). La clave ya estaba en el
+    # VPS —la usan Gestiolibra y MedLibra—; lo que faltaba era declararla aca
+    # y en el Dockerfile.
+    - libragenda=${LIBRAGENDA_SSH_KEY:-~/.ssh/id_ed25519_libragenda}
     - libra-ui=${LIBRA_UI_SSH_KEY:-~/.ssh/id_ed25519_libra_ui}
 
 x-libradesk-common: &libradesk-common

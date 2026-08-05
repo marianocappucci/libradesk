@@ -40,6 +40,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
+from .depositos import Deposito, lugar_de
 from .equipos import (
     Equipo, _mov_to_dict, _to_dict as _equipo_to_dict, descripcion_equipo,
     movimientos_por_cambio, ubicacion_texto,
@@ -49,6 +50,13 @@ from .proveedores import Proveedor
 from .reparaciones import Reparacion, resolver as resolver_reparacion
 
 # destino -> (estado del equipo retirado, sector por defecto, frase para la nota)
+#
+# El sector por defecto de `deposito` es el **fallback**: desde que existen los
+# depositos como entidad (ver `services/depositos.py`), un equipo que vuelve a
+# deposito va al deposito propio marcado como default y su ubicacion sale de
+# ahi. La constante "Depósito" solo se usa en una instancia que todavia no
+# creo ninguno, para que el reemplazo siga funcionando igual que antes en vez
+# de fallar por una tabla vacia.
 DESTINOS: dict[str, tuple[str, str, str]] = {
     "service": ("en_reparacion", "Service", "se envía a service"),
     "deposito": ("almacenado", "Depósito", "vuelve a depósito"),
@@ -226,10 +234,40 @@ class ReemplazoService:
             actor = usuario_actor or "Sistema"
             motivo_final = motivo or f"Incidencia #{incidencia_id}"
 
-            # El hueco que deja el retirado: es donde entra el sustituto.
+            # Los depositos donde estan hoy los dos equipos, para que el
+            # historial diga de donde salieron y no el sector viejo de un
+            # equipo que estaba guardado.
+            ids_previos = {
+                e.deposito_id for e in (retirado, sustituto)
+                if e is not None and e.deposito_id is not None
+            }
+            nombres_previos = dict(
+                session.execute(
+                    select(Deposito.id, Deposito.nombre).where(Deposito.id.in_(ids_previos))
+                ).all()
+            ) if ids_previos else {}
+            deposito_previo_retirado = nombres_previos.get(retirado.deposito_id)
+
+            # A donde va el retirado si el destino es "deposito": el propio
+            # marcado como default. Sin ninguno cargado se cae al texto de
+            # DESTINOS, que es como funcionaba antes de que existieran.
+            deposito_destino = None
+            if destino == "deposito":
+                deposito_destino = session.execute(
+                    select(Deposito)
+                    .where(Deposito.cliente_id.is_(None))
+                    .where(Deposito.activo.is_(True))
+                    .order_by(Deposito.es_default.desc(), Deposito.id)
+                ).scalars().first()
+
+            # El hueco que deja el retirado: es donde entra el sustituto. Sale
+            # de donde estaba **de verdad** — si el equipo retirado estaba en
+            # un deposito, no hay hueco en ningun sector del cliente.
             hueco_sector = retirado.sector
             hueco_ubicacion = retirado.ubicacion_oficina
-            hueco_texto = ubicacion_texto(hueco_sector, hueco_ubicacion)
+            hueco_texto = ubicacion_texto(
+                lugar_de(deposito_previo_retirado, hueco_sector), hueco_ubicacion
+            )
 
             movimientos = []
             actividades = []
@@ -240,18 +278,34 @@ class ReemplazoService:
 
             # ── 1. El equipo que sale ───────────────────────────────────
             previo = (retirado.sector, retirado.ubicacion_oficina, retirado.estado)
-            retirado.sector = sector_destino if sector_destino is not None else sector_por_defecto
+            if deposito_destino is not None:
+                # Va a un deposito real: la ubicacion la da el deposito, no un
+                # texto. `sector` solo se pisa si el llamador mando uno.
+                retirado.deposito_id = deposito_destino.id
+                if sector_destino is not None:
+                    retirado.sector = sector_destino
+            else:
+                # Service, baja, o deposito sin ninguno cargado: el equipo no
+                # esta en un deposito y la ubicacion vuelve a ser el texto.
+                retirado.deposito_id = None
+                retirado.sector = (
+                    sector_destino if sector_destino is not None else sector_por_defecto
+                )
             retirado.ubicacion_oficina = ubicacion_destino
             retirado.estado = estado_destino
+            deposito_actual_retirado = deposito_destino.nombre if deposito_destino else None
             movs_retirado = movimientos_por_cambio(
                 retirado,
                 sector_previo=previo[0], ubicacion_previa=previo[1], estado_previo=previo[2],
+                deposito_previo=deposito_previo_retirado,
+                deposito_actual=deposito_actual_retirado,
                 usuario=actor, motivo=motivo_final, incidencia_id=incidencia_id,
             )
             movimientos += movs_retirado
+            lugar_retirado = lugar_de(deposito_actual_retirado, retirado.sector)
             texto_retiro = (
                 f"Se retira {descripcion_equipo(retirado)} de {hueco_texto} y "
-                f"{frase_destino} ({ubicacion_texto(retirado.sector, retirado.ubicacion_oficina)})."
+                f"{frase_destino} ({ubicacion_texto(lugar_retirado, retirado.ubicacion_oficina)})."
             )
             if motivo:
                 texto_retiro += f" Motivo: {motivo}."
@@ -295,13 +349,20 @@ class ReemplazoService:
             # ── 2. El equipo que entra en su lugar ──────────────────────
             if sustituto is not None:
                 previo_s = (sustituto.sector, sustituto.ubicacion_oficina, sustituto.estado)
+                deposito_previo_sustituto = nombres_previos.get(sustituto.deposito_id)
                 sustituto.sector = hueco_sector
                 sustituto.ubicacion_oficina = hueco_ubicacion
+                # Queda instalado en el puesto del cliente, o sea que sale del
+                # deposito donde estuviera. Sin esto un equipo prestado seguia
+                # figurando en el taller despues de instalarlo.
+                sustituto.deposito_id = None
                 sustituto.estado = "activo"
                 movs_sustituto = movimientos_por_cambio(
                     sustituto,
                     sector_previo=previo_s[0], ubicacion_previa=previo_s[1],
                     estado_previo=previo_s[2],
+                    deposito_previo=deposito_previo_sustituto,
+                    deposito_actual=None,
                     usuario=actor, motivo=motivo_final, incidencia_id=incidencia_id,
                 )
                 movimientos += movs_sustituto
@@ -353,7 +414,9 @@ class ReemplazoService:
                     session.refresh(r)
 
             return {
-                "retirado": _equipo_to_dict(retirado),
+                "retirado": _equipo_to_dict(retirado, deposito_actual_retirado),
+                # El sustituto sale del deposito al instalarse, asi que su
+                # nombre de deposito es siempre None.
                 "sustituto": _equipo_to_dict(sustituto) if sustituto is not None else None,
                 "movimientos": [_mov_to_dict(m) for m in movimientos],
                 "actividades": [_actividad_to_dict(a) for a in actividades],

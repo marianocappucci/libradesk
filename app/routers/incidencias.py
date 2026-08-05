@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..dependencies import (
     get_equipo_repository, get_incidencia_repository, get_reemplazo_service,
 )
+from ..services import incidencia_pdf
 from ..services.equipos import EquipoRepository
 from ..services.incidencias import IncidenciaRepository
 from ..services.reemplazo import (
@@ -19,7 +20,24 @@ router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 class IncidenciaIn(BaseModel):
     cliente_id: int
     equipo_id: int | None = None
+    # El activo alquilado afectado, si el problema es de un equipo NUESTRO
+    # puesto en el cliente. No excluye a `equipo_id`: un ticket puede tocar
+    # legítimamente las dos cosas.
+    activo_id: int | None = None
+    # Los tres papeles alrededor del ticket: quien lo **ejecuta**, quien lo
+    # **recepciona** y quien **vende**. Los tres apuntan al mismo catálogo de
+    # personal (`/api/tecnicos`), filtrable por rol.
     tecnico_id: int | None = None
+    recepcionista_id: int | None = None
+    vendedor_id: int | None = None
+    # `on_site` | `remoto`. Nullable a propósito: los tickets anteriores al
+    # 2026-08-04 no saben cómo se atendieron.
+    modalidad: str | None = None
+    # La agenda (pedido 42, fase B). Los tres nullable: agendar es
+    # opcional. El vehículo no viaja acá — sale del equipo asignado.
+    fecha_programada: datetime | None = None
+    duracion_minutos: int | None = None
+    equipo_trabajo_id: int | None = None
     sector_id: int | None = None
     # Hoja del catalogo de categorias ("Hardware -> Impresoras"), 2026-08-02.
     # Opcional a proposito: las 23 incidencias reales son previas al catalogo.
@@ -68,18 +86,22 @@ def create_incidencia(
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
     user: dict = Depends(get_current_user),
 ):
-    return incidencias.create(usuario_actor=user["username"], **data.model_dump())
+    try:
+        return incidencias.create(usuario_actor=user["username"], **data.model_dump())
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 @router.get("", response_model=list[IncidenciaOut])
 def list_incidencias(
     cliente_id: int | None = None, estado: str | None = None,
     equipo_id: int | None = None, categoria_id: int | None = None,
+    activo_id: int | None = None,
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
 ):
     return incidencias.list(
         cliente_id=cliente_id, estado=estado, equipo_id=equipo_id,
-        categoria_id=categoria_id,
+        categoria_id=categoria_id, activo_id=activo_id,
     )
 
 
@@ -89,6 +111,28 @@ def get_incidencia(incidencia_id: int, incidencias: IncidenciaRepository = Depen
     if incidencia is None:
         raise HTTPException(404, "incidencia not found")
     return incidencia
+
+
+@router.get("/{incidencia_id}/pdf")
+def incidencia_pdf_endpoint(
+    incidencia_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """La orden de trabajo del ticket, para imprimir (pedido 39).
+
+    `inline` y no `attachment`: lo normal es mirarla y mandarla a la impresora,
+    no bajarla. El nombre del archivo igual va, para cuando sí se la guarda.
+    """
+    datos = incidencias.datos_para_pdf(incidencia_id)
+    if datos is None:
+        raise HTTPException(404, "incidencia not found")
+    return Response(
+        content=incidencia_pdf.generar_pdf_incidencia(datos),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="incidencia-{incidencia_id}.pdf"',
+        },
+    )
 
 
 @router.put("/{incidencia_id}", response_model=IncidenciaOut)
@@ -101,6 +145,8 @@ def update_incidencia(
         return incidencias.update(incidencia_id, usuario_actor=user["username"], **data.model_dump())
     except KeyError:
         raise HTTPException(404, "incidencia not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 @router.delete("/{incidencia_id}", status_code=204)

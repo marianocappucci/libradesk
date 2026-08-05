@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
-import { api, ApiError, type Tecnico } from '../api'
+import { api, ApiError, ROL_LABELS, type Tecnico } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,9 +20,27 @@ import { Pencil, Plus, Trash2, Wrench } from 'lucide-react'
 
 const tecnicoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
-})
+  // Los tres roles son independientes: la misma persona puede ser técnica y
+  // vendedora, que es el caso normal en una empresa chica (pedido 41).
+  es_tecnico: z.boolean(),
+  es_recepcionista: z.boolean(),
+  es_vendedor: z.boolean(),
+  es_responsable: z.boolean(),
+}).refine(
+  (v) => v.es_tecnico || v.es_recepcionista || v.es_vendedor || v.es_responsable,
+  // Sin ningún rol la persona quedaría cargada y **fuera de los tres
+  // selectores** del ticket: invisible, que se lee como un bug del sistema.
+  { message: 'Elegí al menos un rol', path: ['es_tecnico'] },
+)
 
 type TecnicoFormValues = z.infer<typeof tecnicoSchema>
+
+const CAMPOS_ROL = [
+  { campo: 'es_tecnico', label: 'Técnico', ayuda: 'Ejecuta el trabajo' },
+  { campo: 'es_recepcionista', label: 'Recepcionista', ayuda: 'Toma el ticket' },
+  { campo: 'es_vendedor', label: 'Vendedor', ayuda: 'Habla con el cliente' },
+  { campo: 'es_responsable', label: 'Responsable de equipo', ayuda: 'Manda una cuadrilla' },
+] as const
 
 // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
 // mismo patrón que Contalibra. Antes el formulario era una card que se abría
@@ -42,7 +60,10 @@ export function Tecnicos() {
 
   const form = useForm<TecnicoFormValues>({
     resolver: zodResolver(tecnicoSchema),
-    defaultValues: { nombre: '' },
+    defaultValues: {
+      nombre: '', es_tecnico: true, es_recepcionista: false, es_vendedor: false,
+      es_responsable: false,
+    },
   })
 
   useEffect(() => {
@@ -70,25 +91,42 @@ export function Tecnicos() {
   function abrirNuevo() {
     setEditando(null)
     setFormError(null)
-    form.reset({ nombre: '' })
+    form.reset({
+      nombre: '', es_tecnico: true, es_recepcionista: false, es_vendedor: false,
+      es_responsable: false,
+    })
     setDialogOpen(true)
   }
 
   function abrirEditar(tecnico: Tecnico) {
     setEditando(tecnico)
     setFormError(null)
-    form.reset({ nombre: tecnico.nombre })
+    form.reset({
+      nombre: tecnico.nombre,
+      es_tecnico: tecnico.es_tecnico,
+      es_recepcionista: tecnico.es_recepcionista,
+      es_vendedor: tecnico.es_vendedor,
+      es_responsable: tecnico.es_responsable,
+    })
     setDialogOpen(true)
   }
 
   async function handleSubmit(values: TecnicoFormValues) {
     setSaving(true)
     setFormError(null)
+    const roles = {
+      es_tecnico: values.es_tecnico,
+      es_recepcionista: values.es_recepcionista,
+      es_vendedor: values.es_vendedor,
+      es_responsable: values.es_responsable,
+    }
     try {
       if (editando === null) {
-        await api.post('/api/tecnicos', { nombre: values.nombre, activo: true })
+        await api.post('/api/tecnicos', { nombre: values.nombre, activo: true, ...roles })
       } else {
-        await api.put(`/api/tecnicos/${editando.id}`, { nombre: values.nombre, activo: editando.activo })
+        await api.put(`/api/tecnicos/${editando.id}`, {
+          nombre: values.nombre, activo: editando.activo, ...roles,
+        })
       }
       setDialogOpen(false)
       await loadTecnicos()
@@ -102,7 +140,17 @@ export function Tecnicos() {
   async function toggleActivo(tecnico: Tecnico) {
     setError(null)
     try {
-      await api.put(`/api/tecnicos/${tecnico.id}`, { nombre: tecnico.nombre, activo: !tecnico.activo })
+      // Los roles viajan sin cambio: el PUT reemplaza el objeto entero, así que
+      // omitirlos dejaría a la persona con los defaults del modelo (sólo
+      // técnica) por el solo hecho de activarla o desactivarla.
+      await api.put(`/api/tecnicos/${tecnico.id}`, {
+        nombre: tecnico.nombre,
+        activo: !tecnico.activo,
+        es_tecnico: tecnico.es_tecnico,
+        es_recepcionista: tecnico.es_recepcionista,
+        es_vendedor: tecnico.es_vendedor,
+        es_responsable: tecnico.es_responsable,
+      })
       await loadTecnicos()
     } catch (err) {
       setError(describeError(err))
@@ -121,6 +169,18 @@ export function Tecnicos() {
 
   const columns = useMemo<ColumnDef<Tecnico>[]>(() => [
     { accessorKey: 'nombre', header: sortableHeader('Nombre'), size: 220, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="font-medium">{row.original.nombre}</span> },
+    {
+      id: 'roles',
+      header: 'Roles',
+      size: 220, minSize: 150,
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.roles.map((r) => (
+            <Badge key={r} variant="outline">{ROL_LABELS[r] ?? r}</Badge>
+          ))}
+        </div>
+      ),
+    },
     {
       accessorKey: 'activo',
       header: 'Estado',
@@ -174,6 +234,27 @@ export function Tecnicos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormItem className="w-full">
+                  <FormLabel>Roles</FormLabel>
+                  <div className="grid gap-2">
+                    {CAMPOS_ROL.map(({ campo, label, ayuda }) => (
+                      <FormField key={campo} control={form.control} name={campo} render={({ field }) => (
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={field.value}
+                            onChange={(e) => field.onChange(e.target.checked)}
+                            aria-label={label}
+                          />
+                          <span>{label}</span>
+                          <span className="text-xs text-muted-foreground">— {ayuda}</span>
+                        </label>
+                      )} />
+                    ))}
+                  </div>
+                  {/* El mensaje del `refine` cuelga de `es_tecnico`. */}
+                  <FormMessage>{form.formState.errors.es_tecnico?.message}</FormMessage>
+                </FormItem>
                 <DialogFooter className="w-full">
                   <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                   <Button type="submit" disabled={saving}>

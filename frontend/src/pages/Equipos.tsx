@@ -3,12 +3,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS as ESTADO_INCIDENCIA_LABELS,
-  MOVIMIENTO_LABELS, describirEquipo, ubicacionTexto, opcionesCliente,
-  type Cliente, type Equipo, type EquipoMovimiento, type Incidencia,
-  type Reparacion,
+  api, ApiError, ESTADO_EQUIPO_LABELS, describirEquipo, lugarDe, opcionesCliente,
+  opcionesDeposito, ubicacionTexto,
+  type Cliente, type Deposito, type Equipo,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,16 +23,15 @@ import {
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
 import {
-  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
+  Dialog, DialogClose, DialogContent, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { History, Monitor, Pencil, Plus, ShieldCheck, Trash2, Wrench } from 'lucide-react'
+import { Eye, Monitor, Pencil, Plus, Trash2 } from 'lucide-react'
 
-function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-}
+// Sin depósito: el equipo está instalado en el sector del cliente. Radix no
+// admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.
+const SIN_DEPOSITO = '__ninguno__'
 
 const equipoSchema = z.object({
   cliente_id: z.string().min(1, 'Elegí un cliente'),
@@ -43,6 +41,7 @@ const equipoSchema = z.object({
   serial: z.string().trim().optional(),
   ubicacion_oficina: z.string().trim().optional(),
   sector: z.string().trim().optional(),
+  deposito_id: z.string().optional(),
   estado: z.string().min(1),
   garantia_vence: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
@@ -55,7 +54,7 @@ type EquipoFormValues = z.infer<typeof equipoSchema>
 
 const EMPTY_VALUES: EquipoFormValues = {
   cliente_id: '', tipo: '', marca: '', modelo: '', serial: '',
-  ubicacion_oficina: '', sector: '', estado: 'activo',
+  ubicacion_oficina: '', sector: '', deposito_id: SIN_DEPOSITO, estado: 'activo',
   garantia_vence: '', observaciones: '', motivo: '',
 }
 
@@ -68,9 +67,11 @@ const TODOS = 'todos'
 export function Equipos() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const navigate = useNavigate()
 
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [depositos, setDepositos] = useState<Deposito[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
@@ -83,10 +84,6 @@ export function Equipos() {
   // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
   const [formError, setFormError] = useState<string | null>(null)
   const [aBorrar, setABorrar] = useState<Equipo | null>(null)
-  const [historialDe, setHistorialDe] = useState<Equipo | null>(null)
-  const [movimientos, setMovimientos] = useState<EquipoMovimiento[] | null>(null)
-  const [incidenciasDelEquipo, setIncidenciasDelEquipo] = useState<Incidencia[] | null>(null)
-  const [reparacionesDelEquipo, setReparacionesDelEquipo] = useState<Reparacion[] | null>(null)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
 
   const form = useForm<EquipoFormValues>({
@@ -127,6 +124,14 @@ export function Equipos() {
     (c) => c.activo || String(c.id) === form.watch('cliente_id'),
   )
 
+  // Depósitos ofrecibles: los propios de la empresa (reciben equipos de
+  // cualquier cliente) más los del cliente que se está eligiendo en el
+  // formulario. Es la misma regla que valida el backend; ofrecer los de otro
+  // cliente sería ofrecer algo que va a volver con un 422.
+  const depositosElegibles = depositos.filter(
+    (d) => d.cliente_id === null || String(d.cliente_id) === form.watch('cliente_id'),
+  )
+
   // El filtro lo resuelve el backend (`?cliente_id=`, ya existía y no lo usaba
   // nadie), no un filter local: es lo que escala cuando el parque crezca.
   const rutaEquipos = () =>
@@ -145,12 +150,16 @@ export function Equipos() {
     setLoading(true)
     setError(null)
     try {
-      const [eq, cl] = await Promise.all([
+      // Sólo los activos: el selector del formulario es para elegir a dónde va
+      // el equipo, y un depósito dado de baja no es un destino válido.
+      const [eq, cl, dep] = await Promise.all([
         api.get<Equipo[]>(rutaEquipos()),
         api.get<Cliente[]>('/api/clientes'),
+        api.get<Deposito[]>('/api/depositos?solo_activos=true'),
       ])
       setEquipos(eq)
       setClientes(cl)
+      setDepositos(dep)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -178,6 +187,7 @@ export function Equipos() {
       serial: equipo.serial ?? '',
       ubicacion_oficina: equipo.ubicacion_oficina ?? '',
       sector: equipo.sector ?? '',
+      deposito_id: equipo.deposito_id === null ? SIN_DEPOSITO : String(equipo.deposito_id),
       estado: equipo.estado,
       garantia_vence: equipo.garantia_vence ?? '',
       observaciones: equipo.observaciones ?? '',
@@ -197,6 +207,9 @@ export function Equipos() {
       serial: values.serial || null,
       ubicacion_oficina: values.ubicacion_oficina || null,
       sector: values.sector || null,
+      deposito_id: !values.deposito_id || values.deposito_id === SIN_DEPOSITO
+        ? null
+        : Number(values.deposito_id),
       estado: values.estado,
       observaciones: values.observaciones || null,
       // Antes iba `null` fijo porque el formulario no tenía el campo: cada
@@ -221,31 +234,6 @@ export function Equipos() {
     }
   }
 
-  async function verHistorial(equipo: Equipo) {
-    setHistorialDe(equipo)
-    setMovimientos(null)
-    setIncidenciasDelEquipo(null)
-    setReparacionesDelEquipo(null)
-    try {
-      // Las tres mitades de la ficha: qué le pasó al equipo (incidencias),
-      // dónde estuvo (movimientos) y cuántas veces salió a reparar
-      // (reparaciones). Antes sólo se veía la segunda, así que ni "¿cuántas
-      // veces falló?" ni "¿cuánto llevamos gastado en este aparato?" tenían
-      // respuesta.
-      const [movs, incs, reps] = await Promise.all([
-        api.get<EquipoMovimiento[]>(`/api/equipos/${equipo.id}/movimientos`),
-        api.get<Incidencia[]>(`/api/incidencias?equipo_id=${equipo.id}`),
-        api.get<Reparacion[]>(`/api/reparaciones?equipo_id=${equipo.id}`),
-      ])
-      setMovimientos(movs)
-      setIncidenciasDelEquipo(incs)
-      setReparacionesDelEquipo(reps)
-    } catch (err) {
-      setError(describeError(err))
-      setHistorialDe(null)
-    }
-  }
-
   async function handleDelete(equipo: Equipo) {
     setError(null)
     try {
@@ -264,6 +252,23 @@ export function Equipos() {
       { accessorKey: 'modelo', header: 'Modelo', size: 150, minSize: 100, cell: ({ row }) => row.original.modelo ?? '—' },
       { accessorKey: 'serial', header: 'Serial', size: 130, minSize: 100, cell: ({ row }) => row.original.serial ?? '—' },
       {
+        id: 'lugar',
+        header: 'Dónde está',
+        size: 160,
+        minSize: 110,
+        // Depósito o sector, nunca los dos: un equipo guardado en el taller no
+        // está en ningún sector del cliente. Ver `lugarDe`.
+        cell: ({ row }) => {
+          const e = row.original
+          return (
+            <span className="flex items-center gap-1.5">
+              {ubicacionTexto(lugarDe(e.deposito_nombre, e.sector), e.ubicacion_oficina)}
+              {e.deposito_nombre && <Badge variant="secondary">Depósito</Badge>}
+            </span>
+          )
+        },
+      },
+      {
         accessorKey: 'estado',
         header: 'Estado',
         size: 120,
@@ -275,14 +280,14 @@ export function Equipos() {
         ),
       },
     ]
-    // El historial es de solo lectura, así que lo ve cualquier usuario
-    // logueado; editar y borrar siguen siendo admin-only.
+    // La ficha es de solo lectura, así que la ve cualquier usuario logueado;
+    // editar y borrar siguen siendo admin-only.
     base.push({
       id: 'actions',
       header: () => <div className="text-right">Acciones</div>,
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
-          <Button size="icon" variant="outline" title="Ver historial de movimientos" aria-label="Ver historial de movimientos" onClick={() => verHistorial(row.original)}><History /></Button>
+          <Button size="icon" variant="outline" title="Ver ficha del equipo" aria-label="Ver ficha del equipo" onClick={() => navigate(`/equipos/${row.original.id}`)}><Eye /></Button>
           {isAdmin && (
             <>
               <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
@@ -373,6 +378,28 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {/* Guardar el equipo en un depósito reemplaza al sector como
+                    ubicación efectiva; el sector queda como de dónde salió.
+                    Sólo se ofrecen los propios y los del cliente elegido: el
+                    backend rechaza el resto (ver `_validar_deposito`). */}
+                <FormField control={form.control} name="deposito_id" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Depósito</FormLabel>
+                    <FormControl>
+                      <SelectBuscable
+                        value={field.value || SIN_DEPOSITO}
+                        onChange={field.onChange}
+                        opciones={[
+                          { value: SIN_DEPOSITO, label: 'Ninguno (en el puesto)' },
+                          ...opcionesDeposito(depositosElegibles),
+                        ]}
+                        ariaLabel="Depósito"
+                        className="w-52"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="garantia_vence" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Garantía vence</FormLabel>
@@ -451,169 +478,19 @@ export function Equipos() {
               emptyMessage={filtroCliente === TODOS
                 ? 'Sin equipos todavía.'
                 : 'Este cliente no tiene equipos cargados.'}
+              onRowClick={(e) => navigate(`/equipos/${e.id}`)}
               search={{
                 campos: (e) => [
                   e.tipo, e.marca, e.modelo, e.serial,
-                  e.sector, e.ubicacion_oficina, clienteNombre(e.cliente_id),
+                  e.sector, e.deposito_nombre, e.ubicacion_oficina,
+                  clienteNombre(e.cliente_id),
                 ],
-                placeholder: 'Buscar por tipo, marca, modelo, serial, sector o cliente',
+                placeholder: 'Buscar por tipo, marca, modelo, serial, depósito, sector o cliente',
               }}
             />
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={historialDe !== null} onOpenChange={(open) => !open && setHistorialDe(null)}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Historial del equipo</DialogTitle>
-            <DialogDescription>
-              {historialDe && describirEquipo(historialDe)}
-              {historialDe?.serial ? ` — ${historialDe.serial}` : ''}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-2">
-            <h4 className="text-sm font-semibold">
-              Incidencias{incidenciasDelEquipo ? ` (${incidenciasDelEquipo.length})` : ''}
-            </h4>
-            {incidenciasDelEquipo === null ? (
-              <p className="text-sm text-muted-foreground">Cargando…</p>
-            ) : incidenciasDelEquipo.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Este equipo nunca falló.</p>
-            ) : (
-              incidenciasDelEquipo.map((i) => (
-                <Link
-                  key={i.id}
-                  to={`/incidencias/${i.id}`}
-                  className="grid gap-0.5 rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={i.estado === 'cerrado' || i.estado === 'resuelta' ? 'default' : 'outline'}>
-                      {ESTADO_INCIDENCIA_LABELS[i.estado] ?? i.estado}
-                    </Badge>
-                    <span className="font-medium">{i.titulo}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    #{i.id} · {formatFecha(i.fecha_creacion)}
-                  </span>
-                </Link>
-              ))
-            )}
-          </div>
-
-          <div className="grid gap-2">
-            <h4 className="text-sm font-semibold">
-              Reparaciones{reparacionesDelEquipo ? ` (${reparacionesDelEquipo.length})` : ''}
-            </h4>
-            {reparacionesDelEquipo === null ? (
-              <p className="text-sm text-muted-foreground">Cargando…</p>
-            ) : reparacionesDelEquipo.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nunca salió a service.</p>
-            ) : (
-              <>
-                {reparacionesDelEquipo.map((r) => (
-                  <div key={r.id} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={r.abierta ? 'default' : 'outline'}>
-                        {r.abierta ? 'En service' : 'Volvió'}
-                      </Badge>
-                      <span className="font-medium">{r.proveedor_nombre}</span>
-                      {r.en_garantia && (
-                        <Badge variant="outline" className="gap-1">
-                          <ShieldCheck className="size-3" />Garantía
-                        </Badge>
-                      )}
-                      {r.incidencia_id !== null && (
-                        <Link
-                          to={`/incidencias/${r.incidencia_id}`}
-                          className="text-xs underline underline-offset-2"
-                        >
-                          Incidencia #{r.incidencia_id}
-                        </Link>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {[
-                        r.abierta
-                          ? `Salió el ${r.fecha_envio} · ${r.dias_afuera} días afuera`
-                          : `${r.fecha_envio} → ${r.fecha_retorno} · ${r.dias_afuera} días`,
-                        r.remito_salida ? `remito ${r.remito_salida}` : null,
-                        r.rma ? `RMA ${r.rma}` : null,
-                        r.costo !== null ? `$ ${r.costo.toLocaleString('es-AR')}` : null,
-                      ].filter(Boolean).join(' · ')}
-                    </span>
-                    {r.diagnostico && (
-                      <span className="text-xs text-muted-foreground">{r.diagnostico}</span>
-                    )}
-                  </div>
-                ))}
-                {/* Lo que ninguna fila suelta contesta: cuánto lleva gastado
-                    este aparato. Con eso al lado del precio de uno nuevo, la
-                    decisión de reemplazarlo deja de ser una corazonada. */}
-                {(() => {
-                  const gastado = reparacionesDelEquipo
-                    .reduce((suma, r) => suma + (r.costo ?? 0), 0)
-                  return gastado > 0 ? (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Wrench className="size-3" />
-                      Gastado en reparaciones: <strong>$ {gastado.toLocaleString('es-AR')}</strong>
-                    </p>
-                  ) : null
-                })()}
-              </>
-            )}
-          </div>
-
-          <h4 className="text-sm font-semibold">Movimientos</h4>
-          {movimientos === null ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-          ) : movimientos.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Sin movimientos registrados.
-            </p>
-          ) : (
-            <div className="grid gap-2">
-              {movimientos.map((m) => {
-                const origen = ubicacionTexto(m.sector_origen, m.ubicacion_origen)
-                // Un cambio de estado no tiene destino: la ubicación viaja
-                // como origen (de dónde sale el equipo). Dibujar la flecha
-                // igual mostraría "Service → sin ubicación", como si se
-                // hubiera movido a ninguna parte.
-                const tieneDestino = Boolean(m.sector_destino || m.ubicacion_destino)
-                const destino = ubicacionTexto(m.sector_destino, m.ubicacion_destino)
-                return (
-                  <div key={m.id} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={m.tipo === 'baja' ? 'destructive' : 'outline'}>
-                        {MOVIMIENTO_LABELS[m.tipo] ?? m.tipo}
-                      </Badge>
-                      <span className="font-medium">{m.descripcion ?? '—'}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {tieneDestino ? `${origen} → ${destino}` : `en ${origen}`}
-                    </span>
-                    {m.motivo && <span className="text-xs text-muted-foreground">Motivo: {m.motivo}</span>}
-                    <span className="text-xs text-muted-foreground">
-                      {m.usuario} · {formatFecha(m.fecha)}
-                      {/* El "por qué" del movimiento: sin esto el historial dice
-                          que salió de Admisión pero no de qué ticket vino. */}
-                      {m.incidencia_id && (
-                        <>
-                          {' · '}
-                          <Link to={`/incidencias/${m.incidencia_id}`} className="underline">
-                            Incidencia #{m.incidencia_id}
-                          </Link>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={aBorrar !== null}

@@ -34,6 +34,21 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn()
 }
 
+// Cuarta API que jsdom no trae y Radix toca: el `Select` llama a
+// `hasPointerCapture` en el `pointerdown` del trigger. El TypeError se come
+// dentro del handler de React, asi que el sintoma NO es un test que revienta
+// sino uno que dice "Unable to find role=listbox" — el desplegable
+// simplemente no abre, y parece que el click no llego.
+//
+// `hasPointerCapture` devuelve false y las otras dos no hacen nada: sin motor
+// de layout ni puntero real, capturar el puntero no significa nada en jsdom, y
+// lo unico que hace falta es que las funciones existan.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+}
+
 // jsdom NO tiene motor de layout: implementa `document.createRange()` pero
 // el Range que devuelve no trae `getBoundingClientRect`. El `data-table`
 // de libra-ui mide ahi el ancho de la columna de acciones y revienta con

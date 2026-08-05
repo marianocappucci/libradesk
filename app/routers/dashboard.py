@@ -34,3 +34,22 @@ def cliente(
     if ficha is None:
         raise HTTPException(404, "cliente not found")
     return {"cliente": ficha, **dashboard.cliente(cliente_id, dias_garantia)}
+
+
+@router.get("/equipo/{equipo_id}")
+def equipo(
+    equipo_id: int,
+    dashboard: DashboardService = Depends(get_dashboard_service),
+):
+    """La ficha de `/equipos/:id`: el equipo, **su cliente**, y todo lo que le
+    paso (incidencias, reparaciones y movimientos).
+
+    Mismo router que la ficha del cliente y por el mismo motivo — ver arriba.
+    A diferencia de aquella, el 404 sale del propio servicio: la ficha del
+    equipo no necesita otro repositorio para armarse, asi que preguntar dos
+    veces por la misma fila seria consulta de mas.
+    """
+    ficha = dashboard.equipo(equipo_id)
+    if ficha is None:
+        raise HTTPException(404, "equipo not found")
+    return ficha

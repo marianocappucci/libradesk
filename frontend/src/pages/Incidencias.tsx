@@ -25,7 +25,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { CircleAlert, Plus } from 'lucide-react'
+import { CircleAlert, Monitor, Plus } from 'lucide-react'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -58,6 +58,12 @@ export function Incidencias() {
   // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Alta de equipo sin salir del alta de la incidencia (pedido 38).
+  const [altaEquipo, setAltaEquipo] = useState(false)
+  const [creandoEquipo, setCreandoEquipo] = useState(false)
+  const [equipoError, setEquipoError] = useState<string | null>(null)
+  const [equipoNuevo, setEquipoNuevo] = useState({ tipo: '', marca: '', modelo: '', serial: '' })
+
   const [filtroEstado, setFiltroEstado] = useState(TODOS)
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
@@ -87,6 +93,47 @@ export function Incidencias() {
   const clientesElegibles = clientes.filter(
     (c) => c.activo || String(c.id) === form.watch('cliente_id'),
   )
+
+  const equiposDelCliente = equipos.filter(
+    (e) => String(e.cliente_id) === form.watch('cliente_id'),
+  )
+
+  // --- Alta de equipo desde el propio formulario del ticket (pedido 38) -----
+
+  function abrirAltaEquipo() {
+    setEquipoError(null)
+    setEquipoNuevo({ tipo: '', marca: '', modelo: '', serial: '' })
+    setAltaEquipo(true)
+  }
+
+  async function crearEquipo() {
+    const clienteId = form.watch('cliente_id')
+    if (!clienteId || !equipoNuevo.tipo.trim()) {
+      setEquipoError('El tipo es obligatorio.')
+      return
+    }
+    setCreandoEquipo(true)
+    setEquipoError(null)
+    try {
+      const creado = await api.post<Equipo>('/api/equipos', {
+        cliente_id: Number(clienteId),
+        tipo: equipoNuevo.tipo.trim(),
+        marca: equipoNuevo.marca.trim() || null,
+        modelo: equipoNuevo.modelo.trim() || null,
+        serial: equipoNuevo.serial.trim() || null,
+      })
+      // Se suma a la lista y queda **elegido**: si sólo se recargara, el
+      // usuario tendría que volver a buscarlo, que es la mitad del problema
+      // que este atajo viene a sacar.
+      setEquipos((previos) => [...previos, creado])
+      form.setValue('equipo_id', String(creado.id))
+      setAltaEquipo(false)
+    } catch (err) {
+      setEquipoError(describeError(err))
+    } finally {
+      setCreandoEquipo(false)
+    }
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -264,15 +311,28 @@ export function Incidencias() {
                         // equipo que no es de ese cliente.
                         opciones={[
                           { value: NONE, label: 'Sin equipo' },
-                          ...opcionesEquipo(
-                            equipos.filter((e) => String(e.cliente_id) === form.watch('cliente_id')),
-                          ),
+                          ...opcionesEquipo(equiposDelCliente),
                         ]}
                         ariaLabel="Equipo"
                         className="w-44"
                         emptyMessage="Ese cliente no tiene equipos."
                       />
                     </FormControl>
+                    {/* Pedido 38: el equipo con el que se trabajó puede no
+                        estar cargado todavía, y hasta ahora eso obligaba a
+                        abandonar el alta, ir a Equipos, cargarlo y volver a
+                        empezar. Se carga acá mismo y queda elegido. */}
+                    <Button
+                      type="button" variant="link" size="sm"
+                      className="h-auto justify-start p-0 text-xs"
+                      disabled={!form.watch('cliente_id')}
+                      onClick={abrirAltaEquipo}
+                    >
+                      <Plus className="size-3" />
+                      {form.watch('cliente_id')
+                        ? 'El equipo no está en la lista'
+                        : 'Elegí un cliente para poder agregar un equipo'}
+                    </Button>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -301,6 +361,66 @@ export function Incidencias() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* El alta de equipo vive FUERA del Dialog de la incidencia: anidar dos
+          Dialog de Radix cierra el de adentro al hacer foco en el de afuera, y
+          el formulario del ticket se perdería. Los dos abiertos a la vez es
+          justo lo que se quiere — se vuelve al ticket con el equipo elegido. */}
+      <Dialog open={altaEquipo} onOpenChange={setAltaEquipo}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Monitor className="size-4" />Nuevo equipo
+            </DialogTitle>
+            <DialogDescription>
+              Se agrega al parque de{' '}
+              {clientes.find((c) => String(c.id) === form.watch('cliente_id'))?.nombre ?? 'el cliente'}
+              {' '}y queda elegido en la incidencia.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            {equipoError && <p className="text-sm text-destructive">{equipoError}</p>}
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium">Tipo</span>
+              <Input
+                autoFocus
+                value={equipoNuevo.tipo}
+                onChange={(e) => setEquipoNuevo({ ...equipoNuevo, tipo: e.target.value })}
+                placeholder="Notebook, Impresora, Router…"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">Marca</span>
+                <Input
+                  value={equipoNuevo.marca}
+                  onChange={(e) => setEquipoNuevo({ ...equipoNuevo, marca: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">Modelo</span>
+                <Input
+                  value={equipoNuevo.modelo}
+                  onChange={(e) => setEquipoNuevo({ ...equipoNuevo, modelo: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium">Número de serie</span>
+              <Input
+                value={equipoNuevo.serial}
+                onChange={(e) => setEquipoNuevo({ ...equipoNuevo, serial: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+            <Button type="button" onClick={crearEquipo} disabled={creandoEquipo}>
+              {creandoEquipo ? 'Creando…' : 'Crear y elegir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
