@@ -9,10 +9,13 @@
  *  botón "atrás" del navegador hace lo que se espera.
  */
 import type { Pestania } from '@/components/conmutador'
-import { Building2, Tags, Wrench } from 'lucide-react'
+import { Building2, Database, Tags, Wrench } from 'lucide-react'
 
 export const PESTANIAS_CONFIG: readonly Pestania[] = [
   { clave: 'empresa', to: '/configuracion', label: 'Empresa', icono: Building2 },
   { clave: 'categorias', to: '/configuracion/categorias', label: 'Tipos de incidencia', icono: Tags },
   { clave: 'proveedores', to: '/configuracion/proveedores', label: 'Proveedores', icono: Wrench },
+  // Última a propósito: es la que más rompe si se toca sin querer, y la que
+  // menos se usa en el día a día. Mismo lugar que en Contalibra.
+  { clave: 'datos', to: '/configuracion/datos', label: 'Datos / Backup', icono: Database },
 ]

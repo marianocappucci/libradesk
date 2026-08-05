@@ -16,6 +16,11 @@ from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
 from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
+from libracore.config_router import (
+    build_backup_router, build_empresa_admin_router, build_empresa_router,
+)
+from libracore.respaldo import Instancia
+from sqlalchemy.engine import make_url
 
 from . import database, schema
 from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
@@ -23,7 +28,7 @@ from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    activos, agenda, categorias, clientes, config_empresa, contratos, dashboard,
+    activos, agenda, categorias, clientes, contratos, dashboard,
     depositos, equipos, equipos_trabajo, health, incidencias, informes, ingresos,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
     tecnicos, users,
@@ -233,9 +238,40 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
         presupuestos.router,
         dependencies=staff_or_admin + [Depends(require_module("presupuestos"))],
     )
-    # Datos de la empresa (encabezado de los PDF): los edita solo admin,
-    # el resto del staff los lee para previsualizar.
-    app.include_router(config_empresa.router, dependencies=staff_or_admin)
+    # Datos de la empresa, logo y backup. Los tres routers salen de LibraCore
+    # v1.10.0: el de empresa reemplaza a `app/routers/config_empresa.py`, que
+    # hacia exactamente esto y ahora lo hacen los seis productos igual.
+    #
+    # La LECTURA queda con `staff_or_admin` —no admin— porque el generador de
+    # PDF la usa: cerrarla romperia la previsualizacion de un remito para
+    # cualquiera que no sea admin. La escritura, el logo y el backup si son
+    # admin: un backup es una copia completa de los datos del cliente.
+    app.include_router(build_empresa_router(), dependencies=staff_or_admin)
+    app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
+    app.include_router(
+        build_backup_router(
+            Instancia(
+                nombre="libradesk",
+                # Una sola base: a diferencia de Gestiolibra, MedLibra y
+                # VentaLibra, aca `usuarios` vive en el MISMO archivo que el
+                # dominio (`AuthBase.metadata.create_all(engine)`, arriba).
+                bases=[make_url(database_url).database],
+                directorios=[os.path.join(data_dir, "logos")],
+            ),
+            os.path.join(data_dir, "backups"),
+            # 🔴 Sin estos dos el restore devuelve `ok` y **no tiene efecto**
+            # hasta que alguien reinicie el contenedor: el pool sigue con el
+            # archivo viejo abierto y la app sirve la base anterior. Lo
+            # encontro `test_config_backup.py::test_crear_listar_y_restaurar`,
+            # que restauraba y despues preguntaba por los clientes.
+            #
+            # `dispose()` sirve para los dos momentos: cierra el pool y deja
+            # que se vuelva a abrir solo en la proxima conexion.
+            cerrar_conexiones=engine.dispose,
+            reabrir_conexiones=engine.dispose,
+        ),
+        dependencies=[Depends(require_admin)],
+    )
 
     # Logs: admin y nada más. Es la pantalla que dice quién borró qué y desde
     # qué IP entró cada uno; el staff no tiene por qué ver la actividad de sus

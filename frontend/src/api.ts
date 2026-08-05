@@ -782,6 +782,19 @@ export type ConfigEmpresa = {
   empresa_inicio_actividades: string
 }
 
+/** Un backup guardado en el servidor. Lo devuelve `GET /api/config/backups`
+ *  (LibraCore v1.10.0).
+ *
+ *  **Es un ZIP con las bases y los archivos de la instancia**, no un `.db`
+ *  suelto: acá la base es una sola, pero en Gestiolibra, MedLibra y VentaLibra
+ *  son dos, y en MedLibra van además los documentos clínicos. El formato es el
+ *  mismo en los seis a propósito. */
+export type BackupGuardado = {
+  filename: string
+  size_mb: number
+  mtime: string
+}
+
 export type DashboardSummary = {
   incidencias_por_estado: Record<string, number>
   incidencias_por_prioridad_abiertas: Record<string, number>

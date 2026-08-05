@@ -987,7 +987,7 @@ def test_el_pdf_no_se_cae_con_un_guion_largo(client):
     porque los tres llegan al PDF por caminos distintos.
     """
     _login(client)
-    client.put("/api/config-empresa", json={"empresa_nombre": "Compulibra — Soporte IT"})
+    client.put("/api/config/empresa", json={"empresa_nombre": "Compulibra — Soporte IT"})
     cliente_id = _cliente_para_comprobantes(client)
     pid = client.post("/api/presupuestos", json={
         "client_id": cliente_id,
@@ -1010,15 +1010,15 @@ def test_el_pdf_no_se_cae_con_un_guion_largo(client):
 def test_config_empresa_ida_y_vuelta(client):
     """El encabezado de los PDF. Sin esto salen con la empresa en blanco."""
     _login(client)
-    assert client.get("/api/config-empresa").json()["empresa_nombre"] == ""
+    assert client.get("/api/config/empresa").json()["empresa_nombre"] == ""
 
-    r = client.put("/api/config-empresa", json={
+    r = client.put("/api/config/empresa", json={
         "empresa_nombre": "Compulibra", "empresa_cuit": "20-12345678-9",
         "empresa_direccion": "Suipacha 123", "empresa_email": "info@compulibra.com.ar",
     })
     assert r.status_code == 200
     assert r.json()["empresa_nombre"] == "Compulibra"
-    assert client.get("/api/config-empresa").json()["empresa_cuit"] == "20-12345678-9"
+    assert client.get("/api/config/empresa").json()["empresa_cuit"] == "20-12345678-9"
 
 
 def test_config_empresa_no_expone_ni_pisa_secretos(client):
@@ -1031,10 +1031,10 @@ def test_config_empresa_no_expone_ni_pisa_secretos(client):
     cfg["mp_access_token"] = "TOKEN-QUE-NO-SE-DEBE-PERDER"
     config_manager.save(cfg)
 
-    r = client.get("/api/config-empresa")
+    r = client.get("/api/config/empresa")
     assert "mp_access_token" not in r.json()
 
-    client.put("/api/config-empresa", json={"empresa_nombre": "Compulibra"})
+    client.put("/api/config/empresa", json={"empresa_nombre": "Compulibra"})
     assert config_manager.load()["mp_access_token"] == "TOKEN-QUE-NO-SE-DEBE-PERDER"
 
 
