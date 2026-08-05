@@ -24,8 +24,17 @@ comprobante que nunca se le dieron a nadie.
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0010_ingresos_reparacion"
-down_revision = "0009_agenda_de_equipos"
+# Renumerada de `0010` a `0011` al mergear: una sesión paralela metió
+# `0010_log_de_actividad` colgando del mismo `0009`. Dos revisiones con el mismo
+# `down_revision` dan **dos cabezas**, y ahí Alembic no sabe cuál correr. El
+# criterio ya usado con el choque del `0004` es el mismo: **el que mergea
+# segundo renumera y encadena**, en vez de que las dos compartan padre. Lo cubre
+# `test_la_cadena_tiene_una_sola_cabeza`.
+#
+# Encadenar es seguro porque las dos son aditivas puras y tocan tablas distintas
+# (`log_actividad` y `ingresos_reparacion`): el orden entre ellas no cambia nada.
+revision = "0011_ingresos_reparacion"
+down_revision = "0010_log_de_actividad"
 branch_labels = None
 depends_on = None
 

@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI
 
 import os
 
+from libraauth.auth_events import AuthEventRepository
 from libraauth.models import Base as AuthBase
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
@@ -13,18 +14,19 @@ from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 
 from . import database, schema
-from .auth import build_session_auth, require_admin_o_servicio, require_staff
+from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
 from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, config_empresa, contratos, dashboard,
     depositos, equipos, equipos_trabajo, health, incidencias, informes,
-    ingresos,
+    ingresos, logs,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
     tecnicos, users,
 )
 from .services.activos import ActivoRepository
+from .services.auditoria import AuditoriaRepository, configurar_auditoria, usuario_actual
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
@@ -74,6 +76,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     module_repository = ModuleRepository(sessions)
     module_repository.ensure_seeded()
 
+    # Log de actividad: cuelga del `flush` de SQLAlchemy, así que se engancha
+    # al session_factory y no a la app — cualquier escritura del producto pasa
+    # por acá, incluidas las que todavía no existen. Ver services/auditoria.py.
+    configurar_auditoria(sessions)
+
     app = FastAPI(title="LibraDesk")
     app.state.users = user_repository
     app.state.session_auth = build_session_auth(user_repository)
@@ -117,7 +124,33 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.remitos = rp_service.RemitoService()
     app.state.presupuestos = rp_service.PresupuestoService()
     app.state.modules = module_repository
+    app.state.auditoria = AuditoriaRepository(sessions)
+    # Log de accesos (libraauth v0.8.0). Es opt-in por ausencia en el motor:
+    # setearlo acá es lo único que hace falta para que login, logout e intentos
+    # fallidos queden registrados.
+    app.state.auth_events = AuthEventRepository(sessions)
     app.state.data_dir = data_dir
+
+    @app.middleware("http")
+    async def _sellar_usuario(request, call_next):
+        """Deja el usuario de la request al alcance del `flush`, que ocurre
+        tres capas más abajo (router → repositorio → sesión).
+
+        Sale de la cookie firmada y no de la base: `get_current_user` sólo
+        verifica la firma, así que esto no agrega una consulta por request. Un
+        request sin sesión (el login, el health) deja el default `Sistema`.
+
+        El `reset` del token no es opcional aunque el server sea async: los
+        workers reusan el contexto entre requests, y sin esto el usuario de una
+        request podría quedar pegado para la siguiente que entrara sin sesión.
+        """
+        usuario = app.state.session_auth.get_current_user(request)
+        token = usuario_actual.set(usuario) if usuario else None
+        try:
+            return await call_next(request)
+        finally:
+            if token is not None:
+                usuario_actual.reset(token)
 
     app.include_router(health.router)
     app.include_router(auth_router.router)
@@ -212,5 +245,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # Datos de la empresa (encabezado de los PDF): los edita solo admin,
     # el resto del staff los lee para previsualizar.
     app.include_router(config_empresa.router, dependencies=staff_or_admin)
+
+    # Logs: admin y nada más. Es la pantalla que dice quién borró qué y desde
+    # qué IP entró cada uno; el staff no tiene por qué ver la actividad de sus
+    # compañeros. El router no lleva `staff_or_admin` a propósito — sería un
+    # permiso más ancho, no más angosto.
+    app.include_router(logs.router, dependencies=[Depends(require_admin)])
 
     return app

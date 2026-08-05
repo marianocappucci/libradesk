@@ -52,6 +52,7 @@ from .database import Base
 # autogenerate SIN filtro: ahi la tabla aparecia en la lista de las que se
 # dropearian, junto a las cinco ajenas. Esa es la unica senal que hay.
 from .services import activos as _activos  # noqa: F401
+from .services import auditoria as _auditoria  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401
 from .services import contratos as _contratos  # noqa: F401

@@ -2,9 +2,11 @@
 `request.app.state` — mismo patron que `gestiolibra/app/dependencies.py`."""
 from fastapi import Request
 
+from libraauth.auth_events import AuthEventRepository
 from libraauth.repository import UserRepository
 
 from .services.activos import ActivoRepository
+from .services.auditoria import AuditoriaRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
@@ -26,6 +28,14 @@ from .services.tecnicos import TecnicoRepository
 
 def get_user_repository(request: Request) -> UserRepository:
     return request.app.state.users
+
+
+def get_auditoria_repository(request: Request) -> AuditoriaRepository:
+    return request.app.state.auditoria
+
+
+def get_auth_events_repository(request: Request) -> AuthEventRepository:
+    return request.app.state.auth_events
 
 
 def get_cliente_repository(request: Request) -> ClienteRepository:
