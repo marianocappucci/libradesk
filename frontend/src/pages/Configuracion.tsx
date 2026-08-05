@@ -1,12 +1,18 @@
-// Datos de la empresa que encabezan los PDF de remitos y presupuestos.
-// Sin esto los PDF salen con el encabezado en blanco, porque
-// libracore.config_manager devuelve strings vacios cuando no hay
-// config.json. Solo admin puede guardar (el backend exige el rol).
+// Configuración, en tres pestañas (pedido 36, 2026-08-04): datos de la empresa,
+// tipos de incidencia y proveedores. Antes eran tres tarjetas apiladas en una
+// sola pantalla larga.
+//
+// Los datos de la empresa encabezan los PDF de remitos y presupuestos: sin esto
+// salen con el encabezado en blanco, porque libracore.config_manager devuelve
+// strings vacios cuando no hay config.json. Solo admin puede guardar (el
+// backend exige el rol).
 import { useEffect, useState } from 'react'
 import {
   api, ApiError, type CategoriaIncidencia, type ConfigEmpresa, type Proveedor,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
+import { Conmutador } from '@/components/conmutador'
+import { PESTANIAS_CONFIG } from './configuracion-piezas'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -505,9 +511,7 @@ export function Configuracion() {
   }
 
   return (
-    <div className="grid gap-4">
-      <h2 className="text-lg font-semibold">Configuración</h2>
-
+    <Pantalla actual="empresa">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Datos de la empresa</CardTitle>
@@ -555,10 +559,42 @@ export function Configuracion() {
           )}
         </CardContent>
       </Card>
+    </Pantalla>
+  )
+}
 
-      <CategoriasCard esAdmin={esAdmin} />
-
-      <ProveedoresCard esAdmin={esAdmin} />
+/** El marco que comparten las tres pestañas: título y conmutador.
+ *
+ *  Está acá y no repetido en cada una porque el conmutador tiene que verse
+ *  idéntico en las tres — si una lo dibujara distinto, cambiar de pestaña se
+ *  sentiría como cambiar de pantalla.
+ */
+function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-4">
+      <h2 className="text-lg font-semibold">Configuración</h2>
+      <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
+      {children}
     </div>
+  )
+}
+
+/** Pestaña de tipos de incidencia. */
+export function ConfiguracionCategorias() {
+  const { user } = useAuth()
+  return (
+    <Pantalla actual="categorias">
+      <CategoriasCard esAdmin={user?.role === 'admin'} />
+    </Pantalla>
+  )
+}
+
+/** Pestaña de proveedores de reparación. */
+export function ConfiguracionProveedores() {
+  const { user } = useAuth()
+  return (
+    <Pantalla actual="proveedores">
+      <ProveedoresCard esAdmin={user?.role === 'admin'} />
+    </Pantalla>
   )
 }

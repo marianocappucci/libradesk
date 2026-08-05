@@ -1,39 +1,30 @@
-/** Lo que comparten las dos pantallas de depósitos: la tarjeta y el conmutador.
+/** Lo que comparten las dos pantallas de depósitos: la tarjeta y sus pestañas.
  *
  *  Las pantallas se separaron el 2026-08-04 (pedido 35) porque son dos
  *  preguntas distintas — "qué tengo yo guardado" y "qué tiene guardado cada
  *  cliente"— y mezclarlas obligaba a que el formulario preguntara de quién es
  *  el depósito en vez de saberlo. La tarjeta sí es la misma, así que vive acá:
  *  una copia por pantalla se desincroniza.
+ *
+ *  El conmutador **se mudó a `components/conmutador.tsx`** al necesitarlo
+ *  también Configuración (pedido 36). Acá queda sólo la definición de estas dos
+ *  pestañas, que es lo propio de depósitos.
  */
-import { Link } from 'react-router-dom'
 import type { Deposito } from '../api'
+import { Conmutador, type Pestania } from '@/components/conmutador'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Link } from 'react-router-dom'
 import { Building2, Eye, Monitor, Pencil, Star, Trash2, Users } from 'lucide-react'
 
+const PESTANIAS_DEPOSITOS: readonly Pestania[] = [
+  { clave: 'propios', to: '/depositos', label: 'De la empresa', icono: Building2 },
+  { clave: 'clientes', to: '/depositos/clientes', label: 'De clientes', icono: Users },
+]
+
 export function ConmutadorDepositos({ actual }: { actual: 'propios' | 'clientes' }) {
-  const tabs = [
-    { clave: 'propios', to: '/depositos', label: 'De la empresa', icono: Building2 },
-    { clave: 'clientes', to: '/depositos/clientes', label: 'De clientes', icono: Users },
-  ] as const
-  return (
-    <div className="flex w-fit gap-1 rounded-md border p-1">
-      {tabs.map(({ clave, to, label, icono: Icono }) => (
-        <Button
-          key={clave}
-          asChild
-          size="sm"
-          variant={actual === clave ? 'default' : 'ghost'}
-        >
-          <Link to={to} aria-current={actual === clave ? 'page' : undefined}>
-            <Icono />{label}
-          </Link>
-        </Button>
-      ))}
-    </div>
-  )
+  return <Conmutador pestanias={PESTANIAS_DEPOSITOS} actual={actual} />
 }
 
 export function TarjetaDeposito({ d, onEditar, onBorrar, onPredeterminar }: {
