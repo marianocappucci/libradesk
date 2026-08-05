@@ -16,14 +16,16 @@
 // `categorias.router` y `proveedores.router` con `staff_or_admin`, así que
 // cualquier staff **ya podía** crear, editar y borrar por la API. Esconderle
 // los botones no restringía nada — sólo hacía que las dos pestañas se vieran
-// rotas para quien no fuera admin. `config-empresa` sí es distinto: su PUT
-// lleva `Depends(require_admin)` de verdad, y ahí el gate se queda.
+// rotas para quien no fuera admin. Los datos de empresa sí son distintos: el
+// `GET` de `/api/config/empresa` es staff, pero el `PUT` va en un router
+// aparte con `require_admin` de verdad, y ahí el gate se queda.
 //
 // Si se decide que estos catálogos sean admin-only, el lugar es el backend, no
 // esta pantalla.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  api, ApiError, type CategoriaIncidencia, type ConfigEmpresa, type Proveedor,
+  api, ApiError, type BackupGuardado, type CategoriaIncidencia, type ConfigEmpresa,
+  type Proveedor,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Conmutador } from '@/components/conmutador'
@@ -34,7 +36,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, CornerDownRight, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, CornerDownRight, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */
@@ -502,7 +504,7 @@ export function Configuracion() {
     setLoading(true)
     setError(null)
     try {
-      setConfig(await api.get<ConfigEmpresa>('/api/config-empresa'))
+      setConfig(await api.get<ConfigEmpresa>('/api/config/empresa'))
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -516,7 +518,7 @@ export function Configuracion() {
     setError(null)
     setGuardado(false)
     try {
-      setConfig(await api.put<ConfigEmpresa>('/api/config-empresa', config))
+      setConfig(await api.put<ConfigEmpresa>('/api/config/empresa', config))
       setGuardado(true)
     } catch (err) {
       setError(describeError(err))
@@ -574,7 +576,118 @@ export function Configuracion() {
           )}
         </CardContent>
       </Card>
+
+      <LogoCard esAdmin={esAdmin} />
     </Pantalla>
+  )
+}
+
+/** El logo que encabeza los PDF.
+ *
+ *  El generador de LibraCore ya lo buscaba en `LOGO_DIR`; lo que no existía
+ *  era el modo de ponerlo ahí sin entrar al volumen del contenedor.
+ */
+function LogoCard({ esAdmin }: { esAdmin: boolean }) {
+  // `version` fuerza a recargar la imagen después de subir o borrar: el
+  // navegador cachea `/api/config/empresa/logo` y sin esto se sigue viendo el
+  // logo anterior aunque el nuevo ya esté en el servidor.
+  const [version, setVersion] = useState(0)
+  const [hayLogo, setHayLogo] = useState<boolean | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/config/empresa/logo', { credentials: 'include' })
+      .then((r) => { if (vivo) setHayLogo(r.ok) })
+      .catch(() => { if (vivo) setHayLogo(false) })
+    return () => { vivo = false }
+  }, [version])
+
+  async function subir(archivo: File) {
+    setSubiendo(true)
+    setError(null)
+    try {
+      const form = new FormData()
+      form.append('logo', archivo)
+      await api.postForm('/api/config/empresa/logo', form)
+      setVersion((v) => v + 1)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'No se pudo subir el logo.')
+    } finally {
+      setSubiendo(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  async function borrar() {
+    setError(null)
+    try {
+      await api.del('/api/config/empresa/logo')
+      setVersion((v) => v + 1)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'No se pudo borrar el logo.')
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Logo</CardTitle>
+        <CardDescription>
+          Sale en el encabezado de remitos, presupuestos e informes. PNG o JPG.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {hayLogo === null ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : hayLogo ? (
+          <img
+            src={`/api/config/empresa/logo?v=${version}`}
+            alt="Logo de la empresa"
+            className="max-h-24 w-auto rounded border bg-white object-contain p-2"
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay logo cargado; los comprobantes salen sin él.
+          </p>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {esAdmin ? (
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) subir(f) }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={subiendo}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {subiendo ? 'Subiendo…' : hayLogo ? 'Reemplazar' : 'Subir logo'}
+            </Button>
+            {hayLogo && (
+              <Button type="button" variant="outline" onClick={borrar}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Quitar
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede cambiar el logo.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -609,5 +722,197 @@ export function ConfiguracionProveedores() {
     <Pantalla actual="proveedores">
       <ProveedoresCard />
     </Pantalla>
+  )
+}
+
+/** Pestaña de Datos / Backup. */
+export function ConfiguracionDatos() {
+  return (
+    <Pantalla actual="datos">
+      <DatosCard />
+    </Pantalla>
+  )
+}
+
+/** Bajar una copia de los datos, y volver a una anterior.
+ *
+ *  El archivo es un **ZIP con la base y los archivos de la instancia**, no un
+ *  `.db` suelto — el formato es el mismo en los seis productos de la familia,
+ *  donde varios tienen dos bases y archivos subidos.
+ */
+function DatosCard() {
+  const { user } = useAuth()
+  const esAdmin = user?.role === 'admin'
+  const [backups, setBackups] = useState<BackupGuardado[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [aRestaurar, setARestaurar] = useState<File | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { recargar() }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function recargar() {
+    setError(null)
+    try {
+      setBackups(await api.get<BackupGuardado[]>('/api/config/backups'))
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  async function crear() {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      await api.post('/api/config/backups')
+      setAviso('Copia guardada en el servidor.')
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function restaurar(archivo: File) {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      const form = new FormData()
+      form.append('backup_file', archivo)
+      const r = await api.postForm<{ backup_previo: string }>('/api/config/restore', form)
+      setAviso(
+        `Datos restaurados. El estado anterior quedó guardado como ${r.backup_previo}.`,
+      )
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setOcupado(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  if (!esAdmin) {
+    return (
+      <Card>
+        <CardHeader><CardTitle className="text-base">Datos / Backup</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede descargar o restaurar los datos.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Copia de tus datos</CardTitle>
+          <CardDescription>
+            Un archivo ZIP con la base de datos y los archivos del sistema.
+            Guardalo fuera del servidor.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {/* Link directo y no `fetch`: el navegador maneja la descarga con la
+              misma cookie, sin pasar el ZIP entero por memoria del JS. */}
+          <Button asChild>
+            <a href="/api/config/backup-ahora">
+              <Download className="mr-2 h-4 w-4" />
+              Descargar copia
+            </a>
+          </Button>
+          <Button type="button" variant="outline" disabled={ocupado} onClick={crear}>
+            {ocupado ? 'Trabajando…' : 'Guardar copia en el servidor'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {(error || aviso) && (
+        <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
+          {error ?? aviso}
+        </p>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Copias guardadas en el servidor</CardTitle>
+          <CardDescription>
+            Se conservan las 10 más recientes. Las de <code>antes_restore</code> las
+            hace el sistema solo, justo antes de restaurar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {backups === null ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : backups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay ninguna.</p>
+          ) : (
+            <ul className="grid gap-2">
+              {backups.map((b) => (
+                <li key={b.filename} className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant="outline">{b.mtime}</Badge>
+                  <span className="text-muted-foreground">{b.size_mb} MB</span>
+                  <a className="underline" href={`/api/config/backups/${b.filename}`}>
+                    {b.filename}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Restaurar</CardTitle>
+          <CardDescription>
+            Reemplaza <strong>todos</strong> los datos actuales por los del archivo.
+            Antes de hacerlo, el sistema guarda solo una copia del estado actual.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) setARestaurar(f) }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={ocupado}
+            onClick={() => inputRef.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Elegir archivo y restaurar
+          </Button>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={aRestaurar !== null}
+        onOpenChange={(abierto) => { if (!abierto) setARestaurar(null) }}
+        title="¿Restaurar los datos?"
+        description={
+          `Se van a reemplazar todos los datos actuales por los de ${aRestaurar?.name ?? ''}. ` +
+          'El estado de ahora queda guardado como copia por si hace falta volver.'
+        }
+        confirmLabel="Restaurar"
+        onConfirm={() => { const f = aRestaurar; setARestaurar(null); if (f) restaurar(f) }}
+      />
+    </div>
   )
 }

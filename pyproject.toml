@@ -59,7 +59,7 @@ dependencies = [
     #   - `libracore/db/schema.py` crecio, pero **el DDL de `remitos` y
     #     `presupuestos` no se movio**, que es el que este producto copia a mano
     #     en `services/remitos_presupuestos.py`. Era el riesgo real del bump.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.9.1",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.11.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
