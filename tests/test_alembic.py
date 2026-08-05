@@ -65,7 +65,7 @@ _DDL_PRODUCCION = [
     'CREATE INDEX ix_sectores_cliente_id ON sectores (cliente_id)',
 ]
 
-# Las 5 tablas que en el mismo archivo pertenecen a otros duenos. El DDL exacto
+# Las tablas que en el mismo archivo pertenecen a otros duenos. El DDL exacto
 # no importa para lo que se prueba (que Alembic no las toque), si el nombre.
 _TABLAS_AJENAS = {
     "usuarios": "CREATE TABLE usuarios (id INTEGER PRIMARY KEY, username VARCHAR(100) NOT NULL)",
@@ -74,6 +74,14 @@ _TABLAS_AJENAS = {
     "remitos": "CREATE TABLE remitos (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT NOT NULL UNIQUE)",
     "presupuestos": "CREATE TABLE presupuestos (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT NOT NULL UNIQUE)",
 }
+
+# `actividad_log` es ajena igual que las de arriba —su schema lo versiona
+# `libraauth.auditoria` desde v0.9.0— pero NO se crea aca: ya la creo la
+# revision `0010`, de cuando el log de actividad era codigo de este producto.
+# Esa revision se queda (una migracion aplicada no se borra), asi que despues
+# de `_upgrade()` la tabla existe y un `CREATE TABLE` mas fallaria.
+_TABLAS_AJENAS_YA_CREADAS = {"actividad_log"}
+_NOMBRES_AJENOS = set(_TABLAS_AJENAS) | _TABLAS_AJENAS_YA_CREADAS
 
 
 # --- helpers -----------------------------------------------------------------
@@ -248,7 +256,8 @@ def test_autogenerate_no_propone_dropear_las_tablas_ajenas(tmp_path):
 
 
 def test_sin_el_filtro_si_las_dropearia(tmp_path):
-    """La contraprueba: sin `include_name`, Alembic propone borrar las 5.
+    """La contraprueba: sin `include_name`, Alembic propone borrar todas las
+    ajenas.
 
     Sin este test, el anterior pasaria igual aunque el filtro no hiciera nada
     — por ejemplo si un dia dejara de estar cableado en `migrations/env.py`.
@@ -260,7 +269,7 @@ def test_sin_el_filtro_si_las_dropearia(tmp_path):
     propuestas = _diferencias(engine, filtro=None)
     dropeadas = {d[1].name for d in propuestas if d[0] == "remove_table"}
 
-    assert dropeadas == set(_TABLAS_AJENAS)
+    assert dropeadas == _NOMBRES_AJENOS
 
 
 # --- adopcion de las bases que ya existen ------------------------------------

@@ -2,11 +2,11 @@
 `request.app.state` — mismo patron que `gestiolibra/app/dependencies.py`."""
 from fastapi import Request
 
+from libraauth.auditoria import AuditoriaRepository
 from libraauth.auth_events import AuthEventRepository
 from libraauth.repository import UserRepository
 
 from .services.activos import ActivoRepository
-from .services.auditoria import AuditoriaRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
