@@ -32,6 +32,11 @@ dependencies = [
     # en los generadores de PDF: `libracore.db` y `provisioning`, que este
     # producto tambien usa, no se tocaron.
     "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.8.0",
+    # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
+    # todo el motor este producto importa `find_conflicts`, que es una
+    # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
+    # ni viven sus 11 tablas en este SQLite. Ver services/agenda.py.
+    "libragenda @ git+https://github.com/marianocappucci/libragenda.git@v0.9.0",
 ]
 
 [project.optional-dependencies]

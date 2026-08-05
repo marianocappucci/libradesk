@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Numeric, String, Text, delete, func, select, update,
+    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func,
+    select, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -73,6 +74,22 @@ class Incidencia(Base):
     # tickets que ya existen no saben como se atendieron, y ponerles `on_site`
     # seria inventar el dato. En pantalla salen con "—".
     modalidad: Mapped[str | None] = mapped_column(String(20), index=True)
+    # La agenda (pedido 42, fase B). Nullable: agendar es opcional — un ticket
+    # que entra por telefono y se resuelve en el momento nunca se agenda.
+    #
+    # `fecha_programada` es CUANDO se va a atender, y no tiene nada que ver con
+    # `fecha_creacion` (cuando entro el ticket) ni con `fecha_cierre` (cuando se
+    # termino). Sin esta columna la disponibilidad de un equipo solo podia ser
+    # "esta o no esta en otro equipo"; con ella, el motor de turnos puede decir
+    # si dos trabajos se pisan. Ver services/agenda.py.
+    fecha_programada: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    duracion_minutos: Mapped[int | None] = mapped_column(Integer)
+    # Que equipo lo hace. El vehiculo NO se guarda aca: sale de lo que ese
+    # equipo tenga asignado (fase A), y duplicarlo admitiria que el ticket diga
+    # una patente y el equipo otra.
+    equipo_trabajo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipos_trabajo.id", ondelete="SET NULL"), index=True,
+    )
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectores.id", ondelete="SET NULL"))
     # Que clase de problema es ("Hardware -> Impresoras"). Apunta siempre a la
     # HOJA del catalogo; el padre se deriva. Nullable y sin `ondelete`: las 23
@@ -126,6 +143,11 @@ def _to_dict(i: Incidencia) -> dict:
         "recepcionista_id": i.recepcionista_id,
         "vendedor_id": i.vendedor_id,
         "modalidad": i.modalidad,
+        "fecha_programada": (
+            i.fecha_programada.isoformat() if i.fecha_programada else None
+        ),
+        "duracion_minutos": i.duracion_minutos,
+        "equipo_trabajo_id": i.equipo_trabajo_id,
         "sector_id": i.sector_id,
         "categoria_id": i.categoria_id,
         "titulo": i.titulo,
@@ -163,6 +185,14 @@ def _estado_log_to_dict(e: IncidenciaEstadoLog) -> dict:
     }
 
 
+def _validar_agenda(session, incidencia) -> None:
+    """Delega en el motor de turnos. Import local por el ciclo: `agenda` importa
+    `Incidencia` de acá para armar los turnos existentes."""
+    from .agenda import validar_agenda
+
+    validar_agenda(session, incidencia)
+
+
 def _validar_modalidad(data: dict) -> None:
     """`modalidad` sí se valida, a diferencia de `estado` y `prioridad`.
 
@@ -184,6 +214,10 @@ class IncidenciaRepository:
         _validar_modalidad(data)
         with self.session_factory() as session:
             i = Incidencia(**data)
+            # Antes de la primera escritura: si el horario se pisa, el ticket no
+            # se crea. Mismo criterio que el service de los activos — lo barato
+            # es no empezar.
+            _validar_agenda(session, i)
             session.add(i)
             session.flush()
             session.add(IncidenciaEstadoLog(
@@ -312,6 +346,10 @@ class IncidenciaRepository:
             estado_anterior = i.estado
             for key, value in data.items():
                 setattr(i, key, value)
+            # Después de aplicar los cambios y **antes** del commit: se valida
+            # el horario que va a quedar, no el que había. La sesión no se
+            # commiteó todavía, así que si esto se planta no queda nada escrito.
+            _validar_agenda(session, i)
             if "estado" in data and data["estado"] != estado_anterior:
                 session.add(IncidenciaEstadoLog(
                     incidencia_id=i.id, estado_anterior=estado_anterior,

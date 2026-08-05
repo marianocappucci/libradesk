@@ -501,6 +501,14 @@ export type Incidencia = {
   // Hoja del catálogo de categorías ("Hardware → Impresoras"). Null en las
   // incidencias previas al catálogo.
   categoria_id: number | null
+  // La agenda (pedido 42, fase B). Los tres null si el ticket no se agenda —
+  // agendar es opcional. `fecha_programada` es **cuándo se va a atender**, y no
+  // tiene nada que ver con `fecha_creacion`.
+  fecha_programada: string | null
+  duracion_minutos: number | null
+  /** El equipo de trabajo que sale. El vehículo no se elige acá: sale de lo que
+   *  ese equipo tenga asignado (fase A). */
+  equipo_trabajo_id: number | null
   titulo: string
   descripcion: string | null
   estado: EstadoIncidencia
@@ -605,6 +613,28 @@ export function opcionesVehiculo(vehiculos: Vehiculo[]): OpcionSelect[] {
     label: v.patente,
     hint: v.descripcion !== v.patente ? v.descripcion : undefined,
   }))
+}
+
+// --- agenda de equipos (pedido 42, fase B) --------------------------------
+//
+// Una fila por trabajo agendado, ya resuelta por el backend: el nombre del
+// cliente, el `hasta` calculado y las patentes del equipo. La pantalla no
+// cruza tres endpoints para armar una grilla horaria.
+
+export type TrabajoAgendado = {
+  incidencia_id: number
+  titulo: string
+  cliente_id: number | null
+  cliente_nombre: string | null
+  estado: EstadoIncidencia
+  modalidad: ModalidadIncidencia | null
+  desde: string
+  hasta: string
+  duracion_minutos: number
+  /** En qué sale el equipo. Derivado de la asignación de la fase A, no
+   *  guardado en el ticket: si mañana el equipo cambia de vehículo, la agenda
+   *  dice el nuevo sin tocar nada. */
+  vehiculos: string[]
 }
 
 export type Sector = {
