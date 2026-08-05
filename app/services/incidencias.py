@@ -392,6 +392,7 @@ class IncidenciaRepository:
             # en esta direccion.
             from .contratos import ContratoEquipo
             from .equipos import EquipoMovimiento
+            from .ingresos import IngresoReparacion
             from .reparaciones import Reparacion
 
             session.execute(
@@ -411,6 +412,15 @@ class IncidenciaRepository:
             session.execute(
                 update(Reparacion)
                 .where(Reparacion.incidencia_id == incidencia_id)
+                .values(incidencia_id=None)
+            )
+            # Y los ingresos a reparación (pedido 43). Acá pesa más que en el
+            # resto: el comprobante que quedó en manos del cliente nombra ese
+            # número, así que la fila **no se puede borrar** con el ticket. Sólo
+            # pierde el link.
+            session.execute(
+                update(IngresoReparacion)
+                .where(IngresoReparacion.incidencia_id == incidencia_id)
                 .values(incidencia_id=None)
             )
             session.execute(

@@ -20,7 +20,8 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, config_empresa, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, health, incidencias, informes, logs,
+    depositos, equipos, equipos_trabajo, health, incidencias, informes,
+    ingresos, logs,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
     tecnicos, users,
 )
@@ -38,6 +39,7 @@ from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
 from .services.reemplazo import ReemplazoService
+from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
@@ -112,6 +114,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
+    app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
     app.state.activos = ActivoRepository(sessions)
     app.state.contratos = ContratoRepository(sessions)
@@ -199,6 +202,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # nadie tomó.
     app.include_router(proveedores.router, dependencies=staff_or_admin)
     app.include_router(reparaciones.router, dependencies=staff_or_admin)
+    # Los ingresos a reparacion cuelgan del mismo lado que reparaciones:
+    # es el mostrador operando, no una feature de plan.
+    app.include_router(ingresos.router, dependencies=staff_or_admin)
 
     # Lo que sí depende del plan (ver `plans.py`). Las instancias que ya
     # existen no se enteran: sin plan asignado, `ModuleRepository` deja todo
