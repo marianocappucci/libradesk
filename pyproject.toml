@@ -35,7 +35,26 @@ dependencies = [
     # chicas. El delta v1.6.0..v1.8.0 son exactamente esos dos commits, los dos
     # en los generadores de PDF: `libracore.db` y `provisioning`, que este
     # producto tambien usa, no se tocaron.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.8.0",
+    #
+    # v1.9.1 arregla un defecto que **reporto el usuario sobre este producto**
+    # (libracore PR #14): el titulo del membrete se dibujaba con un `cell()`,
+    # que no envuelve, asi que un titulo mas ancho que su celda de 38 mm se
+    # salia del recuadro. Con los titulos cortos de facturacion no se notaba
+    # (Remito 10,2 mm; Factura 10,8; Presupuesto 18,2); los dos comprobantes
+    # del pedido 43 miden 55,8 y 51,8, y se pasaban 17,8 y 13,8 mm. Ahora la
+    # fila de la letra crece un renglon **solo si hace falta**, asi que los
+    # comprobantes de una linea de este producto no se mueven.
+    #
+    # El salto v1.8.0 -> v1.9.1 arrastra tambien v1.9.0 (recibos). Se midio
+    # antes de subirlo y es seguro por dos motivos:
+    #   - Todo lo que cambio en `pdf_generator.py` entre v1.8.0 y v1.9.0 esta
+    #     dentro de `generate_pdf_recibo`, que este producto no usa; y los 13
+    #     nombres privados que importa (`_draw_header_block`, `_wrap_text`,
+    #     `_TextoSeguroPDF`, ...) siguen existiendo -- hay un test que lo fija.
+    #   - `libracore/db/schema.py` crecio, pero **el DDL de `remitos` y
+    #     `presupuestos` no se movio**, que es el que este producto copia a mano
+    #     en `services/remitos_presupuestos.py`. Era el riesgo real del bump.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.9.1",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
