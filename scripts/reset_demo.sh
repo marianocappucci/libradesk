@@ -57,13 +57,19 @@ fi
 # Por la API y desde adentro del contenedor: la contrasena sale de su propio
 # entorno y nunca pasa por la linea de comandos del host, donde quedaria en el
 # `ps` y en el log del cron.
-docker cp "/root/libradesk/scripts/seed_demo.py" "$CONTENEDOR:/tmp/seed.py"
+# ⚠️ Se copian los DOS archivos, y con su nombre real. `seed_demo.py` importa
+# `seed_dev` para no duplicar los datos de ejemplo en dos lugares que se van a
+# desincronizar; con un solo archivo adentro del contenedor —y peor, renombrado
+# a `seed.py`— la importacion muere con `ModuleNotFoundError`.
+docker exec "$CONTENEDOR" mkdir -p /tmp/seed
+docker cp "/root/libradesk/scripts/seed_demo.py" "$CONTENEDOR:/tmp/seed/seed_demo.py"
+docker cp "/root/libradesk/scripts/seed_dev.py" "$CONTENEDOR:/tmp/seed/seed_dev.py"
 docker exec -i "$CONTENEDOR" sh -c '
-  python3 /tmp/seed.py \
+  python3 /tmp/seed/seed_demo.py \
     --url https://demo.libradesk.com.ar \
     --usuario "${LIBRADESK_ADMIN_USERNAME:-admin}" \
     --password "$LIBRADESK_ADMIN_PASSWORD"
 '
-docker exec "$CONTENEDOR" rm -f /tmp/seed.py
+docker exec "$CONTENEDOR" rm -rf /tmp/seed
 
 log "=== listo ==="
