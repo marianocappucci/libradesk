@@ -32,6 +32,9 @@ AUDITABLES: dict[str, str] = {
     "Reparacion": "reparacion",
     "EquipoTrabajo": "equipo_trabajo",
     "Vehiculo": "vehiculo",
+    # El precio de lista de lo que se cotiza: lo cambia un admin a mano y se
+    # arrastra a todo presupuesto que se arme despues.
+    "Servicio": "servicio",
 }
 
 # Las tablas que YA son historial quedan afuera a proposito:

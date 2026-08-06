@@ -185,6 +185,33 @@ def sembrar(api: Api) -> None:
         "/api/proveedores", {"nombre": "Compu Service SRL", "telefono": "11-5555-0000"},
     )
 
+    # ── Catalogo de servicios (item 3) ────────────────────────────────────
+    #
+    # Sin esto, Configuracion -> Servicios abre vacia y el buscador del
+    # formulario de comprobante no sugiere nada: la feature se ve como si no
+    # existiera. Uno va SIN descripcion a proposito, para que se vea que en
+    # ese caso el texto que va al comprobante es el nombre.
+    servicios_spec = [
+        ("Mantenimiento preventivo",
+         "Mantenimiento preventivo de equipo, incluye limpieza interna y cambio "
+         "de pasta térmica", 18000),
+        ("Instalación de puesto de trabajo",
+         "Instalación y configuración de puesto de trabajo completo", 25000),
+        ("Visita técnica", "", 12000),
+        ("Backup y migración de datos",
+         "Resguardo y migración de datos a equipo nuevo", 30000),
+        ("Configuración de red",
+         "Configuración de router, switch y puntos de acceso", 40000),
+    ]
+    existentes_srv = api.get("/api/servicios?incluir_inactivos=true") or []
+    for nombre, descripcion, precio in servicios_spec:
+        if buscar(existentes_srv, "nombre", nombre):
+            contar("servicios", False)
+            continue
+        api.post("/api/servicios",
+                 {"nombre": nombre, "descripcion": descripcion, "precio": precio})
+        contar("servicios", True)
+
     # ── Activos, con los estados que la pantalla distingue (fase 1) ────────
     activos_spec = [
         ("Central telefónica", "Yeastar", "S20", "YS-2411-0087", 180000, 250000),

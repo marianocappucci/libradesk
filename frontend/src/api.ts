@@ -782,6 +782,19 @@ export type ConfigEmpresa = {
   empresa_inicio_actividades: string
 }
 
+/** Un servicio del catálogo, para reusar en remitos y presupuestos.
+ *
+ *  `texto` viene resuelto por el backend: es la descripción, o el nombre si la
+ *  descripción está vacía. Es lo que se copia al ítem del comprobante. */
+export type Servicio = {
+  id: number
+  nombre: string
+  descripcion: string
+  texto: string
+  precio: number
+  activo: boolean
+}
+
 /** Un backup guardado en el servidor. Lo devuelve `GET /api/config/backups`
  *  (LibraCore v1.10.0).
  *

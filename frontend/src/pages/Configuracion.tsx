@@ -25,7 +25,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   api, ApiError, type BackupGuardado, type CategoriaIncidencia, type ConfigEmpresa,
-  type Proveedor,
+  type Proveedor, type Servicio,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Conmutador } from '@/components/conmutador'
@@ -45,6 +45,14 @@ type FormProveedor = {
   contacto: string
   telefono: string
   email: string
+}
+
+/** Los campos editables de un servicio, como strings del formulario. */
+type FormServicio = {
+  nombre: string
+  descripcion: string
+  precio: string
+  activo: boolean
 }
 
 const VACIO: ConfigEmpresa = {
@@ -722,6 +730,232 @@ export function ConfiguracionProveedores() {
     <Pantalla actual="proveedores">
       <ProveedoresCard />
     </Pantalla>
+  )
+}
+
+/** Pestaña del catálogo de servicios. */
+export function ConfiguracionServicios() {
+  return (
+    <Pantalla actual="servicios">
+      <ServiciosCard />
+    </Pantalla>
+  )
+}
+
+/** El catálogo de servicios que se reusan al armar remitos y presupuestos.
+ *
+ *  🔴 **No reemplaza al campo libre.** Un ítem de comprobante sigue siendo
+ *  texto libre; este catálogo sólo lo sugiere mientras se escribe. Cargar algo
+ *  acá no obliga a nadie a usarlo, y no cargarlo deja el sistema como estaba.
+ */
+function ServiciosCard() {
+  const { user } = useAuth()
+  const esAdmin = user?.role === 'admin'
+  const [servicios, setServicios] = useState<Servicio[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [nuevo, setNuevo] = useState<FormServicio | null>(null)
+  const [editando, setEditando] = useState<(FormServicio & { id: number }) | null>(null)
+  const [aBorrar, setABorrar] = useState<Servicio | null>(null)
+
+  useEffect(() => { recargar() }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function recargar() {
+    try {
+      // Con inactivos: la pantalla de administración los muestra para poder
+      // reactivarlos. El buscador del comprobante sólo ofrece los activos.
+      setServicios(await api.get<Servicio[]>('/api/servicios?incluir_inactivos=true'))
+      setError(null)
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  async function guardar() {
+    const datos = editando ?? nuevo
+    if (!datos || !datos.nombre.trim()) return
+    setGuardando(true)
+    setError(null)
+    try {
+      const payload = {
+        nombre: datos.nombre.trim(),
+        descripcion: datos.descripcion.trim(),
+        precio: Number(datos.precio) || 0,
+        activo: datos.activo,
+      }
+      if (editando) await api.put(`/api/servicios/${editando.id}`, payload)
+      else await api.post('/api/servicios', payload)
+      setNuevo(null)
+      setEditando(null)
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function borrar(servicio: Servicio) {
+    setError(null)
+    try {
+      await api.del(`/api/servicios/${servicio.id}`)
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  function Formulario({ datos, onCambiar }: {
+    datos: FormServicio
+    onCambiar: (d: FormServicio) => void
+  }) {
+    return (
+      <div className="grid gap-3 rounded border p-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="srv-nombre">Nombre</Label>
+          <Input
+            id="srv-nombre" value={datos.nombre} placeholder="Mantenimiento preventivo"
+            onChange={(e) => onCambiar({ ...datos, nombre: e.target.value })}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="srv-precio">Precio</Label>
+          <Input
+            id="srv-precio" type="number" min="0" step="0.01" value={datos.precio}
+            onChange={(e) => onCambiar({ ...datos, precio: e.target.value })}
+          />
+        </div>
+        <div className="grid gap-1.5 sm:col-span-2">
+          <Label htmlFor="srv-desc">Descripción para el comprobante</Label>
+          <Input
+            id="srv-desc" value={datos.descripcion}
+            placeholder="Si queda vacía se usa el nombre"
+            onChange={(e) => onCambiar({ ...datos, descripcion: e.target.value })}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <Button type="button" disabled={guardando} onClick={guardar}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+          <Button
+            type="button" variant="outline"
+            onClick={() => { setNuevo(null); setEditando(null); setError(null) }}
+          >
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Servicios</CardTitle>
+        <CardDescription>
+          Los que se ofrecen habitualmente, con su precio. Al armar un remito o
+          un presupuesto aparecen como sugerencia mientras se escribe la
+          descripción — <strong>el campo sigue siendo libre</strong>: se puede
+          elegir uno o escribir cualquier otra cosa.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {esAdmin && !nuevo && !editando && (
+          <div>
+            <Button
+              type="button" size="sm"
+              onClick={() => setNuevo({ nombre: '', descripcion: '', precio: '0', activo: true })}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar servicio
+            </Button>
+          </div>
+        )}
+        {nuevo && <Formulario datos={nuevo} onCambiar={setNuevo} />}
+        {editando && (
+          <Formulario
+            datos={editando}
+            onCambiar={(d) => setEditando({ ...d, id: editando.id })}
+          />
+        )}
+
+        {servicios === null ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : servicios.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay servicios cargados. Sin ellos los comprobantes se
+            arman igual, escribiendo cada ítem a mano.
+          </p>
+        ) : (
+          <ul className="grid gap-1">
+            {servicios.map((s) => (
+              <li
+                key={s.id}
+                className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+              >
+                <span className={s.activo ? '' : 'text-muted-foreground line-through'}>
+                  {s.nombre}
+                </span>
+                {!s.activo && <Badge variant="outline">Inactivo</Badge>}
+                {s.descripcion && (
+                  <span className="truncate text-xs text-muted-foreground">{s.descripcion}</span>
+                )}
+                <span className="ml-auto tabular-nums">
+                  {s.precio.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+                </span>
+                {esAdmin && (
+                  <>
+                    <Button
+                      type="button" size="icon" variant="outline" title="Editar"
+                      aria-label={`Editar ${s.nombre}`}
+                      onClick={() => setEditando({
+                        id: s.id, nombre: s.nombre, descripcion: s.descripcion,
+                        precio: String(s.precio), activo: s.activo,
+                      })}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      type="button" size="icon" variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      title="Eliminar" aria-label={`Eliminar ${s.nombre}`}
+                      onClick={() => setABorrar(s)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!esAdmin && (
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede modificar el catálogo.
+          </p>
+        )}
+      </CardContent>
+
+      <ConfirmDialog
+        open={aBorrar !== null}
+        onOpenChange={(abierto) => { if (!abierto) setABorrar(null) }}
+        title={`¿Eliminar «${aBorrar?.nombre ?? ''}»?`}
+        description={
+          'Los remitos y presupuestos que ya lo usaron no cambian: guardaron su ' +
+          'propia descripción y su propio precio. Si sólo querés dejar de ' +
+          'ofrecerlo, editalo y desactivalo en vez de borrarlo.'
+        }
+        onConfirm={() => { const s = aBorrar; setABorrar(null); if (s) borrar(s) }}
+      />
+    </Card>
   )
 }
 

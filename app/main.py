@@ -31,7 +31,7 @@ from .routers import (
     activos, agenda, categorias, clientes, contratos, dashboard,
     depositos, equipos, equipos_trabajo, health, incidencias, informes, ingresos,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
-    tecnicos, users,
+    servicios, tecnicos, users,
 )
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
@@ -46,6 +46,7 @@ from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
+from .services.servicios import ServicioRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
@@ -126,6 +127,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.sectores = SectorRepository(sessions)
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
+    app.state.servicios = ServicioRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
@@ -191,6 +193,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # Categorias: parte del core por el mismo motivo que sectores — clasificar
     # un ticket no es una feature de plan, es como se usa una mesa de ayuda.
     app.include_router(categorias.router, dependencies=staff_or_admin)
+    # Catalogo de servicios: `staff_or_admin` y no admin-only, aunque el ABM
+    # sea cosa del dueño. Quien arma un presupuesto es staff, y el catalogo
+    # existe justamente para que lo use al cargarlo — cerrarlo dejaria una
+    # lista cargada que nadie puede consultar, que es lo contrario del pedido.
+    # El ABM se esconde de la pantalla por rol, como en depositos y categorias.
+    app.include_router(servicios.router, dependencies=staff_or_admin)
     # Reparaciones y sus proveedores: tampoco se gatean. Son la continuación de
     # `equipos` —el activo sale a service y vuelve—, y el parque es core. Si
     # alguna vez se decide venderlo como tier, agregar el módulo a `plans.py`
