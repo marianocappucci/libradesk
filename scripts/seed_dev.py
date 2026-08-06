@@ -597,7 +597,12 @@ def sembrar(api: Api) -> None:
     # el deposito o el estado de un equipo (ver services/equipos.py). Sin esto
     # el reporte de movimientos se queda con las dos filas de los ingresos.
     inventario = api.get("/api/equipos") or []
-    traslados = [("DL-90114", "Taller"), ("SM-31007", "Pañol")]
+    # 🔴 El destino no es libre: el producto rechaza guardar un equipo en el
+    # depósito de OTRO cliente (422, y con razón). Así que un equipo del
+    # cliente sólo se puede mover a un depósito propio de la empresa o al
+    # suyo. Lo encontró este mismo seed al correr — leyendo el modelo no
+    # aparecía.
+    traslados = [("DL-90114", "Taller"), ("SM-31007", "Sala de racks")]
     for serial, destino in traslados:
         eq = buscar(inventario, "serial", serial)
         if not eq or destino not in depositos:
