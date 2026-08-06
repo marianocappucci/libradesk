@@ -64,6 +64,7 @@ from .services import modules as _modules  # noqa: F401
 from .services import proveedores as _proveedores  # noqa: F401
 from .services import reparaciones as _reparaciones  # noqa: F401
 from .services import sectores as _sectores  # noqa: F401
+from .services import servicios as _servicios  # noqa: F401
 from .services import tecnicos as _tecnicos  # noqa: F401
 
 metadata = Base.metadata

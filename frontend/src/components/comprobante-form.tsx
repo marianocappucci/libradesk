@@ -3,10 +3,10 @@
 // diferencian solo en que el presupuesto agrega validez y estado. Una copia
 // por pagina se habria desincronizado igual que paso con el markup de la
 // fila de medicamentos en Farmacia.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import type { Cliente, ComprobanteItem, EstadoPresupuesto } from '../api'
-import { ESTADO_PRESUPUESTO_LABELS } from '../api'
+import type { Cliente, ComprobanteItem, EstadoPresupuesto, Servicio } from '../api'
+import { api, ESTADO_PRESUPUESTO_LABELS } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,101 @@ export type ComprobanteDraft = {
 }
 
 export const ITEM_VACIO: ItemDraft = { description: '', qty: '1', unit_price: '0' }
+
+/** El campo de descripción, con sugerencias del catálogo de servicios.
+ *
+ *  🔴 **Sigue siendo un campo libre.** Lo que se escribe queda tal cual; las
+ *  sugerencias aparecen debajo y sólo hacen algo si se eligen. Es el híbrido
+ *  que pide el pedido —«campo libre o ítems ya preformateados»— y el mismo
+ *  patrón que Contalibra usa contra su catálogo de productos.
+ *
+ *  Elegir una sugerencia **copia** su texto y su precio al ítem; no guarda una
+ *  referencia. Si mañana cambia el precio del servicio, este comprobante no se
+ *  entera — mismo criterio que `description_snapshot` en LibraCommerce.
+ */
+function DescripcionConSugerencias({
+  valor, indice, onCambiar, onElegir,
+}: {
+  valor: string
+  indice: number
+  onCambiar: (v: string) => void
+  onElegir: (s: Servicio) => void
+}) {
+  const [sugerencias, setSugerencias] = useState<Servicio[]>([])
+  const [abierto, setAbierto] = useState(false)
+  // Sin esto, cada tecla dispara una consulta. Escribir "mantenimiento" son 14.
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Descarta respuestas viejas que llegan tarde: sin esto, tipear rápido puede
+  // dejar en pantalla las sugerencias de un texto anterior.
+  const pedido = useRef(0)
+
+  useEffect(() => () => { if (debounce.current) clearTimeout(debounce.current) }, [])
+
+  function buscar(texto: string) {
+    onCambiar(texto)
+    if (debounce.current) clearTimeout(debounce.current)
+    if (texto.trim().length < 2) {
+      setSugerencias([])
+      setAbierto(false)
+      return
+    }
+    const mio = ++pedido.current
+    debounce.current = setTimeout(async () => {
+      try {
+        const res = await api.get<Servicio[]>(
+          `/api/servicios/buscar?q=${encodeURIComponent(texto)}`,
+        )
+        if (mio !== pedido.current) return
+        setSugerencias(res)
+        setAbierto(res.length > 0)
+      } catch {
+        // Que el catálogo no responda no puede romper la carga de un
+        // comprobante: se sigue escribiendo a mano, que es como se hacía antes.
+        setSugerencias([])
+        setAbierto(false)
+      }
+    }, 250)
+  }
+
+  return (
+    <div className="relative">
+      <Input
+        value={valor}
+        placeholder="Reparación, repuesto, servicio…"
+        aria-label={`Descripción del ítem ${indice + 1}`}
+        autoComplete="off"
+        onChange={(e) => buscar(e.target.value)}
+        // `onBlur` con demora: sin ella el click en una sugerencia cierra la
+        // lista antes de que el click llegue a registrarse.
+        onBlur={() => setTimeout(() => setAbierto(false), 150)}
+        onFocus={() => setAbierto(sugerencias.length > 0)}
+      />
+      {abierto && (
+        <ul
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-popover shadow-md"
+          role="listbox"
+          aria-label="Servicios sugeridos"
+        >
+          {sugerencias.map((s) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onElegir(s); setAbierto(false) }}
+              >
+                <span className="truncate">{s.texto}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatMoney(s.precio)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 export function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -126,6 +221,24 @@ export function ComprobanteForm({
 
   function setItem(index: number, campo: keyof ItemDraft, valor: string) {
     const items = draft.items.map((item, i) => (i === index ? { ...item, [campo]: valor } : item))
+    onChange({ ...draft, items })
+  }
+
+  /** Elegir una sugerencia COPIA el texto y el precio; no guarda una
+   *  referencia al servicio.
+   *
+   *  Si guardara el id, cambiar el precio del catálogo cambiaría el total de
+   *  presupuestos ya enviados. Lo que se acordó con el cliente es lo que dice
+   *  el comprobante, no lo que diga la lista mañana.
+   *
+   *  La cantidad **no** se toca: la puso el usuario y no tiene por qué volver
+   *  a 1 porque eligió de dónde sale la descripción. */
+  function elegirServicio(index: number, servicio: Servicio) {
+    const items = draft.items.map((item, i) => (
+      i === index
+        ? { ...item, description: servicio.texto, unit_price: String(servicio.precio) }
+        : item
+    ))
     onChange({ ...draft, items })
   }
 
@@ -243,9 +356,12 @@ export function ComprobanteForm({
                 <div key={i} className="flex flex-wrap items-end gap-2">
                   <div className="grid min-w-52 flex-1 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Descripción</span>}
-                    <Input value={item.description} placeholder="Reparación, repuesto, servicio…"
-                           aria-label={`Descripción del ítem ${i + 1}`}
-                           onChange={(e) => setItem(i, 'description', e.target.value)} />
+                    <DescripcionConSugerencias
+                      valor={item.description}
+                      indice={i}
+                      onCambiar={(v) => setItem(i, 'description', v)}
+                      onElegir={(s) => elegirServicio(i, s)}
+                    />
                   </div>
                   <div className="grid w-24 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Cantidad</span>}
