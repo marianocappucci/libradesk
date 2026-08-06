@@ -479,6 +479,75 @@ def sembrar(api: Api) -> None:
             api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar", entrega)
             contar("entregas", True)
 
+    # ── Categorias de incidencia y sectores del cliente ───────────────────
+    # Estaban vacios en la demo: son los dos catalogos que alimentan los
+    # desplegables de una incidencia, y sin ellos la pantalla ofrece una lista
+    # vacia que parece rota.
+    categorias = api.get("/api/categorias") or []
+    for nombre in ("Redes", "Impresión", "Puestos de trabajo", "Servidores"):
+        if buscar(categorias, "nombre", nombre):
+            continue
+        api.post("/api/categorias", {"nombre": nombre})
+        contar("categorias", True)
+
+    sectores = api.get("/api/sectores") or []
+    for cli, nombre in ((cliente, "Administración"), (cliente, "Guardia"),
+                        (otro, "Depósito"), (otro, "Recepción")):
+        if any(s.get("nombre") == nombre and s.get("cliente_id") == cli["id"]
+               for s in sectores):
+            continue
+        api.post("/api/sectores", {"cliente_id": cli["id"], "nombre": nombre})
+        contar("sectores", True)
+
+    # ── Presupuestos y remitos, con su PDF ────────────────────────────────
+    # 🔴 Son las dos pantallas que un interesado abre para ver "como se ve un
+    # comprobante", y estaban vacias: sin una fila no hay PDF que descargar, y
+    # el modulo entero parece no existir. Pedido explicito del humano
+    # (2026-08-06).
+    #
+    # Los items salen del catalogo de servicios sembrado arriba, no de texto
+    # inventado acá: asi el ejemplo muestra el flujo real —elegir del catalogo
+    # y que se complete precio y alicuota— y no un presupuesto que ningun
+    # usuario podria haber armado.
+    servicios = api.get("/api/servicios") or []
+    if servicios:
+        def item(srv, qty):
+            return {"description": srv["nombre"], "qty": qty,
+                    "unit_price": srv.get("precio") or 1000,
+                    "tax_rate": srv.get("iva_rate")}
+
+        # Tres estados distintos a proposito: la pantalla los pinta distinto y
+        # con uno solo no se ve la diferencia.
+        presupuestos_spec = [
+            ("borrador", [item(servicios[0], 2)], "Sujeto a disponibilidad de repuestos."),
+            ("enviado", [item(s, 1) for s in servicios[:3]],
+             "Incluye traslado dentro del casco urbano."),
+            ("aceptado", [item(servicios[1], 4), item(servicios[0], 1)],
+             "Aceptado por mail el 04/08."),
+        ]
+        ya = {p.get("observations") for p in (api.get("/api/presupuestos") or [])}
+        for estado, items, obs in presupuestos_spec:
+            if obs in ya:
+                continue
+            api.post("/api/presupuestos", {
+                "client_id": cliente["id"] if estado != "aceptado" else otro["id"],
+                "status": estado, "items": items, "observations": obs,
+            })
+            contar("presupuestos", True)
+
+        remitos_spec = [
+            ([item(servicios[0], 1)], "Entregado en mano, conforme."),
+            ([item(s, 2) for s in servicios[:2]], "Retira el cliente por depósito."),
+        ]
+        ya_r = {r.get("observations") for r in (api.get("/api/remitos") or [])}
+        for items, obs in remitos_spec:
+            if obs in ya_r:
+                continue
+            api.post("/api/remitos", {
+                "client_id": cliente["id"], "items": items, "observations": obs,
+            })
+            contar("remitos", True)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
 
