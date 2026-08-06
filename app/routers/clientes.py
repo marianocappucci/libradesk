@@ -4,8 +4,33 @@ from sqlalchemy.exc import IntegrityError
 
 from ..dependencies import get_cliente_repository
 from ..services.clientes import ClienteRepository
+from ..services.iva import CONDICIONES, discrimina
 
 router = APIRouter(prefix="/api/clientes", tags=["clientes"])
+
+
+class CondicionIVA(BaseModel):
+    nombre: str
+    #: Si un cliente con esta condición recibe el comprobante con el IVA
+    #: discriminado. Va acá y no en la pantalla para que la regla —hoy «sólo
+    #: el Responsable Inscripto»— esté escrita **una sola vez**: si la
+    #: pantalla la reprodujera, agregar una condición que discrimine cambiaría
+    #: el PDF y no el aviso que se lee al cargarla.
+    discrimina: bool
+
+
+@router.get("/condiciones-iva", response_model=list[CondicionIVA])
+def condiciones_iva():
+    """Las condiciones frente al IVA que el sistema conoce, con su efecto.
+
+    Salen del backend por lo mismo que las alícuotas: si la pantalla las
+    repitiera, agregar una acá no la haría elegible y sacar una dejaría la
+    pantalla ofreciendo algo que ya no significa nada.
+
+    Ruta literal antes de `/{cliente_id}`: al revés, FastAPI la matchearía
+    contra la otra y fallaría al convertirla a int.
+    """
+    return [{"nombre": c, "discrimina": discrimina(c)} for c in CONDICIONES]
 
 
 class ClienteIn(BaseModel):
@@ -15,6 +40,9 @@ class ClienteIn(BaseModel):
     telefono: str | None = None
     ciudad: str | None = None
     cuit: str | None = None
+    # Decide si el comprobante muestra el IVA discriminado o el precio final.
+    # **No** decide la alícuota: esa es del servicio. Ver `app/services/iva.py`.
+    condicion_iva: str | None = None
     domicilio: str | None = None
     observaciones: str | None = None
     tipo_facturacion: str = "por_servicio"
@@ -23,6 +51,10 @@ class ClienteIn(BaseModel):
 
 class ClienteOut(ClienteIn):
     id: int
+    # Derivado de `condicion_iva` por `app/services/iva.py`. Sale en la
+    # respuesta —y no se recalcula en la pantalla— para que la regla de quién
+    # discrimina esté escrita una sola vez.
+    iva_discriminado: bool = False
     fecha_creacion: str | None = None
 
 

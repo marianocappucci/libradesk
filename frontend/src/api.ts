@@ -19,6 +19,14 @@ export type Cliente = {
   // Datos fiscales, para que los comprobantes no obliguen a tipearlos cada
   // vez. Nulos en los 9 clientes migrados del Node.js viejo.
   cuit: string | null
+  // Decide si el comprobante muestra el IVA discriminado o el precio final.
+  // **No** decide la alícuota: esa es del servicio. Null en los clientes que
+  // ya existían — el backend cae a precio final a propósito.
+  condicion_iva: string | null
+  /** Derivado de `condicion_iva` por el backend: si los comprobantes de este
+   *  cliente muestran el IVA discriminado. **No recalcularlo acá** — la regla
+   *  vive en `app/services/iva.py` y tiene que estar escrita una sola vez. */
+  iva_discriminado: boolean
   domicilio: string | null
   observaciones: string | null
   tipo_facturacion: 'mensual' | 'por_servicio'
@@ -731,6 +739,10 @@ export type ComprobanteItem = {
   qty: number
   unit_price: number
   subtotal: number
+  /** La alícuota de la línea, en porcentaje (21, 10.5, 0). Opcional: los
+   *  comprobantes guardados antes de 2026-08-05 no la tienen y caen a la del
+   *  documento. Es lo que lee el PDF para la columna de IVA por línea. */
+  iva_pct?: number
 }
 
 type ComprobanteBase = {
@@ -792,6 +804,12 @@ export type Servicio = {
   descripcion: string
   texto: string
   precio: number
+  /** La alícuota de IVA de ESTE servicio, como fracción (0.21 = 21%).
+   *
+   *  Es del servicio y no del cliente: en Argentina el 21 / 10,5 / 27 / exento
+   *  sale de QUÉ se vende. De la condición del cliente depende otra cosa — si
+   *  el comprobante discrimina el IVA o muestra el precio final. */
+  iva_rate: number
   activo: boolean
 }
 

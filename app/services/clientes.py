@@ -10,6 +10,7 @@ from sqlalchemy import Boolean, DateTime, String, Text, func, select
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+from . import iva
 
 
 class Cliente(Base):
@@ -27,6 +28,14 @@ class Cliente(Base):
     # filas reales de `compulibra` existen desde la migracion del Node.js
     # viejo y no los tienen — ver app/migrations.py.
     cuit: Mapped[str | None] = mapped_column(String(20))
+    # Decide si el comprobante muestra el IVA discriminado o el precio final.
+    # **No** decide la alicuota: esa es del servicio. Ver `app/services/iva.py`.
+    #
+    # Nullable a proposito: los clientes que ya existen no la tienen cargada, y
+    # `iva.discrimina(None)` cae a "precio final", que es lo que espera la
+    # mayoria de los clientes de una mesa de ayuda. Un default de "Responsable
+    # Inscripto" le habria cambiado el comprobante a todos de golpe.
+    condicion_iva: Mapped[str | None] = mapped_column(String(50))
     domicilio: Mapped[str | None] = mapped_column(String(255))
     observaciones: Mapped[str | None] = mapped_column(Text)
     tipo_facturacion: Mapped[str] = mapped_column(String(20), nullable=False, default="por_servicio")
@@ -43,6 +52,13 @@ def _to_dict(c: Cliente) -> dict:
         "telefono": c.telefono,
         "ciudad": c.ciudad,
         "cuit": c.cuit,
+        "condicion_iva": c.condicion_iva,
+        # Derivado, no almacenado. Va en la respuesta para que la regla de
+        # quien discrimina viva en UN solo lugar: si la pantalla la reprodujera
+        # comparando contra "Responsable Inscripto", agregar una condicion
+        # cambiaria el PDF y no la pantalla, y nadie se enteraria hasta ver un
+        # comprobante mal.
+        "iva_discriminado": iva.discrimina(c.condicion_iva),
         "domicilio": c.domicilio,
         "observaciones": c.observaciones,
         "tipo_facturacion": c.tipo_facturacion,

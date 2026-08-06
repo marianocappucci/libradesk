@@ -29,6 +29,8 @@ class ItemIn(BaseModel):
     description: str = Field(min_length=1)
     qty: float = Field(gt=0)
     unit_price: float = Field(ge=0)
+    # La alicuota de ESTA linea. `None` = se usa la del documento.
+    tax_rate: float | None = Field(default=None, ge=0, le=1)
 
 
 class RemitoIn(BaseModel):

@@ -31,11 +31,12 @@ const CLIENTES: Cliente[] = [
 const SERVICIOS = [
   {
     id: 1, nombre: 'Mantenimiento preventivo', descripcion: '',
-    texto: 'Mantenimiento preventivo', precio: 15000, activo: true,
+    texto: 'Mantenimiento preventivo', precio: 15000, iva_rate: 0.21, activo: true,
   },
   {
     id: 2, nombre: 'Service anual', descripcion: 'Incluye limpieza y pasta térmica',
-    texto: 'Incluye limpieza y pasta térmica', precio: 22000, activo: true,
+    texto: 'Incluye limpieza y pasta térmica', precio: 22000, iva_rate: 0.21,
+    activo: true,
   },
 ]
 

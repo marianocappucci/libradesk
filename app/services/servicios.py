@@ -42,6 +42,7 @@ from sqlalchemy import Boolean, DateTime, Numeric, String, func, or_, select, tr
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+from . import iva
 
 
 class Servicio(Base):
@@ -72,6 +73,12 @@ class Servicio(Base):
     precio: Mapped[float] = mapped_column(
         Numeric(12, 2), nullable=False, default=0, server_default="0",
     )
+    # La alicuota con la que se cotiza este servicio. Es propiedad del
+    # servicio y no del cliente: en Argentina el 21 / 10,5 / 27 / exento sale
+    # de QUE se vende. Ver `app/services/iva.py`.
+    iva_rate: Mapped[float] = mapped_column(
+        Numeric(5, 4), nullable=False, default=0.21, server_default="0.21",
+    )
     # Un servicio que se deja de ofrecer no se borra: dejaria de sugerirse pero
     # los comprobantes viejos que lo usaron ya guardaron su texto y su precio.
     activo: Mapped[bool] = mapped_column(
@@ -89,6 +96,7 @@ def _to_dict(s: Servicio) -> dict:
         # repetir la regla de "descripcion o, si esta vacia, el nombre".
         "texto": s.descripcion or s.nombre,
         "precio": float(s.precio or 0),
+        "iva_rate": float(s.iva_rate if s.iva_rate is not None else iva.DEFECTO),
         "activo": s.activo,
     }
 
@@ -138,12 +146,18 @@ class ServicioRepository:
             s = session.get(Servicio, servicio_id)
             return _to_dict(s) if s else None
 
-    def crear(self, nombre: str, descripcion: str = "", precio: float = 0) -> dict:
+    def crear(self, nombre: str, descripcion: str = "", precio: float = 0,
+              iva_rate=None) -> dict:
+        # `iva.validar` explota con `AlicuotaInvalida` ante una alicuota que
+        # ARCA no sabe mapear. Se valida al GUARDAR y no al mostrar: una fila
+        # ya guardada se muestra como este, aunque la lista cambie.
+        alicuota = iva.validar(iva.DEFECTO if iva_rate is None else iva_rate)
         with self.session_factory() as session:
             s = Servicio(
                 nombre=nombre.strip(),
                 descripcion=(descripcion or "").strip(),
                 precio=precio,
+                iva_rate=alicuota,
             )
             session.add(s)
             session.commit()
@@ -151,7 +165,8 @@ class ServicioRepository:
             return _to_dict(s)
 
     def actualizar(self, servicio_id: int, nombre: str, descripcion: str,
-                   precio: float, activo: bool) -> dict | None:
+                   precio: float, activo: bool, iva_rate=None) -> dict | None:
+        alicuota = iva.validar(iva.DEFECTO if iva_rate is None else iva_rate)
         with self.session_factory() as session:
             s = session.get(Servicio, servicio_id)
             if s is None:
@@ -159,6 +174,7 @@ class ServicioRepository:
             s.nombre = nombre.strip()
             s.descripcion = (descripcion or "").strip()
             s.precio = precio
+            s.iva_rate = alicuota
             s.activo = activo
             session.commit()
             session.refresh(s)

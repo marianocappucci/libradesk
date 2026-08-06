@@ -46,6 +46,8 @@ from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
 from sqlalchemy.engine import make_url
 
+from . import iva
+
 # El DDL de LibraCore (libracore/db/schema.py) menos la FK a `clients`, y
 # con `usuario_id` incluido. Cualquier otra diferencia contra el original es
 # un bug: las dos tablas las lee y escribe el codigo de LibraCore.
@@ -126,25 +128,52 @@ def ensure_schema() -> None:
 
 
 def _totales(items: list[dict], tax_rate: float) -> tuple[float, float, float]:
-    """Totales calculados en el servidor: lo que manda el cliente se ignora."""
-    subtotal = round(sum(float(i["qty"]) * float(i["unit_price"]) for i in items), 2)
-    tax_amount = round(subtotal * float(tax_rate), 2)
-    return subtotal, tax_amount, round(subtotal + tax_amount, 2)
+    """Totales calculados en el servidor: lo que manda el cliente se ignora.
+
+    Desde el 2026-08-05 **cada linea lleva su alicuota** y el IVA se suma linea
+    por linea; `tax_rate` queda como default de las que no la traigan. Antes era
+    `subtotal * tax_rate` para todo el comprobante, que daba mal apenas una
+    linea era exenta. Ver `app/services/iva.py`.
+    """
+    con_alicuota = [{**i, "tax_rate": _alicuota(i, tax_rate)} for i in items]
+    return iva.totales(con_alicuota)
 
 
-def _normalizar_items(items: list[dict]) -> list[dict]:
+def _alicuota(item: dict, defecto: float) -> float:
+    """La alicuota de una linea, o la del documento.
+
+    ⚠️ No alcanza con `item.get("tax_rate", defecto)`: el payload del router
+    trae la clave **presente y en `None`** cuando el usuario no la eligio
+    (`tax_rate: float | None = None`), y ahi `.get` devuelve `None`, no el
+    default. Un `None` multiplicando revienta o —peor— se cuela como 0.
+    """
+    valor = item.get("tax_rate")
+    return float(defecto if valor is None else valor)
+
+
+def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
     """Deja los items en la forma que espera el PDF de LibraCore
     (`description`/`qty`/`unit_price`/`subtotal`, ver `_draw_items_table`),
-    con el subtotal por linea recalculado."""
+    con el subtotal por linea recalculado.
+
+    Suma dos campos: `tax_rate` —la alicuota de esa linea, que se guarda en el
+    JSON— y `iva_pct`, la misma en porcentaje, que es lo que lee la columna de
+    IVA del PDF (`item["iva_pct"]`). Se guardan los dos en vez de derivar uno
+    del otro al dibujar, para que un comprobante ya guardado no dependa de que
+    alguien recuerde la conversion.
+    """
     salida = []
     for i in items:
         qty = float(i["qty"])
         unit_price = float(i["unit_price"])
+        alicuota = _alicuota(i, tax_rate)
         salida.append({
             "description": str(i["description"]).strip(),
             "qty": qty,
             "unit_price": unit_price,
             "subtotal": round(qty * unit_price, 2),
+            "tax_rate": alicuota,
+            "iva_pct": round(alicuota * 100, 1),
         })
     return salida
 
@@ -158,8 +187,12 @@ class RemitoService:
     def create(self, *, date, client_id, client_name, client_address="", client_cuit="",
                client_email="", client_phone="", items, tax_rate=0.21, observations="",
                usuario_id=None) -> dict:
-        items = _normalizar_items(items)
+        items = _normalizar_items(items, tax_rate)
         subtotal, tax_amount, total = _totales(items, tax_rate)
+        # Lo que se guarda en la columna del comprobante es la alicuota
+        # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
+        # hay una sola que describa al documento. Ver `iva.py`.
+        tax_rate = iva.alicuota_del_documento(items)
         remito_id = rp.create_remito(
             rp.get_next_remito_number(), date, client_id, client_name, client_address,
             client_cuit, client_email, client_phone, items, subtotal, tax_rate,
@@ -184,8 +217,12 @@ class RemitoService:
                observations="") -> dict:
         if rp.get_remito(remito_id) is None:
             raise KeyError(remito_id)
-        items = _normalizar_items(items)
+        items = _normalizar_items(items, tax_rate)
         subtotal, tax_amount, total = _totales(items, tax_rate)
+        # Lo que se guarda en la columna del comprobante es la alicuota
+        # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
+        # hay una sola que describa al documento. Ver `iva.py`.
+        tax_rate = iva.alicuota_del_documento(items)
         rp.update_remito(
             remito_id, date, client_id, client_name, client_address, client_cuit,
             client_email, client_phone, items, subtotal, tax_rate, tax_amount,
@@ -217,8 +254,12 @@ class PresupuestoService:
     def create(self, *, date, valid_until, client_id, client_name, client_address="",
                client_cuit="", client_email="", client_phone="", items, tax_rate=0.21,
                observations="", status="borrador", usuario_id=None) -> dict:
-        items = _normalizar_items(items)
+        items = _normalizar_items(items, tax_rate)
         subtotal, tax_amount, total = _totales(items, tax_rate)
+        # Lo que se guarda en la columna del comprobante es la alicuota
+        # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
+        # hay una sola que describa al documento. Ver `iva.py`.
+        tax_rate = iva.alicuota_del_documento(items)
         presupuesto_id = rp.create_presupuesto(
             rp.get_next_presupuesto_number(), date, valid_until, client_id, client_name,
             client_address, client_cuit, client_email, client_phone, items, subtotal,
@@ -246,8 +287,12 @@ class PresupuestoService:
                client_phone="", items, tax_rate=0.21, observations="") -> dict:
         if rp.get_presupuesto(presupuesto_id) is None:
             raise KeyError(presupuesto_id)
-        items = _normalizar_items(items)
+        items = _normalizar_items(items, tax_rate)
         subtotal, tax_amount, total = _totales(items, tax_rate)
+        # Lo que se guarda en la columna del comprobante es la alicuota
+        # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
+        # hay una sola que describa al documento. Ver `iva.py`.
+        tax_rate = iva.alicuota_del_documento(items)
         rp.update_presupuesto(
             presupuesto_id, date, valid_until, status, client_id, client_name,
             client_address, client_cuit, client_email, client_phone, items,
