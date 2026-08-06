@@ -9,15 +9,33 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_servicio_repository
+from ..services.iva import ALICUOTAS, AlicuotaInvalida
 from ..services.servicios import ServicioRepository
 
 router = APIRouter(prefix="/api/servicios", tags=["servicios"])
+
+
+@router.get("/alicuotas", response_model=list[float])
+def alicuotas():
+    """Las alícuotas que la pantalla puede ofrecer.
+
+    Salen del backend y no se hardcodean en el frontend para que haya **una**
+    lista: si se agregara una y la pantalla siguiera con las cuatro de antes,
+    el catálogo aceptaría por API algo que nadie puede elegir.
+
+    Ruta literal antes de `/{servicio_id}`, por el mismo motivo que `/buscar`.
+    """
+    return [float(a) for a in ALICUOTAS]
 
 
 class ServicioIn(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     descripcion: str = Field(default="", max_length=500)
     precio: float = Field(default=0, ge=0)
+    # Se valida contra la lista cerrada en el repositorio, no aca: el mensaje
+    # de error nombra las alicuotas validas, que es mas util que un 422 de
+    # pydantic diciendo "value is not a valid enumeration member".
+    iva_rate: float = Field(default=0.21, ge=0, le=1)
 
 
 class ServicioUpdate(ServicioIn):
@@ -32,6 +50,7 @@ class ServicioOut(BaseModel):
     # esta vacia). La pantalla no repite la regla.
     texto: str
     precio: float
+    iva_rate: float
     activo: bool
 
 
@@ -64,7 +83,10 @@ def obtener(servicio_id: int, servicios: ServicioRepository = Depends(get_servic
 
 @router.post("", status_code=201, response_model=ServicioOut)
 def crear(data: ServicioIn, servicios: ServicioRepository = Depends(get_servicio_repository)):
-    return servicios.crear(data.nombre, data.descripcion, data.precio)
+    try:
+        return servicios.crear(data.nombre, data.descripcion, data.precio, data.iva_rate)
+    except AlicuotaInvalida as e:
+        raise HTTPException(422, str(e))
 
 
 @router.put("/{servicio_id}", response_model=ServicioOut)
@@ -73,9 +95,13 @@ def actualizar(
     data: ServicioUpdate,
     servicios: ServicioRepository = Depends(get_servicio_repository),
 ):
-    s = servicios.actualizar(
-        servicio_id, data.nombre, data.descripcion, data.precio, data.activo,
-    )
+    try:
+        s = servicios.actualizar(
+            servicio_id, data.nombre, data.descripcion, data.precio, data.activo,
+            data.iva_rate,
+        )
+    except AlicuotaInvalida as e:
+        raise HTTPException(422, str(e))
     if s is None:
         raise HTTPException(404, "servicio not found")
     return s

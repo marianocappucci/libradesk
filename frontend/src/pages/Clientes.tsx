@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import {
@@ -31,6 +31,9 @@ const clienteSchema = z.object({
   telefono: z.string().trim().optional(),
   ciudad: z.string().trim().optional(),
   cuit: z.string().trim().optional(),
+  // '' = sin cargar, y es un valor legítimo: poner "Responsable Inscripto" por
+  // defecto le cambiaría el comprobante de golpe a todos los que ya existen.
+  condicion_iva: z.string().optional(),
   domicilio: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
   tipo_facturacion: z.enum(['mensual', 'por_servicio']),
@@ -38,8 +41,28 @@ const clienteSchema = z.object({
 
 type ClienteFormValues = z.infer<typeof clienteSchema>
 
+/** El `<Select>` de shadcn no admite `value=""` (lo usa para "sin elegir" y el
+ *  placeholder queda pegado), así que "sin cargar" viaja con un centinela y se
+ *  traduce a `null` al guardar. */
+const SIN_CONDICION = '__sin_cargar__'
+
+/** Una condición frente al IVA y su efecto sobre el comprobante, tal como las
+ *  devuelve `GET /api/clientes/condiciones-iva`. */
+type CondicionIVA = { nombre: string; discrimina: boolean }
+
+/** Las conocidas al escribir esta pantalla. Sólo se usan si la consulta al
+ *  backend falla: el que manda es el backend. */
+const CONDICIONES_INICIALES: CondicionIVA[] = [
+  { nombre: 'Responsable Inscripto', discrimina: true },
+  { nombre: 'Monotributista', discrimina: false },
+  { nombre: 'IVA Exento', discrimina: false },
+  { nombre: 'Consumidor Final', discrimina: false },
+  { nombre: 'No Alcanzado', discrimina: false },
+]
+
 const EMPTY_VALUES: ClienteFormValues = {
   nombre: '', empresa: '', email: '', telefono: '', ciudad: '', cuit: '',
+  condicion_iva: SIN_CONDICION,
   domicilio: '', observaciones: '', tipo_facturacion: 'por_servicio',
 }
 
@@ -61,6 +84,18 @@ export function Clientes() {
   // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
   const [formError, setFormError] = useState<string | null>(null)
   const [clienteADesactivar, setClienteADesactivar] = useState<Cliente | null>(null)
+  // Las condiciones y su efecto salen del backend, que es donde está la regla.
+  // El fallback deja el formulario usable si la consulta falla; guardar valida
+  // igual del otro lado.
+  const [condiciones, setCondiciones] = useState<CondicionIVA[]>(CONDICIONES_INICIALES)
+
+  useEffect(() => {
+    let vigente = true
+    api.get<CondicionIVA[]>('/api/clientes/condiciones-iva')
+      .then((res) => { if (vigente && res.length) setCondiciones(res) })
+      .catch(() => { /* se quedan las conocidas */ })
+    return () => { vigente = false }
+  }, [])
 
   // --- sectores del cliente -------------------------------------------
   // El backend los tenía completos desde la migración (tabla propia con FK
@@ -119,6 +154,7 @@ export function Clientes() {
       telefono: cliente.telefono ?? '',
       ciudad: cliente.ciudad ?? '',
       cuit: cliente.cuit ?? '',
+      condicion_iva: cliente.condicion_iva ?? SIN_CONDICION,
       domicilio: cliente.domicilio ?? '',
       observaciones: cliente.observaciones ?? '',
       tipo_facturacion: cliente.tipo_facturacion,
@@ -136,6 +172,10 @@ export function Clientes() {
       telefono: values.telefono || null,
       ciudad: values.ciudad || null,
       cuit: values.cuit || null,
+      condicion_iva:
+        values.condicion_iva && values.condicion_iva !== SIN_CONDICION
+          ? values.condicion_iva
+          : null,
       domicilio: values.domicilio || null,
       observaciones: values.observaciones || null,
       tipo_facturacion: values.tipo_facturacion,
@@ -337,6 +377,33 @@ export function Clientes() {
                   <FormItem>
                     <FormLabel>CUIT / DNI</FormLabel>
                     <FormControl><Input {...field} className="w-40" placeholder="20-12345678-9" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {/* Decide si los comprobantes de este cliente muestran el IVA
+                    discriminado o el precio final. **No** decide la alícuota:
+                    esa es del servicio, y se carga en el catálogo. */}
+                <FormField control={form.control} name="condicion_iva" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Condición frente al IVA</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="w-52">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={SIN_CONDICION}>Sin cargar</SelectItem>
+                        {condiciones.map((c) => (
+                          <SelectItem key={c.nombre} value={c.nombre}>{c.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {condiciones.find((c) => c.nombre === field.value)?.discrimina
+                        ? 'Los comprobantes salen con el IVA discriminado.'
+                        : 'Los comprobantes salen con el precio final, sin desglose.'}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

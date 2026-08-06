@@ -52,6 +52,10 @@ type FormServicio = {
   nombre: string
   descripcion: string
   precio: string
+  /** La alícuota como fracción, en string (`'0.21'`). El `<select>` trabaja
+   *  con strings; guardarla así evita comparar floats para marcar la opción
+   *  elegida. */
+  iva_rate: string
   activo: boolean
 }
 
@@ -757,8 +761,20 @@ function ServiciosCard() {
   const [nuevo, setNuevo] = useState<FormServicio | null>(null)
   const [editando, setEditando] = useState<(FormServicio & { id: number }) | null>(null)
   const [aBorrar, setABorrar] = useState<Servicio | null>(null)
+  // Las alícuotas válidas salen del backend, que es donde está la lista
+  // cerrada. Si se hardcodearan acá, agregar una allá dejaría el catálogo
+  // aceptando por API algo que esta pantalla no deja elegir.
+  const [alicuotas, setAlicuotas] = useState<number[]>([0, 0.105, 0.21, 0.27])
 
   useEffect(() => { recargar() }, [])
+
+  useEffect(() => {
+    let vigente = true
+    api.get<number[]>('/api/servicios/alicuotas')
+      .then((res) => { if (vigente && res.length) setAlicuotas(res) })
+      .catch(() => { /* se quedan las conocidas: sin select no se puede cargar nada */ })
+    return () => { vigente = false }
+  }, [])
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -786,6 +802,7 @@ function ServiciosCard() {
         nombre: datos.nombre.trim(),
         descripcion: datos.descripcion.trim(),
         precio: Number(datos.precio) || 0,
+        iva_rate: Number(datos.iva_rate),
         activo: datos.activo,
       }
       if (editando) await api.put(`/api/servicios/${editando.id}`, payload)
@@ -830,6 +847,24 @@ function ServiciosCard() {
             onChange={(e) => onCambiar({ ...datos, precio: e.target.value })}
           />
         </div>
+        <div className="grid gap-1.5">
+          {/* La alícuota es del servicio, no del cliente: en Argentina el
+              21 / 10,5 / 27 / exento sale de QUÉ se vende. De la condición del
+              cliente depende otra cosa — si el comprobante la discrimina. */}
+          <Label htmlFor="srv-iva">IVA</Label>
+          <select
+            id="srv-iva"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            value={datos.iva_rate}
+            onChange={(e) => onCambiar({ ...datos, iva_rate: e.target.value })}
+          >
+            {alicuotas.map((r) => (
+              <option key={r} value={String(r)}>
+                {(r * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="grid gap-1.5 sm:col-span-2">
           <Label htmlFor="srv-desc">Descripción para el comprobante</Label>
           <Input
@@ -871,7 +906,9 @@ function ServiciosCard() {
           <div>
             <Button
               type="button" size="sm"
-              onClick={() => setNuevo({ nombre: '', descripcion: '', precio: '0', activo: true })}
+              onClick={() => setNuevo({
+                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21', activo: true,
+              })}
             >
               <Plus className="mr-2 h-4 w-4" />
               Agregar servicio
@@ -910,6 +947,11 @@ function ServiciosCard() {
                 <span className="ml-auto tabular-nums">
                   {s.precio.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
                 </span>
+                <Badge variant="secondary" className="tabular-nums">
+                  {s.iva_rate === 0
+                    ? 'Exento'
+                    : `IVA ${(s.iva_rate * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`}
+                </Badge>
                 {esAdmin && (
                   <>
                     <Button
@@ -917,7 +959,8 @@ function ServiciosCard() {
                       aria-label={`Editar ${s.nombre}`}
                       onClick={() => setEditando({
                         id: s.id, nombre: s.nombre, descripcion: s.descripcion,
-                        precio: String(s.precio), activo: s.activo,
+                        precio: String(s.precio), iva_rate: String(s.iva_rate),
+                        activo: s.activo,
                       })}
                     >
                       <Pencil />

@@ -59,7 +59,20 @@ dependencies = [
     #   - `libracore/db/schema.py` crecio, pero **el DDL de `remitos` y
     #     `presupuestos` no se movio**, que es el que este producto copia a mano
     #     en `services/remitos_presupuestos.py`. Era el riesgo real del bump.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.11.0",
+    #
+    # v1.11.0 -> v1.13.0 (2026-08-05, item 2 de los pendientes de Libra). Los
+    # dos saltos salen de este pedido y **este producto es el unico consumidor
+    # que los ejercita**:
+    #   - v1.12.0: el presupuesto que mezcla alicuotas no inventa un porcentaje
+    #     en el total, y muestra la columna de IVA por linea.
+    #   - v1.13.0: `generate_pdf_presupuesto(..., discriminar=)`, para que el
+    #     comprobante de quien no computa credito fiscal salga con el precio
+    #     final en vez del desglose.
+    # Los dos tienen el comportamiento viejo como default, asi que un
+    # comprobante de una sola alicuota para un Responsable Inscripto sale
+    # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
+    # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.13.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones

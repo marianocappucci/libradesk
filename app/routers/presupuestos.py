@@ -36,6 +36,10 @@ class ItemIn(BaseModel):
     description: str = Field(min_length=1)
     qty: float = Field(gt=0)
     unit_price: float = Field(ge=0)
+    # La alicuota de ESTA linea. `None` = se usa la del documento, que es como
+    # se comportaba todo antes de 2026-08-05 y lo que mandan los comprobantes
+    # ya guardados al editarse.
+    tax_rate: float | None = Field(default=None, ge=0, le=1)
 
 
 def _valid_until_default() -> date_type:
@@ -211,13 +215,27 @@ def delete_presupuesto(
 def presupuesto_pdf(
     presupuesto_id: int,
     presupuestos: PresupuestoService = Depends(get_presupuesto_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
     data_dir: str = Depends(get_data_dir),
 ):
     presupuesto = presupuestos.get(presupuesto_id)
     if presupuesto is None:
         raise HTTPException(404, "presupuesto not found")
+    # La condicion del receptor decide si el PDF discrimina el IVA o muestra el
+    # precio final (LibraCore v1.13.0).
+    #
+    # Se lee del cliente **al generar el PDF**, no se copia al comprobante: es
+    # un dato del cliente, y si una condicion mal cargada se corrige, el PDF
+    # tiene que salir bien la proxima vez sin tocar los presupuestos emitidos.
+    #
+    # Un presupuesto sin cliente —o de un cliente borrado— cae a precio final,
+    # el mismo default que una condicion vacia.
+    cliente = (
+        clientes.get(presupuesto["client_id"]) if presupuesto.get("client_id") else None
+    )
     path = pdf_generator.generate_pdf_presupuesto(
         presupuesto, output_dir=f"{data_dir}/presupuestos_pdf",
+        discriminar=bool(cliente and cliente["iva_discriminado"]),
     )
     presupuestos.set_pdf_path(presupuesto_id, path)
     return FileResponse(
