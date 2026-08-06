@@ -167,6 +167,38 @@ def test_una_garantia_ya_vencida_sigue_apareciendo(client):
     assert bloque["items"][0]["dias_restantes"] == -15
 
 
+def test_una_garantia_vencida_hace_mucho_no_entierra_a_las_proximas(client):
+    """🔴 Encontrado con los datos reales de dev, no por los tests: el bloque
+    traía 22 garantías y **16 habían vencido hace meses** (hasta 283 días),
+    dejando fuera de los 5 visibles a las 3 que estaban por vencer — las únicas
+    sobre las que se puede hacer algo.
+
+    Una garantía vencida no es una anomalía: el equipo ya no está cubierto y no
+    hay nada que hacer. La ventana hacia atrás es del tamaño del horizonte,
+    porque una vencida **hace poco** sí importa — el cliente puede llegar
+    creyendo que sigue cubierto.
+    """
+    c = _cliente(client)
+    _equipo(client, c["id"], garantia=HOY - timedelta(days=200))
+    _equipo(client, c["id"], garantia=HOY - timedelta(days=10))
+    _equipo(client, c["id"], garantia=HOY + timedelta(days=10))
+
+    bloque = _operativo(client, dias=30)["vencimientos"]["garantias"]
+    assert bloque["total"] == 2
+    assert [g["dias_restantes"] for g in bloque["items"]] == [-10, 10]
+
+
+def test_un_contrato_vencido_hace_mucho_SI_aparece(client):
+    """La contracara: un contrato **vigente** con la fecha de fin pasada es una
+    anomalía, y da igual cuánto hace. No lleva piso."""
+    c = _cliente(client)
+    _contrato(client, c["id"], HOY - timedelta(days=200))
+
+    bloque = _operativo(client, dias=30)["vencimientos"]["contratos"]
+    assert bloque["total"] == 1
+    assert bloque["items"][0]["dias_restantes"] == -200
+
+
 def test_el_horizonte_tiene_tope(client):
     """Sin tope, un `dias` grande lista todo el sistema y el bloque deja de ser
     "lo que se vence" para volverse el listado completo."""

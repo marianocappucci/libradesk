@@ -159,12 +159,27 @@ class DashboardService:
             # equipo no tiene columna `activo` —el estado es un string— y usar
             # otro filtro acá haría que el total global y el de la ficha del
             # cliente no cerraran entre sí.
+            #
+            # 🔴 **Las garantías, a diferencia de los contratos, tienen piso.**
+            # Una garantía vencida no es una anomalía: el equipo simplemente ya
+            # no está cubierto, y no hay nada que hacer al respecto. Sin piso, en
+            # los datos reales de dev el bloque traía 22 garantías de las cuales
+            # **16 habían vencido hace meses** (hasta 283 días), enterrando a las
+            # 3 que estaban por vencer — que son las únicas accionables. Se
+            # mantiene una ventana hacia atrás del mismo tamaño que el horizonte
+            # porque una vencida hace poco sí importa: el cliente puede llegar
+            # creyendo que todavía está cubierto.
+            #
+            # Un contrato vigente pasado de fecha, en cambio, **sí** es una
+            # anomalía y no lleva piso: da igual cuánto hace.
+            piso = hoy - timedelta(days=dias)
             garantias = []
             for e in session.execute(
                 select(Equipo)
                 .where(Equipo.estado != "baja")
                 .where(Equipo.garantia_vence.is_not(None))
                 .where(Equipo.garantia_vence <= limite)
+                .where(Equipo.garantia_vence >= piso)
                 .order_by(Equipo.garantia_vence.asc())
             ).scalars():
                 vence = e.garantia_vence
