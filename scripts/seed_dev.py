@@ -482,6 +482,32 @@ def sembrar(api: Api) -> None:
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
 
+#: Los subdominios que NO son de un cliente. Se compara contra la **primera
+#: etiqueta** del host, no como substring de la URL entera — ver
+#: `url_no_productiva`.
+_HOSTS_NO_PRODUCTIVOS = ("dev", "demo", "prueba", "localhost", "127.0.0.1")
+
+
+def url_no_productiva(url: str) -> bool:
+    """Si la URL apunta a una instancia donde se puede sembrar.
+
+    🔴 **Compara la primera etiqueta del host, no un substring de la URL.** La
+    versión anterior hacía `"dev" in url`, y con eso una instancia de cliente
+    llamada `demoliciones.libradesk.com.ar` —o cualquiera cuyo nombre
+    contuviera "dev"— habría pasado la guarda y recibido datos inventados entre
+    los reales. De ahí no se vuelve fácil.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if not host:
+        return False
+    # El host entero **o** su primera etiqueta. Lo primero es para las IP y
+    # `localhost`, que no tienen subdominio: partir `127.0.0.1` por el punto
+    # da `127`, que no matchea con nada.
+    return host in _HOSTS_NO_PRODUCTIVOS or host.split(".")[0] in _HOSTS_NO_PRODUCTIVOS
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
@@ -489,16 +515,17 @@ def main() -> int:
     ap.add_argument("--password", required=True)
     ap.add_argument(
         "--force", action="store_true",
-        help="Correr contra una URL que no parece de dev. No usar.",
+        help="Correr contra una URL que no parece de dev ni de demo. No usar.",
     )
     args = ap.parse_args()
 
     # La guarda. Un seed sobre la instancia de un cliente le mete datos
     # inventados entre los reales, y de ahí no se vuelve fácil.
-    pistas = ("dev", "localhost", "127.0.0.1")
-    if not any(p in args.url for p in pistas) and not args.force:
-        print(f"ERROR: {args.url} no parece una instancia de dev.", file=sys.stderr)
-        print("Este script NO se corre contra la instancia de un cliente.", file=sys.stderr)
+    if not url_no_productiva(args.url) and not args.force:
+        print(f"ERROR: {args.url} no parece una instancia de dev ni de demo.",
+              file=sys.stderr)
+        print("Este script NO se corre contra la instancia de un cliente.",
+              file=sys.stderr)
         return 2
 
     api = Api(args.url)
