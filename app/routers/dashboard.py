@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import get_cliente_repository, get_dashboard_service
 from ..services.clientes import ClienteRepository
@@ -13,6 +13,24 @@ def summary(
     dashboard: DashboardService = Depends(get_dashboard_service),
 ):
     return dashboard.summary(date_from, date_to)
+
+
+@router.get("/operativo")
+def operativo(
+    dias: int = Query(default=30, ge=1, le=365),
+    dashboard: DashboardService = Depends(get_dashboard_service),
+):
+    """Qué hay que hacer hoy: vencimientos, backlog viejo, taller, sin asignar.
+
+    `dias` es el horizonte de los vencimientos y **se aplica a los tres**
+    (contratos, garantías y turnos), a diferencia del `date_from`/`date_to` de
+    `/api/dashboard`, que movía un solo número de seis.
+
+    El tope de 365 no es una precaución vacía: con un `dias` grande el bloque
+    lista todos los contratos del sistema y deja de ser "lo que se vence" para
+    volverse el listado de contratos, que ya existe en su propia pantalla.
+    """
+    return dashboard.operativo(dias)
 
 
 @router.get("/cliente/{cliente_id}")
