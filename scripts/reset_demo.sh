@@ -57,7 +57,7 @@ fi
 # Por la API y desde adentro del contenedor: la contrasena sale de su propio
 # entorno y nunca pasa por la linea de comandos del host, donde quedaria en el
 # `ps` y en el log del cron.
-docker cp "/root/libradesk/scripts/seed_dev.py" "$CONTENEDOR:/tmp/seed.py"
+docker cp "/root/libradesk/scripts/seed_demo.py" "$CONTENEDOR:/tmp/seed.py"
 docker exec -i "$CONTENEDOR" sh -c '
   python3 /tmp/seed.py \
     --url https://demo.libradesk.com.ar \
