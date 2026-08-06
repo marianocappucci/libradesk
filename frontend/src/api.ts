@@ -830,9 +830,86 @@ export type DashboardSummary = {
   incidencias_por_estado: Record<string, number>
   incidencias_por_prioridad_abiertas: Record<string, number>
   incidencias_en_rango: number
+  horas_en_rango: number
   total_clientes_activos: number
   total_equipos: number
   horas_totales_invertidas: number
+  /** Qué claves de este objeto responden al filtro de fechas. Las demás son
+   *  totales absolutos. La pantalla lo usa para rotularlas: sin eso el usuario
+   *  mueve el rango, ve que casi nada cambia y no tiene cómo saber cuáles lo
+   *  miran — se lee peor que no tener filtro. */
+  responden_al_rango: string[]
+}
+
+// --- dashboard operativo (`GET /api/dashboard/operativo`) -------------------
+//
+// Qué hay que hacer hoy. Cada bloque trae el `total` y sólo los primeros
+// `items`: el dashboard no es un listado — si hay 40 contratos por vencer, lo
+// que importa es que son 40 y cuáles son los 5 más próximos.
+
+/** Un bloque del dashboard operativo: cuántos hay y los más urgentes. */
+export type BloqueOperativo<T> = { total: number; items: T[] }
+
+export type ContratoPorVencer = {
+  id: number
+  numero: string
+  cliente: string
+  vence: string
+  /** Puede ser **negativo**: un contrato vigente cuya fecha de fin ya pasó
+   *  está vencido y sigue apareciendo — es justamente lo que hay que atender. */
+  dias_restantes: number
+  estado: string
+}
+
+export type GarantiaPorVencer = {
+  id: number
+  equipo: string
+  cliente: string
+  vence: string
+  dias_restantes: number
+}
+
+export type TurnoProximo = {
+  id: number
+  titulo: string
+  cliente: string
+  cuando: string
+  dias_restantes: number
+  prioridad: string
+}
+
+export type IncidenciaVieja = {
+  id: number
+  titulo: string
+  cliente: string
+  dias: number
+  prioridad: string
+  estado: string
+}
+
+export type EnTaller = {
+  id: number
+  numero: string
+  equipo: string
+  cliente: string
+  dias: number
+}
+
+export type DashboardOperativo = {
+  dias: number
+  hoy: string
+  vencimientos: {
+    contratos: BloqueOperativo<ContratoPorVencer>
+    garantias: BloqueOperativo<GarantiaPorVencer>
+    agenda: BloqueOperativo<TurnoProximo>
+  }
+  backlog: {
+    total_abiertas: number
+    por_antiguedad: Record<string, number>
+    mas_viejas: IncidenciaVieja[]
+  }
+  taller: BloqueOperativo<EnTaller>
+  sin_asignar: number
 }
 
 // --- ficha del cliente (`/clientes/:id`) -----------------------------------
