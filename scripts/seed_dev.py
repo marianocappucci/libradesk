@@ -548,6 +548,102 @@ def sembrar(api: Api) -> None:
             })
             contar("remitos", True)
 
+    # ── Equipos en TODOS los depositos, y garantias a distintas distancias ──
+    # 🔴 Tres cosas se arreglan acá, y las tres salieron de MEDIR los reportes
+    # contra la demo, no de leer el codigo:
+    #
+    # 1. Los depositos estaban vacios. Un deposito sin equipos es una pantalla
+    #    que existe y no muestra nada — y son cuatro: dos propios y dos del
+    #    cliente.
+    # 2. El reporte de **garantias** daba 0 filas: consulta
+    #    `Equipo.garantia_vence <= hoy + dias` y ningun equipo tenia esa fecha.
+    #    Por eso hay vencidas, por vencer y lejanas: el reporte por defecto
+    #    mira 60 dias, y con una sola distancia no se ve para que sirve.
+    # 3. Los reportes de equipos/equipamiento/movimientos traian 1 o 2 filas.
+    depositos = {d["nombre"]: d for d in (api.get("/api/depositos") or [])}
+    por_id = {c["id"]: c for c in clientes}
+
+    def dentro_de(dias: int) -> str:
+        return (date.today() + timedelta(days=dias)).isoformat()
+
+    equipos_spec = [
+        # (deposito, cliente_id, tipo, marca, modelo, serial, garantia, estado)
+        ("Taller", cliente["id"], "Notebook", "Lenovo", "ThinkPad E14", "LN-77120", dentro_de(-40), "en_reparacion"),
+        ("Taller", otro["id"], "Impresora", "Brother", "HL-L2360", "BR-55231", dentro_de(21), "en_reparacion"),
+        ("Depósito central", cliente["id"], "PC de escritorio", "Dell", "OptiPlex 3080", "DL-90114", dentro_de(45), "operativo"),
+        ("Depósito central", otro["id"], "Monitor", "Samsung", "S24R650", "SM-31007", dentro_de(210), "operativo"),
+        ("Depósito central", cliente["id"], "UPS", "APC", "BX1500M", "APC-6621", dentro_de(-120), "operativo"),
+        # Los dos depositos que son del cliente: sus equipos son de ese cliente.
+        ("Pañol", 1, "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
+        ("Pañol", 1, "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
+        ("Sala de racks", 2, "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
+        ("Sala de racks", 2, "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
+    ]
+    ya_serie = {e.get("serial") for e in (api.get("/api/equipos") or [])}
+    for dep, cli_id, tipo, marca, modelo, serial, garantia, estado in equipos_spec:
+        if serial in ya_serie or dep not in depositos:
+            continue
+        if cli_id not in por_id:
+            continue
+        api.post("/api/equipos", {
+            "cliente_id": cli_id, "tipo": tipo, "marca": marca, "modelo": modelo,
+            "serial": serial, "deposito_id": depositos[dep]["id"],
+            "estado": estado, "garantia_vence": garantia,
+            "observaciones": f"Ingresado al {dep.lower()}.",
+        })
+        contar("equipos_deposito", True)
+
+    # Un par de traslados: los movimientos NO se crean solos, salen de cambiar
+    # el deposito o el estado de un equipo (ver services/equipos.py). Sin esto
+    # el reporte de movimientos se queda con las dos filas de los ingresos.
+    inventario = api.get("/api/equipos") or []
+    traslados = [("DL-90114", "Taller"), ("SM-31007", "Pañol")]
+    for serial, destino in traslados:
+        eq = buscar(inventario, "serial", serial)
+        if not eq or destino not in depositos:
+            continue
+        if eq.get("deposito_id") == depositos[destino]["id"]:
+            continue
+        api.put(f"/api/equipos/{eq['id']}", {
+            **{k: eq.get(k) for k in ("cliente_id", "tipo", "marca", "modelo",
+                                      "serial", "estado", "garantia_vence",
+                                      "ubicacion_oficina", "sector", "observaciones")},
+            "deposito_id": depositos[destino]["id"],
+        })
+        contar("traslados", True)
+
+    # ── Incidencias cerradas: es lo que alimenta el reporte de facturacion ──
+    # El reporte pide `estado == "cerrado"` sobre clientes `por_servicio`, y el
+    # seed no cerraba ninguna: daba 0 filas. `fecha_cierre` no se puede mandar
+    # en el alta — la pone el producto al pasar a cerrado, asi que se cierra
+    # con un PUT, que es lo que hace un usuario.
+    #
+    # Con los tres estados de facturacion a la vez (sin facturar, facturado y
+    # no facturable) el filtro de la pantalla tiene las tres opciones con
+    # resultados; con una sola no se ve que el filtro haga algo.
+    cierres = [
+        (0, 2.5, "Se reemplazó la fuente y se probó 24 h.", None),
+        (1, 1.0, "Actualización de firmware y prueba de impresión.", "facturado"),
+        (2, 4.0, "Recableado del rack y etiquetado.", "no_facturable"),
+    ]
+    incidencias = api.get("/api/incidencias") or []
+    for indice, horas, resolucion, estado_fact in cierres:
+        if indice >= len(incidencias):
+            continue
+        inc = incidencias[indice]
+        if inc.get("estado") == "cerrado":
+            continue
+        api.put(f"/api/incidencias/{inc['id']}", {
+            **{k: inc.get(k) for k in (
+                "cliente_id", "equipo_id", "tecnico_id", "titulo", "descripcion",
+                "prioridad", "categoria_id", "sector_id", "modalidad")},
+            "estado": "cerrado",
+            "horas_invertidas": horas,
+            "resolucion": resolucion,
+            "estado_facturacion": estado_fact,
+        })
+        contar("incidencias_cerradas", True)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
 
