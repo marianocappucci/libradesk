@@ -54,6 +54,7 @@ from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
 from .services.tecnicos import TecnicoRepository
+from libraauth.bootstrap import ensure_demo_user
 from .services.users import ensure_default_admin
 
 
@@ -82,6 +83,16 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
     ensure_default_admin(user_repository)
+    # Crea al visitante de la demo, **solo si esta instancia es una demo**: se
+    # guia por `DEMO_MODE` + `DEMO_USERNAME`, las mismas dos variables que
+    # registran `POST /auth/demo`. En la instancia de un cliente devuelve None
+    # y no toca la base.
+    #
+    # 🔴 Sin esta llamada la ruta existe y no tiene a quien loguear: contesta
+    # `503 demo user not provisioned`. Cablear `incluir_demo=True` en el router
+    # no alcanza — la ruta y la siembra las conecta el producto, cada una por
+    # su lado.
+    ensure_demo_user(user_repository)
     module_repository = ModuleRepository(sessions)
     module_repository.ensure_seeded()
 
