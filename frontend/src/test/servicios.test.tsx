@@ -16,9 +16,17 @@ import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { Cliente } from '../api'
 import {
   ComprobanteForm, draftVacio, type ComprobanteDraft,
 } from '../components/comprobante-form'
+
+const CLIENTES: Cliente[] = [
+  {
+    id: 1, nombre: 'Compulibra', email: null, telefono: null, ciudad: null,
+    cuit: null, activo: true,
+  } as Cliente,
+]
 
 const SERVICIOS = [
   {
@@ -71,11 +79,11 @@ function Anfitrion({ espia }: { espia: (d: ComprobanteDraft) => void }) {
       tipo="presupuesto"
       titulo="Nuevo presupuesto"
       draft={draft}
-      clientes={[{ id: 1, nombre: 'Compulibra', activo: true } as never]}
-      onChange={setDraft}
+      clientes={CLIENTES}
+      onChange={(d) => setDraft(d)}
       onSubmit={vi.fn()}
       onCancel={vi.fn()}
-      guardando={false}
+      saving={false}
     />
   )
 }
