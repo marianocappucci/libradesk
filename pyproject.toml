@@ -22,7 +22,7 @@ dependencies = [
     # v0.12.0: un cambio que solo toca columnas ocultas deja fila igual, con el
     # valor tapado. Antes se descartaba entero — o sea que cambiar SOLO la
     # contrasena de un usuario no dejaba rastro en el log de este producto.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.18.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.19.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
