@@ -6,12 +6,21 @@ from fastapi import Depends, FastAPI
 
 import os
 
+from libraauth.auditoria import (
+    AuditoriaBase, AuditoriaRepository, agregar_middleware_de_usuario, build_logs_router,
+    configurar_auditoria,
+)
 from libraauth.auth_events import AuthEventRepository
 from libraauth.models import Base as AuthBase
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
 from libraauth.session_auth import build_smtp_settings_router
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
+from libracore.config_router import (
+    build_backup_router, build_empresa_admin_router, build_empresa_router,
+)
+from libracore.respaldo import Instancia
+from sqlalchemy.engine import make_url
 
 from . import database, schema
 from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
@@ -19,14 +28,13 @@ from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    activos, agenda, categorias, clientes, config_empresa, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, health, incidencias, informes,
-    ingresos, logs,
+    activos, agenda, categorias, clientes, contratos, dashboard,
+    depositos, equipos, equipos_trabajo, health, incidencias, informes, ingresos,
     presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
-    tecnicos, users,
+    servicios, tecnicos, users,
 )
+from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
-from .services.auditoria import AuditoriaRepository, configurar_auditoria, usuario_actual
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
@@ -38,6 +46,7 @@ from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
+from .services.servicios import ServicioRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
@@ -45,6 +54,7 @@ from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
 from .services.tecnicos import TecnicoRepository
+from libraauth.bootstrap import ensure_demo_user
 from .services.users import ensure_default_admin
 
 
@@ -73,13 +83,28 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
     ensure_default_admin(user_repository)
+    # Crea al visitante de la demo, **solo si esta instancia es una demo**: se
+    # guia por `DEMO_MODE` + `DEMO_USERNAME`, las mismas dos variables que
+    # registran `POST /auth/demo`. En la instancia de un cliente devuelve None
+    # y no toca la base.
+    #
+    # 🔴 Sin esta llamada la ruta existe y no tiene a quien loguear: contesta
+    # `503 demo user not provisioned`. Cablear `incluir_demo=True` en el router
+    # no alcanza — la ruta y la siembra las conecta el producto, cada una por
+    # su lado.
+    ensure_demo_user(user_repository)
     module_repository = ModuleRepository(sessions)
     module_repository.ensure_seeded()
 
-    # Log de actividad: cuelga del `flush` de SQLAlchemy, así que se engancha
-    # al session_factory y no a la app — cualquier escritura del producto pasa
-    # por acá, incluidas las que todavía no existen. Ver services/auditoria.py.
-    configurar_auditoria(sessions)
+    # Log de actividad (libraauth v0.9.0): cuelga del `flush` de SQLAlchemy, así
+    # que se engancha al session_factory y no a la app — cualquier escritura del
+    # producto pasa por acá, incluidas las que todavía no existen. Lo único que
+    # queda en el producto es la lista blanca, en `app/auditoria.py`.
+    #
+    # `create_all` acá es para una base nueva: en las que ya existen la tabla la
+    # creó la revisión `0010`, de cuando este código vivía en el producto.
+    AuditoriaBase.metadata.create_all(engine)
+    configurar_auditoria(sessions, AUDITABLES)
 
     app = FastAPI(title="LibraDesk")
     app.state.users = user_repository
@@ -113,6 +138,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.sectores = SectorRepository(sessions)
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
+    app.state.servicios = ServicioRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
@@ -131,26 +157,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.auth_events = AuthEventRepository(sessions)
     app.state.data_dir = data_dir
 
-    @app.middleware("http")
-    async def _sellar_usuario(request, call_next):
-        """Deja el usuario de la request al alcance del `flush`, que ocurre
-        tres capas más abajo (router → repositorio → sesión).
-
-        Sale de la cookie firmada y no de la base: `get_current_user` sólo
-        verifica la firma, así que esto no agrega una consulta por request. Un
-        request sin sesión (el login, el health) deja el default `Sistema`.
-
-        El `reset` del token no es opcional aunque el server sea async: los
-        workers reusan el contexto entre requests, y sin esto el usuario de una
-        request podría quedar pegado para la siguiente que entrara sin sesión.
-        """
-        usuario = app.state.session_auth.get_current_user(request)
-        token = usuario_actual.set(usuario) if usuario else None
-        try:
-            return await call_next(request)
-        finally:
-            if token is not None:
-                usuario_actual.reset(token)
+    # Sella el usuario de la cookie para que la auditoría sepa quién escribió,
+    # tres capas más abajo. Lo pone el motor (libraauth v0.9.0).
+    agregar_middleware_de_usuario(app)
 
     app.include_router(health.router)
     app.include_router(auth_router.router)
@@ -195,6 +204,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # Categorias: parte del core por el mismo motivo que sectores — clasificar
     # un ticket no es una feature de plan, es como se usa una mesa de ayuda.
     app.include_router(categorias.router, dependencies=staff_or_admin)
+    # Catalogo de servicios: `staff_or_admin` y no admin-only, aunque el ABM
+    # sea cosa del dueño. Quien arma un presupuesto es staff, y el catalogo
+    # existe justamente para que lo use al cargarlo — cerrarlo dejaria una
+    # lista cargada que nadie puede consultar, que es lo contrario del pedido.
+    # El ABM se esconde de la pantalla por rol, como en depositos y categorias.
+    app.include_router(servicios.router, dependencies=staff_or_admin)
     # Reparaciones y sus proveedores: tampoco se gatean. Son la continuación de
     # `equipos` —el activo sale a service y vuelve—, y el parque es core. Si
     # alguna vez se decide venderlo como tier, agregar el módulo a `plans.py`
@@ -242,14 +257,51 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
         presupuestos.router,
         dependencies=staff_or_admin + [Depends(require_module("presupuestos"))],
     )
-    # Datos de la empresa (encabezado de los PDF): los edita solo admin,
-    # el resto del staff los lee para previsualizar.
-    app.include_router(config_empresa.router, dependencies=staff_or_admin)
+    # Datos de la empresa, logo y backup. Los tres routers salen de LibraCore
+    # v1.10.0: el de empresa reemplaza a `app/routers/config_empresa.py`, que
+    # hacia exactamente esto y ahora lo hacen los seis productos igual.
+    #
+    # La LECTURA queda con `staff_or_admin` —no admin— porque el generador de
+    # PDF la usa: cerrarla romperia la previsualizacion de un remito para
+    # cualquiera que no sea admin. La escritura, el logo y el backup si son
+    # admin: un backup es una copia completa de los datos del cliente.
+    app.include_router(build_empresa_router(), dependencies=staff_or_admin)
+    app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
+    app.include_router(
+        build_backup_router(
+            Instancia(
+                nombre="libradesk",
+                # Una sola base: a diferencia de Gestiolibra, MedLibra y
+                # VentaLibra, aca `usuarios` vive en el MISMO archivo que el
+                # dominio (`AuthBase.metadata.create_all(engine)`, arriba).
+                bases=[make_url(database_url).database],
+                directorios=[os.path.join(data_dir, "logos")],
+            ),
+            os.path.join(data_dir, "backups"),
+            # 🔴 Sin estos dos el restore devuelve `ok` y **no tiene efecto**
+            # hasta que alguien reinicie el contenedor: el pool sigue con el
+            # archivo viejo abierto y la app sirve la base anterior. Lo
+            # encontro `test_config_backup.py::test_crear_listar_y_restaurar`,
+            # que restauraba y despues preguntaba por los clientes.
+            #
+            # `dispose()` sirve para los dos momentos: cierra el pool y deja
+            # que se vuelva a abrir solo en la proxima conexion.
+            cerrar_conexiones=engine.dispose,
+            reabrir_conexiones=engine.dispose,
+        ),
+        dependencies=[Depends(require_admin)],
+    )
 
     # Logs: admin y nada más. Es la pantalla que dice quién borró qué y desde
     # qué IP entró cada uno; el staff no tiene por qué ver la actividad de sus
-    # compañeros. El router no lleva `staff_or_admin` a propósito — sería un
-    # permiso más ancho, no más angosto.
-    app.include_router(logs.router, dependencies=[Depends(require_admin)])
+    # compañeros. No lleva `staff_or_admin` a propósito — sería un permiso más
+    # ancho, no más angosto.
+    #
+    # El router lo arma el motor (libraauth v0.10.0) pero **el gate lo pone el
+    # producto**: el vocabulario de roles es de acá, no del paquete.
+    app.include_router(
+        build_logs_router(AUDITABLES, prefix="/api/logs"),
+        dependencies=[Depends(require_admin)],
+    )
 
     return app

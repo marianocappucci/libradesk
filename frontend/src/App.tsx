@@ -28,7 +28,8 @@ import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
 import {
-  Configuracion, ConfiguracionCategorias, ConfiguracionProveedores,
+  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionProveedores,
+  ConfiguracionServicios,
 } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
 import { Logs } from './pages/Logs'
@@ -91,6 +92,8 @@ export default function App() {
           sección y el botón "atrás" del navegador hace lo que se espera. */}
       <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
       <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
+      <Route path="/configuracion/servicios" element={<ProtectedRoute><ConfiguracionServicios /></ProtectedRoute>} />
+      <Route path="/configuracion/datos" element={<ProtectedRoute><ConfiguracionDatos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       {/* El gateo real es del backend (`require_admin` en `/api/logs`): acá
           `adminOnly` sólo esconde el ítem del menú. Un staff que escriba la

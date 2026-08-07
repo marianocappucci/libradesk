@@ -59,7 +59,7 @@ beforeEach(() => {
       cuerpo: opciones?.body ? JSON.parse(String(opciones.body)) : null,
     })
     if (metodo !== 'GET') return Promise.resolve(json({ ok: true }))
-    if (u.includes('/api/config-empresa')) return Promise.resolve(json(CONFIG))
+    if (u.includes('/api/config/empresa')) return Promise.resolve(json(CONFIG))
     if (u.includes('/api/categorias')) {
       return Promise.resolve(json([
         { id: 1, nombre: 'Hardware', parent_id: null, ruta: 'Hardware', activo: true },
@@ -190,7 +190,7 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
   })
 
   it('los datos de la empresa SÍ siguen siendo admin-only', async () => {
-    // No es el mismo caso: el PUT de `/api/config-empresa` lleva
+    // No es el mismo caso: el PUT de `/api/config/empresa` lleva
     // `Depends(require_admin)` de verdad, así que ahí mostrar el botón sería
     // ofrecer un 403.
     render(<Configuracion />, '/configuracion')

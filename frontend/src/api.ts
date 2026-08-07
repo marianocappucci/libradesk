@@ -19,6 +19,14 @@ export type Cliente = {
   // Datos fiscales, para que los comprobantes no obliguen a tipearlos cada
   // vez. Nulos en los 9 clientes migrados del Node.js viejo.
   cuit: string | null
+  // Decide si el comprobante muestra el IVA discriminado o el precio final.
+  // **No** decide la alícuota: esa es del servicio. Null en los clientes que
+  // ya existían — el backend cae a precio final a propósito.
+  condicion_iva: string | null
+  /** Derivado de `condicion_iva` por el backend: si los comprobantes de este
+   *  cliente muestran el IVA discriminado. **No recalcularlo acá** — la regla
+   *  vive en `app/services/iva.py` y tiene que estar escrita una sola vez. */
+  iva_discriminado: boolean
   domicilio: string | null
   observaciones: string | null
   tipo_facturacion: 'mensual' | 'por_servicio'
@@ -731,6 +739,10 @@ export type ComprobanteItem = {
   qty: number
   unit_price: number
   subtotal: number
+  /** La alícuota de la línea, en porcentaje (21, 10.5, 0). Opcional: los
+   *  comprobantes guardados antes de 2026-08-05 no la tienen y caen a la del
+   *  documento. Es lo que lee el PDF para la columna de IVA por línea. */
+  iva_pct?: number
 }
 
 type ComprobanteBase = {
@@ -782,13 +794,122 @@ export type ConfigEmpresa = {
   empresa_inicio_actividades: string
 }
 
+/** Un servicio del catálogo, para reusar en remitos y presupuestos.
+ *
+ *  `texto` viene resuelto por el backend: es la descripción, o el nombre si la
+ *  descripción está vacía. Es lo que se copia al ítem del comprobante. */
+export type Servicio = {
+  id: number
+  nombre: string
+  descripcion: string
+  texto: string
+  precio: number
+  /** La alícuota de IVA de ESTE servicio, como fracción (0.21 = 21%).
+   *
+   *  Es del servicio y no del cliente: en Argentina el 21 / 10,5 / 27 / exento
+   *  sale de QUÉ se vende. De la condición del cliente depende otra cosa — si
+   *  el comprobante discrimina el IVA o muestra el precio final. */
+  iva_rate: number
+  activo: boolean
+}
+
+/** Un backup guardado en el servidor. Lo devuelve `GET /api/config/backups`
+ *  (LibraCore v1.10.0).
+ *
+ *  **Es un ZIP con las bases y los archivos de la instancia**, no un `.db`
+ *  suelto: acá la base es una sola, pero en Gestiolibra, MedLibra y VentaLibra
+ *  son dos, y en MedLibra van además los documentos clínicos. El formato es el
+ *  mismo en los seis a propósito. */
+export type BackupGuardado = {
+  filename: string
+  size_mb: number
+  mtime: string
+}
+
 export type DashboardSummary = {
   incidencias_por_estado: Record<string, number>
   incidencias_por_prioridad_abiertas: Record<string, number>
   incidencias_en_rango: number
+  horas_en_rango: number
   total_clientes_activos: number
   total_equipos: number
   horas_totales_invertidas: number
+  /** Qué claves de este objeto responden al filtro de fechas. Las demás son
+   *  totales absolutos. La pantalla lo usa para rotularlas: sin eso el usuario
+   *  mueve el rango, ve que casi nada cambia y no tiene cómo saber cuáles lo
+   *  miran — se lee peor que no tener filtro. */
+  responden_al_rango: string[]
+}
+
+// --- dashboard operativo (`GET /api/dashboard/operativo`) -------------------
+//
+// Qué hay que hacer hoy. Cada bloque trae el `total` y sólo los primeros
+// `items`: el dashboard no es un listado — si hay 40 contratos por vencer, lo
+// que importa es que son 40 y cuáles son los 5 más próximos.
+
+/** Un bloque del dashboard operativo: cuántos hay y los más urgentes. */
+export type BloqueOperativo<T> = { total: number; items: T[] }
+
+export type ContratoPorVencer = {
+  id: number
+  numero: string
+  cliente: string
+  vence: string
+  /** Puede ser **negativo**: un contrato vigente cuya fecha de fin ya pasó
+   *  está vencido y sigue apareciendo — es justamente lo que hay que atender. */
+  dias_restantes: number
+  estado: string
+}
+
+export type GarantiaPorVencer = {
+  id: number
+  equipo: string
+  cliente: string
+  vence: string
+  dias_restantes: number
+}
+
+export type TurnoProximo = {
+  id: number
+  titulo: string
+  cliente: string
+  cuando: string
+  dias_restantes: number
+  prioridad: string
+}
+
+export type IncidenciaVieja = {
+  id: number
+  titulo: string
+  cliente: string
+  dias: number
+  prioridad: string
+  estado: string
+}
+
+export type EnTaller = {
+  id: number
+  numero: string
+  equipo: string
+  cliente: string
+  dias: number
+}
+
+export type DashboardOperativo = {
+  dias: number
+  hoy: string
+  vencimientos: {
+    contratos: BloqueOperativo<ContratoPorVencer>
+    garantias: BloqueOperativo<GarantiaPorVencer>
+    agenda: BloqueOperativo<TurnoProximo>
+  }
+  backlog: {
+    total_abiertas: number
+    por_antiguedad: Record<string, number>
+    mas_viejas: IncidenciaVieja[]
+  }
+  taller: BloqueOperativo<EnTaller>
+  sin_asignar: number
 }
 
 // --- ficha del cliente (`/clientes/:id`) -----------------------------------
@@ -913,45 +1034,10 @@ export const MARCA_CLASE: Record<string, string> = {
 
 // --- logs (admin) ----------------------------------------------------------
 //
-// Dos fuentes distintas en una sola respuesta: `actividad` la escribe el flush
-// de SQLAlchemy (app/services/auditoria.py) y `accesos` el router de login del
-// motor (libraauth v0.8.0). Las entidades y las acciones vienen del backend y
-// no se declaran acá a propósito: la lista de lo auditable vive en
-// `auditoria.AUDITABLES`, y agregar una entidad no debería obligar a tocar el
-// frontend para que se vea.
-
-export type ActividadLog = {
-  id: number
-  ts: string
-  usuario: string
-  accion: string
-  entidad: string
-  entidad_id: number | null
-  descripcion: string
-  // `{columna: [antes, despues]}`. Null en altas y bajas: ahí no hay diff que
-  // mostrar, la fila entera es la novedad.
-  cambios: Record<string, [unknown, unknown]> | null
-}
-
-export type AccesoLog = {
-  id: number
-  ts: string
-  evento: 'login' | 'logout' | 'login_fallido' | string
-  username: string
-  ip: string
-  detalle: string
-}
-
-export type LogsData = {
-  actividad: ActividadLog[]
-  total: number
-  total_pages: number
-  page: number
-  entidades: string[]
-  acciones: Record<string, { label: string; color: string }>
-  usuarios: string[]
-  accesos: AccesoLog[]
-}
+// Los tipos viven en libra-ui junto a la pantalla (v0.12.0): la respuesta la
+// arma `libraauth.auditoria.build_logs_router()`, que es del motor, no de este
+// producto.
+export type { ActividadLog, AccesoLog, LogsData } from 'libra-ui/Logs'
 
 export type ClienteResumen = {
   cliente: Cliente

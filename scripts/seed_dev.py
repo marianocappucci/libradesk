@@ -185,6 +185,33 @@ def sembrar(api: Api) -> None:
         "/api/proveedores", {"nombre": "Compu Service SRL", "telefono": "11-5555-0000"},
     )
 
+    # ── Catalogo de servicios (item 3) ────────────────────────────────────
+    #
+    # Sin esto, Configuracion -> Servicios abre vacia y el buscador del
+    # formulario de comprobante no sugiere nada: la feature se ve como si no
+    # existiera. Uno va SIN descripcion a proposito, para que se vea que en
+    # ese caso el texto que va al comprobante es el nombre.
+    servicios_spec = [
+        ("Mantenimiento preventivo",
+         "Mantenimiento preventivo de equipo, incluye limpieza interna y cambio "
+         "de pasta térmica", 18000),
+        ("Instalación de puesto de trabajo",
+         "Instalación y configuración de puesto de trabajo completo", 25000),
+        ("Visita técnica", "", 12000),
+        ("Backup y migración de datos",
+         "Resguardo y migración de datos a equipo nuevo", 30000),
+        ("Configuración de red",
+         "Configuración de router, switch y puntos de acceso", 40000),
+    ]
+    existentes_srv = api.get("/api/servicios?incluir_inactivos=true") or []
+    for nombre, descripcion, precio in servicios_spec:
+        if buscar(existentes_srv, "nombre", nombre):
+            contar("servicios", False)
+            continue
+        api.post("/api/servicios",
+                 {"nombre": nombre, "descripcion": descripcion, "precio": precio})
+        contar("servicios", True)
+
     # ── Activos, con los estados que la pantalla distingue (fase 1) ────────
     activos_spec = [
         ("Central telefónica", "Yeastar", "S20", "YS-2411-0087", 180000, 250000),
@@ -452,7 +479,282 @@ def sembrar(api: Api) -> None:
             api.post(f"/api/ingresos-reparacion/{creado['id']}/entregar", entrega)
             contar("entregas", True)
 
+    # ── Categorias de incidencia y sectores del cliente ───────────────────
+    # Estaban vacios en la demo: son los dos catalogos que alimentan los
+    # desplegables de una incidencia, y sin ellos la pantalla ofrece una lista
+    # vacia que parece rota.
+    categorias = api.get("/api/categorias") or []
+    for nombre in ("Redes", "Impresión", "Puestos de trabajo", "Servidores"):
+        if buscar(categorias, "nombre", nombre):
+            continue
+        api.post("/api/categorias", {"nombre": nombre})
+        contar("categorias", True)
+
+    sectores = api.get("/api/sectores") or []
+    for cli, nombre in ((cliente, "Administración"), (cliente, "Guardia"),
+                        (otro, "Depósito"), (otro, "Recepción")):
+        if any(s.get("nombre") == nombre and s.get("cliente_id") == cli["id"]
+               for s in sectores):
+            continue
+        api.post("/api/sectores", {"cliente_id": cli["id"], "nombre": nombre})
+        contar("sectores", True)
+
+    # ── Presupuestos y remitos, con su PDF ────────────────────────────────
+    # 🔴 Son las dos pantallas que un interesado abre para ver "como se ve un
+    # comprobante", y estaban vacias: sin una fila no hay PDF que descargar, y
+    # el modulo entero parece no existir. Pedido explicito del humano
+    # (2026-08-06).
+    #
+    # Los items salen del catalogo de servicios sembrado arriba, no de texto
+    # inventado acá: asi el ejemplo muestra el flujo real —elegir del catalogo
+    # y que se complete precio y alicuota— y no un presupuesto que ningun
+    # usuario podria haber armado.
+    servicios = api.get("/api/servicios") or []
+    if servicios:
+        def item(srv, qty):
+            return {"description": srv["nombre"], "qty": qty,
+                    "unit_price": srv.get("precio") or 1000,
+                    "tax_rate": srv.get("iva_rate")}
+
+        # Tres estados distintos a proposito: la pantalla los pinta distinto y
+        # con uno solo no se ve la diferencia.
+        presupuestos_spec = [
+            ("borrador", [item(servicios[0], 2)], "Sujeto a disponibilidad de repuestos."),
+            ("enviado", [item(s, 1) for s in servicios[:3]],
+             "Incluye traslado dentro del casco urbano."),
+            ("aceptado", [item(servicios[1], 4), item(servicios[0], 1)],
+             "Aceptado por mail el 04/08."),
+        ]
+        ya = {p.get("observations") for p in (api.get("/api/presupuestos") or [])}
+        for estado, items, obs in presupuestos_spec:
+            if obs in ya:
+                continue
+            api.post("/api/presupuestos", {
+                "client_id": cliente["id"] if estado != "aceptado" else otro["id"],
+                "status": estado, "items": items, "observations": obs,
+            })
+            contar("presupuestos", True)
+
+        remitos_spec = [
+            ([item(servicios[0], 1)], "Entregado en mano, conforme."),
+            ([item(s, 2) for s in servicios[:2]], "Retira el cliente por depósito."),
+        ]
+        ya_r = {r.get("observations") for r in (api.get("/api/remitos") or [])}
+        for items, obs in remitos_spec:
+            if obs in ya_r:
+                continue
+            api.post("/api/remitos", {
+                "client_id": cliente["id"], "items": items, "observations": obs,
+            })
+            contar("remitos", True)
+
+    # ── Equipos en TODOS los depositos, y garantias a distintas distancias ──
+    # 🔴 Tres cosas se arreglan acá, y las tres salieron de MEDIR los reportes
+    # contra la demo, no de leer el codigo:
+    #
+    # 1. Los depositos estaban vacios. Un deposito sin equipos es una pantalla
+    #    que existe y no muestra nada — y son cuatro: dos propios y dos del
+    #    cliente.
+    # 2. El reporte de **garantias** daba 0 filas: consulta
+    #    `Equipo.garantia_vence <= hoy + dias` y ningun equipo tenia esa fecha.
+    #    Por eso hay vencidas, por vencer y lejanas: el reporte por defecto
+    #    mira 60 dias, y con una sola distancia no se ve para que sirve.
+    # 3. Los reportes de equipos/equipamiento/movimientos traian 1 o 2 filas.
+    depositos = {d["nombre"]: d for d in (api.get("/api/depositos") or [])}
+    por_id = {c["id"]: c for c in clientes}
+
+    def dentro_de(dias: int) -> str:
+        return (date.today() + timedelta(days=dias)).isoformat()
+
+    equipos_spec = [
+        # (deposito, cliente_id, tipo, marca, modelo, serial, garantia, estado)
+        ("Taller", cliente["id"], "Notebook", "Lenovo", "ThinkPad E14", "LN-77120", dentro_de(-40), "en_reparacion"),
+        ("Taller", otro["id"], "Impresora", "Brother", "HL-L2360", "BR-55231", dentro_de(21), "en_reparacion"),
+        ("Depósito central", cliente["id"], "PC de escritorio", "Dell", "OptiPlex 3080", "DL-90114", dentro_de(45), "operativo"),
+        ("Depósito central", otro["id"], "Monitor", "Samsung", "S24R650", "SM-31007", dentro_de(210), "operativo"),
+        ("Depósito central", cliente["id"], "UPS", "APC", "BX1500M", "APC-6621", dentro_de(-120), "operativo"),
+        # Los dos depositos que son del cliente: sus equipos son de ese cliente.
+        ("Pañol", 1, "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
+        ("Pañol", 1, "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
+        ("Sala de racks", 2, "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
+        ("Sala de racks", 2, "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
+    ]
+    ya_serie = {e.get("serial") for e in (api.get("/api/equipos") or [])}
+    for dep, cli_id, tipo, marca, modelo, serial, garantia, estado in equipos_spec:
+        if serial in ya_serie or dep not in depositos:
+            continue
+        if cli_id not in por_id:
+            continue
+        api.post("/api/equipos", {
+            "cliente_id": cli_id, "tipo": tipo, "marca": marca, "modelo": modelo,
+            "serial": serial, "deposito_id": depositos[dep]["id"],
+            "estado": estado, "garantia_vence": garantia,
+            "observaciones": f"Ingresado al {dep.lower()}.",
+        })
+        contar("equipos_deposito", True)
+
+    # Un par de traslados: los movimientos NO se crean solos, salen de cambiar
+    # el deposito o el estado de un equipo (ver services/equipos.py). Sin esto
+    # el reporte de movimientos se queda con las dos filas de los ingresos.
+    inventario = api.get("/api/equipos") or []
+    # 🔴 El destino no es libre: el producto rechaza guardar un equipo en el
+    # depósito de OTRO cliente (422, y con razón). Así que un equipo del
+    # cliente sólo se puede mover a un depósito propio de la empresa o al
+    # suyo. Lo encontró este mismo seed al correr — leyendo el modelo no
+    # aparecía.
+    traslados = [("DL-90114", "Taller"), ("SM-31007", "Sala de racks")]
+    for serial, destino in traslados:
+        eq = buscar(inventario, "serial", serial)
+        if not eq or destino not in depositos:
+            continue
+        if eq.get("deposito_id") == depositos[destino]["id"]:
+            continue
+        api.put(f"/api/equipos/{eq['id']}", {
+            **{k: eq.get(k) for k in ("cliente_id", "tipo", "marca", "modelo",
+                                      "serial", "estado", "garantia_vence",
+                                      "ubicacion_oficina", "sector", "observaciones")},
+            "deposito_id": depositos[destino]["id"],
+        })
+        contar("traslados", True)
+
+    # ── Incidencias cerradas: es lo que alimenta el reporte de facturacion ──
+    # El reporte pide `estado == "cerrado"` sobre clientes `por_servicio`, y el
+    # seed no cerraba ninguna: daba 0 filas. `fecha_cierre` no se puede mandar
+    # en el alta — la pone el producto al pasar a cerrado, asi que se cierra
+    # con un PUT, que es lo que hace un usuario.
+    #
+    # Con los tres estados de facturacion a la vez (sin facturar, facturado y
+    # no facturable) el filtro de la pantalla tiene las tres opciones con
+    # resultados; con una sola no se ve que el filtro haga algo.
+    cierres = [
+        (0, 2.5, "Se reemplazó la fuente y se probó 24 h.", None),
+        (1, 1.0, "Actualización de firmware y prueba de impresión.", "facturado"),
+        (2, 4.0, "Recableado del rack y etiquetado.", "no_facturable"),
+    ]
+    incidencias = api.get("/api/incidencias") or []
+    for indice, horas, resolucion, estado_fact in cierres:
+        if indice >= len(incidencias):
+            continue
+        inc = incidencias[indice]
+        if inc.get("estado") == "cerrado":
+            continue
+        api.put(f"/api/incidencias/{inc['id']}", {
+            **{k: inc.get(k) for k in (
+                "cliente_id", "equipo_id", "tecnico_id", "titulo", "descripcion",
+                "prioridad", "categoria_id", "sector_id", "modalidad")},
+            "estado": "cerrado",
+            "horas_invertidas": horas,
+            "resolucion": resolucion,
+            "estado_facturacion": estado_fact,
+        })
+        contar("incidencias_cerradas", True)
+
+    # El logo del negocio, para que los comprobantes salgan como los de un
+    # cliente y no con un hueco arriba.
+    _cargar_logo(api, "Compulibra Servicios IT", "C", (79, 70, 229), contar)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
+
+
+#: Los subdominios que NO son de un cliente. Se compara contra la **primera
+#: etiqueta** del host, no como substring de la URL entera — ver
+#: `url_no_productiva`.
+_HOSTS_NO_PRODUCTIVOS = ("dev", "demo", "prueba", "localhost", "127.0.0.1")
+
+
+
+def _cargar_logo(api: Api, nombre: str, inicial: str, color: tuple, contar) -> None:
+    """Dibuja el logo del negocio y lo sube a Configuración.
+
+    🔴 **Se genera, no se commitea.** PIL viene en la imagen del producto, así
+    que el seed lo dibuja en el momento: no hay binarios en el repo y cambiar
+    el color es cambiar una línea. Mismo criterio que el resto del seed — el
+    estado limpio es código, no un archivo guardado a mano.
+
+    Sin logo, los PDF de la demo salen con un hueco arriba: el interesado ve
+    dónde iría el suyo pero no cómo se ve. Con uno, el comprobante se lee como
+    el que va a emitir él.
+    """
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        # En un entorno sin PIL el seed sigue: un logo faltante no vale
+        # abortar la carga de datos.
+        print("  (sin PIL: se saltea el logo)")
+        return
+
+    # Idempotencia tolerante: la clave del logo cambió de nombre entre
+    # productos, así que se busca cualquiera que lo mencione en vez de fijar
+    # una — un nombre equivocado acá haría que el logo se resuba en cada
+    # corrida sin que se note.
+    actual = api.get("/api/config/empresa") or {}
+    if any("logo" in clave and valor for clave, valor in actual.items()):
+        contar("logo", False)
+        return
+
+    ANCHO, ALTO = 520, 160
+    imagen = Image.new("RGBA", (ANCHO, ALTO), (255, 255, 255, 0))
+    dibujo = ImageDraw.Draw(imagen)
+    # Cuadrado redondeado con la inicial, y el nombre al lado: es la forma que
+    # tienen los logos de la familia y la que mejor sobrevive achicada en un
+    # encabezado de PDF.
+    dibujo.rounded_rectangle((8, 20, 128, 140), radius=24, fill=color)
+    dibujo.text((52, 60), inicial, fill=(255, 255, 255))
+    dibujo.text((150, 55), nombre, fill=(30, 30, 30))
+    dibujo.line((150, 95, 150 + min(340, len(nombre) * 11), 95), fill=color, width=4)
+
+    # 🔴 La subida es multipart a mano, así que necesita la URL y el opener del
+    # `Api` real. La suite corre el seed contra un doble que habla directo con
+    # la app y no tiene ninguno de los dos: sin esta guarda, `api.base`
+    # reventaba con AttributeError y se llevaba puestos **11 tests** del seed
+    # entero, no sólo el del logo.
+    if not getattr(api, "base", None) or not getattr(api, "opener", None):
+        return
+
+    import io
+    buffer = io.BytesIO()
+    imagen.save(buffer, format="PNG")
+    contenido = buffer.getvalue()
+
+    limite = "----seed" + "0" * 12
+    cuerpo = (
+        f"--{limite}\r\n"
+        # 🔴 El campo se llama `logo`, no `file`: con `file` la API contesta
+        # 422. Leído del openapi de la instancia.
+        'Content-Disposition: form-data; name="logo"; filename="logo.png"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+    ).encode() + contenido + f"\r\n--{limite}--\r\n".encode()
+
+    import urllib.request
+    pedido = urllib.request.Request(
+        f"{api.base}/api/config/empresa/logo", data=cuerpo, method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={limite}"},
+    )
+    try:
+        api.opener.open(pedido, timeout=30)
+        contar("logo", True)
+    except Exception as e:
+        print(f"  -- logo: {e}")
+
+
+def url_no_productiva(url: str) -> bool:
+    """Si la URL apunta a una instancia donde se puede sembrar.
+
+    🔴 **Compara la primera etiqueta del host, no un substring de la URL.** La
+    versión anterior hacía `"dev" in url`, y con eso una instancia de cliente
+    llamada `demoliciones.libradesk.com.ar` —o cualquiera cuyo nombre
+    contuviera "dev"— habría pasado la guarda y recibido datos inventados entre
+    los reales. De ahí no se vuelve fácil.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if not host:
+        return False
+    # El host entero **o** su primera etiqueta. Lo primero es para las IP y
+    # `localhost`, que no tienen subdominio: partir `127.0.0.1` por el punto
+    # da `127`, que no matchea con nada.
+    return host in _HOSTS_NO_PRODUCTIVOS or host.split(".")[0] in _HOSTS_NO_PRODUCTIVOS
 
 
 def main() -> int:
@@ -462,16 +764,17 @@ def main() -> int:
     ap.add_argument("--password", required=True)
     ap.add_argument(
         "--force", action="store_true",
-        help="Correr contra una URL que no parece de dev. No usar.",
+        help="Correr contra una URL que no parece de dev ni de demo. No usar.",
     )
     args = ap.parse_args()
 
     # La guarda. Un seed sobre la instancia de un cliente le mete datos
     # inventados entre los reales, y de ahí no se vuelve fácil.
-    pistas = ("dev", "localhost", "127.0.0.1")
-    if not any(p in args.url for p in pistas) and not args.force:
-        print(f"ERROR: {args.url} no parece una instancia de dev.", file=sys.stderr)
-        print("Este script NO se corre contra la instancia de un cliente.", file=sys.stderr)
+    if not url_no_productiva(args.url) and not args.force:
+        print(f"ERROR: {args.url} no parece una instancia de dev ni de demo.",
+              file=sys.stderr)
+        print("Este script NO se corre contra la instancia de un cliente.",
+              file=sys.stderr)
         return 2
 
     api = Api(args.url)

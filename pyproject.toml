@@ -13,11 +13,16 @@ dependencies = [
     "alembic>=1.13",
     "itsdangerous>=2.2.0",
     "openpyxl>=3.1.0",
-    # v0.8.0 trae el log de accesos (`libraauth.auth_events`): la mitad de
-    # acceso de la pantalla de Logs. El bump NO es opcional para este producto
-    # a partir de esta version — `main.py` importa `AuthEventRepository`, asi
-    # que con v0.7.0 la app ni siquiera levanta.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.8.0",
+    # v0.8.0 trae el log de accesos (`libraauth.auth_events`), v0.9.0 el de
+    # actividad (`libraauth.auditoria`) y v0.10.0 el router que los lee — los
+    # tres extraidos de este mismo producto para que los otros no los copien.
+    # El bump NO es opcional a partir de aca: `main.py` importa de los tres,
+    # asi que con un pin anterior la app ni siquiera levanta.
+    #
+    # v0.12.0: un cambio que solo toca columnas ocultas deja fila igual, con el
+    # valor tapado. Antes se descartaba entero — o sea que cambiar SOLO la
+    # contrasena de un usuario no dejaba rastro en el log de este producto.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.20.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -54,7 +59,20 @@ dependencies = [
     #   - `libracore/db/schema.py` crecio, pero **el DDL de `remitos` y
     #     `presupuestos` no se movio**, que es el que este producto copia a mano
     #     en `services/remitos_presupuestos.py`. Era el riesgo real del bump.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.9.1",
+    #
+    # v1.11.0 -> v1.13.0 (2026-08-05, item 2 de los pendientes de Libra). Los
+    # dos saltos salen de este pedido y **este producto es el unico consumidor
+    # que los ejercita**:
+    #   - v1.12.0: el presupuesto que mezcla alicuotas no inventa un porcentaje
+    #     en el total, y muestra la columna de IVA por linea.
+    #   - v1.13.0: `generate_pdf_presupuesto(..., discriminar=)`, para que el
+    #     comprobante de quien no computa credito fiscal salga con el precio
+    #     final en vez del desglose.
+    # Los dos tienen el comportamiento viejo como default, asi que un
+    # comprobante de una sola alicuota para un Responsable Inscripto sale
+    # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
+    # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.13.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones

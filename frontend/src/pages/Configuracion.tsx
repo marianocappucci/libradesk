@@ -16,14 +16,16 @@
 // `categorias.router` y `proveedores.router` con `staff_or_admin`, así que
 // cualquier staff **ya podía** crear, editar y borrar por la API. Esconderle
 // los botones no restringía nada — sólo hacía que las dos pestañas se vieran
-// rotas para quien no fuera admin. `config-empresa` sí es distinto: su PUT
-// lleva `Depends(require_admin)` de verdad, y ahí el gate se queda.
+// rotas para quien no fuera admin. Los datos de empresa sí son distintos: el
+// `GET` de `/api/config/empresa` es staff, pero el `PUT` va en un router
+// aparte con `require_admin` de verdad, y ahí el gate se queda.
 //
 // Si se decide que estos catálogos sean admin-only, el lugar es el backend, no
 // esta pantalla.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  api, ApiError, type CategoriaIncidencia, type ConfigEmpresa, type Proveedor,
+  api, ApiError, type BackupGuardado, type CategoriaIncidencia, type ConfigEmpresa,
+  type Proveedor, type Servicio,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Conmutador } from '@/components/conmutador'
@@ -34,7 +36,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, CornerDownRight, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, CornerDownRight, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */
@@ -43,6 +45,18 @@ type FormProveedor = {
   contacto: string
   telefono: string
   email: string
+}
+
+/** Los campos editables de un servicio, como strings del formulario. */
+type FormServicio = {
+  nombre: string
+  descripcion: string
+  precio: string
+  /** La alícuota como fracción, en string (`'0.21'`). El `<select>` trabaja
+   *  con strings; guardarla así evita comparar floats para marcar la opción
+   *  elegida. */
+  iva_rate: string
+  activo: boolean
 }
 
 const VACIO: ConfigEmpresa = {
@@ -502,7 +516,7 @@ export function Configuracion() {
     setLoading(true)
     setError(null)
     try {
-      setConfig(await api.get<ConfigEmpresa>('/api/config-empresa'))
+      setConfig(await api.get<ConfigEmpresa>('/api/config/empresa'))
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -516,7 +530,7 @@ export function Configuracion() {
     setError(null)
     setGuardado(false)
     try {
-      setConfig(await api.put<ConfigEmpresa>('/api/config-empresa', config))
+      setConfig(await api.put<ConfigEmpresa>('/api/config/empresa', config))
       setGuardado(true)
     } catch (err) {
       setError(describeError(err))
@@ -574,7 +588,118 @@ export function Configuracion() {
           )}
         </CardContent>
       </Card>
+
+      <LogoCard esAdmin={esAdmin} />
     </Pantalla>
+  )
+}
+
+/** El logo que encabeza los PDF.
+ *
+ *  El generador de LibraCore ya lo buscaba en `LOGO_DIR`; lo que no existía
+ *  era el modo de ponerlo ahí sin entrar al volumen del contenedor.
+ */
+function LogoCard({ esAdmin }: { esAdmin: boolean }) {
+  // `version` fuerza a recargar la imagen después de subir o borrar: el
+  // navegador cachea `/api/config/empresa/logo` y sin esto se sigue viendo el
+  // logo anterior aunque el nuevo ya esté en el servidor.
+  const [version, setVersion] = useState(0)
+  const [hayLogo, setHayLogo] = useState<boolean | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/config/empresa/logo', { credentials: 'include' })
+      .then((r) => { if (vivo) setHayLogo(r.ok) })
+      .catch(() => { if (vivo) setHayLogo(false) })
+    return () => { vivo = false }
+  }, [version])
+
+  async function subir(archivo: File) {
+    setSubiendo(true)
+    setError(null)
+    try {
+      const form = new FormData()
+      form.append('logo', archivo)
+      await api.postForm('/api/config/empresa/logo', form)
+      setVersion((v) => v + 1)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'No se pudo subir el logo.')
+    } finally {
+      setSubiendo(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  async function borrar() {
+    setError(null)
+    try {
+      await api.del('/api/config/empresa/logo')
+      setVersion((v) => v + 1)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'No se pudo borrar el logo.')
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Logo</CardTitle>
+        <CardDescription>
+          Sale en el encabezado de remitos, presupuestos e informes. PNG o JPG.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {hayLogo === null ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : hayLogo ? (
+          <img
+            src={`/api/config/empresa/logo?v=${version}`}
+            alt="Logo de la empresa"
+            className="max-h-24 w-auto rounded border bg-white object-contain p-2"
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay logo cargado; los comprobantes salen sin él.
+          </p>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {esAdmin ? (
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) subir(f) }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={subiendo}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {subiendo ? 'Subiendo…' : hayLogo ? 'Reemplazar' : 'Subir logo'}
+            </Button>
+            {hayLogo && (
+              <Button type="button" variant="outline" onClick={borrar}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Quitar
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede cambiar el logo.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -609,5 +734,462 @@ export function ConfiguracionProveedores() {
     <Pantalla actual="proveedores">
       <ProveedoresCard />
     </Pantalla>
+  )
+}
+
+/** Pestaña del catálogo de servicios. */
+export function ConfiguracionServicios() {
+  return (
+    <Pantalla actual="servicios">
+      <ServiciosCard />
+    </Pantalla>
+  )
+}
+
+/** El catálogo de servicios que se reusan al armar remitos y presupuestos.
+ *
+ *  🔴 **No reemplaza al campo libre.** Un ítem de comprobante sigue siendo
+ *  texto libre; este catálogo sólo lo sugiere mientras se escribe. Cargar algo
+ *  acá no obliga a nadie a usarlo, y no cargarlo deja el sistema como estaba.
+ */
+function ServiciosCard() {
+  const { user } = useAuth()
+  const esAdmin = user?.role === 'admin'
+  const [servicios, setServicios] = useState<Servicio[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [nuevo, setNuevo] = useState<FormServicio | null>(null)
+  const [editando, setEditando] = useState<(FormServicio & { id: number }) | null>(null)
+  const [aBorrar, setABorrar] = useState<Servicio | null>(null)
+  // Las alícuotas válidas salen del backend, que es donde está la lista
+  // cerrada. Si se hardcodearan acá, agregar una allá dejaría el catálogo
+  // aceptando por API algo que esta pantalla no deja elegir.
+  const [alicuotas, setAlicuotas] = useState<number[]>([0, 0.105, 0.21, 0.27])
+
+  useEffect(() => { recargar() }, [])
+
+  useEffect(() => {
+    let vigente = true
+    api.get<number[]>('/api/servicios/alicuotas')
+      .then((res) => { if (vigente && res.length) setAlicuotas(res) })
+      .catch(() => { /* se quedan las conocidas: sin select no se puede cargar nada */ })
+    return () => { vigente = false }
+  }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function recargar() {
+    try {
+      // Con inactivos: la pantalla de administración los muestra para poder
+      // reactivarlos. El buscador del comprobante sólo ofrece los activos.
+      setServicios(await api.get<Servicio[]>('/api/servicios?incluir_inactivos=true'))
+      setError(null)
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  async function guardar() {
+    const datos = editando ?? nuevo
+    if (!datos || !datos.nombre.trim()) return
+    setGuardando(true)
+    setError(null)
+    try {
+      const payload = {
+        nombre: datos.nombre.trim(),
+        descripcion: datos.descripcion.trim(),
+        precio: Number(datos.precio) || 0,
+        iva_rate: Number(datos.iva_rate),
+        activo: datos.activo,
+      }
+      if (editando) await api.put(`/api/servicios/${editando.id}`, payload)
+      else await api.post('/api/servicios', payload)
+      setNuevo(null)
+      setEditando(null)
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function borrar(servicio: Servicio) {
+    setError(null)
+    try {
+      await api.del(`/api/servicios/${servicio.id}`)
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  function Formulario({ datos, onCambiar }: {
+    datos: FormServicio
+    onCambiar: (d: FormServicio) => void
+  }) {
+    return (
+      <div className="grid gap-3 rounded border p-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="srv-nombre">Nombre</Label>
+          <Input
+            id="srv-nombre" value={datos.nombre} placeholder="Mantenimiento preventivo"
+            onChange={(e) => onCambiar({ ...datos, nombre: e.target.value })}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="srv-precio">Precio</Label>
+          <Input
+            id="srv-precio" type="number" min="0" step="0.01" value={datos.precio}
+            onChange={(e) => onCambiar({ ...datos, precio: e.target.value })}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          {/* La alícuota es del servicio, no del cliente: en Argentina el
+              21 / 10,5 / 27 / exento sale de QUÉ se vende. De la condición del
+              cliente depende otra cosa — si el comprobante la discrimina. */}
+          <Label htmlFor="srv-iva">IVA</Label>
+          <select
+            id="srv-iva"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            value={datos.iva_rate}
+            onChange={(e) => onCambiar({ ...datos, iva_rate: e.target.value })}
+          >
+            {alicuotas.map((r) => (
+              <option key={r} value={String(r)}>
+                {(r * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-1.5 sm:col-span-2">
+          <Label htmlFor="srv-desc">Descripción para el comprobante</Label>
+          <Input
+            id="srv-desc" value={datos.descripcion}
+            placeholder="Si queda vacía se usa el nombre"
+            onChange={(e) => onCambiar({ ...datos, descripcion: e.target.value })}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <Button type="button" disabled={guardando} onClick={guardar}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+          <Button
+            type="button" variant="outline"
+            onClick={() => { setNuevo(null); setEditando(null); setError(null) }}
+          >
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Servicios</CardTitle>
+        <CardDescription>
+          Los que se ofrecen habitualmente, con su precio. Al armar un remito o
+          un presupuesto aparecen como sugerencia mientras se escribe la
+          descripción — <strong>el campo sigue siendo libre</strong>: se puede
+          elegir uno o escribir cualquier otra cosa.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {esAdmin && !nuevo && !editando && (
+          <div>
+            <Button
+              type="button" size="sm"
+              onClick={() => setNuevo({
+                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21', activo: true,
+              })}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar servicio
+            </Button>
+          </div>
+        )}
+        {nuevo && <Formulario datos={nuevo} onCambiar={setNuevo} />}
+        {editando && (
+          <Formulario
+            datos={editando}
+            onCambiar={(d) => setEditando({ ...d, id: editando.id })}
+          />
+        )}
+
+        {servicios === null ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : servicios.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay servicios cargados. Sin ellos los comprobantes se
+            arman igual, escribiendo cada ítem a mano.
+          </p>
+        ) : (
+          <ul className="grid gap-1">
+            {servicios.map((s) => (
+              <li
+                key={s.id}
+                className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+              >
+                <span className={s.activo ? '' : 'text-muted-foreground line-through'}>
+                  {s.nombre}
+                </span>
+                {!s.activo && <Badge variant="outline">Inactivo</Badge>}
+                {s.descripcion && (
+                  <span className="truncate text-xs text-muted-foreground">{s.descripcion}</span>
+                )}
+                <span className="ml-auto tabular-nums">
+                  {s.precio.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+                </span>
+                <Badge variant="secondary" className="tabular-nums">
+                  {s.iva_rate === 0
+                    ? 'Exento'
+                    : `IVA ${(s.iva_rate * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`}
+                </Badge>
+                {esAdmin && (
+                  <>
+                    <Button
+                      type="button" size="icon" variant="outline" title="Editar"
+                      aria-label={`Editar ${s.nombre}`}
+                      onClick={() => setEditando({
+                        id: s.id, nombre: s.nombre, descripcion: s.descripcion,
+                        precio: String(s.precio), iva_rate: String(s.iva_rate),
+                        activo: s.activo,
+                      })}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      type="button" size="icon" variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      title="Eliminar" aria-label={`Eliminar ${s.nombre}`}
+                      onClick={() => setABorrar(s)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!esAdmin && (
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede modificar el catálogo.
+          </p>
+        )}
+      </CardContent>
+
+      <ConfirmDialog
+        open={aBorrar !== null}
+        onOpenChange={(abierto) => { if (!abierto) setABorrar(null) }}
+        title={`¿Eliminar «${aBorrar?.nombre ?? ''}»?`}
+        description={
+          'Los remitos y presupuestos que ya lo usaron no cambian: guardaron su ' +
+          'propia descripción y su propio precio. Si sólo querés dejar de ' +
+          'ofrecerlo, editalo y desactivalo en vez de borrarlo.'
+        }
+        onConfirm={() => { const s = aBorrar; setABorrar(null); if (s) borrar(s) }}
+      />
+    </Card>
+  )
+}
+
+/** Pestaña de Datos / Backup. */
+export function ConfiguracionDatos() {
+  return (
+    <Pantalla actual="datos">
+      <DatosCard />
+    </Pantalla>
+  )
+}
+
+/** Bajar una copia de los datos, y volver a una anterior.
+ *
+ *  El archivo es un **ZIP con la base y los archivos de la instancia**, no un
+ *  `.db` suelto — el formato es el mismo en los seis productos de la familia,
+ *  donde varios tienen dos bases y archivos subidos.
+ */
+function DatosCard() {
+  const { user } = useAuth()
+  const esAdmin = user?.role === 'admin'
+  const [backups, setBackups] = useState<BackupGuardado[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [aRestaurar, setARestaurar] = useState<File | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { recargar() }, [])
+
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.detail
+    return 'Error de conexión.'
+  }
+
+  async function recargar() {
+    setError(null)
+    try {
+      setBackups(await api.get<BackupGuardado[]>('/api/config/backups'))
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  async function crear() {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      await api.post('/api/config/backups')
+      setAviso('Copia guardada en el servidor.')
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function restaurar(archivo: File) {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      const form = new FormData()
+      form.append('backup_file', archivo)
+      const r = await api.postForm<{ backup_previo: string }>('/api/config/restore', form)
+      setAviso(
+        `Datos restaurados. El estado anterior quedó guardado como ${r.backup_previo}.`,
+      )
+      await recargar()
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setOcupado(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  if (!esAdmin) {
+    return (
+      <Card>
+        <CardHeader><CardTitle className="text-base">Datos / Backup</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Solo un administrador puede descargar o restaurar los datos.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Copia de tus datos</CardTitle>
+          <CardDescription>
+            Un archivo ZIP con la base de datos y los archivos del sistema.
+            Guardalo fuera del servidor.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {/* Link directo y no `fetch`: el navegador maneja la descarga con la
+              misma cookie, sin pasar el ZIP entero por memoria del JS. */}
+          <Button asChild>
+            <a href="/api/config/backup-ahora">
+              <Download className="mr-2 h-4 w-4" />
+              Descargar copia
+            </a>
+          </Button>
+          <Button type="button" variant="outline" disabled={ocupado} onClick={crear}>
+            {ocupado ? 'Trabajando…' : 'Guardar copia en el servidor'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {(error || aviso) && (
+        <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
+          {error ?? aviso}
+        </p>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Copias guardadas en el servidor</CardTitle>
+          <CardDescription>
+            Se conservan las 10 más recientes. Las de <code>antes_restore</code> las
+            hace el sistema solo, justo antes de restaurar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {backups === null ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : backups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay ninguna.</p>
+          ) : (
+            <ul className="grid gap-2">
+              {backups.map((b) => (
+                <li key={b.filename} className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant="outline">{b.mtime}</Badge>
+                  <span className="text-muted-foreground">{b.size_mb} MB</span>
+                  <a className="underline" href={`/api/config/backups/${b.filename}`}>
+                    {b.filename}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Restaurar</CardTitle>
+          <CardDescription>
+            Reemplaza <strong>todos</strong> los datos actuales por los del archivo.
+            Antes de hacerlo, el sistema guarda solo una copia del estado actual.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) setARestaurar(f) }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={ocupado}
+            onClick={() => inputRef.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Elegir archivo y restaurar
+          </Button>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={aRestaurar !== null}
+        onOpenChange={(abierto) => { if (!abierto) setARestaurar(null) }}
+        title="¿Restaurar los datos?"
+        description={
+          `Se van a reemplazar todos los datos actuales por los de ${aRestaurar?.name ?? ''}. ` +
+          'El estado de ahora queda guardado como copia por si hace falta volver.'
+        }
+        confirmLabel="Restaurar"
+        onConfirm={() => { const f = aRestaurar; setARestaurar(null); if (f) restaurar(f) }}
+      />
+    </div>
   )
 }

@@ -18,7 +18,8 @@ import type { Cliente } from '../api'
 function cliente(over: Partial<Cliente> & { id: number; nombre: string }): Cliente {
   return {
     empresa: null, email: null, telefono: null, ciudad: null,
-    cuit: null, domicilio: null, observaciones: null,
+    cuit: null, condicion_iva: null, iva_discriminado: false,
+    domicilio: null, observaciones: null,
     tipo_facturacion: 'por_servicio', activo: true, fecha_creacion: null,
     ...over,
   }

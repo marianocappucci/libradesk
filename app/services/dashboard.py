@@ -25,6 +25,24 @@ from .tecnicos import Tecnico
 # porque si no el total global y el del cliente no cierran entre si.
 ESTADOS_ABIERTOS = ("abierto", "en_progreso")
 
+#: Contratos que todavia pueden vencer. Los cerrados no interesan: ya
+#: terminaron, y listarlos como "por vencer" seria ruido permanente.
+_CONTRATOS_VIGENTES = ("activo", "suspendido")
+
+#: Los tramos del backlog abierto, en dias desde que entro el ticket. El
+#: primero es "hasta 7 dias" y no "hoy": un ticket de esta semana es lo normal,
+#: y darle un tramo propio haria parecer urgente al trabajo del dia.
+_TRAMOS_BACKLOG = (
+    ("hasta_7_dias", 0, 7),
+    ("de_8_a_30_dias", 8, 30),
+    ("mas_de_30_dias", 31, None),
+)
+
+#: Cuantos items se listan por bloque. El dashboard no es un listado: si hay
+#: 40 contratos por vencer, lo que importa es que son 40 y cuales son los 5 mas
+#: proximos. Para el resto estan las pantallas de cada modulo.
+_TOPE_LISTA = 5
+
 
 class DashboardService:
     def __init__(self, session_factory: sessionmaker):
@@ -54,20 +72,220 @@ class DashboardService:
                 select(func.coalesce(func.sum(Incidencia.horas_invertidas), 0))
             ).scalar_one()
 
-            stmt = select(Incidencia)
+            # `COUNT` en la base, no `len(...all())`: traer todas las filas
+            # para contarlas funciona con 29 incidencias y no con 29.000.
+            stmt = select(func.count()).select_from(Incidencia)
             if date_from:
                 stmt = stmt.where(Incidencia.fecha_creacion >= datetime.fromisoformat(date_from))
             if date_to:
                 stmt = stmt.where(Incidencia.fecha_creacion <= datetime.fromisoformat(date_to))
-            incidencias_en_rango = len(session.execute(stmt).scalars().all())
+            incidencias_en_rango = session.execute(stmt).scalar_one()
+
+            # Las horas del RANGO, no de todos los tiempos. Antes eran el total
+            # historico y colgaban del subtitulo de "Equipos", que no tiene
+            # nada que ver: el usuario movia las fechas y el numero no se
+            # movia, sin ninguna forma de saber por que.
+            stmt_horas = select(func.coalesce(func.sum(Incidencia.horas_invertidas), 0))
+            if date_from:
+                stmt_horas = stmt_horas.where(
+                    Incidencia.fecha_creacion >= datetime.fromisoformat(date_from))
+            if date_to:
+                stmt_horas = stmt_horas.where(
+                    Incidencia.fecha_creacion <= datetime.fromisoformat(date_to))
+            horas_en_rango = session.execute(stmt_horas).scalar_one()
 
             return {
                 "incidencias_por_estado": incidencias_por_estado,
                 "incidencias_por_prioridad_abiertas": incidencias_por_prioridad_abiertas,
                 "incidencias_en_rango": incidencias_en_rango,
+                "horas_en_rango": float(horas_en_rango),
                 "total_clientes_activos": total_clientes_activos,
                 "total_equipos": total_equipos,
                 "horas_totales_invertidas": float(horas_totales),
+                # Cuales de los numeros de arriba responden al filtro de
+                # fechas. La pantalla lo usa para rotularlos: sin esto el
+                # usuario mueve el rango, ve que casi nada cambia y no tiene
+                # como saber cuales miran el rango y cuales son totales.
+                # Se lee peor que no tener filtro.
+                "responden_al_rango": ["incidencias_en_rango", "horas_en_rango"],
+            }
+
+    def operativo(self, dias: int = 30) -> dict:
+        """Qué hay que hacer hoy.
+
+        Decidido con el humano el 2026-08-05: el dashboard de LibraDesk es
+        **operativo**, no de gestión. Contesta "qué se vence, qué está
+        esperando hace mucho, qué hay en el taller y qué no tiene a nadie", no
+        "cómo viene el mes". La pantalla que había no era ninguna de las dos:
+        cuatro tarjetas con seis totales absolutos que no cambian de un día
+        para el otro.
+
+        `dias` es el horizonte de los vencimientos y **se aplica a los tres**
+        —contratos, garantías y turnos—, a diferencia del filtro de fechas de
+        `summary()`, que tocaba un solo número de seis.
+
+        Todo sale de columnas que ya existen. No hay tabla nueva.
+        """
+        from .contratos import Contrato
+        from .ingresos import IngresoReparacion
+
+        hoy = date.today()
+        limite = hoy + timedelta(days=dias)
+        ahora = datetime.now()
+
+        with self.session_factory() as session:
+            nombre_cliente = dict(session.execute(select(Cliente.id, Cliente.nombre)).all())
+
+            # --- 1. Lo que se vence ------------------------------------------
+            contratos = [
+                {
+                    "id": c.id,
+                    "numero": c.numero,
+                    "cliente": nombre_cliente.get(c.cliente_id, "—"),
+                    "vence": c.fecha_fin.isoformat(),
+                    "dias_restantes": (c.fecha_fin - hoy).days,
+                    "estado": c.estado,
+                }
+                for c in session.execute(
+                    select(Contrato)
+                    .where(Contrato.estado.in_(_CONTRATOS_VIGENTES))
+                    .where(Contrato.fecha_fin.is_not(None))
+                    .where(Contrato.fecha_fin <= limite)
+                    .order_by(Contrato.fecha_fin.asc())
+                ).scalars()
+            ]
+
+            # Mismo criterio **exacto** que `cliente()`: `estado != "baja"`. El
+            # equipo no tiene columna `activo` —el estado es un string— y usar
+            # otro filtro acá haría que el total global y el de la ficha del
+            # cliente no cerraran entre sí.
+            #
+            # 🔴 **Las garantías, a diferencia de los contratos, tienen piso.**
+            # Una garantía vencida no es una anomalía: el equipo simplemente ya
+            # no está cubierto, y no hay nada que hacer al respecto. Sin piso, en
+            # los datos reales de dev el bloque traía 22 garantías de las cuales
+            # **16 habían vencido hace meses** (hasta 283 días), enterrando a las
+            # 3 que estaban por vencer — que son las únicas accionables. Se
+            # mantiene una ventana hacia atrás del mismo tamaño que el horizonte
+            # porque una vencida hace poco sí importa: el cliente puede llegar
+            # creyendo que todavía está cubierto.
+            #
+            # Un contrato vigente pasado de fecha, en cambio, **sí** es una
+            # anomalía y no lleva piso: da igual cuánto hace.
+            piso = hoy - timedelta(days=dias)
+            garantias = []
+            for e in session.execute(
+                select(Equipo)
+                .where(Equipo.estado != "baja")
+                .where(Equipo.garantia_vence.is_not(None))
+                .where(Equipo.garantia_vence <= limite)
+                .where(Equipo.garantia_vence >= piso)
+                .order_by(Equipo.garantia_vence.asc())
+            ).scalars():
+                vence = e.garantia_vence
+                vence = vence.date() if isinstance(vence, datetime) else vence
+                garantias.append({
+                    "id": e.id,
+                    "equipo": descripcion_equipo(e),
+                    "cliente": nombre_cliente.get(e.cliente_id, "—"),
+                    "vence": vence.isoformat(),
+                    "dias_restantes": (vence - hoy).days,
+                })
+
+            # Los turnos ya agendados. `fecha_programada` es cuándo se va a
+            # atender — no tiene nada que ver con cuándo entró el ticket.
+            agenda = [
+                {
+                    "id": i.id,
+                    "titulo": i.titulo,
+                    "cliente": nombre_cliente.get(i.cliente_id, "—"),
+                    "cuando": i.fecha_programada.isoformat(),
+                    "dias_restantes": (i.fecha_programada.date() - hoy).days,
+                    "prioridad": i.prioridad,
+                }
+                for i in session.execute(
+                    select(Incidencia)
+                    .where(Incidencia.estado.in_(ESTADOS_ABIERTOS))
+                    .where(Incidencia.fecha_programada.is_not(None))
+                    .where(Incidencia.fecha_programada <= datetime.combine(limite, datetime.max.time()))
+                    .order_by(Incidencia.fecha_programada.asc())
+                ).scalars()
+            ]
+
+            # --- 2. El backlog, por antigüedad -------------------------------
+            #
+            # 🔴 Es la pregunta que un sistema de tickets tiene que contestar y
+            # la que la pantalla vieja no contestaba: el desglose por estado
+            # dice cuántas hay abiertas, no cuántas están esperando hace un mes.
+            abiertas = session.execute(
+                select(Incidencia)
+                .where(Incidencia.estado.in_(ESTADOS_ABIERTOS))
+                .order_by(Incidencia.fecha_creacion.asc())
+            ).scalars().all()
+
+            def antiguedad(i) -> int:
+                return (ahora - i.fecha_creacion).days if i.fecha_creacion else 0
+
+            backlog = {clave: 0 for clave, _, _ in _TRAMOS_BACKLOG}
+            for i in abiertas:
+                d = antiguedad(i)
+                for clave, desde, hasta in _TRAMOS_BACKLOG:
+                    if d >= desde and (hasta is None or d <= hasta):
+                        backlog[clave] += 1
+                        break
+
+            # Ya vienen de la más vieja a la más nueva.
+            mas_viejas = [
+                {
+                    "id": i.id,
+                    "titulo": i.titulo,
+                    "cliente": nombre_cliente.get(i.cliente_id, "—"),
+                    "dias": antiguedad(i),
+                    "prioridad": i.prioridad,
+                    "estado": i.estado,
+                }
+                for i in abiertas[:_TOPE_LISTA]
+            ]
+
+            # --- 3. Lo que está físicamente en el taller ---------------------
+            en_taller = [
+                {
+                    "id": g.id,
+                    "numero": g.numero,
+                    "equipo": " ".join(
+                        p for p in (g.equipo_tipo, g.equipo_marca, g.equipo_modelo) if p),
+                    "cliente": nombre_cliente.get(g.cliente_id, "—"),
+                    "dias": (ahora - g.fecha_recepcion).days,
+                }
+                for g in session.execute(
+                    select(IngresoReparacion)
+                    .where(IngresoReparacion.fecha_entrega.is_(None))
+                    .order_by(IngresoReparacion.fecha_recepcion.asc())
+                ).scalars()
+            ]
+
+            # --- 4. Lo que no tiene a nadie ----------------------------------
+            sin_asignar = session.execute(
+                select(func.count()).select_from(Incidencia)
+                .where(Incidencia.estado.in_(ESTADOS_ABIERTOS))
+                .where(Incidencia.tecnico_id.is_(None))
+            ).scalar_one()
+
+            return {
+                "dias": dias,
+                "hoy": hoy.isoformat(),
+                "vencimientos": {
+                    "contratos": {"total": len(contratos), "items": contratos[:_TOPE_LISTA]},
+                    "garantias": {"total": len(garantias), "items": garantias[:_TOPE_LISTA]},
+                    "agenda": {"total": len(agenda), "items": agenda[:_TOPE_LISTA]},
+                },
+                "backlog": {
+                    "total_abiertas": len(abiertas),
+                    "por_antiguedad": backlog,
+                    "mas_viejas": mas_viejas,
+                },
+                "taller": {"total": len(en_taller), "items": en_taller[:_TOPE_LISTA]},
+                "sin_asignar": sin_asignar,
             }
 
     def cliente(self, cliente_id: int, dias_garantia: int = 60) -> dict:
