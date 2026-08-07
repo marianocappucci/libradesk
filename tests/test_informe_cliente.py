@@ -18,12 +18,10 @@ propósito: con fechas relativas a hoy, los tests del ancla temporal no podrían
 distinguir "contado desde el fin del período" de "contado desde hoy", que es
 justo lo que tienen que distinguir.
 """
-import sys
 from datetime import datetime
 from io import BytesIO
 
 import pytest
-from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 RUTA = "/api/informes/cliente/{cliente_id}.pdf"
@@ -32,16 +30,7 @@ DESDE = "2026-01-01"
 HASTA = "2026-01-31"
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _login(client) -> None:

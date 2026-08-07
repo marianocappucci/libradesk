@@ -16,10 +16,6 @@ importa fijar aca es el borde:
 import pytest
 from libraauth.session_auth import SERVICE_TOKEN_ENV, SERVICE_TOKEN_HEADER
 
-import sys
-
-from fastapi.testclient import TestClient
-
 TOKEN = "un-token-de-servicio-de-prueba"
 RUTA_USERS = "/api/usuarios"
 
@@ -28,17 +24,13 @@ ACEPTAN_TOKEN = {RUTA_USERS, "/admin/smtp"}
 
 
 @pytest.fixture
-def sin_sesion(tmp_path, monkeypatch):
-    """Cliente sin loguear: es como llega el backoffice, que no es usuario."""
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    with TestClient(app, base_url="https://testserver") as client:
-        yield client
+def sin_sesion(client):
+    """Cliente sin loguear: es como llega el backoffice, que no es usuario.
+
+    Es el `client` de conftest.py tal cual — que ya viene sin sesion. El alias
+    existe para que los tests de este archivo se lean por lo que prueban.
+    """
+    return client
 
 
 def test_sin_la_variable_el_header_no_sirve(sin_sesion, monkeypatch):

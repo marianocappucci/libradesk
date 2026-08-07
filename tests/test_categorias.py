@@ -15,24 +15,11 @@ Lo que fijan estos tests, en orden de lo que se rompe sin que se note:
    apuntando a un id inexistente (el pragma de FKs está apagado).
 4. Que filtrar por una categoría **raíz** traiga las de sus subcategorías.
 """
-import sys
-
 import pytest
-from fastapi.testclient import TestClient
 
 RUTA = "/api/categorias"
 
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _login(client) -> None:

@@ -14,21 +14,10 @@ Reusa la fixture `client` de `test_api.py` via conftest implicito: este repo no
 tiene `tests/conftest.py`, asi que la fixture se redefine aca igual que alli.
 """
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 @pytest.fixture

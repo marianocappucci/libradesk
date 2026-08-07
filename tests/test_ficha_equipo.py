@@ -14,25 +14,14 @@ Lo que estos tests fijan:
 4. Que `lugar` diga dónde está de verdad: el depósito cuando está guardado, no
    el sector del que salió hace meses.
 """
-import sys
 from datetime import date, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 RUTA = "/api/dashboard/equipo/{equipo_id}"
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 @pytest.fixture

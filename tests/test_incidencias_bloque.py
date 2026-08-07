@@ -12,29 +12,19 @@ pantalla. Lo que cubren estos tests:
   que el backend tiene que sostener.
 """
 import os
-import sys
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-
-    with TestClient(app, base_url="https://testserver") as c:
-        r = c.post("/auth/login", json={
-            "username": os.environ.get("LIBRADESK_ADMIN_USERNAME", "admin"),
-            "password": os.environ.get("LIBRADESK_ADMIN_PASSWORD", "admin"),
-        })
-        assert r.status_code == 200, r.text
-        yield c
+def client(client):
+    """El `client` de conftest.py, ya logueado como admin."""
+    r = client.post("/auth/login", json={
+        "username": os.environ.get("LIBRADESK_ADMIN_USERNAME", "admin"),
+        "password": os.environ.get("LIBRADESK_ADMIN_PASSWORD", "admin"),
+    })
+    assert r.status_code == 200, r.text
+    return client
 
 
 @pytest.fixture

@@ -20,19 +20,11 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    c = TestClient(app, base_url="https://testserver")
-    r = c.post("/auth/login", json={"username": "admin", "password": "admin"})
+def client(client):
+    """El `client` de conftest.py, ya logueado como admin."""
+    r = client.post("/auth/login", json={"username": "admin", "password": "admin"})
     assert r.status_code == 200, r.text
-    return c
+    return client
 
 
 def _servicio(client, nombre="Mantenimiento preventivo", descripcion="", precio=15000):
