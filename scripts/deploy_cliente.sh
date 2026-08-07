@@ -216,6 +216,69 @@ if ! (cd "$CLIENT_DIR" && docker compose up -d); then
   exit 1
 fi
 
+# ------------------------------------------------------------------------------
+# PODA DE TAGS VIEJOS (agregado 2026-08-07)
+# ------------------------------------------------------------------------------
+# Hasta hoy nada borraba los tags: cada deploy acuna `v$(date +%Y.%m.%d-%H%M)`
+# y ninguno se retiraba nunca. Medido en el VPS el 2026-08-07, libradesk tenia
+# 17 tags de ~570 MB, y entre los seis productos las imagenes y el build cache
+# eran 63 de los 75 GB usados, con el disco al 75%.
+#
+# Espejo de `libracore.provisioning.panel_admin.podar_imagenes_viejas()`, que
+# cubre a los otros cinco productos. Corre al final y nunca antes: si el deploy
+# falla, la imagen vieja es justo a la que hay que poder volver.
+#
+# ⚠️ Todo lo de adentro va con `|| true`. Este script corre con
+# `set -euo pipefail`, y aca hay tres comandos que devuelven != 0 en su camino
+# NORMAL: `grep` sin coincidencias (ningun cliente todavia), `docker image
+# inspect` de un tag ausente, y `docker rmi` de una imagen retenida. Sin el
+# `|| true` cualquiera de los tres aborta el script — despues de haber
+# desplegado, que es el peor momento para cortar.
+podar_tags_viejos() {
+  local keep="${IMAGE_RETENTION:-3}" recientes=0 tag ref iid r
+  local candidatos=() ids_en_uso="" en_uso="" pineados=""
+
+  # Refs que retiene algun contenedor, corriendo O PARADO: un contenedor
+  # parado tambien necesita su imagen para poder volver a arrancar.
+  en_uso="$(docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u || true)"
+  while read -r r; do
+    [ -z "$r" ] && continue
+    iid="$(docker image inspect -f '{{.Id}}' "$r" 2>/dev/null || true)"
+    [ -n "$iid" ] && ids_en_uso+="$iid"$'\n'
+  done <<< "$en_uso"
+
+  # Lo pineado en el compose de cualquier cliente, aunque no este corriendo.
+  pineados="$(grep -hoE 'image:[[:space:]]*[^[:space:]]+' \
+      "$REPO_ROOT"/clientes/*/docker-compose.yml 2>/dev/null \
+      | awk '{print $2}' | sort -u || true)"
+
+  while read -r tag; do
+    case "$tag" in ""|latest|"<none>") continue ;; esac
+    ref="libradesk:$tag"
+    # Los tags que no acuno el deploy son hitos y puntos de rollback puestos a
+    # mano (p7, pre-p8-cutover-rollback, pre-recibos-*). No se tocan.
+    echo "$tag" | grep -qE '^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]{4}$' || continue
+    if [ "$recientes" -lt "$keep" ]; then recientes=$((recientes + 1)); continue; fi
+    echo "$pineados" | grep -qxF "$ref" && continue
+    iid="$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || true)"
+    if [ -n "$iid" ] && echo "$ids_en_uso" | grep -qxF "$iid"; then continue; fi
+    candidatos+=("$ref")
+  done < <(docker images libradesk --format '{{.Tag}}' 2>/dev/null | sort -r || true)
+
+  if [ "${#candidatos[@]}" -eq 0 ]; then
+    echo "[OK] Poda: nada que borrar (se conservan los $keep tags mas nuevos)."
+    return 0
+  fi
+  local borrados=0
+  for ref in "${candidatos[@]}"; do
+    # Sin `-f` a proposito: si algo la retiene, Docker se niega y seguimos.
+    if docker rmi "$ref" >/dev/null 2>&1; then borrados=$((borrados + 1)); fi
+  done
+  echo "[OK] Poda: $borrados de ${#candidatos[@]} tag/s de deploy viejos borrados"
+  echo "     (se conservan los $keep mas nuevos, los pineados y los de rollback)."
+}
+podar_tags_viejos
+
 echo "[OK] '$SLUG' corriendo en $IMAGE_REF (commit $COMMIT)"
 echo "     Rollback: editar image: en $COMPOSE_FILE y 'docker compose up -d'"
 echo "     Versiones disponibles:"
