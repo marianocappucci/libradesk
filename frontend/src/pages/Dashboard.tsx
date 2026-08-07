@@ -120,7 +120,12 @@ function Fila({ principal, secundario, dias }: {
   dias: number
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    // 🔴 `min-w-0` en la FILA, no sólo en el texto: estas filas son ítems de
+    // un grid, y un ítem de grid no baja de su contenido (`min-width: auto`),
+    // así que la fila se estiraba y el `truncate` de adentro nunca llegaba a
+    // aplicarse. Se veía recién con nombres largos de verdad — con los datos
+    // de ejemplo cortos, no.
+    <div className="flex min-w-0 items-center justify-between gap-2">
       <span className="min-w-0 truncate">
         {principal}
         {secundario && <span className="text-muted-foreground"> · {secundario}</span>}
@@ -301,7 +306,7 @@ export function Dashboard() {
                     <>
                       <p className="text-xs text-muted-foreground">Las que más esperan</p>
                       {backlog.mas_viejas.map((i) => (
-                        <div key={i.id} className="flex items-center justify-between gap-2">
+                        <div key={i.id} className="flex min-w-0 items-center justify-between gap-2">
                           <Link to={`/incidencias/${i.id}`} className="min-w-0 truncate hover:underline">
                             {i.titulo}
                             <span className="text-muted-foreground"> · {i.cliente}</span>
