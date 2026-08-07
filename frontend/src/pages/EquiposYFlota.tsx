@@ -1,15 +1,24 @@
 /** Equipos de trabajo, agenda del día y flota de vehículos (pedido 42).
  *
- *  Las tres cosas en una pantalla, a diferencia de depósitos: acá **la
- *  asignación las cruza** — la pregunta que motivó el pedido es "cuando un
- *  equipo tiene un trabajo, ¿en qué vehículo sale?", y separarlas obligaría a
- *  ir y volver para contestarla.
- *
  *  La fase A dejó el armado (quién está en cada equipo, qué vehículo tiene) y
  *  la fase B la agenda: cuándo trabaja cada uno, con el motor de turnos
  *  impidiendo que dos trabajos del mismo equipo se pisen. La fecha se carga en
  *  el ticket (`IncidenciaDetalle`); acá se **lee** el resultado, que es lo que
  *  se mira a la mañana para despachar.
+ *
+ *  **En tres pestañas desde el 2026-08-07**, a pedido del usuario y con el
+ *  mismo conmutador que depósitos, configuración y recepción. Las tres venían
+ *  apiladas en una pantalla larga porque *la asignación las cruza* — "cuando un
+ *  equipo tiene un trabajo, ¿en qué vehículo sale?" —, pero ese cruce no
+ *  necesitaba las tres listas a la vez: la patente aparece en la tarjeta del
+ *  equipo **y** en su columna de la agenda, así que la pregunta se sigue
+ *  contestando sin cambiar de pestaña. Lo que la pantalla larga sí obligaba era
+ *  a pasar por la flota entera para llegar a la agenda, que es lo que se mira
+ *  todos los días.
+ *
+ *  Cada pestaña es una ruta (ver `equipos-flota-piezas.tsx`), así que se puede
+ *  linkear "mirá la agenda de hoy" y el botón "atrás" del navegador hace lo que
+ *  se espera.
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -32,13 +41,18 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AgendaEquipos } from '@/components/agenda-equipos'
+import { Conmutador } from '@/components/conmutador'
+import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
 import {
   Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink, Users,
 } from 'lucide-react'
 
 const SIN = '__sin__'
 
-export function EquiposYFlota() {
+/** Cuál de las tres se está mirando. Coincide con `clave` en `PESTANIAS_EQUIPOS`. */
+type Seccion = 'equipos' | 'agenda' | 'flota'
+
+function EquiposYFlota({ seccion }: { seccion: Seccion }) {
   const [equipos, setEquipos] = useState<EquipoTrabajo[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [personal, setPersonal] = useState<Tecnico[]>([])
@@ -76,6 +90,11 @@ export function EquiposYFlota() {
     setLoading(true)
     setError(null)
     try {
+      // Las tres listas siempre, sin importar la pestaña. La de equipos ya
+      // necesita las tres a la vez (los vehículos para saber cuáles quedan
+      // libres, el personal para el diálogo), y son listas de decenas de filas:
+      // partirlas por pestaña daría tres estados de carga distintos a cambio de
+      // ahorrar un par de requests chicos.
       const [eq, veh, per] = await Promise.all([
         api.get<EquipoTrabajo[]>('/api/equipos-trabajo'),
         api.get<Vehiculo[]>('/api/equipos-trabajo/vehiculos'),
@@ -190,18 +209,23 @@ export function EquiposYFlota() {
   const disponibles = vehiculos.filter((v) => v.estado === 'disponible')
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Users className="size-5" />Equipos y flota
         </h2>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => abrirVehiculo(null)}>
-            <Plus />Nuevo vehículo
-          </Button>
+        {/* El botón de alta es el de la pestaña que se está mirando: dejar los
+            dos siempre visibles haría que "Nuevo vehículo" apareciera parado en
+            la agenda, donde no es lo que se vino a hacer. */}
+        {seccion === 'equipos' && (
           <Button onClick={() => abrirEquipo(null)}><Plus />Nuevo equipo</Button>
-        </div>
+        )}
+        {seccion === 'flota' && (
+          <Button onClick={() => abrirVehiculo(null)}><Plus />Nuevo vehículo</Button>
+        )}
       </div>
+
+      <Conmutador pestanias={PESTANIAS_EQUIPOS} actual={seccion} />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -210,128 +234,126 @@ export function EquiposYFlota() {
       ) : (
         <>
           {/* ── Equipos ─────────────────────────────────────────────── */}
-          <div className="grid gap-2">
-            <div>
-              <h3 className="text-base font-semibold">Equipos de trabajo</h3>
+          {seccion === 'equipos' && (
+            <div className="grid gap-2">
               <p className="text-sm text-muted-foreground">
                 Un responsable y los técnicos que responden a él. El vehículo
                 asignado es en el que sale el equipo.
               </p>
+              {equipos.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  No hay equipos armados todavía.
+                </CardContent></Card>
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {equipos.map((e) => (
+                    <Card key={e.id} className={e.activo ? '' : 'opacity-60'}>
+                      <CardHeader className="flex flex-row items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{e.nombre}</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Responsable: {e.responsable_nombre ?? '— sin asignar'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="outline" aria-label={`Editar ${e.nombre}`} onClick={() => abrirEquipo(e)}><Pencil /></Button>
+                          <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" aria-label={`Eliminar ${e.nombre}`} onClick={() => setABorrarEquipo(e)}><Trash2 /></Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Integrantes</p>
+                          {e.integrantes.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Sin integrantes.</p>
+                          ) : (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {e.integrantes.map((i) => (
+                                <Badge key={i.id} variant="outline">{i.nombre}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Sale en</p>
+                          {e.vehiculos.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Sin vehículo asignado.</p>
+                          ) : (
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {e.vehiculos.map((v) => (
+                                <span key={v.id} className="flex items-center gap-1">
+                                  <Badge className="gap-1"><Car className="size-3" />{v.patente}</Badge>
+                                  <Button
+                                    size="icon" variant="ghost"
+                                    title="Desasignar" aria-label={`Desasignar ${v.patente}`}
+                                    onClick={() => accion(() => api.post(
+                                      `/api/equipos-trabajo/vehiculos/${v.id}/desasignar`, {},
+                                    ))}
+                                  ><Unlink /></Button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          size="sm" variant="outline" className="justify-self-start"
+                          disabled={disponibles.length === 0}
+                          onClick={() => { setAsignando(e); setVehiculoAAsignar(''); setFormError(null) }}
+                        >
+                          <LinkIcon />
+                          {disponibles.length === 0 ? 'No hay vehículos libres' : 'Asignar vehículo'}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-            {equipos.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No hay equipos armados todavía.
-              </CardContent></Card>
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {equipos.map((e) => (
-                  <Card key={e.id} className={e.activo ? '' : 'opacity-60'}>
-                    <CardHeader className="flex flex-row items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{e.nombre}</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          Responsable: {e.responsable_nombre ?? '— sin asignar'}
-                        </p>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="icon" variant="outline" aria-label={`Editar ${e.nombre}`} onClick={() => abrirEquipo(e)}><Pencil /></Button>
-                        <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" aria-label={`Eliminar ${e.nombre}`} onClick={() => setABorrarEquipo(e)}><Trash2 /></Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="grid gap-3">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Integrantes</p>
-                        {e.integrantes.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Sin integrantes.</p>
-                        ) : (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {e.integrantes.map((i) => (
-                              <Badge key={i.id} variant="outline">{i.nombre}</Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Sale en</p>
-                        {e.vehiculos.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Sin vehículo asignado.</p>
-                        ) : (
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {e.vehiculos.map((v) => (
-                              <span key={v.id} className="flex items-center gap-1">
-                                <Badge className="gap-1"><Car className="size-3" />{v.patente}</Badge>
-                                <Button
-                                  size="icon" variant="ghost"
-                                  title="Desasignar" aria-label={`Desasignar ${v.patente}`}
-                                  onClick={() => accion(() => api.post(
-                                    `/api/equipos-trabajo/vehiculos/${v.id}/desasignar`, {},
-                                  ))}
-                                ><Unlink /></Button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        size="sm" variant="outline" className="justify-self-start"
-                        disabled={disponibles.length === 0}
-                        onClick={() => { setAsignando(e); setVehiculoAAsignar(''); setFormError(null) }}
-                      >
-                        <LinkIcon />
-                        {disponibles.length === 0 ? 'No hay vehículos libres' : 'Asignar vehículo'}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* ── Agenda (fase B) ─────────────────────────────────────── */}
-          <AgendaEquipos equipos={equipos} />
+          {seccion === 'agenda' && <AgendaEquipos equipos={equipos} />}
 
           {/* ── Flota ───────────────────────────────────────────────── */}
-          <div className="grid gap-2">
-            <div>
-              <h3 className="text-base font-semibold">Flota</h3>
+          {seccion === 'flota' && (
+            <div className="grid gap-2">
               <p className="text-sm text-muted-foreground">
                 Los vehículos de la empresa. Uno asignado no puede estar en otro
                 equipo al mismo tiempo.
               </p>
+              {vehiculos.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  No hay vehículos cargados todavía.
+                </CardContent></Card>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {vehiculos.map((v) => (
+                    <Card key={v.id}>
+                      <CardContent className="grid gap-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="flex items-center gap-2 font-semibold">
+                              <Car className="size-4 text-primary" />{v.patente}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{v.descripcion}</p>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button size="icon" variant="outline" aria-label={`Editar ${v.patente}`} onClick={() => abrirVehiculo(v)}><Pencil /></Button>
+                            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" aria-label={`Eliminar ${v.patente}`} onClick={() => setABorrarVeh(v)}><Trash2 /></Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={v.estado === 'asignado' ? 'default' : 'outline'}>
+                            {ESTADO_VEHICULO_LABELS[v.estado] ?? v.estado}
+                          </Badge>
+                          {v.equipo_nombre && <span className="text-sm">{v.equipo_nombre}</span>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-            {vehiculos.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No hay vehículos cargados todavía.
-              </CardContent></Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {vehiculos.map((v) => (
-                  <Card key={v.id}>
-                    <CardContent className="grid gap-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="flex items-center gap-2 font-semibold">
-                            <Car className="size-4 text-primary" />{v.patente}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{v.descripcion}</p>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button size="icon" variant="outline" aria-label={`Editar ${v.patente}`} onClick={() => abrirVehiculo(v)}><Pencil /></Button>
-                          <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" aria-label={`Eliminar ${v.patente}`} onClick={() => setABorrarVeh(v)}><Trash2 /></Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge variant={v.estado === 'asignado' ? 'default' : 'outline'}>
-                          {ESTADO_VEHICULO_LABELS[v.estado] ?? v.estado}
-                        </Badge>
-                        {v.equipo_nombre && <span className="text-sm">{v.equipo_nombre}</span>}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </>
       )}
 
@@ -517,4 +539,19 @@ export function EquiposYFlota() {
       />
     </div>
   )
+}
+
+/** Pestaña de equipos de trabajo: quién está en cada uno y en qué sale. */
+export function EquiposDeTrabajo() {
+  return <EquiposYFlota seccion="equipos" />
+}
+
+/** Pestaña de la agenda del día. */
+export function AgendaDelDia() {
+  return <EquiposYFlota seccion="agenda" />
+}
+
+/** Pestaña de la flota de vehículos. */
+export function Flota() {
+  return <EquiposYFlota seccion="flota" />
 }

@@ -11,30 +11,20 @@ Lo que estos tests fijan, en orden de qué duele más si se rompe:
 4. Los correlativos son dos y no se pisan.
 """
 import os
-import sys
 from datetime import datetime
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-
-    with TestClient(app, base_url="https://testserver") as c:
-        r = c.post("/auth/login", json={
-            "username": os.environ.get("LIBRADESK_ADMIN_USERNAME", "admin"),
-            "password": os.environ.get("LIBRADESK_ADMIN_PASSWORD", "admin"),
-        })
-        assert r.status_code == 200, r.text
-        yield c
+def client(client):
+    """El `client` de conftest.py, ya logueado como admin."""
+    r = client.post("/auth/login", json={
+        "username": os.environ.get("LIBRADESK_ADMIN_USERNAME", "admin"),
+        "password": os.environ.get("LIBRADESK_ADMIN_PASSWORD", "admin"),
+    })
+    assert r.status_code == 200, r.text
+    return client
 
 
 @pytest.fixture
@@ -230,9 +220,9 @@ def test_el_service_es_quien_impide_fabricar_una_entrega(client, escenario):
     forma de request: cualquier otro llamador —un script, un seed, un router
     futuro que reuse el modelo— pasaría por acá.
     """
-    from app.asgi import app  # noqa: PLC0415
-
-    repo = app.state.ingresos
+    # `client.app` y no `app.asgi.app`: la app la arma la fixture, y `app.asgi`
+    # construiria una SEGUNDA instancia, con su propio engine.
+    repo = client.app.state.ingresos
     i = _recibir(client, escenario).json()
 
     r = repo.update(
@@ -389,9 +379,7 @@ def test_los_dos_pdf_llevan_el_texto_del_pedido(client, escenario):
     client.post(f"/api/ingresos-reparacion/{i['id']}/entregar", json={
         "retirado_por": "Marta Ríos", "trabajo_realizado": "Cambio de teclado",
     })
-    from app.asgi import app  # noqa: PLC0415
-
-    repo: IngresoRepository = app.state.ingresos
+    repo: IngresoRepository = client.app.state.ingresos
     rec = repo.datos_para_pdf(i["id"], tipo="recepcion")
     ent = repo.datos_para_pdf(i["id"], tipo="entrega")
 

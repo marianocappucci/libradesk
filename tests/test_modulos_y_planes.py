@@ -10,24 +10,13 @@ ese cambio:
    queda habilitado, así que `compulibra` y `dev` siguen funcionando igual.
 2. El core de tickets no se gatea ni aunque alguien lo intente.
 """
-import sys
 
 import pytest
-from fastapi.testclient import TestClient
 
 from plans import PLAN_MODULOS, PLANES, TODOS_LOS_MODULOS, modulos_de_plan
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _login(client) -> None:

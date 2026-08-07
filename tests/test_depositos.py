@@ -15,22 +15,11 @@ Lo que estos tests fijan, en orden de lo que puede romperse en silencio:
    `UniqueConstraint` no sirve porque en SQLite dos NULL son distintos, asi que
    dos depositos propios homonimos entrarian sin chistar.
 """
-import sys
 
 import pytest
-from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 @pytest.fixture

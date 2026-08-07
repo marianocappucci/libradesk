@@ -25,27 +25,18 @@ Lo que fijan estos tests, en orden de lo que se rompe sin que se note:
 from datetime import date, datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    c = TestClient(app, base_url="https://testserver")
-    r = c.post("/auth/login", json={"username": "admin", "password": "admin"})
+def client(client):
+    """El `client` de conftest.py, ya logueado y con la ruta de la base."""
+    r = client.post("/auth/login", json={"username": "admin", "password": "admin"})
     assert r.status_code == 200, r.text
     # La ruta de la base, para `_envejecer`. `get_data_dir` es una dependencia
     # de FastAPI y necesita un `Request`; el valor real vive en el estado de la
     # app, que es de donde lo saca esa dependencia.
-    c.ruta_db = f"{app.state.data_dir}/libradesk.db"
-    return c
+    client.ruta_db = f"{client.app.state.data_dir}/libradesk.db"
+    return client
 
 
 HOY = date.today()

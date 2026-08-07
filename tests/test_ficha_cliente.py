@@ -9,25 +9,14 @@ Lo que estos tests fijan, en orden de lo que puede romperse sin que se note:
    y excluya las bajas, que es donde la ficha se diferencia de un simple
    "vence dentro de N días".
 """
-import sys
 from datetime import date, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 RUTA = "/api/dashboard/cliente/{cliente_id}"
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _login(client) -> None:

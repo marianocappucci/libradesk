@@ -7,16 +7,16 @@
 //    puede salir dos veces, y ofrecerlo sería ofrecer un 409.
 // 2. **El responsable sale del catálogo de personal**, filtrado por su rol.
 //
-// Los nombres de equipo se buscan en plural (`findAllByText`) desde la fase B:
-// la pantalla ahora tiene también la agenda del día, con una tarjeta por
-// equipo, así que cada nombre aparece dos veces. Lo que sigue siendo único —
-// los botones, "Sin vehículo asignado." — se busca en singular.
+// Los nombres de equipo vuelven a buscarse en singular (`findByText`) desde que
+// las tres secciones son pestañas: la agenda, que también dibuja una tarjeta por
+// equipo, ya no se renderiza junto al armado. Que cada nombre aparezca una sola
+// vez es parte de lo que se pidió, así que el singular lo verifica.
 import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { EquiposYFlota } from '../pages/EquiposYFlota'
+import { AgendaDelDia, EquiposDeTrabajo, Flota } from '../pages/EquiposYFlota'
 
 const render = (ui: ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -86,19 +86,82 @@ beforeEach(() => {
   }))
 })
 
+// Las tres secciones separadas en pestañas (2026-08-07, a pedido del usuario).
+//
+// Lo que hay que sostener: que el conmutador **no sea decorativo**. Si las tres
+// siguieran renderizándose juntas, la pantalla seguiría siendo la misma tira
+// larga y el pedido no estaría hecho.
+const pestania = (nombre: string | RegExp) => screen.getByRole('link', { name: nombre })
+
+describe('Equipos y flota en pestañas', () => {
+  it('las tres pestañas están, y apuntan a rutas propias', async () => {
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
+
+    expect(pestania('Equipos de trabajo')).toHaveAttribute('href', '/equipos-trabajo')
+    expect(pestania('Agenda del día')).toHaveAttribute('href', '/equipos-trabajo/agenda')
+    expect(pestania('Flota')).toHaveAttribute('href', '/equipos-trabajo/flota')
+  })
+
+  it('🔴 la pestaña de equipos no dibuja ni la agenda ni la flota', async () => {
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Sin vehículo asignado.')
+    expect(screen.queryByLabelText('Día')).not.toBeInTheDocument()
+    expect(screen.queryByText('Renault Kangoo')).not.toBeInTheDocument()
+  })
+
+  it('🔴 la pestaña de agenda muestra sólo la agenda', async () => {
+    render(<AgendaDelDia />)
+    expect(await screen.findByLabelText('Día')).toBeInTheDocument()
+    expect(screen.queryByText('Sin vehículo asignado.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Renault Kangoo')).not.toBeInTheDocument()
+  })
+
+  it('🔴 la pestaña de flota muestra sólo los vehículos', async () => {
+    render(<Flota />)
+    await screen.findByText('Renault Kangoo')
+    expect(screen.queryByText('Sin vehículo asignado.')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Día')).not.toBeInTheDocument()
+  })
+
+  it('la pestaña activa se marca con aria-current, no sólo con color', async () => {
+    render(<AgendaDelDia />)
+    await screen.findByLabelText('Día')
+
+    expect(pestania('Agenda del día')).toHaveAttribute('aria-current', 'page')
+    expect(pestania('Flota')).not.toHaveAttribute('aria-current')
+  })
+
+  it('el botón de alta es el de la pestaña que se está mirando', async () => {
+    // Los dos botones siempre visibles ofrecerían "Nuevo vehículo" parado en la
+    // agenda, que no es lo que se vino a hacer ahí.
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
+    expect(screen.getByRole('button', { name: /Nuevo equipo/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Nuevo vehículo/ })).not.toBeInTheDocument()
+  })
+
+  it('la flota ofrece dar de alta un vehículo, no un equipo', async () => {
+    render(<Flota />)
+    await screen.findByText('Renault Kangoo')
+    expect(screen.getByRole('button', { name: /Nuevo vehículo/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Nuevo equipo/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('Equipos de trabajo', () => {
   it('muestra el responsable, los integrantes y en qué sale', async () => {
-    render(<EquiposYFlota />)
-    expect((await screen.findAllByText('Cuadrilla Norte')).length).toBeGreaterThan(0)
+    render(<EquiposDeTrabajo />)
+    expect(await screen.findByText('Cuadrilla Norte')).toBeInTheDocument()
     expect(screen.getByText(/Responsable: Sofía Núñez/)).toBeInTheDocument()
     expect(screen.getByText('Diego Ramos')).toBeInTheDocument()
     // El vehículo asignado: es la respuesta al pedido.
-    expect(screen.getAllByText('AB123CD').length).toBeGreaterThan(0)
+    expect(screen.getByText('AB123CD')).toBeInTheDocument()
   })
 
   it('el equipo sin vehículo lo dice, no lo deja en blanco', async () => {
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Sur')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Sur')
     expect(screen.getByText('Sin vehículo asignado.')).toBeInTheDocument()
     expect(screen.getByText('Sin integrantes.')).toBeInTheDocument()
   })
@@ -107,8 +170,8 @@ describe('Equipos de trabajo', () => {
     // Ofrecer el personal entero haría que el rol no quisiera decir nada — y el
     // backend rechaza a quien no lo tiene, así que sería ofrecer un 409.
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Norte')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
 
     await user.click(screen.getByRole('button', { name: /Nuevo equipo/ }))
     const dialogo = await screen.findByRole('dialog')
@@ -122,8 +185,8 @@ describe('Equipos de trabajo', () => {
 
   it('el alta manda la lista completa de integrantes', async () => {
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Norte')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
 
     await user.click(screen.getByRole('button', { name: /Nuevo equipo/ }))
     const dialogo = await screen.findByRole('dialog')
@@ -141,8 +204,8 @@ describe('Equipos de trabajo', () => {
 describe('Flota y asignación', () => {
   it('🔴 asignar ofrece sólo los disponibles', async () => {
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Sur')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Sur')
 
     await user.click(screen.getAllByRole('button', { name: /Asignar vehículo/ })[0])
     const dialogo = await screen.findByRole('dialog', { name: /Asignar vehículo/ })
@@ -158,8 +221,8 @@ describe('Flota y asignación', () => {
 
   it('asignar manda el equipo elegido', async () => {
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Sur')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Sur')
 
     // El segundo botón es el de Cuadrilla Sur.
     await user.click(screen.getAllByRole('button', { name: /Asignar vehículo/ })[1])
@@ -177,7 +240,7 @@ describe('Flota y asignación', () => {
 
   it('el estado de un vehículo asignado no se puede editar', async () => {
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
+    render(<Flota />)
     await screen.findByText('Renault Kangoo')
 
     await user.click(screen.getByRole('button', { name: 'Editar AB123CD' }))
@@ -197,8 +260,8 @@ describe('Flota y asignación', () => {
       if (u.includes('/api/tecnicos')) return Promise.resolve(json([SOFIA]))
       return Promise.resolve(json([]))
     }))
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Norte')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
 
     const boton = screen.getByRole('button', { name: /No hay vehículos libres/ })
     expect(boton).toBeDisabled()
@@ -206,8 +269,8 @@ describe('Flota y asignación', () => {
 
   it('desasignar sale desde la tarjeta del equipo', async () => {
     const user = userEvent.setup()
-    render(<EquiposYFlota />)
-    await screen.findAllByText('Cuadrilla Norte')
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Cuadrilla Norte')
 
     await user.click(screen.getByRole('button', { name: 'Desasignar AB123CD' }))
 

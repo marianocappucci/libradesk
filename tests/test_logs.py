@@ -12,24 +12,12 @@ Lo que fijan estos tests, en orden de lo que se rompe sin que se note:
 4. Que la pantalla sea admin-only. Es la que dice desde qué IP entró cada uno.
 5. Que la contraseña no aparezca en el log de accesos.
 """
-import sys
 
-import pytest
-from fastapi.testclient import TestClient
 
 RUTA = "/api/logs"
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _login(client, username="admin", password="admin") -> None:

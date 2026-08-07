@@ -5,42 +5,32 @@ que el motor no puede: que ESTE producto la tenga montada, que el link del
 mail apunte a su propia pantalla, y que el flujo entero funcione contra la
 app real.
 
-Mismo `client` que test_api.py: reimporta los módulos de `app` en limpio,
-porque `app.database`/`app.main` tienen engine y session_factory globales.
+El SMTP se decide **por test**, así que la app se arma dentro del cuerpo con
+`armar_cliente` (ver conftest.py) y no en una fixture: `resolver_smtp_config`
+lee el entorno al construirse el servicio.
 """
-import sys
-
-import pytest
-from fastapi.testclient import TestClient
 
 
-def _fresh_app(tmp_path, monkeypatch, con_smtp: bool):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+def _fresh_app(armar_cliente, monkeypatch, con_smtp: bool):
     if con_smtp:
         monkeypatch.setenv("LIBRAAUTH_SMTP_HOST", "smtp.test")
         monkeypatch.setenv("LIBRAAUTH_SMTP_FROM_EMAIL", "no-reply@test")
     else:
         monkeypatch.delenv("LIBRAAUTH_SMTP_HOST", raising=False)
         monkeypatch.delenv("LIBRAAUTH_SMTP_FROM_EMAIL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return app, TestClient(app, base_url="https://testserver")
+    return armar_cliente()
 
 
-def test_los_endpoints_estan_montados(tmp_path, monkeypatch):
-    _, client = _fresh_app(tmp_path, monkeypatch, con_smtp=False)
+def test_los_endpoints_estan_montados(armar_cliente, monkeypatch):
+    _, client = _fresh_app(armar_cliente, monkeypatch, con_smtp=False)
     # Sin SMTP responde 503: prueba de que el endpoint existe y llega al
     # servicio (un 404 sería "no montado").
     assert client.post("/auth/forgot-password",
                        json={"identificador": "admin"}).status_code == 503
 
 
-def test_forgot_password_responde_igual_exista_o_no(tmp_path, monkeypatch):
-    app, client = _fresh_app(tmp_path, monkeypatch, con_smtp=True)
+def test_forgot_password_responde_igual_exista_o_no(armar_cliente, monkeypatch):
+    app, client = _fresh_app(armar_cliente, monkeypatch, con_smtp=True)
     app.state.password_reset._send_email = lambda **kw: None
 
     real = client.post("/auth/forgot-password", json={"identificador": "admin"})
@@ -50,8 +40,8 @@ def test_forgot_password_responde_igual_exista_o_no(tmp_path, monkeypatch):
     assert real.json() == fantasma.json()
 
 
-def test_flujo_completo(tmp_path, monkeypatch):
-    app, client = _fresh_app(tmp_path, monkeypatch, con_smtp=True)
+def test_flujo_completo(armar_cliente, monkeypatch):
+    app, client = _fresh_app(armar_cliente, monkeypatch, con_smtp=True)
     enviados = []
     app.state.password_reset._send_email = lambda **kw: enviados.append(kw)
     app.state.users.create(username="ana", name="Ana", password="vieja123",
@@ -75,7 +65,7 @@ def test_flujo_completo(tmp_path, monkeypatch):
                        json={"token": token, "new_password": "otra-clave-2"}).status_code == 400
 
 
-def test_token_invalido_da_400(tmp_path, monkeypatch):
-    _, client = _fresh_app(tmp_path, monkeypatch, con_smtp=True)
+def test_token_invalido_da_400(armar_cliente, monkeypatch):
+    _, client = _fresh_app(armar_cliente, monkeypatch, con_smtp=True)
     assert client.post("/auth/reset-password",
                        json={"token": "inventado", "new_password": "nueva-clave-1"}).status_code == 400

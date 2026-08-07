@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Car, CalendarDays } from 'lucide-react'
+import { Car } from 'lucide-react'
 
 /** Hoy en `YYYY-MM-DD`, hora local.
  *
@@ -85,15 +85,12 @@ export function AgendaEquipos({ equipos }: { equipos: EquipoTrabajo[] }) {
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-base font-semibold">
-            <CalendarDays className="size-4" />Agenda del día
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Qué tiene cada equipo y en qué sale. Dos trabajos del mismo equipo no
-            se pueden pisar: al agendarlos, el sistema los rechaza.
-          </p>
-        </div>
+        {/* Sin título propio: desde que la agenda es una pestaña, el conmutador
+            ya la nombra, y repetirlo debajo haría parecer que son dos cosas. */}
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Qué tiene cada equipo y en qué sale. Dos trabajos del mismo equipo no
+          se pueden pisar: al agendarlos, el sistema los rechaza.
+        </p>
         <div className="grid gap-1.5">
           <Label htmlFor="dia-agenda">Día</Label>
           <Input

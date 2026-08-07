@@ -17,25 +17,14 @@ Los otros dos que importan:
 - Que los resaltados viajen como marca semantica y no como color: es lo que
   permite que el Excel los pinte y la pantalla les ponga una clase.
 """
-import sys
 from datetime import date, timedelta
 from io import BytesIO
 
 import pytest
-from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    return TestClient(app, base_url="https://testserver")
+# `client` sale de conftest.py.
 
 
 def _iso(dias: int) -> str:

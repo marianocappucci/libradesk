@@ -13,23 +13,10 @@ ajeno. Lo que se prueba **acá** es lo que sólo este producto puede verificar:
 """
 import zipfile
 
-import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    c = TestClient(app, base_url="https://testserver")
-    c.data_dir = tmp_path
-    return c
+# `client` sale de conftest.py.
 
 
 def _login(client, usuario="admin", clave="admin") -> None:

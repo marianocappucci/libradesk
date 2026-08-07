@@ -13,25 +13,15 @@ que le faltaba el usuario.
 Un test que sólo mirara la ruta habría pasado igual. Éste mira **el efecto del
 arranque sobre la base**.
 """
-from fastapi.testclient import TestClient
+def _cliente(armar_cliente):
+    """Un cliente logueado sobre una instancia recién arrancada.
 
-
-def _cliente(tmp_path, monkeypatch):
-    """Un cliente con la app reconstruida desde cero.
-
-    LibraDesk no tiene una fixture `admin_client` como los otros tres, y la
-    suya se construye al empezar el test — así que el entorno de la demo hay
-    que dejarlo puesto **antes** de llamar a esto, no después.
+    El arranque es lo que se está probando, así que la app se arma **dentro
+    del test** con `armar_cliente` (ver conftest.py) y no en una fixture: el
+    entorno de la demo tiene que estar puesto antes de que corra
+    `ensure_demo_user`, y una fixture se resolvería demasiado temprano.
     """
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    c = TestClient(app, base_url="https://testserver")
+    _, c = armar_cliente()
     r = c.post("/auth/login", json={"username": "admin", "password": "admin"})
     assert r.status_code == 200, r.text
     return c
@@ -43,28 +33,28 @@ def _usuarios(cliente) -> set[str]:
     return {u["username"] for u in r.json()}
 
 
-def test_el_arranque_crea_al_visitante(tmp_path, monkeypatch):
+def test_el_arranque_crea_al_visitante(armar_cliente, monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "1")
     monkeypatch.setenv("DEMO_USERNAME", "visitante")
 
-    assert "visitante" in _usuarios(_cliente(tmp_path, monkeypatch))
+    assert "visitante" in _usuarios(_cliente(armar_cliente))
 
 
-def test_el_visitante_no_es_admin(tmp_path, monkeypatch):
+def test_el_visitante_no_es_admin(armar_cliente, monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "1")
     monkeypatch.setenv("DEMO_USERNAME", "visitante")
 
-    cliente = _cliente(tmp_path, monkeypatch)
+    cliente = _cliente(armar_cliente)
     visitante = next(u for u in cliente.get("/api/usuarios").json()
                      if u["username"] == "visitante")
 
     assert visitante["role"] != "admin"
 
 
-def test_sin_configuracion_no_se_crea_nadie_de_mas(tmp_path, monkeypatch):
+def test_sin_configuracion_no_se_crea_nadie_de_mas(armar_cliente, monkeypatch):
     """En la instancia de un cliente. Un usuario de más no rompe nada visible,
     y por eso nadie lo encontraría."""
     monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.delenv("DEMO_USERNAME", raising=False)
 
-    assert "visitante" not in _usuarios(_cliente(tmp_path, monkeypatch))
+    assert "visitante" not in _usuarios(_cliente(armar_cliente))

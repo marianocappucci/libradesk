@@ -2,29 +2,10 @@
 dashboard). No es cobertura exhaustiva de los 5 dominios — verifica que
 el wiring completo (libraauth + SQLAlchemy + routers) funciona de punta
 a punta contra una SQLite temporal."""
-import os
-
 import pytest
-from fastapi.testclient import TestClient
 
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENV", "development")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    # Reimportar limpio: app.database/app.main tienen estado de modulo
-    # (engine/session_factory globales) que no debe pisarse entre tests.
-    import sys
-    for mod in list(sys.modules):
-        if mod == "app" or mod.startswith("app."):
-            del sys.modules[mod]
-    from app.asgi import app
-    # base_url https: la cookie de sesion se crea con secure=True (ver
-    # libraauth/session_auth.py) — sobre http:// el cliente la descarta y
-    # cualquier request post-login vuelve 401, mismo gotcha que ya
-    # documentan los tests de libraauth.
-    return TestClient(app, base_url="https://testserver")
+# La fixture `client` vive en `conftest.py`: es la misma para toda la suite y
+# ya no reimporta `app.*` en cada test. Ver ahí el porqué.
 
 
 def _login(client) -> None:
