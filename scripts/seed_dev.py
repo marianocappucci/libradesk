@@ -683,7 +683,12 @@ def _cargar_logo(api: Api, nombre: str, inicial: str, color: tuple, contar) -> N
         print("  (sin PIL: se saltea el logo)")
         return
 
-    if (api.get("/api/config/empresa") or {}).get("empresa_logo"):
+    # Idempotencia tolerante: la clave del logo cambió de nombre entre
+    # productos, así que se busca cualquiera que lo mencione en vez de fijar
+    # una — un nombre equivocado acá haría que el logo se resuba en cada
+    # corrida sin que se note.
+    actual = api.get("/api/config/empresa") or {}
+    if any("logo" in clave and valor for clave, valor in actual.items()):
         contar("logo", False)
         return
 
@@ -706,7 +711,9 @@ def _cargar_logo(api: Api, nombre: str, inicial: str, color: tuple, contar) -> N
     limite = "----seed" + "0" * 12
     cuerpo = (
         f"--{limite}\r\n"
-        'Content-Disposition: form-data; name="file"; filename="logo.png"\r\n'
+        # 🔴 El campo se llama `logo`, no `file`: con `file` la API contesta
+        # 422. Leído del openapi de la instancia.
+        'Content-Disposition: form-data; name="logo"; filename="logo.png"\r\n'
         "Content-Type: image/png\r\n\r\n"
     ).encode() + contenido + f"\r\n--{limite}--\r\n".encode()
 
