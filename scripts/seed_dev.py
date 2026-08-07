@@ -649,6 +649,10 @@ def sembrar(api: Api) -> None:
         })
         contar("incidencias_cerradas", True)
 
+    # El logo del negocio, para que los comprobantes salgan como los de un
+    # cliente y no con un hueco arriba.
+    _cargar_logo(api, "Compulibra Servicios IT", "C", (79, 70, 229), contar)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
 
 
@@ -656,6 +660,66 @@ def sembrar(api: Api) -> None:
 #: etiqueta** del host, no como substring de la URL entera — ver
 #: `url_no_productiva`.
 _HOSTS_NO_PRODUCTIVOS = ("dev", "demo", "prueba", "localhost", "127.0.0.1")
+
+
+
+def _cargar_logo(api: Api, nombre: str, inicial: str, color: tuple, contar) -> None:
+    """Dibuja el logo del negocio y lo sube a Configuración.
+
+    🔴 **Se genera, no se commitea.** PIL viene en la imagen del producto, así
+    que el seed lo dibuja en el momento: no hay binarios en el repo y cambiar
+    el color es cambiar una línea. Mismo criterio que el resto del seed — el
+    estado limpio es código, no un archivo guardado a mano.
+
+    Sin logo, los PDF de la demo salen con un hueco arriba: el interesado ve
+    dónde iría el suyo pero no cómo se ve. Con uno, el comprobante se lee como
+    el que va a emitir él.
+    """
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        # En un entorno sin PIL el seed sigue: un logo faltante no vale
+        # abortar la carga de datos.
+        print("  (sin PIL: se saltea el logo)")
+        return
+
+    if (api.get("/api/config/empresa") or {}).get("empresa_logo"):
+        contar("logo", False)
+        return
+
+    ANCHO, ALTO = 520, 160
+    imagen = Image.new("RGBA", (ANCHO, ALTO), (255, 255, 255, 0))
+    dibujo = ImageDraw.Draw(imagen)
+    # Cuadrado redondeado con la inicial, y el nombre al lado: es la forma que
+    # tienen los logos de la familia y la que mejor sobrevive achicada en un
+    # encabezado de PDF.
+    dibujo.rounded_rectangle((8, 20, 128, 140), radius=24, fill=color)
+    dibujo.text((52, 60), inicial, fill=(255, 255, 255))
+    dibujo.text((150, 55), nombre, fill=(30, 30, 30))
+    dibujo.line((150, 95, 150 + min(340, len(nombre) * 11), 95), fill=color, width=4)
+
+    import io
+    buffer = io.BytesIO()
+    imagen.save(buffer, format="PNG")
+    contenido = buffer.getvalue()
+
+    limite = "----seed" + "0" * 12
+    cuerpo = (
+        f"--{limite}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="logo.png"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+    ).encode() + contenido + f"\r\n--{limite}--\r\n".encode()
+
+    import urllib.request
+    pedido = urllib.request.Request(
+        f"{api.base}/api/config/empresa/logo", data=cuerpo, method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={limite}"},
+    )
+    try:
+        api.opener.open(pedido, timeout=30)
+        contar("logo", True)
+    except Exception as e:
+        print(f"  -- logo: {e}")
 
 
 def url_no_productiva(url: str) -> bool:
