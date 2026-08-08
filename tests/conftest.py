@@ -53,7 +53,15 @@ from fastapi.testclient import TestClient
 # test_demo_arranque, `LIBRAAUTH_SMTP_*` en test_password_reset) partan siempre
 # del mismo piso. No se neutralizan al construir la app de cada test: ahí es
 # donde el test las quiere puestas.
-_ENV_DE_INSTANCIA = ("DEMO_MODE", "DEMO_USERNAME", "DATABASE_URL")
+_ENV_DE_INSTANCIA = (
+    "DEMO_MODE", "DEMO_USERNAME", "DATABASE_URL",
+    # El emparejamiento con Contalibra (`app/services/facturacion_externa.py`).
+    # Van acá por el mismo motivo que las de arriba: si la máquina que corre la
+    # suite las tuviera puestas, los tests que ejercen el camino "sin
+    # configurar" pasarían a ejercer el otro **sin fallar**, que es el peor modo
+    # de romperse.
+    "CONTALIBRA_URL", "CONTALIBRA_SERVICE_TOKEN", "INSTANCIA_SLUG",
+)
 
 
 def construir_app(data_dir: Path):
