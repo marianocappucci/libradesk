@@ -7,6 +7,9 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy>=2.0",
+    # Driver para el backend PostgreSQL del dominio SQLAlchemy. SQLite sigue
+    # siendo válido durante la transición y no requiere dependencia extra.
+    "psycopg[binary]>=3.2",
     # Runtime, no dev: las migraciones corren en el arranque de la app
     # (app/schema.py), no en un paso aparte del deploy. Un contenedor sin
     # alembic no levanta.

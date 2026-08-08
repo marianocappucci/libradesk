@@ -44,6 +44,21 @@ x-libradesk-common: &libradesk-common
     - stack-net
 
 services:
+  # Backend PostgreSQL descartable para el piloto. No se conecta todavía a la
+  # aplicación: remitos/presupuestos siguen dependiendo del adaptador SQLite
+  # crudo de libracore. Activar con `docker compose --profile postgres up -d`.
+  libradesk-postgres:
+    image: postgres:16-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_DB: libradesk
+      POSTGRES_USER: libradesk
+      POSTGRES_PASSWORD: libradesk-dev
+    volumes:
+      - libradesk-postgres-data:/var/lib/postgresql/data
+    networks:
+      - stack-net
+
   # Instancia de desarrollo/pruebas — dev.libradesk.com.ar
   libradesk-dev:
     <<: *libradesk-common
@@ -74,3 +89,6 @@ networks:
   stack-net:
     external: true
     name: stack_stack-net
+
+volumes:
+  libradesk-postgres-data:
