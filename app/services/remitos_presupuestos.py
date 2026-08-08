@@ -44,7 +44,6 @@ import os
 from libracore import config_manager
 from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
-from sqlalchemy.engine import make_url
 
 from . import iva
 
@@ -111,10 +110,12 @@ def configure(database_url: str, data_dir: str) -> None:
     aca es explicito y del mismo tipo que `core.configure()`: LibraCore esta
     disenado para configurarse por producto.
     """
-    db_path = make_url(database_url).database
-    if not db_path:
-        raise ValueError(f"database_url sin path de archivo: {database_url!r}")
-    libracore_core.configure(db_path)
+    if not database_url:
+        raise ValueError("database_url vacia")
+    # LibraCore distingue SQLite de PostgreSQL por el esquema de la URL.
+    # Pasar solo `.database` convertiria `postgresql://.../libradesk` en el
+    # archivo SQLite `libradesk`, anulando toda la migracion del piloto.
+    libracore_core.configure(database_url)
 
     config_manager.CONFIG_PATH = os.path.join(data_dir, "config.json")
     config_manager.LOGO_DIR = os.path.join(data_dir, "logos")
