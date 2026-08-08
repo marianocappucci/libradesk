@@ -75,7 +75,9 @@ dependencies = [
     # comprobante de una sola alicuota para un Responsable Inscripto sale
     # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
     # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.13.0",
+    # Durante el piloto PostgreSQL se consume la rama de compatibilidad de
+    # LibraCore. Volver a un tag estable cuando esa rama se integre y publique.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@feature/comprobantes-pendientes",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
