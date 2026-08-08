@@ -29,9 +29,9 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, health, incidencias, informes, ingresos,
-    presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
-    servicios, tecnicos, users,
+    depositos, equipos, equipos_trabajo, facturacion, health, incidencias,
+    informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
+    reportes, sectores, servicios, tecnicos, users,
 )
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
@@ -42,6 +42,7 @@ from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
+from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
@@ -149,6 +150,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.informes = InformeService(sessions)
     app.state.remitos = rp_service.RemitoService()
     app.state.presupuestos = rp_service.PresupuestoService()
+    # El puente hacia la instancia de Contalibra del mismo cliente. Se
+    # construye siempre: si el emparejamiento no está configurado, el servicio
+    # lo dice y el router contesta 409 — no hay una app distinta según haya o
+    # no puente.
+    app.state.puente_facturacion = PuenteFacturacion(sessions)
     app.state.modules = module_repository
     app.state.auditoria = AuditoriaRepository(sessions)
     # Log de accesos (libraauth v0.8.0). Es opt-in por ausencia en el motor:
@@ -256,6 +262,16 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(
         presupuestos.router,
         dependencies=staff_or_admin + [Depends(require_module("presupuestos"))],
+    )
+    # El puente hacia Contalibra. Módulo propio y no colgado de `remitos`
+    # —ver `plans.py`—, y **admin-only**: mandar algo a facturar es una
+    # decisión comercial, no parte de armar el comprobante. Quien arma un
+    # remito es staff; quien decide que se le cobre al cliente, no.
+    app.include_router(
+        facturacion.router,
+        dependencies=[
+            Depends(require_admin), Depends(require_module("facturacion_externa")),
+        ],
     )
     # Datos de la empresa, logo y backup. Los tres routers salen de LibraCore
     # v1.10.0: el de empresa reemplaza a `app/routers/config_empresa.py`, que

@@ -58,6 +58,7 @@ from .services import contratos as _contratos  # noqa: F401
 from .services import depositos as _depositos  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import equipos_trabajo as _equipos_trabajo  # noqa: F401
+from .services import facturacion_externa as _facturacion_externa  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import ingresos as _ingresos  # noqa: F401
 from .services import modules as _modules  # noqa: F401

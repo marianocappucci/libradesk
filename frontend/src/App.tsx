@@ -25,6 +25,7 @@ import { Remitos } from './pages/Remitos'
 import { RemitoDetalle } from './pages/RemitoDetalle'
 import { Presupuestos } from './pages/Presupuestos'
 import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
+import { Facturacion } from './pages/Facturacion'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
 import {
@@ -87,6 +88,7 @@ export default function App() {
       <Route path="/presupuestos/:id" element={<ProtectedRoute><PresupuestoDetalle /></ProtectedRoute>} />
       <Route path="/remitos" element={<ProtectedRoute><Remitos /></ProtectedRoute>} />
       <Route path="/remitos/:id" element={<ProtectedRoute><RemitoDetalle /></ProtectedRoute>} />
+      <Route path="/facturacion" element={<ProtectedRoute><Facturacion /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
       <Route path="/reportes/:slug" element={<ProtectedRoute><ReporteDetalle /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />

@@ -14,6 +14,7 @@ from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
+from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.proveedores import ProveedorRepository
@@ -117,6 +118,10 @@ def get_remito_service(request: Request) -> RemitoService:
 
 def get_presupuesto_service(request: Request) -> PresupuestoService:
     return request.app.state.presupuestos
+
+
+def get_puente_facturacion(request: Request) -> PuenteFacturacion:
+    return request.app.state.puente_facturacion
 
 
 def get_data_dir(request: Request) -> str:
