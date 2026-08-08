@@ -34,7 +34,21 @@ def test_postgres_backend_when_configured():
         metadata.drop_all(engine)
 
 
-def test_application_starts_against_postgres(tmp_path):
+def test_application_starts_against_postgres(tmp_path, monkeypatch):
+    """El gate de verdad del piloto: la app entera arranca contra PostgreSQL.
+
+    Es el unico test que ejerce el camino completo —cadena de Alembic del
+    producto, `create_all()` de los motores y bootstrap— contra un PostgreSQL
+    real, y por eso es el que fue encontrando los defectos de dialecto uno por
+    uno el 2026-08-08: `BOOLEAN DEFAULT 1` en las revisiones 0007/0008, y el
+    `datetime('now','localtime')` de `auth_log` en LibraAuth.
+
+    `ENV=development` es lo mismo que hace la fixture `data_dir` del conftest
+    para el resto de la suite: sin eso `libraauth.bootstrap` exige
+    `LIBRADESK_ADMIN_PASSWORD` y aborta el arranque. Este archivo no usa esa
+    fixture —construye la app contra PostgreSQL y no contra la plantilla
+    SQLite— asi que tiene que armar el entorno por su cuenta.
+    """
     url = os.environ.get("LIBRADESK_POSTGRES_URL")
     if not url:
         pytest.skip("LIBRADESK_POSTGRES_URL no configurada; el CI la provee")
@@ -42,6 +56,9 @@ def test_application_starts_against_postgres(tmp_path):
     from fastapi.testclient import TestClient
 
     from app.main import create_app
+
+    monkeypatch.setenv("ENV", "development")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     app = create_app(url, str(tmp_path))
     with TestClient(app) as client:
