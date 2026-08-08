@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func, select, text, update
+from sqlalchemy import Boolean, DateTime, String, false, func, select, true, update
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -63,20 +63,29 @@ class Tecnico(Base):
     # `NOT NULL` sobre una tabla con filas, y sin declararlos tambien acá el
     # schema que construye Alembic difiere del que construye `create_all()`.
     # Lo agarro `test_alembic_construye_lo_mismo_que_create_all`.
+    #
+    # 🔴 **`true()`/`false()` y no `text("1")`/`text("0")`.** Los dos son lo
+    # mismo en SQLite —el dialecto no tiene booleano nativo y ambos emiten
+    # `DEFAULT 1`—, pero en PostgreSQL `BOOLEAN DEFAULT 1` es un error duro:
+    # "column is of type boolean but default expression is of type integer".
+    # Lo encontro el gate PostgreSQL del piloto (2026-08-08) corriendo la
+    # cadena de migraciones contra PG real. Las funciones se compilan segun el
+    # dialecto (`1` en SQLite, `true` en PostgreSQL), asi que esto NO cambia
+    # nada de lo que ya corre en SQLite. Mismo patron que `servicios.py`.
     es_tecnico: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1"),
+        Boolean, nullable=False, default=True, server_default=true(),
     )
     es_recepcionista: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0"),
+        Boolean, nullable=False, default=False, server_default=false(),
     )
     es_vendedor: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0"),
+        Boolean, nullable=False, default=False, server_default=false(),
     )
     # Quien manda un equipo de trabajo (pedido 42). Mismo patron que los otros
     # tres, incluido el `server_default` que necesita la migracion para poder
     # agregar la columna `NOT NULL` sobre una tabla con filas.
     es_responsable: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0"),
+        Boolean, nullable=False, default=False, server_default=false(),
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

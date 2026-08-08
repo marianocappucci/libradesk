@@ -16,6 +16,10 @@ agregada sobre datos y no se reconstruye nada; las FK viajan dentro del
 > El default es **0** y no 1, a diferencia de `es_tecnico` en la 0007: nadie es
 > responsable de un equipo hasta que alguien lo marque, y marcar a todos seria
 > inventar una estructura que no existe.
+>
+> 🔴 Se escribe `sa.false()` y no `sa.text('0')` por el mismo motivo que las tres
+> banderas de la 0007 — ver el docstring de esa revision. En SQLite las dos
+> formas emiten `DEFAULT 0`; en PostgreSQL `BOOLEAN DEFAULT 0` no compila.
 
 **No hay backfill.** Los equipos de trabajo no existen como dato: hasta hoy la
 organizacion de las cuadrillas vivia fuera del sistema.
@@ -32,7 +36,7 @@ depends_on = None
 def upgrade():
     with op.batch_alter_table('tecnicos', schema=None) as batch_op:
         batch_op.add_column(sa.Column(
-            'es_responsable', sa.Boolean(), nullable=False, server_default=sa.text('0'),
+            'es_responsable', sa.Boolean(), nullable=False, server_default=sa.false(),
         ))
 
     op.create_table(

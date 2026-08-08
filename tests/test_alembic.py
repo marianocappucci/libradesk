@@ -14,6 +14,9 @@ Las tres cosas que estos tests protegen, en orden de gravedad si fallaran:
    su revision tiene que poner un test en rojo, no aparecer recien cuando la
    consulta falle en produccion.
 """
+import contextlib
+import io
+import re
 import sqlite3
 
 import pytest
@@ -393,3 +396,77 @@ def test_sqlite_no_soporta_alter_column_sin_batch():
         con.execute("ALTER TABLE t ALTER COLUMN b TYPE VARCHAR(20)")
 
     con.close()
+
+
+# --- la cadena tambien tiene que compilar en PostgreSQL ----------------------
+
+def _sql_de_la_cadena(monkeypatch, url: str) -> str:
+    """La cadena entera renderizada para un dialecto, SIN servidor ni base.
+
+    Alembic tiene modo offline (`sql=True`): en vez de ejecutar, imprime el SQL
+    que ejecutaria. `migrations/env.py` ya lo soporta y toma la URL de
+    `DATABASE_URL`, asi que apuntandolo a una URL PostgreSQL se obtiene el DDL
+    tal como lo veria PostgreSQL — en milisegundos y sin levantar nada.
+    """
+    monkeypatch.setenv("DATABASE_URL", url)
+    salida = io.StringIO()
+    with contextlib.redirect_stdout(salida):
+        command.upgrade(alembic_config(None), "head", sql=True)
+    return salida.getvalue()
+
+
+# `BOOLEAN DEFAULT 1`, en cualquiera de las dos formas en que puede aparecer:
+# dentro de un `CREATE TABLE` y en un `ADD COLUMN`.
+_BOOLEANO_CON_DEFAULT_ENTERO = re.compile(r"(\w+)\s+BOOLEAN\s+DEFAULT\s+(\d+)", re.IGNORECASE)
+
+
+def test_ningun_booleano_lleva_un_default_entero_en_postgres(monkeypatch):
+    """🔴 `BOOLEAN DEFAULT 1` pasa en SQLite y rompe el upgrade en PostgreSQL.
+
+    SQLite no tiene booleano nativo: `sa.text("1")` y `sa.true()` emiten los dos
+    `DEFAULT 1` y se comportan igual. PostgreSQL es estricto y aborta con
+    *"column is of type boolean but default expression is of type integer"* —
+    o sea que la migracion no corre y **la instancia no arranca**.
+
+    Es real, no hipotetico: el 2026-08-08 la revision 0007 freno el gate
+    PostgreSQL del piloto con `es_tecnico BOOLEAN DEFAULT 1 NOT NULL`, con las
+    otras 480 pruebas de la suite en verde. La forma correcta es `sa.true()` /
+    `sa.false()`, que se compilan segun el dialecto.
+
+    **Esto no reemplaza al gate contra PostgreSQL real** — ese es
+    `test_database_backend.py::test_application_starts_against_postgres`, que
+    corre la cadena de verdad en CI. Renderizar no ejecuta, asi que ve errores
+    de compilacion del DDL y no de semantica. Este test existe para que esta
+    clase concreta —la que ya costo una corrida de CI— se vea en segundos y
+    localmente, sin PostgreSQL instalado.
+    """
+    sql = _sql_de_la_cadena(monkeypatch, "postgresql+psycopg://u:p@localhost:5432/x")
+
+    ofensores = _BOOLEANO_CON_DEFAULT_ENTERO.findall(sql)
+
+    assert ofensores == [], (
+        "estas columnas booleanas llevan un default entero, que PostgreSQL "
+        f"rechaza: {ofensores}. Usar `sa.true()`/`sa.false()`, que se compilan "
+        "segun el dialecto (1/0 en SQLite, true/false en PostgreSQL)."
+    )
+
+
+def test_el_render_postgres_realmente_mira_la_cadena(monkeypatch):
+    """La contraprueba del test de arriba.
+
+    Sin esto, aquel assert pasaria igual si el render devolviera vacio, si la
+    URL cayera de vuelta a SQLite, o si el regex no matcheara nunca — tres
+    formas distintas de dar verde sin haber mirado nada. Se exige que el SQL sea
+    efectivamente de PostgreSQL (`SERIAL`, que el dialecto SQLite no emite), que
+    las cuatro banderas aparezcan en el render, y que el regex sepa encontrar el
+    defecto cuando esta presente.
+    """
+    sql = _sql_de_la_cadena(monkeypatch, "postgresql+psycopg://u:p@localhost:5432/x")
+
+    assert "SERIAL" in sql.upper()
+    for bandera in ("es_tecnico", "es_recepcionista", "es_vendedor", "es_responsable"):
+        assert f"{bandera} BOOLEAN DEFAULT" in sql, f"falta {bandera} en el render"
+
+    assert _BOOLEANO_CON_DEFAULT_ENTERO.findall(
+        "ALTER TABLE tecnicos ADD COLUMN es_tecnico BOOLEAN DEFAULT 1 NOT NULL;"
+    ) == [("es_tecnico", "1")]

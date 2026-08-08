@@ -25,6 +25,16 @@ default: los 23 tickets que ya existen no saben cómo se atendieron, y ponerles
 >
 > El downgrade también venía mal: `drop_constraint(None, ...)` no puede
 > ejecutarse. Las FK van con nombre explícito.
+
+> 🔴 **Los defaults son `sa.true()`/`sa.false()`, no `sa.text('1')`/`'0'`.**
+> Decían `text('1')` hasta el 2026-08-08. En SQLite da igual —no tiene booleano
+> nativo y las dos formas emiten `DEFAULT 1`—, pero contra PostgreSQL este mismo
+> `ALTER TABLE` falla duro: *"column es_tecnico is of type boolean but default
+> expression is of type integer"*. Lo encontró el gate PostgreSQL del piloto
+> corriendo la cadena completa contra PG 16 real; las 480 pruebas restantes
+> pasaban. `sa.true()` se compila según el dialecto (`1` en SQLite, `true` en
+> PostgreSQL), así que **el schema que ve SQLite no cambia** y las bases que ya
+> aplicaron esta revisión no se tocan.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -38,13 +48,13 @@ depends_on = None
 def upgrade():
     with op.batch_alter_table('tecnicos', schema=None) as batch_op:
         batch_op.add_column(sa.Column(
-            'es_tecnico', sa.Boolean(), nullable=False, server_default=sa.text('1'),
+            'es_tecnico', sa.Boolean(), nullable=False, server_default=sa.true(),
         ))
         batch_op.add_column(sa.Column(
-            'es_recepcionista', sa.Boolean(), nullable=False, server_default=sa.text('0'),
+            'es_recepcionista', sa.Boolean(), nullable=False, server_default=sa.false(),
         ))
         batch_op.add_column(sa.Column(
-            'es_vendedor', sa.Boolean(), nullable=False, server_default=sa.text('0'),
+            'es_vendedor', sa.Boolean(), nullable=False, server_default=sa.false(),
         ))
 
     with op.batch_alter_table('incidencias', schema=None) as batch_op:
