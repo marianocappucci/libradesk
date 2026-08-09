@@ -24,7 +24,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends openssl git openssh-client && rm -rf /var/lib/apt/lists/*
+# `postgresql-client` trae `pg_dump` y `pg_restore`, que es lo que usa
+# `libracore.respaldo` cuando la instancia corre sobre PostgreSQL. Sin ellos la
+# pantalla de Backup deja de andar — con un error explicito, no en silencio,
+# pero deja de andar. En una instancia SQLite no se usan.
+#
+# 🔴 La version del cliente tiene que ser >= la del servidor, o `pg_dump` se
+# niega a dumpear. Medido el 2026-08-09: python:3.12-slim es Debian 13
+# (trixie) y su `postgresql-client` es **17**, contra sidecar **postgres:16**.
+# Alcanza. Si algun dia el servidor sube por encima del cliente de Debian, hay
+# que agregar el repo de PGDG — no subir el pin del servidor y esperar.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl git openssh-client postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # pyproject.toml referencia libraauth, libracore y libragenda via git+https
 # (dev local sin identidad SSH propia funciona igual); el build real reescribe
