@@ -29,13 +29,9 @@ import pytest
 
 @pytest.fixture
 def client(client):
-    """El `client` de conftest.py, ya logueado y con la ruta de la base."""
+    """El `client` de conftest.py, ya logueado."""
     r = client.post("/auth/login", json={"username": "admin", "password": "admin"})
     assert r.status_code == 200, r.text
-    # La ruta de la base, para `_envejecer`. `get_data_dir` es una dependencia
-    # de FastAPI y necesita un `Request`; el valor real vive en el estado de la
-    # app, que es de donde lo saca esa dependencia.
-    client.ruta_db = f"{client.app.state.data_dir}/libradesk.db"
     return client
 
 
@@ -99,15 +95,25 @@ def _envejecer(client, incidencia_id, dias):
     No hay forma de crear una incidencia con fecha pasada por la API —y está
     bien que no la haya—, así que el envejecimiento se hace en la tabla. Es lo
     único que estos tests tocan por fuera del contrato HTTP.
+
+    Va por el engine de la app y no por `sqlite3.connect(ruta)`: la suite
+    también corre contra PostgreSQL (ver `tests/conftest.py`), donde no hay
+    archivo que abrir. Con `sqlite3` directo, estos tres tests fallaban con
+    *"no such table: incidencias"* — el archivo existía en el DATA_DIR pero
+    vacío, porque los datos estaban en PostgreSQL.
     """
-    import sqlite3
-    con = sqlite3.connect(client.ruta_db)
-    con.execute(
-        "UPDATE incidencias SET fecha_creacion = ? WHERE id = ?",
-        ((datetime.now() - timedelta(days=dias)).isoformat(sep=" "), incidencia_id),
-    )
-    con.commit()
-    con.close()
+    from sqlalchemy import text
+
+    from app import database
+
+    with database.get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE incidencias SET fecha_creacion = :fecha WHERE id = :id"),
+            {
+                "fecha": (datetime.now() - timedelta(days=dias)).isoformat(sep=" "),
+                "id": incidencia_id,
+            },
+        )
 
 
 # ── El horizonte ──────────────────────────────────────────────────────────

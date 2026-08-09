@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [develop, main]
+    branches: [develop, main, "feature/**"]
   pull_request:
     branches: [develop, main]
 
@@ -17,6 +17,22 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: libradesk
+          POSTGRES_USER: libradesk
+          POSTGRES_PASSWORD: libradesk-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U libradesk -d libradesk"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      LIBRADESK_POSTGRES_URL: postgresql+psycopg://libradesk:libradesk-ci@localhost:5432/libradesk
 
     steps:
       - uses: actions/checkout@v4

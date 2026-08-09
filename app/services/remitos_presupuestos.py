@@ -111,10 +111,18 @@ def configure(database_url: str, data_dir: str) -> None:
     aca es explicito y del mismo tipo que `core.configure()`: LibraCore esta
     disenado para configurarse por producto.
     """
-    db_path = make_url(database_url).database
-    if not db_path:
-        raise ValueError(f"database_url sin path de archivo: {database_url!r}")
-    libracore_core.configure(db_path)
+    if not database_url:
+        raise ValueError("database_url vacia")
+    # LibraCore distingue SQLite de PostgreSQL por el tipo del argumento:
+    # recibe una ruta para SQLite y la URL completa para PostgreSQL. Pasar solo
+    # `.database` en el segundo caso lo convertiría en un archivo SQLite.
+    if database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        libracore_core.configure(database_url)
+    else:
+        db_path = make_url(database_url).database
+        if not db_path:
+            raise ValueError(f"database_url sin path de archivo: {database_url!r}")
+        libracore_core.configure(db_path)
 
     config_manager.CONFIG_PATH = os.path.join(data_dir, "config.json")
     config_manager.LOGO_DIR = os.path.join(data_dir, "logos")
@@ -231,9 +239,31 @@ class RemitoService:
         return rp.get_remito(remito_id)
 
     def delete(self, remito_id: int) -> None:
+        """Borra el remito **si ningun presupuesto lo referencia**.
+
+        `presupuestos.remito_id` guarda de que presupuesto salio el remito
+        (`convertir_a_remito`). Borrar el remito dejaba esa columna apuntando a
+        un id inexistente y el presupuesto seguia diciendo "ya se convirtio",
+        sin nada al otro lado. Contra PostgreSQL esa FK rechaza el borrado
+        sola; aca se hace explicito para que SQLite haga lo mismo (2026-08-09).
+        """
         if rp.get_remito(remito_id) is None:
             raise KeyError(remito_id)
+
+        colgando = self.dependencias(remito_id)
+        if any(colgando.values()):
+            raise ValueError(colgando)
+
         rp.delete_remito(remito_id)
+
+    def dependencias(self, remito_id: int) -> dict[str, int]:
+        from libracore.db import core as libracore_core
+
+        with libracore_core.get_connection() as conn:
+            fila = conn.execute(
+                "SELECT COUNT(*) FROM presupuestos WHERE remito_id=?", (remito_id,)
+            ).fetchone()
+        return {"presupuestos_convertidos": fila[0]}
 
     def set_pdf_path(self, remito_id: int, pdf_path: str) -> None:
         rp.update_remito_pdf_path(remito_id, pdf_path)

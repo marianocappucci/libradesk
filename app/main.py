@@ -59,6 +59,16 @@ from libraauth.bootstrap import ensure_demo_user
 from .services.users import ensure_default_admin
 
 
+def _es_postgres(database_url: str) -> bool:
+    """Si esta instancia corre sobre PostgreSQL en vez de SQLite.
+
+    Mismo criterio que usa `libracore.db.core.configure()` para elegir backend,
+    a proposito: si los dos no coinciden, la app y su backup mirarian a bases
+    distintas.
+    """
+    return database_url.startswith(("postgresql://", "postgresql+psycopg://"))
+
+
 def create_app(database_url: str, data_dir: str) -> FastAPI:
     configure(database_url)
     engine = get_engine()
@@ -285,12 +295,24 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
     app.include_router(
         build_backup_router(
+            # 🔴 En PostgreSQL se pasa la URL, NO `make_url(...).database`.
+            # Ahi ese campo es el NOMBRE de la base, no una ruta de archivo, y
+            # `libracore.respaldo` lo trataba como ruta: no encontraba el
+            # archivo, se lo saltaba por el caso "instancia recien creada" y el
+            # cliente se bajaba un ZIP **con los logos y sin datos**, sin ningun
+            # error. Recien se notaba al restaurar ("El backup no contiene
+            # ninguna base de datos"). Lo encontro la suite corriendo contra
+            # PostgreSQL el 2026-08-09.
             Instancia(
                 nombre="libradesk",
                 # Una sola base: a diferencia de Gestiolibra, MedLibra y
                 # VentaLibra, aca `usuarios` vive en el MISMO archivo que el
                 # dominio (`AuthBase.metadata.create_all(engine)`, arriba).
-                bases=[make_url(database_url).database],
+                bases=(
+                    [] if _es_postgres(database_url)
+                    else [make_url(database_url).database]
+                ),
+                postgres_url=database_url if _es_postgres(database_url) else None,
                 directorios=[os.path.join(data_dir, "logos")],
             ),
             os.path.join(data_dir, "backups"),

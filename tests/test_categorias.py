@@ -250,18 +250,26 @@ def test_la_migracion_agrega_la_categoria_a_una_base_vieja(client, catalogo, tic
 
     engine = database.get_engine()
 
+    # Introspección por el inspector de SQLAlchemy y no por `PRAGMA
+    # table_info` / `index_list`: eso es exclusivo de SQLite y la suite corre
+    # también contra PostgreSQL (ver `tests/conftest.py`).
+    from sqlalchemy import inspect
+
+    def columnas_de(conn):
+        return {c["name"] for c in inspect(conn).get_columns("incidencias")}
+
     with engine.begin() as conn:
         filas_antes = conn.execute(text("SELECT COUNT(*) FROM incidencias")).scalar()
         command.downgrade(_config(conn), BASELINE)
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(incidencias)")).all()}
+        columnas = columnas_de(conn)
     assert "categoria_id" not in columnas
     assert filas_antes == 4  # los 4 tickets del fixture
 
     assert ensure_schema(engine) == "upgrade"
 
     with engine.begin() as conn:
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(incidencias)")).all()}
-        indices = {f[1] for f in conn.execute(text("PRAGMA index_list(incidencias)")).all()}
+        columnas = columnas_de(conn)
+        indices = {i["name"] for i in inspect(conn).get_indexes("incidencias")}
         filas_despues = conn.execute(text("SELECT COUNT(*) FROM incidencias")).scalar()
     assert "categoria_id" in columnas
     # Mismo nombre que genera SQLAlchemy: una base migrada y una nueva tienen
@@ -274,13 +282,22 @@ def test_la_migracion_agrega_la_categoria_a_una_base_vieja(client, catalogo, tic
     assert ensure_schema(engine) == "upgrade"  # idempotente
 
     # Y la base migrada acepta escribir la columna nueva, que es el punto.
+    #
+    # 🔴 La categoría se crea DE NUEVO acá, después del upgrade. Las de
+    # `catalogo` ya no existen: el `downgrade` al baseline borra la tabla
+    # `categorias_incidencia` entera. Hasta el 2026-08-09 este bloque reusaba
+    # `catalogo["notebooks"]` y pasaba igual **porque SQLite no exige las
+    # foreign keys** — el ticket quedaba apuntando a una categoría borrada y el
+    # test lo daba por bueno. Contra PostgreSQL sale
+    # `ForeignKeyViolation: Key (categoria_id)=(4) is not present`.
+    notebooks = client.post("/api/categorias", json={"nombre": "Notebooks"}).json()["id"]
     inc = client.get(f"/api/incidencias/{tickets['impresora']}").json()
     r = client.put(f"/api/incidencias/{tickets['impresora']}", json={
         **{k: inc[k] for k in ("cliente_id", "titulo", "estado", "prioridad")},
-        "categoria_id": catalogo["notebooks"],
+        "categoria_id": notebooks,
     })
-    assert r.json()["categoria_id"] == catalogo["notebooks"]
-    assert client.get(f"/api/incidencias?categoria_id={catalogo['notebooks']}").json()
+    assert r.json()["categoria_id"] == notebooks
+    assert client.get(f"/api/incidencias?categoria_id={notebooks}").json()
 
 
 def test_el_reporte_trae_la_ruta_completa_de_la_categoria(client, catalogo, tickets):

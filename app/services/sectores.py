@@ -59,6 +59,19 @@ class SectorRepository:
             session.refresh(s)
             return _to_dict(s)
 
+    def dependencias(self, sector_id: int) -> dict[str, int]:
+        """Lo que impide borrar el sector. Las incidencias no entran: esas se
+        desasignan (ver `delete`); un contrato, en cambio, pacto ese sector."""
+        from .contratos import Contrato
+
+        with self.session_factory() as session:
+            return {
+                "contratos": session.execute(
+                    select(func.count()).select_from(Contrato)
+                    .where(Contrato.sector_id == sector_id)
+                ).scalar_one(),
+            }
+
     def delete(self, sector_id: int) -> None:
         """Borra el sector y **desasigna** las incidencias que lo usaban.
 
@@ -74,7 +87,16 @@ class SectorRepository:
         prender el pragma para todo el engine — eso es un cambio de
         comportamiento global sobre una base de produccion y merece
         decidirse aparte.
+
+        🔴 **Y se niega si el sector esta en un contrato** (2026-08-09). Esa
+        FK llego con el modulo de contratos, despues de este metodo: borrar el
+        sector dejaba el contrato apuntando a un id inexistente, y el sector
+        de un contrato es parte de lo pactado, no una etiqueta.
         """
+        colgando = self.dependencias(sector_id)
+        if any(colgando.values()):
+            raise ValueError(colgando)
+
         with self.session_factory() as session:
             s = session.get(Sector, sector_id)
             if s is None:

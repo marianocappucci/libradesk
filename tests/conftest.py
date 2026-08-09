@@ -37,11 +37,19 @@ detectar.
 archivo de base y su propia app, sólo que partiendo de una copia ya migrada en
 lugar de reconstruirla. No hay estado compartido entre tests — la plantilla se
 lee, nunca se escribe.
+
+**La suite también corre contra PostgreSQL**, con
+`LIBRADESK_SUITE_POSTGRES_URL` puesta. Es la misma idea de plantilla, con
+`CREATE DATABASE ... TEMPLATE` en lugar del `copytree`. Ver el bloque de
+`_SUITE_PG_URL` más abajo para el detalle y para por qué no se usa un rollback
+por transacción.
 """
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import zlib
 from pathlib import Path
 
 import pytest
@@ -64,7 +72,87 @@ _ENV_DE_INSTANCIA = (
 )
 
 
-def construir_app(data_dir: Path):
+# --- La suite contra PostgreSQL -------------------------------------------
+#
+# Con `LIBRADESK_SUITE_POSTGRES_URL` puesta, **toda** la suite corre contra
+# PostgreSQL en vez de SQLite. Es opt-in y usa una variable PROPIA, distinta de
+# `LIBRADESK_POSTGRES_URL`: esa última la pone el CI hoy para los tests que
+# ejercen los dos motores a la vez, y reusarla acá daría vuelta la suite entera
+# sin que nadie lo pidiera.
+#
+# **Por qué una base por test y no un rollback por transacción**, que sería más
+# rápido: `create_app()` configura DOS fuentes de conexión independientes —el
+# engine de SQLAlchemy y `libracore`, que abre una conexión psycopg nueva en
+# cada `get_connection()`—. Una transacción externa sólo envuelve a la primera,
+# así que las escrituras de remitos y presupuestos quedarían afuera del
+# aislamiento. Un schema por test tampoco sirve de atajo: habría que correr
+# Alembic y las semillas en cada uno, que es exactamente el costo que la
+# plantilla existe para evitar.
+#
+# Con `CREATE DATABASE ... TEMPLATE`, en cambio, PostgreSQL copia la plantilla a
+# nivel de archivos del lado del servidor — el equivalente exacto del
+# `copytree` que hace la variante SQLite.
+_SUITE_PG_URL = os.environ.get("LIBRADESK_SUITE_POSTGRES_URL")
+_PLANTILLA_PG = "libradesk_plantilla"
+
+
+# 🔴 `str(url)` de SQLAlchemy ENMASCARA la contraseña como `***`, así que una
+# URL reconstruida con `str()` falla con "password authentication failed" —
+# que se lee como un problema de credenciales y es un problema de renderizado.
+# Hay que pedir el render explícito.
+def _render(url) -> str:
+    return url.render_as_string(hide_password=False)
+
+
+def _url_admin() -> str:
+    """URL a la base `postgres`, para crear y borrar bases.
+
+    No se puede hacer `CREATE DATABASE` estando conectado a la base que se está
+    por reemplazar, así que las operaciones de administración van por acá. El
+    driver se saca del prefijo porque esto lo consume psycopg directo, no
+    SQLAlchemy.
+    """
+    from sqlalchemy.engine import make_url
+
+    return _render(make_url(_SUITE_PG_URL).set(database="postgres")).replace(
+        "postgresql+psycopg://", "postgresql://", 1
+    )
+
+
+def _url_de(nombre: str) -> str:
+    from sqlalchemy.engine import make_url
+
+    return _render(make_url(_SUITE_PG_URL).set(database=nombre))
+
+
+def _sql_admin(*sentencias: str) -> None:
+    import psycopg
+
+    with psycopg.connect(_url_admin(), autocommit=True) as conn:
+        for sentencia in sentencias:
+            conn.execute(sentencia)
+
+
+def _soltar_conexiones() -> None:
+    """Devuelve al pool y cierra todo lo que la app dejó abierto.
+
+    Hace falta por dos motivos distintos, y los dos muerden:
+
+    1. `CREATE DATABASE ... TEMPLATE x` falla si **alguien** sigue conectado a
+       `x`. Después de construir la plantilla hay que soltarla.
+    2. Cada test deja un engine con conexiones en el pool contra SU base. Sin
+       cerrarlas, 486 tests dejan cientos de conexiones vivas y PostgreSQL
+       corta en `max_connections` (100 por defecto) — un fallo que aparece a
+       mitad de la corrida y no se parece en nada a su causa.
+    """
+    from app import database as db_producto
+
+    engine = db_producto.get_engine()
+    if engine is not None:
+        engine.dispose()
+
+
+def construir_app(data_dir: Path, database_url: str | None = None):
     """La app de LibraDesk sobre un DATA_DIR ya migrado y sembrado.
 
     Se importa `create_app` acá adentro y no arriba: importar `app.main` levanta
@@ -73,7 +161,8 @@ def construir_app(data_dir: Path):
     """
     from app.main import create_app
 
-    return create_app(f"sqlite:///{data_dir}/libradesk.db", str(data_dir))
+    url = database_url or f"sqlite:///{data_dir}/libradesk.db"
+    return create_app(url, str(data_dir))
 
 
 @pytest.fixture(scope="session")
@@ -91,7 +180,17 @@ def _plantilla(tmp_path_factory) -> Path:
     for var in _ENV_DE_INSTANCIA:
         os.environ.pop(var, None)
     try:
-        construir_app(destino)
+        if _SUITE_PG_URL:
+            # La plantilla se construye en una base propia, y hay que soltarla:
+            # `CREATE DATABASE ... TEMPLATE` falla si queda alguien conectado.
+            _sql_admin(
+                f'DROP DATABASE IF EXISTS "{_PLANTILLA_PG}"',
+                f'CREATE DATABASE "{_PLANTILLA_PG}"',
+            )
+            construir_app(destino, _url_de(_PLANTILLA_PG))
+            _soltar_conexiones()
+        else:
+            construir_app(destino)
     finally:
         for var, valor in previo.items():
             if valor is None:
@@ -99,7 +198,10 @@ def _plantilla(tmp_path_factory) -> Path:
             else:
                 os.environ[var] = valor
 
-    return destino
+    yield destino
+
+    if _SUITE_PG_URL:
+        _sql_admin(f'DROP DATABASE IF EXISTS "{_PLANTILLA_PG}"')
 
 
 @pytest.fixture
@@ -109,6 +211,10 @@ def data_dir(_plantilla, tmp_path, monkeypatch) -> Path:
     Se copia **sobre `tmp_path`** y no en un subdirectorio para que el contrato
     con los tests sea el mismo de antes: `DATA_DIR == tmp_path`, la base en
     `tmp_path/libradesk.db`.
+
+    En modo PostgreSQL el DATA_DIR se copia igual —`logos/`, `backups/` y lo
+    que consume `test_config_backup` siguen viviendo en disco—; lo que cambia
+    es de dónde sale la base, y de eso se ocupa `url_de_base`.
     """
     shutil.copytree(_plantilla, tmp_path, dirs_exist_ok=True)
     monkeypatch.setenv("ENV", "development")
@@ -118,7 +224,58 @@ def data_dir(_plantilla, tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def armar_cliente(data_dir):
+def url_de_base(request) -> str | None:
+    """La base propia del test: `None` en SQLite, una base nueva en PostgreSQL.
+
+    `None` deja que `construir_app` arme la URL SQLite dentro del DATA_DIR,
+    exactamente como antes. En PostgreSQL cada test recibe una base recién
+    copiada de la plantilla.
+    """
+    # 🔴 `yield`, nunca `return`: esta fixture tiene un `yield` más abajo, así
+    # que es una función generadora. Un `return None` acá no devuelve None —
+    # termina el generador sin ceder nada, y pytest falla con "did not yield a
+    # value" en TODOS los tests que la piden. Costó una corrida entera: 431
+    # errores en modo SQLite con el modo PostgreSQL andando bien.
+    if not _SUITE_PG_URL:
+        yield None
+        return
+
+    # El nombre sale del test y no de un contador: si algo queda colgado, el
+    # nombre de la base dice cuál lo dejó. Se sanea y se recorta porque
+    # PostgreSQL corta los identificadores en 63 bytes, y se le antepone un
+    # hash para que dos tests con final parecido no colisionen.
+    crudo = re.sub(r"[^a-z0-9_]", "_", request.node.nodeid.lower())
+    nombre = f"ld_{zlib.crc32(crudo.encode()):08x}_{crudo[-30:]}"[:60]
+    _sql_admin(
+        f'DROP DATABASE IF EXISTS "{nombre}"',
+        f'CREATE DATABASE "{nombre}" TEMPLATE "{_PLANTILLA_PG}"',
+    )
+
+    yield _url_de(nombre)
+
+    # Cerrar ANTES de borrar: una base con conexiones vivas no se puede
+    # dropear, y dejarlas abiertas agota `max_connections` a mitad de la
+    # corrida — un fallo que aparece lejos de su causa.
+    _soltar_conexiones()
+    _sql_admin(f'DROP DATABASE IF EXISTS "{nombre}"')
+
+
+@pytest.fixture
+def destino_base(data_dir, url_de_base) -> str:
+    """La base de ESTA instancia, como la espera el provisioning: una ruta
+    SQLite o una URL PostgreSQL.
+
+    Existe porque los tests de planes construían `tmp_path/libradesk.db` a
+    mano. En modo PostgreSQL esa ruta no es la base —el archivo ni siquiera
+    tiene la tabla `modulos`— y los cuatro morían con `no such table`. El
+    mismo string que recibe `create_app`, que es el que el provisioning le
+    pasa a `plans.aplicar_plan_en_db`.
+    """
+    return url_de_base or f"{data_dir}/libradesk.db"
+
+
+@pytest.fixture
+def armar_cliente(data_dir, url_de_base):
     """Fábrica: construye la app **cuando el test la pide**, no antes.
 
     Para los archivos que deciden el entorno dentro del test y no en la
@@ -130,14 +287,14 @@ def armar_cliente(data_dir):
     Devuelve `(app, cliente)` porque un par de tests parchean `app.state`.
     """
     def _armar() -> tuple:
-        app = construir_app(data_dir)
+        app = construir_app(data_dir, url_de_base)
         return app, TestClient(app, base_url="https://testserver")
 
     return _armar
 
 
 @pytest.fixture
-def client(data_dir):
+def client(data_dir, url_de_base):
     """Cliente HTTP contra una instancia limpia, **sin loguear**.
 
     `base_url` https a propósito: la cookie de sesión se crea con `secure=True`
@@ -155,7 +312,7 @@ def client(data_dir):
     módulo contra el de acá. Así el login queda a la vista en el archivo que lo
     necesita en vez de repartirse en dos fixtures con el mismo nombre.
     """
-    with TestClient(construir_app(data_dir), base_url="https://testserver") as c:
+    with TestClient(construir_app(data_dir, url_de_base), base_url="https://testserver") as c:
         # Lo consume test_config_backup para comparar el ZIP contra el
         # directorio real de la instancia.
         c.data_dir = data_dir

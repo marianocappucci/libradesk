@@ -7,6 +7,9 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy>=2.0",
+    # Driver para el backend PostgreSQL del dominio SQLAlchemy. SQLite sigue
+    # siendo válido durante la transición y no requiere dependencia extra.
+    "psycopg[binary]>=3.2",
     # Runtime, no dev: las migraciones corren en el arranque de la app
     # (app/schema.py), no en un paso aparte del deploy. Un contenedor sin
     # alembic no levanta.
@@ -22,7 +25,20 @@ dependencies = [
     # v0.12.0: un cambio que solo toca columnas ocultas deja fila igual, con el
     # valor tapado. Antes se descartaba entero — o sea que cambiar SOLO la
     # contrasena de un usuario no dejaba rastro en el log de este producto.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.20.0",
+    #
+    # v0.21.0: el `server_default` de `auth_log.ts` era
+    # `datetime('now','localtime')` —SQLite puro— y contra PostgreSQL el
+    # CREATE TABLE muere con "function datetime(unknown, unknown) does not
+    # exist", o sea que la instancia no arranca. Ahora se emite por dialecto
+    # con una `FunctionElement`: en SQLite el DDL no cambia un byte, en
+    # PostgreSQL sale `LOCALTIMESTAMP`. No se pudo usar `func.now()` porque esa
+    # tabla la escriben DOS lados —el ORM de LibraAuth y un INSERT crudo de
+    # `libracore.db.logs` que se apoya en el DEFAULT— y en SQLite `func.now()`
+    # es UTC, lo que dejaria medio log tres horas corrido.
+    #
+    # Este tag sale de `feature/compatibilidad-postgres`, la rama que este pin
+    # consumia durante el piloto: ya esta mergeada a `develop` y publicada.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.21.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -72,7 +88,36 @@ dependencies = [
     # comprobante de una sola alicuota para un Responsable Inscripto sale
     # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
     # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.13.0",
+    # v1.16.0: la capa dual SQLite/PostgreSQL. `configure()` acepta una URL
+    # PostgreSQL y un wrapper de Connection/Cursor traduce paramstyle, emula
+    # `sqlite3.Row`, convierte `lastrowid` en `RETURNING id` y traduce el DDL y
+    # las funciones de SQLite. Es lo que permite que este producto lea remitos
+    # y presupuestos contra PostgreSQL — hasta v1.15.0, 5 de las 7 lecturas de
+    # `remitos_presupuestos` fallaban ahi (`dict(fila)` sin `keys()`,
+    # `ROUND(x,n)` sobre double precision, `text < date`, y `created_at` con
+    # microsegundos y zona). Ver `tests/test_remitos_postgres.py`.
+    #
+    # Para SQLite el unico cambio de comportamiento es el `HAVING` del reporte
+    # de stock bajo, que vuelve a comparar el valor REDONDEADO — o sea que
+    # restaura lo de v1.15.0, no lo cambia. Este producto no usa ese reporte.
+    #
+    # v1.16.0 -> v1.17.0: `Instancia.postgres_url`. **El bump NO es opcional a
+    # partir de aca**: `main.py` le pasa ese argumento a `Instancia` y con
+    # v1.16.0 la app ni arranca (`TypeError: unexpected keyword argument`,
+    # verificado). Es lo que hace que el backup de una instancia PostgreSQL
+    # traiga la base: hasta v1.16.0 el ZIP salia con los logos y sin datos, sin
+    # ningun error. Requiere `pg_dump`/`pg_restore` en la imagen — ver el
+    # Dockerfile.
+    #
+    # v1.18.0: aplicar un plan de modulos contra PostgreSQL. `apply_plan_modules`
+    # abria su propio `sqlite3`, asi que contra una instancia PostgreSQL creaba
+    # un archivo vacio al lado y moria con `no such table: modulos` — el plan
+    # NO se aplicaba y la instancia quedaba con los modulos como vinieran. Trae
+    # ademas dos arreglos del adaptador que salieron de ahi (`RETURNING id`
+    # sobre una tabla sin `id`, y un entero en una columna BOOLEAN) y
+    # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
+    # motores sin estado global.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.18.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
