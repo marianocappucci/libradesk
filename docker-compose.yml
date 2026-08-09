@@ -103,6 +103,16 @@ services:
       # El host es la clave del servicio, que en esta red compartida es un
       # alias publico — ver el comentario de `libradesk-postgres`.
       - DATABASE_URL=postgresql+psycopg://libradesk:${LIBRADESK_DEV_DB_PASSWORD:?falta LIBRADESK_DEV_DB_PASSWORD}@libradesk-postgres:5432/libradesk
+      # Secreto compartido con la landing para validar el login de /docs/. Sin
+      # el, el endpoint de verify falla cerrado y el login dice "usuario o
+      # contrasena incorrectos" aunque esten bien.
+      #
+      # Estaba SOLO en el compose del VPS, con el valor escrito adentro y sin
+      # commitear — la unica deriva local que tenia ese archivo, y la que hizo
+      # conflicto al traer esta rama el 2026-08-09. El valor ya vivia tambien
+      # en el `.env`, asi que se referencia desde ahi y el compose del VPS
+      # queda sin cambios locales.
+      - DOCS_AUTH_SECRET=${DOCS_AUTH_SECRET:?falta DOCS_AUTH_SECRET}
       - ENV=production
       # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
       # igual y POST /auth/forgot-password devuelve 503: cargar estas
