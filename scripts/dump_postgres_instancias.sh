@@ -24,6 +24,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 log "=== dump de instancias PostgreSQL ==="
 encontradas=0
+fallo=0
 
 for dir in /root/libradesk/clientes/*/; do
     slug=$(basename "$dir")
@@ -41,18 +42,35 @@ for dir in /root/libradesk/clientes/*/; do
 
     # `pg_dump` corre DENTRO del contenedor de la app: ahi estan el cliente y
     # la URL, y la clave nunca pasa por la linea de comandos del host.
-    if docker exec "$cont" sh -c "pg_dump --format=custom --no-owner --no-privileges --file '${destino}' \"\$DATABASE_URL\""; then
+    #
+    # 🔴 Hay que sacarle el `+psycopg` a la URL. Ese sufijo lo entiende
+    # SQLAlchemy; **libpq no**, y ante un esquema que no reconoce no protesta:
+    # ignora la URL entera y se conecta al socket local, que en ese contenedor
+    # no existe. El error que sale —"connection to server on socket ... failed"—
+    # se lee como "el sidecar esta caido" y en realidad es un sufijo de mas.
+    # Y deja un `.dump` de 0 bytes, que sin la guarda de tamaño de abajo
+    # entraria al tar.gz como si fuera un backup.
+    if docker exec "$cont" sh -c "
+        URL=\$(echo \"\$DATABASE_URL\" | sed 's#postgresql+psycopg://#postgresql://#')
+        pg_dump --format=custom --no-owner --no-privileges --file '${destino}' -d \"\$URL\"
+    "; then
         tam=$(docker exec "$cont" sh -c "stat -c %s '${destino}'")
-        # Un dump vacio pesa ~1 KB y tiene la misma pinta que uno bueno. Se
-        # exige un piso: mas vale un cron en rojo que un backup que miente.
+        # Un dump vacio tiene la misma pinta que uno bueno. Se exige un piso:
+        # mas vale un cron en rojo que un backup que miente.
         if [ "$tam" -lt 2000 ]; then
-            log "${slug}: 🔴 el dump pesa ${tam} bytes — sospechoso, se conserva pero REVISAR"
+            log "${slug}: 🔴 el dump pesa ${tam} bytes — se BORRA para que no entre al tar"
+            docker exec "$cont" rm -f "$destino"
+            fallo=1
         else
             log "${slug}: dump OK (${tam} bytes)"
         fi
     else
+        # Se borra el parcial y se sigue con las demas: que una instancia falle
+        # no puede dejar a las otras sin backup. El codigo de salida al final
+        # es lo que hace que el cron se vea en rojo.
         log "${slug}: 🔴 FALLO el pg_dump"
-        exit 1
+        docker exec "$cont" rm -f "$destino" 2>/dev/null || true
+        fallo=1
     fi
 
     # Purga: los dumps viejos se acumulan dentro de data/ y entran a cada tar.
@@ -61,3 +79,7 @@ for dir in /root/libradesk/clientes/*/; do
 done
 
 log "=== listo: ${encontradas} instancia(s) sobre PostgreSQL ==="
+if [ "$fallo" != "0" ]; then
+    log "🔴 hubo al menos un fallo — el cron sale en rojo a proposito"
+    exit 1
+fi
