@@ -108,7 +108,16 @@ dependencies = [
     # traiga la base: hasta v1.16.0 el ZIP salia con los logos y sin datos, sin
     # ningun error. Requiere `pg_dump`/`pg_restore` en la imagen — ver el
     # Dockerfile.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.17.0",
+    #
+    # v1.18.0: aplicar un plan de modulos contra PostgreSQL. `apply_plan_modules`
+    # abria su propio `sqlite3`, asi que contra una instancia PostgreSQL creaba
+    # un archivo vacio al lado y moria con `no such table: modulos` — el plan
+    # NO se aplicaba y la instancia quedaba con los modulos como vinieran. Trae
+    # ademas dos arreglos del adaptador que salieron de ahi (`RETURNING id`
+    # sobre una tabla sin `id`, y un entero en una columna BOOLEAN) y
+    # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
+    # motores sin estado global.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.18.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
