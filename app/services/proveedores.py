@@ -113,6 +113,15 @@ class ProveedorRepository:
             return _to_dict(p)
 
     def dependencias(self, proveedor_id: int) -> dict[str, int]:
+        """Lo que cuelga del proveedor y le impide borrarse.
+
+        Los activos comprados se sumaron el 2026-08-09: esa columna
+        (`activos.proveedor_compra_id`) llego despues de este metodo, asi que
+        borrar al proveedor dejaba el activo diciendo que se lo compro a un id
+        inexistente — y de donde salio un equipo es justo el dato que se busca
+        cuando hay que reclamar una garantia.
+        """
+        from .activos import Activo
         from .reparaciones import Reparacion
 
         with self.session_factory() as session:
@@ -120,6 +129,10 @@ class ProveedorRepository:
                 "reparaciones": session.execute(
                     select(func.count()).select_from(Reparacion)
                     .where(Reparacion.proveedor_id == proveedor_id)
+                ).scalar_one(),
+                "activos_comprados": session.execute(
+                    select(func.count()).select_from(Activo)
+                    .where(Activo.proveedor_compra_id == proveedor_id)
                 ).scalar_one(),
             }
 
@@ -135,7 +148,7 @@ class ProveedorRepository:
         declarado en un `except IntegrityError` que no se ejecutaba nunca.
         """
         colgando = self.dependencias(proveedor_id)
-        if colgando["reparaciones"]:
+        if any(colgando.values()):
             raise ValueError(colgando)
 
         with self.session_factory() as session:

@@ -116,6 +116,19 @@ def test_cliente_guarda_cuit_y_domicilio(client):
     assert r.json()["cuit"] is None and r.json()["domicilio"] is None
 
 
+def _columnas(conn, tabla: str) -> set[str]:
+    """Los nombres de columna de una tabla, en el motor que sea.
+
+    Antes esto era `PRAGMA table_info(...)`, que es introspección exclusiva de
+    SQLite: contra PostgreSQL el test moría con un error de sintaxis. La suite
+    corre contra los dos motores (ver `tests/conftest.py`), así que va por el
+    inspector de SQLAlchemy.
+    """
+    from sqlalchemy import inspect
+
+    return {c["name"] for c in inspect(conn).get_columns(tabla)}
+
+
 def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
     """Mismo caso real que la columna de `equipos_movimientos`: los 9 clientes
     de `compulibra` existen desde la migracion del Node.js, y el schema propio
@@ -140,7 +153,7 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
 
     with engine.begin() as conn:
         command.downgrade(_config(conn), BASELINE)
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
+        columnas = _columnas(conn, "clientes")
         filas_antes = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
     assert "cuit" not in columnas and "domicilio" not in columnas
     # El downgrade recrea `clientes` en batch: la fila tiene que sobrevivir.
@@ -149,7 +162,7 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
     assert ensure_schema(engine) == "upgrade"
 
     with engine.begin() as conn:
-        columnas = {f[1] for f in conn.execute(text("PRAGMA table_info(clientes)")).all()}
+        columnas = _columnas(conn, "clientes")
         filas_despues = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
     assert {"cuit", "domicilio"} <= columnas
     # El cliente migrado no se pierde: queda con los campos nuevos en NULL.

@@ -80,8 +80,19 @@ def update_tecnico(tecnico_id: int, data: TecnicoIn, tecnicos: TecnicoRepository
 
 @router.delete("/{tecnico_id}", status_code=204)
 def delete_tecnico(tecnico_id: int, tecnicos: TecnicoRepository = Depends(get_tecnico_repository)):
+    """Borra un tecnico **sin papeles firmados**. Con comprobantes de ingreso o
+    instalaciones en contratos no se borra: para sacarlo de circulacion esta
+    `activo=False`, que conserva la historia. Mismo 409 y mismo motivo que el
+    de clientes y equipos.
+    """
     try:
         tecnicos.delete(tecnico_id)
     except KeyError:
         raise HTTPException(404, "tecnico not found")
+    except ValueError as e:
+        colgando = ", ".join(f"{n} {k}" for k, n in e.args[0].items() if n)
+        raise HTTPException(
+            409,
+            f"El técnico tiene {colgando}. Desactivalo en vez de borrarlo.",
+        )
     return Response(status_code=204)

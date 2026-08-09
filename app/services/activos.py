@@ -33,7 +33,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func,
-    select,
+    select, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -296,7 +296,15 @@ class ActivoRepository:
             return _to_dict(a, colocacion=colocacion)
 
     def dependencias(self, activo_id: int) -> dict[str, int]:
+        """Los DOCUMENTOS del activo, que impiden borrarlo.
+
+        Las reparaciones se sumaron el 2026-08-09: ese modulo llego despues de
+        este metodo y el activo se borraba dejandolas apuntando a un id
+        inexistente. No entran las incidencias ni los movimientos, que son
+        asignacion e historial y los resuelve `delete()`.
+        """
         from .contratos import ContratoEquipo
+        from .reparaciones import Reparacion
 
         with self.session_factory() as session:
             return {
@@ -304,27 +312,49 @@ class ActivoRepository:
                     select(func.count()).select_from(ContratoEquipo)
                     .where(ContratoEquipo.activo_id == activo_id)
                 ).scalar_one(),
+                "reparaciones": session.execute(
+                    select(func.count()).select_from(Reparacion)
+                    .where(Reparacion.activo_id == activo_id)
+                ).scalar_one(),
             }
 
     def delete(self, activo_id: int) -> None:
-        """Borra solo un activo **sin historial de contratos** — uno cargado por
-        error. Para uno que estuvo en algun contrato esta el estado `baja`, que
-        conserva la historia.
+        """Borra solo un activo **sin historial de contratos ni reparaciones** —
+        uno cargado por error. Para uno con historia esta el estado `baja`, que
+        la conserva.
 
         La negativa es explicita y no via `IntegrityError`: el pragma
         `foreign_keys` esta apagado en las conexiones de SQLAlchemy (medido en
         este mismo producto), asi que la base nunca levantaria el error y el
         DELETE pasaria dejando lineas de contrato apuntando a un id inexistente.
         Misma trampa que ya documenta `ProveedorRepository.delete`.
+
+        🔴 **Ampliado el 2026-08-09** con lo que faltaba: sus movimientos de
+        equipo (que sin el activo no describen nada, igual que en
+        `EquipoRepository.delete`) y la desasignacion de las incidencias que lo
+        tenian. Los dos estaban declarados como `ondelete` y ninguno corria.
         """
         colgando = self.dependencias(activo_id)
-        if colgando["lineas_de_contrato"]:
+        if any(colgando.values()):
             raise ValueError(colgando)
 
         with self.session_factory() as session:
             a = session.get(Activo, activo_id)
             if a is None:
                 raise KeyError(activo_id)
+
+            from .equipos import EquipoMovimiento
+            from .incidencias import Incidencia
+
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.activo_id == activo_id)
+                .values(activo_id=None)
+            )
+            session.execute(
+                EquipoMovimiento.__table__.delete()
+                .where(EquipoMovimiento.activo_id == activo_id)
+            )
             session.delete(a)
             session.commit()
 

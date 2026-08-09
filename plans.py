@@ -51,7 +51,17 @@ _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 # funcionalidad. Va acá y no en el core —a diferencia de reparaciones, que es la
 # continuación de `equipos`— porque es funcionalidad comercial: un LibraDesk sin
 # alquileres sigue siendo LibraDesk.
-_PREMIUM = _ESTANDAR | {"remitos", "presupuestos", "alquileres"}
+#
+# `facturacion_externa` (2026-08-08) es el puente que manda lo facturable a la
+# instancia de Contalibra del mismo cliente. Módulo propio y no colgado de
+# `remitos`: lo que habilita no es emitir un comprobante más, es que **dos
+# sistemas contratados se vean**. Un cliente premium sin Contalibra tiene el
+# módulo prendido y el puente apagado igual, porque sin la configuración de
+# emparejamiento no hay a dónde mandar nada — ver
+# `app/services/facturacion_externa.py`.
+_PREMIUM = _ESTANDAR | {
+    "remitos", "presupuestos", "alquileres", "facturacion_externa",
+}
 
 PLAN_MODULOS = {
     "basico":   set(_BASICO),

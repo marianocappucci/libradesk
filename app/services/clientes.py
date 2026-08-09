@@ -120,22 +120,53 @@ class ClienteRepository:
             return _to_dict(c)
 
     def dependencias(self, cliente_id: int) -> dict[str, int]:
-        """Cuenta lo que cuelga del cliente, para poder negarse a borrarlo."""
+        """Cuenta lo que cuelga del cliente, para poder negarse a borrarlo.
+
+        🔴 **Esta lista tiene que estar completa, y se quedo atras dos veces.**
+        Hasta el 2026-08-09 contaba equipos, incidencias y sectores — los tres
+        modulos que existian cuando se escribio — y no contaba contratos,
+        depositos ni comprobantes de ingreso, que llegaron despues. Un cliente
+        que tuviera SOLO un contrato se borraba sin chistar y dejaba el
+        contrato apuntando a un id inexistente.
+
+        No se notaba porque el pragma `foreign_keys` esta apagado en SQLite.
+        Contra PostgreSQL, tres de esas FK rechazan el borrado y **una
+        (`depositos.cliente_id`) es CASCADE: borraria los depositos de
+        verdad**. Lo encontro el analisis de FK del 2026-08-09, no un test:
+        ningun test borraba un cliente con contratos.
+
+        Al agregar una tabla nueva que referencie a `clientes`, **agregarla
+        aca**. La medicion que encuentra los huecos esta en
+        `wiki/analyses/migracion-postgresql-familia-libra.md`.
+        """
+        from .contratos import Contrato
+        from .depositos import Deposito
         from .equipos import Equipo
         from .incidencias import Incidencia
+        from .ingresos import IngresoReparacion
         from .sectores import Sector
+
+        def _contar(session, modelo, *condiciones):
+            return session.execute(
+                select(func.count()).select_from(modelo).where(*condiciones)
+            ).scalar_one()
 
         with self.session_factory() as session:
             return {
-                "equipos": session.execute(
-                    select(func.count()).select_from(Equipo).where(Equipo.cliente_id == cliente_id)
-                ).scalar_one(),
-                "incidencias": session.execute(
-                    select(func.count()).select_from(Incidencia).where(Incidencia.cliente_id == cliente_id)
-                ).scalar_one(),
-                "sectores": session.execute(
-                    select(func.count()).select_from(Sector).where(Sector.cliente_id == cliente_id)
-                ).scalar_one(),
+                "equipos": _contar(session, Equipo, Equipo.cliente_id == cliente_id),
+                "incidencias": _contar(session, Incidencia, Incidencia.cliente_id == cliente_id),
+                "sectores": _contar(session, Sector, Sector.cliente_id == cliente_id),
+                # Las dos columnas de `contratos`: el cliente puede ser el
+                # titular o el propietario del equipamiento, y las dos son FK.
+                "contratos": _contar(
+                    session, Contrato,
+                    (Contrato.cliente_id == cliente_id)
+                    | (Contrato.propietario_cliente_id == cliente_id),
+                ),
+                "depositos": _contar(session, Deposito, Deposito.cliente_id == cliente_id),
+                "comprobantes_de_ingreso": _contar(
+                    session, IngresoReparacion, IngresoReparacion.cliente_id == cliente_id
+                ),
             }
 
     def delete(self, cliente_id: int) -> None:

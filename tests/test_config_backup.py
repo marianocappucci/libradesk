@@ -11,6 +11,7 @@ ajeno. Lo que se prueba **acá** es lo que sólo este producto puede verificar:
 2. Que los gates sean los de LibraDesk: la lectura abierta al staff (el
    generador de PDF la usa), la escritura y el backup sólo admin.
 """
+import os
 import zipfile
 
 from fastapi.testclient import TestClient
@@ -44,7 +45,14 @@ def _png() -> bytes:
 def test_el_backup_trae_la_base_y_el_logo_de_esta_instancia(client):
     """Si la `Instancia` apuntara a la base equivocada —o a ninguna— el
     endpoint devolvería un ZIP igual, sólo que sin nada adentro que sirva. No
-    hay forma de notarlo desde la pantalla."""
+    hay forma de notarlo desde la pantalla.
+
+    🔴 Eso **pasaba de verdad** en PostgreSQL hasta el 2026-08-09: el producto
+    le pasaba a `libracore.respaldo` el NOMBRE de la base como si fuera una
+    ruta de archivo, no existía, y el ZIP salía con los logos y sin datos. Por
+    eso este test no se conforma con que haya una entrada en `bases/`:
+    **extrae la base y busca adentro el cliente que acaba de crear**.
+    """
     _login(client)
     client.post("/api/clientes", json={"nombre": "Cliente que tiene que estar en el backup"})
     client.post("/api/config/empresa/logo", files={"logo": ("l.png", _png(), "image/png")})
@@ -52,21 +60,39 @@ def test_el_backup_trae_la_base_y_el_logo_de_esta_instancia(client):
     r = client.get("/api/config/backup-ahora")
     assert r.status_code == 200, r.text
 
+    # El nombre de la entrada depende del motor, y se exige el exacto en cada
+    # caso: un `any(... startswith("bases/"))` daría verde con el archivo del
+    # otro motor, que es medio defecto de cableado.
+    postgres = bool(os.environ.get("LIBRADESK_SUITE_POSTGRES_URL"))
+    esperado = "bases/libradesk.dump" if postgres else "bases/libradesk.db"
+
     import io
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:
         dentro = z.namelist()
-        assert "bases/libradesk.db" in dentro, dentro
+        assert esperado in dentro, dentro
         assert "datos/logos/logo.png" in dentro, dentro
         # Y que la base traiga los datos de verdad, no un archivo vacío.
-        z.extract("bases/libradesk.db", client.data_dir / "verificacion")
+        z.extract(esperado, client.data_dir / "verificacion")
 
-    import sqlite3
-    conn = sqlite3.connect(str(client.data_dir / "verificacion" / "bases" / "libradesk.db"))
-    try:
-        nombres = [f[0] for f in conn.execute("SELECT nombre FROM clientes").fetchall()]
-    finally:
-        conn.close()
-    assert "Cliente que tiene que estar en el backup" in nombres
+    copia = client.data_dir / "verificacion" / esperado
+    if postgres:
+        # `pg_restore --file -` convierte el dump a SQL sin tocar ninguna base:
+        # alcanza para ver si el INSERT/COPY del cliente está adentro, y no
+        # necesita un servidor.
+        import subprocess
+        volcado = subprocess.run(
+            ["pg_restore", "--file", "-", str(copia)],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "Cliente que tiene que estar en el backup" in volcado
+    else:
+        import sqlite3
+        conn = sqlite3.connect(str(copia))
+        try:
+            nombres = [f[0] for f in conn.execute("SELECT nombre FROM clientes").fetchall()]
+        finally:
+            conn.close()
+        assert "Cliente que tiene que estar en el backup" in nombres
 
 
 def test_crear_listar_y_restaurar(client):

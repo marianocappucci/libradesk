@@ -35,10 +35,38 @@ fi
 log "=== reset de $CONTENEDOR ==="
 
 # --- 1. Base de cero ------------------------------------------------------
-# Se borran tambien los `-wal` y `-shm`: sin eso SQLite puede reconstruir parte
-# de lo borrado desde el journal, y el reset queda a medias.
-docker exec "$CONTENEDOR" sh -c 'rm -f /app/data/*.db /app/data/*.db-wal /app/data/*.db-shm'
-log "base borrada"
+#
+# 🔴 Desde el corte a PostgreSQL del 2026-08-09 la demo NO guarda sus datos en
+# un archivo. Si esto siguiera haciendo solo `rm *.db`, el reset **no
+# resetearia nada** y no fallaria: borraria un archivo que la app ya no lee, el
+# seed agregaria ejemplos ENCIMA de los del dia anterior, y la demo iria
+# acumulando basura sin que nada avise. Por eso se decide segun el backend real
+# de la instancia, leido de su entorno, y no por una constante de este script.
+URL_BASE=$(docker exec "$CONTENEDOR" sh -c 'echo "${DATABASE_URL:-}"')
+
+if [ -n "$URL_BASE" ]; then
+  log "backend PostgreSQL detectado"
+  # Se vacia el SCHEMA, no la base: borrar la base pide desconectar a todos y
+  # el contenedor de la app esta conectado. El arranque la reconstruye entera
+  # -- `create_app()` corre Alembic y los create_all -- que es exactamente el
+  # mismo camino que ya se usaba con SQLite.
+  docker exec "$CONTENEDOR" sh -c '
+    python3 - <<PY
+import os, psycopg
+url = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+with psycopg.connect(url, autocommit=True) as c:
+    c.execute("DROP SCHEMA public CASCADE")
+    c.execute("CREATE SCHEMA public")
+print("schema public recreado")
+PY
+  '
+  log "base PostgreSQL vaciada"
+else
+  # Se borran tambien los `-wal` y `-shm`: sin eso SQLite puede reconstruir
+  # parte de lo borrado desde el journal, y el reset queda a medias.
+  docker exec "$CONTENEDOR" sh -c 'rm -f /app/data/*.db /app/data/*.db-wal /app/data/*.db-shm'
+  log "base SQLite borrada"
+fi
 
 docker restart "$CONTENEDOR" >/dev/null
 for _ in $(seq 1 40); do

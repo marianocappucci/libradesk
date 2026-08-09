@@ -3,7 +3,7 @@
 import {
   AlertCircle, Boxes, Building2, Car, ClipboardCheck, FileSignature,
   FileSpreadsheet, FileText, LayoutDashboard, Monitor, Receipt, ScrollText,
-  Settings, UserCog, Users, Wrench,
+  Send, Settings, UserCog, Users, Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
@@ -41,6 +41,11 @@ export const Layout = createLayout({
     // presupuesta, se acepta, se remite).
     { to: '/presupuestos', label: 'Presupuestos', icon: FileText },
     { to: '/remitos', label: 'Remitos', icon: Receipt },
+    // Después de los dos comprobantes porque es el paso siguiente: se
+    // presupuesta, se remite, y recién ahí se manda a facturar. Admin-only,
+    // igual que el router: armar el comprobante es trabajo de staff, decidir
+    // que se le cobre al cliente no.
+    { to: '/facturacion', label: 'Enviar a facturar', icon: Send, adminOnly: true },
     { to: '/reportes', label: 'Reportes', icon: FileSpreadsheet },
     { to: '/tecnicos', label: 'Técnicos', icon: UserCog, adminOnly: true },
     { to: '/usuarios', label: 'Usuarios', icon: UserCog, adminOnly: true },

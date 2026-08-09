@@ -29,9 +29,9 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, health, incidencias, informes, ingresos,
-    presupuestos, proveedores, remitos, reparaciones, reportes, sectores,
-    servicios, tecnicos, users,
+    depositos, equipos, equipos_trabajo, facturacion, health, incidencias,
+    informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
+    reportes, sectores, servicios, tecnicos, users,
 )
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
@@ -42,6 +42,7 @@ from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
+from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
@@ -56,6 +57,16 @@ from .services.sectores import SectorRepository
 from .services.tecnicos import TecnicoRepository
 from libraauth.bootstrap import ensure_demo_user
 from .services.users import ensure_default_admin
+
+
+def _es_postgres(database_url: str) -> bool:
+    """Si esta instancia corre sobre PostgreSQL en vez de SQLite.
+
+    Mismo criterio que usa `libracore.db.core.configure()` para elegir backend,
+    a proposito: si los dos no coinciden, la app y su backup mirarian a bases
+    distintas.
+    """
+    return database_url.startswith(("postgresql://", "postgresql+psycopg://"))
 
 
 def create_app(database_url: str, data_dir: str) -> FastAPI:
@@ -149,6 +160,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.informes = InformeService(sessions)
     app.state.remitos = rp_service.RemitoService()
     app.state.presupuestos = rp_service.PresupuestoService()
+    # El puente hacia la instancia de Contalibra del mismo cliente. Se
+    # construye siempre: si el emparejamiento no está configurado, el servicio
+    # lo dice y el router contesta 409 — no hay una app distinta según haya o
+    # no puente.
+    app.state.puente_facturacion = PuenteFacturacion(sessions)
     app.state.modules = module_repository
     app.state.auditoria = AuditoriaRepository(sessions)
     # Log de accesos (libraauth v0.8.0). Es opt-in por ausencia en el motor:
@@ -257,6 +273,16 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
         presupuestos.router,
         dependencies=staff_or_admin + [Depends(require_module("presupuestos"))],
     )
+    # El puente hacia Contalibra. Módulo propio y no colgado de `remitos`
+    # —ver `plans.py`—, y **admin-only**: mandar algo a facturar es una
+    # decisión comercial, no parte de armar el comprobante. Quien arma un
+    # remito es staff; quien decide que se le cobre al cliente, no.
+    app.include_router(
+        facturacion.router,
+        dependencies=[
+            Depends(require_admin), Depends(require_module("facturacion_externa")),
+        ],
+    )
     # Datos de la empresa, logo y backup. Los tres routers salen de LibraCore
     # v1.10.0: el de empresa reemplaza a `app/routers/config_empresa.py`, que
     # hacia exactamente esto y ahora lo hacen los seis productos igual.
@@ -269,12 +295,24 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
     app.include_router(
         build_backup_router(
+            # 🔴 En PostgreSQL se pasa la URL, NO `make_url(...).database`.
+            # Ahi ese campo es el NOMBRE de la base, no una ruta de archivo, y
+            # `libracore.respaldo` lo trataba como ruta: no encontraba el
+            # archivo, se lo saltaba por el caso "instancia recien creada" y el
+            # cliente se bajaba un ZIP **con los logos y sin datos**, sin ningun
+            # error. Recien se notaba al restaurar ("El backup no contiene
+            # ninguna base de datos"). Lo encontro la suite corriendo contra
+            # PostgreSQL el 2026-08-09.
             Instancia(
                 nombre="libradesk",
                 # Una sola base: a diferencia de Gestiolibra, MedLibra y
                 # VentaLibra, aca `usuarios` vive en el MISMO archivo que el
                 # dominio (`AuthBase.metadata.create_all(engine)`, arriba).
-                bases=[make_url(database_url).database],
+                bases=(
+                    [] if _es_postgres(database_url)
+                    else [make_url(database_url).database]
+                ),
+                postgres_url=database_url if _es_postgres(database_url) else None,
                 directorios=[os.path.join(data_dir, "logos")],
             ),
             os.path.join(data_dir, "backups"),
