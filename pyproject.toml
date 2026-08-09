@@ -100,7 +100,15 @@ dependencies = [
     # Para SQLite el unico cambio de comportamiento es el `HAVING` del reporte
     # de stock bajo, que vuelve a comparar el valor REDONDEADO — o sea que
     # restaura lo de v1.15.0, no lo cambia. Este producto no usa ese reporte.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.16.0",
+    #
+    # v1.16.0 -> v1.17.0: `Instancia.postgres_url`. **El bump NO es opcional a
+    # partir de aca**: `main.py` le pasa ese argumento a `Instancia` y con
+    # v1.16.0 la app ni arranca (`TypeError: unexpected keyword argument`,
+    # verificado). Es lo que hace que el backup de una instancia PostgreSQL
+    # traiga la base: hasta v1.16.0 el ZIP salia con los logos y sin datos, sin
+    # ningun error. Requiere `pg_dump`/`pg_restore` en la imagen — ver el
+    # Dockerfile.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.17.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
