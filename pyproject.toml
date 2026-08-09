@@ -26,13 +26,19 @@ dependencies = [
     # valor tapado. Antes se descartaba entero — o sea que cambiar SOLO la
     # contrasena de un usuario no dejaba rastro en el log de este producto.
     #
-    # Durante el piloto PostgreSQL se consume la rama de compatibilidad de
-    # LibraAuth, igual que con LibraCore: el `server_default` de `auth_log.ts`
-    # era `datetime('now','localtime')` —SQLite puro— y contra PostgreSQL el
+    # v0.21.0: el `server_default` de `auth_log.ts` era
+    # `datetime('now','localtime')` —SQLite puro— y contra PostgreSQL el
     # CREATE TABLE muere con "function datetime(unknown, unknown) does not
-    # exist", o sea que la instancia no arranca. Volver a un tag estable cuando
-    # esa rama se integre y se publique.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@feature/compatibilidad-postgres",
+    # exist", o sea que la instancia no arranca. Ahora se emite por dialecto
+    # con una `FunctionElement`: en SQLite el DDL no cambia un byte, en
+    # PostgreSQL sale `LOCALTIMESTAMP`. No se pudo usar `func.now()` porque esa
+    # tabla la escriben DOS lados —el ORM de LibraAuth y un INSERT crudo de
+    # `libracore.db.logs` que se apoya en el DEFAULT— y en SQLite `func.now()`
+    # es UTC, lo que dejaria medio log tres horas corrido.
+    #
+    # Este tag sale de `feature/compatibilidad-postgres`, la rama que este pin
+    # consumia durante el piloto: ya esta mergeada a `develop` y publicada.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.21.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -82,8 +88,13 @@ dependencies = [
     # comprobante de una sola alicuota para un Responsable Inscripto sale
     # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
     # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
-    # Durante el piloto PostgreSQL se consume la rama de compatibilidad de
-    # LibraCore. Volver a un tag estable cuando esa rama se integre y publique.
+    # ⚠️ ULTIMO PIN A RAMA que le queda a este producto. La rama ya esta
+    # mergeada a `develop` (PR #28, CI verde), pero los tags de release de
+    # LibraCore viven en `main` y la promocion `develop` -> `main` sigue
+    # abierta (PR #29). Taguear `develop` publicaria una version SIN los dos
+    # commits de seguridad que hoy solo estan en `main`, que seria un retroceso
+    # frente a v1.15.0 — por eso este pin espera al merge en vez de atajar.
+    # Apenas exista `v1.16.0`, cambiar esta linea por el tag.
     "libracore @ git+https://github.com/marianocappucci/libracore.git@feature/comprobantes-pendientes",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
