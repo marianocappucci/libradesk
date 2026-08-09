@@ -38,7 +38,7 @@ dependencies = [
     #
     # Este tag sale de `feature/compatibilidad-postgres`, la rama que este pin
     # consumia durante el piloto: ya esta mergeada a `develop` y publicada.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.21.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.22.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
