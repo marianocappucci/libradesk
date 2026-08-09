@@ -107,7 +107,43 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 IMAGE_REF="libradesk:$VERSION"
-ANTERIOR="$(grep -m1 -oE 'image:[[:space:]]*\S+' "$COMPOSE_FILE" | awk '{print $2}')"
+
+# ------------------------------------------------------------------------------
+# Cual de las lineas `image:` es la de la APP
+# ------------------------------------------------------------------------------
+# 🔴 Esto miraba la PRIMERA aparicion de `image:` del compose, y desde el corte a
+# PostgreSQL del 2026-08-09 la primera es la del SIDECAR: cada instancia tiene
+# ahora dos servicios y la base se declara arriba. O sea que el repin le habria
+# escrito `libradesk:<version>` encima a `postgres:16-alpine`, y el `up -d`
+# habria recreado el contenedor de la BASE con la imagen de la app. En `demo`
+# eso es una demo caida; en `compulibra`, el cliente real sin base.
+#
+# Lo delato el `--dry-run`, que reportaba `actual : postgres:16-alpine`.
+#
+# Ahora la clave del servicio se LEE -- no se supone: en el compose de compulibra
+# el servicio y el `container_name` no coinciden -- y se ubica su linea `image:`
+# por numero.
+CLAVE_APP="$(docker compose -f "$COMPOSE_FILE" config --services | grep -vE -- '-db$')"
+CLAVE_APP="${CLAVE_APP%%$'\n'*}"
+[ -n "$CLAVE_APP" ] || { echo "[ERROR] No se pudo leer el servicio de la app en $COMPOSE_FILE"; exit 1; }
+
+LINEA_SVC="$(awk -v s="  ${CLAVE_APP}:" '$0 == s { print NR; exit }' "$COMPOSE_FILE")"
+[ -n "$LINEA_SVC" ] || { echo "[ERROR] No se encontro el bloque del servicio '$CLAVE_APP'"; exit 1; }
+LINEA_IMG="$(awk -v n="$LINEA_SVC" 'NR > n && /^[[:space:]]*image:/ { print NR; exit }' "$COMPOSE_FILE")"
+[ -n "$LINEA_IMG" ] || { echo "[ERROR] El servicio '$CLAVE_APP' no declara image:"; exit 1; }
+
+ANTERIOR="$(sed -n "${LINEA_IMG}s/^[[:space:]]*image:[[:space:]]*//p" "$COMPOSE_FILE")"
+
+# Guarda: la linea que se va a reescribir tiene que tener HOY una imagen de este
+# producto. Si dijera `postgres:...` es que se apunto al sidecar, y ahi hay que
+# parar en vez de pisar la base.
+case "$ANTERIOR" in
+  libradesk:*) ;;
+  *) echo "[ERROR] La linea $LINEA_IMG de $COMPOSE_FILE dice '$ANTERIOR',"
+     echo "        que no es una imagen de libradesk. Se aborta para no pisar el"
+     echo "        servicio equivocado (el sidecar de PostgreSQL, casi seguro)."
+     exit 1 ;;
+esac
 HEAD_REF="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo desconocido)"
 
 # ------------------------------------------------------------------------------
@@ -204,14 +240,18 @@ DOCKER_BUILDKIT=1 docker build \
 # `latest` NO se mueve a proposito: nadie deberia apuntarle, y moverlo seria
 # reintroducir el tag mutable que este esquema vino a sacar.
 
-echo "[*] Repineando $COMPOSE_FILE -> $IMAGE_REF"
-sed -i -E "0,/^([[:space:]]*image:[[:space:]]*).*/s//\\1$IMAGE_REF/" "$COMPOSE_FILE"
+echo "[*] Repineando $COMPOSE_FILE linea $LINEA_IMG ($CLAVE_APP) -> $IMAGE_REF"
+sed -i -E "${LINEA_IMG}s|^([[:space:]]*image:[[:space:]]*).*|\\1$IMAGE_REF|" "$COMPOSE_FILE"
+
+# Un `sed` que no matchea sale con codigo 0. Se comprueba que la linea quedo.
+grep -q "image: $IMAGE_REF" "$COMPOSE_FILE" || {
+  echo "[ERROR] El repin no quedo escrito en $COMPOSE_FILE"; exit 1; }
 
 echo "[*] Levantando $SLUG ..."
 if ! (cd "$CLIENT_DIR" && docker compose up -d); then
   echo "[ERROR] Fallo el arranque. Repineando a ${ANTERIOR:-la version anterior}."
   if [ -n "$ANTERIOR" ]; then
-    sed -i -E "0,/^([[:space:]]*image:[[:space:]]*).*/s//\\1$ANTERIOR/" "$COMPOSE_FILE"
+    sed -i -E "${LINEA_IMG}s|^([[:space:]]*image:[[:space:]]*).*|\\1$ANTERIOR|" "$COMPOSE_FILE"
   fi
   exit 1
 fi
