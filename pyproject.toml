@@ -88,14 +88,19 @@ dependencies = [
     # comprobante de una sola alicuota para un Responsable Inscripto sale
     # identico a como salia con v1.11.0. El DDL de `remitos` y `presupuestos`
     # —el riesgo real de cualquier bump acá— no se movio en ninguno de los dos.
-    # ⚠️ ULTIMO PIN A RAMA que le queda a este producto. La rama ya esta
-    # mergeada a `develop` (PR #28, CI verde), pero los tags de release de
-    # LibraCore viven en `main` y la promocion `develop` -> `main` sigue
-    # abierta (PR #29). Taguear `develop` publicaria una version SIN los dos
-    # commits de seguridad que hoy solo estan en `main`, que seria un retroceso
-    # frente a v1.15.0 — por eso este pin espera al merge en vez de atajar.
-    # Apenas exista `v1.16.0`, cambiar esta linea por el tag.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@feature/comprobantes-pendientes",
+    # v1.16.0: la capa dual SQLite/PostgreSQL. `configure()` acepta una URL
+    # PostgreSQL y un wrapper de Connection/Cursor traduce paramstyle, emula
+    # `sqlite3.Row`, convierte `lastrowid` en `RETURNING id` y traduce el DDL y
+    # las funciones de SQLite. Es lo que permite que este producto lea remitos
+    # y presupuestos contra PostgreSQL — hasta v1.15.0, 5 de las 7 lecturas de
+    # `remitos_presupuestos` fallaban ahi (`dict(fila)` sin `keys()`,
+    # `ROUND(x,n)` sobre double precision, `text < date`, y `created_at` con
+    # microsegundos y zona). Ver `tests/test_remitos_postgres.py`.
+    #
+    # Para SQLite el unico cambio de comportamiento es el `HAVING` del reporte
+    # de stock bajo, que vuelve a comparar el valor REDONDEADO — o sea que
+    # restaura lo de v1.15.0, no lo cambia. Este producto no usa ese reporte.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.16.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
