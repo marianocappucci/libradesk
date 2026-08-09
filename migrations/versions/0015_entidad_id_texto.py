@@ -20,6 +20,21 @@ MISMA transaccion que la operacion auditada, no se pierde una fila de auditoria:
 > Al reves, el producto deja de poder escribir. Los otros consumidores estan en
 > SQLite y ahi el tipado dinamico los protege del desorden; este no.
 
+**El orden esta MEDIDO contra PostgreSQL real, no razonado** (2026-08-09), que
+es lo unico que separa esto de una corazonada:
+
+| Estado | Escritura |
+|---|---|
+| columna VARCHAR + modelo `String` (despues del bump) | OK |
+| columna INTEGER + modelo `String` (bumpear SIN migrar) | 🔴 `DatatypeMismatch: column is of type integer but expression is of type character varying` |
+| columna VARCHAR + modelo `Integer` (migrar SIN bumpear) | OK -- PostgreSQL castea el entero solo |
+
+O sea que el estado intermedio de esta migracion **es seguro**, y el que hay que
+evitar es el otro. En SQLite ese intermedio si cambia algo, aunque inocuo: la
+columna pasa a afinidad TEXT, con lo que un id entero vuelve como `'1'` en vez
+de `1`. Dos tests de este repo lo asertaban como entero y pasan a pedir texto.
+
+
 El modelo esta en `libraauth.auditoria` (compartido por los seis productos);
 aca va solo la migracion de la tabla de este.
 

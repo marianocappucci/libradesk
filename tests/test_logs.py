@@ -51,7 +51,11 @@ def test_crear_deja_una_fila_sin_que_el_repositorio_haga_nada(client):
     creado = _crear_cliente(client)
     fila = _de(client, "cliente")[0]
     assert fila["accion"] == "crear"
-    assert fila["entidad_id"] == creado["id"]
+    # Como TEXTO: `actividad_log.entidad_id` dejo de ser INTEGER en la revision
+    # `0015`. Los ids de este producto son enteros y siguen siendolo -- lo que
+    # cambio es la columna, porque otros productos de la familia usan ids de
+    # texto y ahi el tipo viejo rompia el alta entera contra PostgreSQL.
+    assert fila["entidad_id"] == str(creado["id"])
     assert "Compulibra" in fila["descripcion"]
 
 
@@ -89,7 +93,7 @@ def test_borrar_conserva_el_id_y_la_etiqueta(client):
     assert client.delete(f"/api/clientes/{creado['id']}").status_code in (200, 204)
 
     borrado = [f for f in _de(client, "cliente") if f["accion"] == "borrar"][0]
-    assert borrado["entidad_id"] == creado["id"]
+    assert borrado["entidad_id"] == str(creado["id"])
     assert "Cliente borrado" in borrado["descripcion"]
 
 
