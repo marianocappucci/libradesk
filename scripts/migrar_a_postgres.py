@@ -91,6 +91,19 @@ def abrir_origen(ruta: str) -> sqlite3.Connection:
     return con
 
 
+# 🔴 La tabla de versión de Alembic NO se copia. El destino se construye con
+# `create_app()`, que corre la cadena entera y deja la revisión en HEAD; copiar
+# la del origen la pisa con una anterior si el origen venía de código más
+# viejo. Entonces la app arranca, Alembic ve una revisión que no corresponde e
+# intenta aplicar migraciones **ya aplicadas**: muere con `DuplicateTable` y el
+# contenedor queda reiniciando en loop.
+#
+# Pasó en el corte de dev del 2026-08-09: el `.db` estaba en `0013_iva_por_item`
+# y el código en `0014_envios_facturacion`. La migración verificó OK —los datos
+# estaban perfectos— y la app no levantaba.
+TABLAS_QUE_NO_SE_COPIAN = ("alembic_version_libradesk",)
+
+
 def tablas_de(con: sqlite3.Connection) -> list[str]:
     return [
         r[0] for r in con.execute(
@@ -98,6 +111,14 @@ def tablas_de(con: sqlite3.Connection) -> list[str]:
             "AND name NOT LIKE 'sqlite_%' ORDER BY name"
         )
     ]
+
+
+def revision_de(con: sqlite3.Connection) -> str | None:
+    try:
+        fila = con.execute("SELECT version_num FROM alembic_version_libradesk").fetchone()
+    except sqlite3.Error:
+        return None
+    return fila[0] if fila else None
 
 
 def conteos(con: sqlite3.Connection, tablas: list[str]) -> dict[str, int]:
@@ -305,12 +326,15 @@ def main() -> int:
             # El schema recien creado trae sus semillas (modulos, admin). Se
             # vacia para que los conteos del final comparen contra el origen y
             # no contra origen+semilla.
+            a_copiar = [t for t in orden_topologico(origen, tablas)
+                        if t not in TABLAS_QUE_NO_SE_COPIAN]
+
             cur.execute("SET session_replication_role = replica")
-            for t in reversed(orden_topologico(origen, tablas)):
+            for t in reversed(a_copiar):
                 cur.execute(f'TRUNCATE TABLE "{t}" CASCADE')
 
             copiadas = {}
-            for t in orden_topologico(origen, tablas):
+            for t in a_copiar:
                 cur.execute(
                     "SELECT column_name FROM information_schema.columns "
                     "WHERE table_schema = current_schema() AND table_name = %s",
@@ -322,11 +346,24 @@ def main() -> int:
                     continue
                 copiadas[t] = copiar(origen, cur, t, cols_destino)
 
+            # La revisión del destino se deja como la dejó `create_app()`. Si
+            # difiere de la del origen, el corte además ADELANTÓ el schema, y
+            # eso el operador tiene que verlo: no es lo mismo mover datos que
+            # mover datos y migrar.
+            cur.execute("SELECT version_num FROM alembic_version_libradesk")
+            fila = cur.fetchone()
+            rev_destino = fila[0] if fila else None
+            rev_origen = revision_de(origen)
+            if rev_origen != rev_destino:
+                print(f"   ⚠️ el schema AVANZO: origen {rev_origen} -> destino {rev_destino}")
+                print("      (la revision del destino NO se pisa con la del origen: "
+                      "hacerlo deja a Alembic reaplicando migraciones ya aplicadas)")
+
             cur.execute("SET session_replication_role = DEFAULT")
             secuencias = ajustar_secuencias(cur)
 
             problemas = verificar(cur, {t: n for t, n in esperados.items() if t in copiadas})
-            faltantes = set(esperados) - set(copiadas)
+            faltantes = set(esperados) - set(copiadas) - set(TABLAS_QUE_NO_SE_COPIAN)
             if faltantes:
                 problemas.append(f"tablas del origen sin destino: {sorted(faltantes)}")
 
