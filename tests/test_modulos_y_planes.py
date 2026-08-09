@@ -99,10 +99,10 @@ def test_sin_plan_asignado_todo_queda_habilitado(client):
 
 # ── Con un plan aplicado ────────────────────────────────────────────────────
 
-def test_plan_basico_deja_el_core_y_corta_el_resto(client, tmp_path):
+def test_plan_basico_deja_el_core_y_corta_el_resto(client, destino_base):
     from plans import aplicar_plan_en_db
 
-    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "basico")
+    aplicar_plan_en_db(destino_base, "basico")
     _login(client)
 
     # El core sigue entero.
@@ -113,10 +113,10 @@ def test_plan_basico_deja_el_core_y_corta_el_resto(client, tmp_path):
         assert client.get(ruta).status_code == 403, modulo
 
 
-def test_plan_estandar_suma_dashboard_y_reportes(client, tmp_path):
+def test_plan_estandar_suma_dashboard_y_reportes(client, destino_base):
     from plans import aplicar_plan_en_db
 
-    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "estandar")
+    aplicar_plan_en_db(destino_base, "estandar")
     _login(client)
 
     assert client.get(RUTAS["dashboard"]).status_code == 200
@@ -125,17 +125,17 @@ def test_plan_estandar_suma_dashboard_y_reportes(client, tmp_path):
     assert client.get(RUTAS["presupuestos"]).status_code == 403
 
 
-def test_plan_premium_habilita_todo(client, tmp_path):
+def test_plan_premium_habilita_todo(client, destino_base):
     from plans import aplicar_plan_en_db
 
-    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "premium")
+    aplicar_plan_en_db(destino_base, "premium")
     _login(client)
 
     for modulo, ruta in RUTAS.items():
         assert client.get(ruta).status_code == 200, modulo
 
 
-def test_los_dos_routers_de_alquileres_van_juntos(client, tmp_path):
+def test_los_dos_routers_de_alquileres_van_juntos(client, destino_base):
     """Activos y contratos cuelgan del mismo módulo, así que se habilitan y se
     cortan a la vez. Sin este test, gatear uno solo pasaría desapercibido:
     `RUTAS` cubre `/api/contratos` y nadie miraría `/api/activos`."""
@@ -143,18 +143,20 @@ def test_los_dos_routers_de_alquileres_van_juntos(client, tmp_path):
 
     assert _existe_de_verdad(client, RUTA_ACTIVOS), f"{RUTA_ACTIVOS} ya no existe"
 
-    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "estandar")
+    aplicar_plan_en_db(destino_base, "estandar")
     _login(client)
     assert client.get(RUTA_ACTIVOS).status_code == 403
     assert client.get(RUTAS["alquileres"]).status_code == 403
 
-    aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "premium")
+    aplicar_plan_en_db(destino_base, "premium")
     assert client.get(RUTA_ACTIVOS).status_code == 200
     assert client.get(RUTAS["alquileres"]).status_code == 200
 
 
 def test_aplicar_un_plan_inexistente_falla_fuerte(tmp_path):
+    """No necesita una base de verdad: el nombre del plan se valida antes de
+    abrir ninguna conexión, y que sea así es parte de lo que se prueba."""
     from plans import aplicar_plan_en_db
 
     with pytest.raises(ValueError, match="enterprise"):
-        aplicar_plan_en_db(str(tmp_path / "libradesk.db"), "enterprise")
+        aplicar_plan_en_db(str(tmp_path / "no-existe.db"), "enterprise")

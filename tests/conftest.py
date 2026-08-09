@@ -261,6 +261,20 @@ def url_de_base(request) -> str | None:
 
 
 @pytest.fixture
+def destino_base(data_dir, url_de_base) -> str:
+    """La base de ESTA instancia, como la espera el provisioning: una ruta
+    SQLite o una URL PostgreSQL.
+
+    Existe porque los tests de planes construían `tmp_path/libradesk.db` a
+    mano. En modo PostgreSQL esa ruta no es la base —el archivo ni siquiera
+    tiene la tabla `modulos`— y los cuatro morían con `no such table`. El
+    mismo string que recibe `create_app`, que es el que el provisioning le
+    pasa a `plans.aplicar_plan_en_db`.
+    """
+    return url_de_base or f"{data_dir}/libradesk.db"
+
+
+@pytest.fixture
 def armar_cliente(data_dir, url_de_base):
     """Fábrica: construye la app **cuando el test la pide**, no antes.
 
