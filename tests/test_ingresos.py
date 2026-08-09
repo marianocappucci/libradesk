@@ -141,15 +141,44 @@ def test_corregir_el_equipo_en_el_inventario_NO_cambia_el_comprobante(client, es
     assert despues["equipo_serial"] == "LN-0001"
 
 
-def test_borrar_el_equipo_no_se_lleva_el_comprobante(client, escenario):
-    """Y el comprobante sigue diciendo qué se recibió, que es su única razón
-    de existir."""
+def test_un_equipo_con_comprobante_no_se_borra(client, escenario):
+    """El comprobante dice qué se recibió, que es su única razón de existir, y
+    el equipo no se lo lleva puesto.
+
+    🔴 Este test decía otra cosa hasta el 2026-08-09: borraba el equipo, veía
+    que el comprobante seguía respondiendo 200 y lo daba por bueno. **El
+    comprobante quedaba apuntando a un equipo inexistente**, y sólo se leía
+    bien porque guarda el serial desnormalizado. Pasaba porque el pragma
+    `foreign_keys` está apagado en SQLite; contra PostgreSQL el DELETE muere
+    con `ForeignKeyViolation`.
+
+    Ahora un equipo con papeles no se borra —para sacarlo de circulación está
+    el estado `baja`— y se asiertan las dos mitades: que el borrado se rechaza
+    y que el comprobante sigue completo.
+    """
     i = _recibir(client, escenario).json()
-    client.delete(f"/api/equipos/{escenario['equipo']['id']}")
+
+    r = client.delete(f"/api/equipos/{escenario['equipo']['id']}")
+    assert r.status_code == 409, r.text
+    assert "comprobantes_de_ingreso" in r.text
 
     despues = client.get(f"/api/ingresos-reparacion/{i['id']}")
     assert despues.status_code == 200
     assert despues.json()["equipo_serial"] == "LN-0001"
+    # Y el equipo sigue estando: el rechazo no lo dejó a medio borrar.
+    assert client.get(f"/api/equipos/{escenario['equipo']['id']}").status_code == 200
+
+
+def test_un_equipo_sin_papeles_se_sigue_borrando(client, escenario):
+    """Contraprueba de la guarda de arriba.
+
+    Sin esto, un `delete` que devolviera 409 SIEMPRE —por un bug en el conteo
+    de dependencias— dejaría verde al test anterior, y nadie podría borrar un
+    equipo cargado por error.
+    """
+    r = client.delete(f"/api/equipos/{escenario['equipo']['id']}")
+    assert r.status_code == 204, r.text
+    assert client.get(f"/api/equipos/{escenario['equipo']['id']}").status_code == 404
 
 
 # ── Entregar ───────────────────────────────────────────────────────────────

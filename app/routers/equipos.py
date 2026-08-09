@@ -108,10 +108,25 @@ def update_equipo(
 
 @router.delete("/{equipo_id}", status_code=204)
 def delete_equipo(equipo_id: int, equipos: EquipoRepository = Depends(get_equipo_repository)):
+    """Borra un equipo **sin papeles**. Con comprobantes de ingreso o
+    reparaciones no se borra: para sacarlo de circulacion esta el estado
+    `baja`, que conserva la historia.
+
+    Mismo 409 y mismo motivo que el de clientes: hasta el 2026-08-09 el DELETE
+    pasaba igual y dejaba esas filas apuntando a un id inexistente, porque el
+    pragma de FKs esta apagado en SQLite. Contra PostgreSQL las dos FK
+    rechazan el borrado — la base toma la misma decision sola.
+    """
     try:
         equipos.delete(equipo_id)
     except KeyError:
         raise HTTPException(404, "equipo not found")
+    except ValueError as e:
+        colgando = ", ".join(f"{n} {k}" for k, n in e.args[0].items() if n)
+        raise HTTPException(
+            409,
+            f"El equipo tiene {colgando}. Dalo de baja en vez de borrarlo.",
+        )
     return Response(status_code=204)
 
 

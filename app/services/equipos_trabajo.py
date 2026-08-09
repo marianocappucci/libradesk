@@ -34,7 +34,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint,
-    func, select,
+    func, select, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -269,6 +269,11 @@ class EquipoTrabajoRepository:
         esta apagado en este producto—, asi que se hace explicito. Sin esto un
         vehiculo quedaria `asignado` a un equipo que ya no existe, que es
         exactamente el estado imposible que `asignar()` viene a evitar.
+
+        🔴 **Faltaban las incidencias** (2026-08-09): `incidencias.
+        equipo_trabajo_id` declara `SET NULL` y tampoco corria, asi que el
+        ticket quedaba asignado a un equipo borrado. Se desasigna, igual que
+        hacen `TecnicoRepository` y `SectorRepository` con lo suyo.
         """
         with self.session_factory() as session:
             e = session.get(EquipoTrabajo, equipo_id)
@@ -282,6 +287,14 @@ class EquipoTrabajoRepository:
             session.execute(
                 EquipoTrabajoIntegrante.__table__.delete()
                 .where(EquipoTrabajoIntegrante.equipo_id == equipo_id)
+            )
+
+            from .incidencias import Incidencia
+
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.equipo_trabajo_id == equipo_id)
+                .values(equipo_trabajo_id=None)
             )
             session.delete(e)
             session.commit()

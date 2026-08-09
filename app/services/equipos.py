@@ -402,6 +402,32 @@ class EquipoRepository:
             session.commit()
             return movidos
 
+    def dependencias(self, equipo_id: int) -> dict[str, int]:
+        """Los DOCUMENTOS que cuelgan del equipo y que impiden borrarlo.
+
+        Un comprobante de ingreso y una reparacion son papeles: dicen que
+        alguien trajo algo y que se le hizo tal cosa. Sobreviven al equipo por
+        definicion, asi que el equipo no se borra mientras existan — para
+        sacarlo de circulacion esta el estado `baja`, que conserva la historia.
+
+        No entran aca los movimientos ni las incidencias: esos son
+        asignaciones e historial *del equipo*, y `delete()` los resuelve.
+        """
+        from .ingresos import IngresoReparacion
+        from .reparaciones import Reparacion
+
+        with self.session_factory() as session:
+            return {
+                "comprobantes_de_ingreso": session.execute(
+                    select(func.count()).select_from(IngresoReparacion)
+                    .where(IngresoReparacion.equipo_id == equipo_id)
+                ).scalar_one(),
+                "reparaciones": session.execute(
+                    select(func.count()).select_from(Reparacion)
+                    .where(Reparacion.equipo_id == equipo_id)
+                ).scalar_one(),
+            }
+
     def delete(self, equipo_id: int) -> None:
         """Borra el equipo con **su historial de movimientos** y
         **desasigna** las incidencias que lo tenian.
@@ -416,7 +442,17 @@ class EquipoRepository:
         Los movimientos SI se borran aca, a diferencia de los del ticket
         (ver `IncidenciaRepository.delete`, donde solo pierden el link):
         son el historial *del equipo*, y sin el equipo no describen nada.
+
+        🔴 **Y se niega si hay comprobantes o reparaciones** (2026-08-09).
+        Faltaba: esas dos tablas llegaron despues de este metodo y nadie
+        volvio a mirarlo, asi que el DELETE pasaba y las dejaba apuntando a un
+        id inexistente. Contra PostgreSQL las dos FK rechazan el borrado, que
+        es la misma decision — sólo que la base la toma sola.
         """
+        colgando = self.dependencias(equipo_id)
+        if any(colgando.values()):
+            raise ValueError(colgando)
+
         with self.session_factory() as session:
             e = session.get(Equipo, equipo_id)
             if e is None:

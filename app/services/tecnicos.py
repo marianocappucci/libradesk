@@ -176,8 +176,36 @@ class TecnicoRepository:
             session.refresh(t)
             return _to_dict(t)
 
+    def dependencias(self, tecnico_id: int) -> dict[str, int]:
+        """Los DOCUMENTOS firmados por el tecnico, que impiden borrarlo.
+
+        Un comprobante de ingreso o de entrega lleva quien recibio y quien
+        entrego: es un papel que le dieron a un cliente, y no se puede quedar
+        sin firmante. Una linea de contrato guarda quien instalo. Para sacar a
+        alguien de circulacion esta `activo=False`, que conserva la historia.
+
+        No entran aca las incidencias ni los equipos de trabajo: eso son
+        ASIGNACIONES y `delete()` las desasigna.
+        """
+        from .contratos import ContratoEquipo
+        from .ingresos import IngresoReparacion
+
+        with self.session_factory() as session:
+            return {
+                "comprobantes_de_ingreso": session.execute(
+                    select(func.count()).select_from(IngresoReparacion).where(
+                        (IngresoReparacion.tecnico_id == tecnico_id)
+                        | (IngresoReparacion.tecnico_entrega_id == tecnico_id)
+                    )
+                ).scalar_one(),
+                "instalaciones_en_contratos": session.execute(
+                    select(func.count()).select_from(ContratoEquipo)
+                    .where(ContratoEquipo.tecnico_instalador_id == tecnico_id)
+                ).scalar_one(),
+            }
+
     def delete(self, tecnico_id: int) -> None:
-        """Borra el tecnico y **desasigna** las incidencias que tenia.
+        """Borra el tecnico y **desasigna** todo lo que tenia asignado.
 
         Mismo caso que `SectorRepository.delete`: `incidencias.tecnico_id`
         declara `ondelete="SET NULL"` y ese ondelete no corre nunca, porque
@@ -185,12 +213,25 @@ class TecnicoRepository:
         tecnico dejaba tickets apuntando a un id inexistente y el reporte
         "Por tecnico" —que agrupa por esa FK— los perdia de vista sin decir
         por que.
+
+        🔴 **Ampliado el 2026-08-09.** Faltaban los equipos de trabajo, que
+        llegaron despues de este metodo: un tecnico borrado dejaba el equipo
+        con un `responsable_id` inexistente y su fila de integrante colgada.
+        Y faltaba negarse cuando hay papeles firmados — ver `dependencias`.
+        Contra PostgreSQL las cinco FK hacen exactamente esto solas
+        (SET NULL, CASCADE y rechazo); aca se hace explicito para que SQLite
+        se comporte igual.
         """
+        colgando = self.dependencias(tecnico_id)
+        if any(colgando.values()):
+            raise ValueError(colgando)
+
         with self.session_factory() as session:
             t = session.get(Tecnico, tecnico_id)
             if t is None:
                 raise KeyError(tecnico_id)
 
+            from .equipos_trabajo import EquipoTrabajo, EquipoTrabajoIntegrante
             from .incidencias import Incidencia
 
             # Los TRES papeles, no sólo el de técnico: desde el pedido 41 la
@@ -203,5 +244,18 @@ class TecnicoRepository:
                     .where(getattr(Incidencia, columna) == tecnico_id)
                     .values(**{columna: None})
                 )
+            # El equipo de trabajo se queda sin responsable, no se borra: el
+            # equipo existe independientemente de quién lo dirija.
+            session.execute(
+                update(EquipoTrabajo)
+                .where(EquipoTrabajo.responsable_id == tecnico_id)
+                .values(responsable_id=None)
+            )
+            # La fila de integrante SÍ se borra: es la pertenencia en sí, y sin
+            # la persona no describe nada. Es lo que declara su `CASCADE`.
+            session.execute(
+                EquipoTrabajoIntegrante.__table__.delete()
+                .where(EquipoTrabajoIntegrante.tecnico_id == tecnico_id)
+            )
             session.delete(t)
             session.commit()
