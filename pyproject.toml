@@ -117,7 +117,7 @@ dependencies = [
     # sobre una tabla sin `id`, y un entero en una columna BOOLEAN) y
     # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
     # motores sin estado global.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.27.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.28.1",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
