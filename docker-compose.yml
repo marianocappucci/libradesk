@@ -40,8 +40,12 @@ x-libradesk-common: &libradesk-common
     timeout: 5s
     retries: 3
     start_period: 10s
+  # `stack-net` es la red compartida de todo el stack: la necesita la APP para
+  # que el proxy la alcance por nombre. `datos` es la red de ESTA instancia, y
+  # es la unica donde vive el sidecar — ver la estrofa `networks:` del final.
   networks:
     - stack-net
+    - datos
 
 services:
   # El backend de la instancia de dev desde el corte del 2026-08-09. Dejo de
@@ -75,8 +79,12 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    # SOLO `datos`. Fuera de la red compartida a proposito: en `stack_stack-net`
+    # conviven ~40 contenedores, asi que cualquier app de otro producto llegaba
+    # a esta base y lo unico que separaba era la contraseña. Medido el
+    # 2026-08-11 — ver la pagina de la migracion a PostgreSQL en el wiki.
     networks:
-      - stack-net
+      - datos
 
   # Instancia de desarrollo/pruebas — dev.libradesk.com.ar
   libradesk-dev:
@@ -129,6 +137,8 @@ networks:
   stack-net:
     external: true
     name: stack_stack-net
+  datos:
+    name: libradesk-dev-datos
 
 volumes:
   libradesk-postgres-data:
