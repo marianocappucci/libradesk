@@ -96,7 +96,7 @@ PAYLOAD = {
 
 @pytest.mark.parametrize("codigo,esperado", [
     (-1, "uniqueid"),
-    (-4, "validación"),
+    (-4, "número de comprobante ya existe"),
 ])
 def test_un_id_negativo_es_rechazo_no_un_alta(configurado, codigo, esperado):
     """🔴 `{"id": -4}` no trae la clave `error` y no creó nada.
@@ -217,6 +217,7 @@ def test_proximo_numero_sigue_al_ultimo_del_punto_de_venta(configurado):
             {"factura": "FC-0003-00000009"},
             {"factura": "FC-0004-00000900"},   # otro punto de venta
             {"factura": "FA-0003-00005000"},   # otra letra
+            {"factura": "NCC-0003-00007000"},  # nota de crédito C, no factura
             {"factura": "roto"},
         ]},
     })

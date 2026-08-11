@@ -30,7 +30,7 @@ El alta devuelve `{"id": N}`, y **N negativo es un rechazo**, no un id:
 
     {"id": 900492665}  -> creada de verdad
     {"id": -1}         -> rechazada: `uniqueid` ya usado
-    {"id": -4}         -> rechazada: validación (combinación letra/tipo inválida)
+    {"id": -4}         -> rechazada: ese número ya existe en el punto de venta
 
 Un cuerpo sin la clave `error` puede no haber creado nada. Por eso
 `interpretar()` exige `id > 0` y trata cualquier otra cosa como fallo: es la
@@ -140,7 +140,8 @@ CONDICION_IVA_POR_DEFECTO = 5  # Consumidor Final
 # reconstruyeron probando. Se traducen para que el operador no vea "-4" pelado.
 RECHAZOS = {
     -1: "SOS rechazó el alta: el `uniqueid` ya fue usado (el comprobante ya se envió)",
-    -4: "SOS rechazó el alta por validación: revisar letra, tipo de operación y numeración",
+    -4: "SOS rechazó el alta: el número de comprobante ya existe en ese punto de "
+        "venta y letra. Reintentar toma el siguiente número libre.",
 }
 
 
@@ -440,7 +441,11 @@ class AdaptadorSOS:
                 continue
             if int(pv) != int(puntoventa):
                 continue
-            if etiqueta[-1:].upper() != letra.upper():
+            # La etiqueta es tipo + letra ("FC" = factura C, "FA" = factura A).
+            # Se compara **entera** y no sólo la última letra: una nota de
+            # crédito C ("NCC") terminaría igual que una factura C y le
+            # adelantaría la numeración a las facturas.
+            if etiqueta.upper() != f"{fcncnd}{letra}".upper():
                 continue
             maximo = max(maximo, int(numero))
         return maximo + 1

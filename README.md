@@ -107,7 +107,7 @@ destinos posibles y la instancia elige uno.
 | `SOS_PASSWORD` | Contraseña. La API no tiene tokens de servicio |
 | `SOS_IDCUIT` | Id de la CUIT sobre la que se opera (`GET /cuit/listado`) |
 | `SOS_PUNTOVENTA` | Punto de venta. **Tiene que ser exclusivo de LibraDesk**: la numeración la lleva el emisor y se pisa con lo que el estudio facture a mano |
-| `SOS_LETRA` | Letra del comprobante (default `C`). Depende de la condición del emisor: en una cuenta de Responsable Inscripto la `C` se rechaza |
+| `SOS_LETRA` | Letra del comprobante (default `C`), según la condición del emisor ante ARCA |
 | `SOS_IDTIPO_OPERACION` | Default `2`. Los tipos 1, 3 y 5 exigen campos no documentados y fallan |
 | `SOS_IDPRODUCTO` | Opcional. Fija un producto genérico del catálogo para todos los ítems, en vez de crear uno por descripción |
 
