@@ -81,6 +81,40 @@ libradesk/
 | `DATA_DIR` | Carpeta donde vive `libradesk.db` (default `/app/data` en el container) |
 | `ENV` | `development` relaja los fail-fast anteriores |
 
+### Puente de facturación
+
+LibraDesk **no factura**: arma el comprobante y lo deja en la bandeja del
+sistema que sí emite, donde una persona lo revisa y saca el CAE. Hay dos
+destinos posibles y la instancia elige uno.
+
+| Variable | Descripción |
+|----------|-------------|
+| `FACTURACION_DESTINO` | `contalibra` (default) o `sos`. Sin la variable, o con un valor desconocido, se usa `contalibra` |
+| `INSTANCIA_SLUG` | Identifica a esta instancia del lado del destino |
+
+**Destino `contalibra`:**
+
+| Variable | Descripción |
+|----------|-------------|
+| `CONTALIBRA_URL` | URL de la instancia de Contalibra del mismo cliente |
+| `CONTALIBRA_SERVICE_TOKEN` | Token de servicio. Nunca sale por la API, ni enmascarado |
+
+**Destino `sos`** — SOS Contador, el sistema del estudio contable del cliente:
+
+| Variable | Descripción |
+|----------|-------------|
+| `SOS_USUARIO` | Usuario de la API. **Que sea uno dedicado**: un usuario del estudio alcanza todas las CUITs de su cartera |
+| `SOS_PASSWORD` | Contraseña. La API no tiene tokens de servicio |
+| `SOS_IDCUIT` | Id de la CUIT sobre la que se opera (`GET /cuit/listado`) |
+| `SOS_PUNTOVENTA` | Punto de venta. **Tiene que ser exclusivo de LibraDesk**: la numeración la lleva el emisor y se pisa con lo que el estudio facture a mano |
+| `SOS_LETRA` | Letra del comprobante (default `C`). Depende de la condición del emisor: en una cuenta de Responsable Inscripto la `C` se rechaza |
+| `SOS_IDTIPO_OPERACION` | Default `2`. Los tipos 1, 3 y 5 exigen campos no documentados y fallan |
+| `SOS_IDPRODUCTO` | Opcional. Fija un producto genérico del catálogo para todos los ítems, en vez de crear uno por descripción |
+
+Sin las variables del destino elegido **no hay puente**: falla cerrado y la
+pantalla lo informa. Los comprobantes se mandan siempre con `obtienecae: false`,
+es decir sin emitir ante ARCA.
+
 ---
 
 ## Desarrollo local
