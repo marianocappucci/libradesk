@@ -34,6 +34,8 @@ nueva, copiando y renombrando. Sin esto, cualquier migracion que no sea un
 """
 import os
 
+from libracore.db.url_de_instancia import url_de_instancia
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -49,7 +51,7 @@ from app.schema import metadata as target_metadata
 def _url() -> str:
     # `DATABASE_URL` primero, misma convencion que gestiolibra/migrations/env.py:
     # asi el CLI apunta a la base real (o a una descartable) sin editar el ini.
-    return os.environ.get("DATABASE_URL") or context.config.get_main_option("sqlalchemy.url")
+    return url_de_instancia("libradesk") or context.config.get_main_option("sqlalchemy.url")
 
 
 def run_migrations_offline() -> None:

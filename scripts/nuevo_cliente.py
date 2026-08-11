@@ -26,6 +26,7 @@ from libracore.provisioning.nuevo_cliente import (
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
 configure(
+    postgres=True,
     product_name="LIBRADESK",
     image_name="libradesk:latest",
     container_prefix="libradesk",

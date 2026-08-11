@@ -3,6 +3,8 @@
 fuera de `/app` en `/opt/frontend-dist`, ver `Dockerfile`), catch-all a
 `index.html` para el ruteo client-side de la SPA."""
 import os
+
+from libracore.db.url_de_instancia import url_de_instancia
 from pathlib import Path
 
 from fastapi.responses import FileResponse
@@ -12,7 +14,9 @@ from .main import create_app
 
 DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 os.makedirs(DATA_DIR, exist_ok=True)
-database_url = os.environ.get("DATABASE_URL", f"sqlite:///{DATA_DIR}/libradesk.db")
+database_url = url_de_instancia(
+    "libradesk", default=f"sqlite:///{DATA_DIR}/libradesk.db"
+)
 
 app = create_app(database_url, DATA_DIR)
 
