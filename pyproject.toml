@@ -43,21 +43,14 @@ dependencies = [
     #
     # Este tag sale de `feature/compatibilidad-postgres`, la rama que este pin
     # consumia durante el piloto: ya esta mergeada a `develop` y publicada.
-    # 🔴🔴 PIN A COMMIT, NO A TAG — **NO MERGEAR ESTA RAMA ASI** 🔴🔴
-    #
-    # `d864610` es el merge del PR #31 de libraauth a `develop`: el diff de
-    # auditoria pasa a ir por atributo y no por nombre de columna. Sin ese
-    # arreglo, el modelo de clientes de la revision `0017` --que mapea `nombre`
-    # a la columna `name`-- tumba el PUT y el desactivar con un 404, porque el
-    # log se escribe en la misma transaccion que la operacion.
-    #
-    # Se pinea al commit y no a un tag porque taguear obliga a mergear a `main`
-    # y publicar una release de un motor que consumen cinco productos, y esto
-    # es una verificacion en dev. **Antes de mergear esta rama hay que
-    # reemplazarlo por el tag de la release correspondiente**: un pin a commit
-    # que se cuela a produccion es la trampa que ya paso con libracommerce
-    # (ver wiki/entities/libracore.md, `v1.20.0`).
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@d864610",
+    # v0.24.0 trae el arreglo del diff de auditoria: recorre `column_attrs` y
+    # lee por atributo, en vez de buscar nombres de COLUMNA en un indice por
+    # ATRIBUTO. Este producto es el primero de la familia donde los dos nombres
+    # diferen --el modelo de clientes de la revision `0017` mapea `nombre` a la
+    # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
+    # se escribe en la misma transaccion que la operacion, asi que el KeyError
+    # no perdia una linea de log, se llevaba puesta la operacion entera.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.24.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -136,17 +129,15 @@ dependencies = [
     # sobre una tabla sin `id`, y un entero en una columna BOOLEAN) y
     # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
     # motores sin estado global.
-    # 🔴🔴 PIN A COMMIT, NO A TAG — **NO MERGEAR ESTA RAMA ASI** 🔴🔴
+    # v1.34.0 trae las cuatro columnas de `clients` que este producto necesita
+    # (`empresa`, `ciudad`, `observaciones`, `tipo_facturacion`, revision
+    # `0002`) y `validar_cuit_no_duplicado()`, que `app/services/clientes.py`
+    # importa: con `v1.29.0` ese import no existe y **la app no arranca**.
     #
-    # `e233b94` es el merge del PR #71 de libracore a `develop`: trae las cuatro
-    # columnas de `clients` que este producto necesitaba (`empresa`, `ciudad`,
-    # `observaciones`, `tipo_facturacion`) y `validar_cuit_no_duplicado()`, que
-    # `app/services/clientes.py` importa. Con el tag anterior (`v1.29.0`) ese
-    # import no existe y **la app no arranca**.
-    #
-    # Mismo motivo y misma advertencia que el pin de libraauth de arriba:
-    # reemplazar por el tag de la release antes de mergear esta rama.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@e233b94",
+    # Las dos cosas ya venian desde `v1.33.0`; se pinea la mas nueva, que suma
+    # el arreglo de `migrar_instancias.sh` --que este producto no consume, pero
+    # es el paso de deploy que aplica las migraciones del motor--.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.34.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
