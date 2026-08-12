@@ -15,6 +15,11 @@ dependencies = [
     # alembic no levanta.
     "alembic>=1.13",
     "itsdangerous>=2.2.0",
+    # Directa desde que la configuracion de facturacion cifra las credenciales
+    # en reposo (`app/services/facturacion_config.py`). Ya venia como
+    # transitiva, pero de eso no se puede depender: si la dependencia que la
+    # arrastraba deja de necesitarla, el import revienta en produccion.
+    "cryptography>=42.0",
     "openpyxl>=3.1.0",
     # v0.8.0 trae el log de accesos (`libraauth.auth_events`), v0.9.0 el de
     # actividad (`libraauth.auditoria`) y v0.10.0 el router que los lee — los

@@ -30,6 +30,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_CONFIG } from './configuracion-piezas'
+import { FacturacionConfigCard } from './configuracion-facturacion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -724,6 +725,15 @@ export function ConfiguracionCategorias() {
   return (
     <Pantalla actual="categorias">
       <CategoriasCard />
+    </Pantalla>
+  )
+}
+
+/** Pestaña del destino de la facturación: Contalibra, SOS Contador o los dos. */
+export function ConfiguracionFacturacion() {
+  return (
+    <Pantalla actual="facturacion">
+      <FacturacionConfigCard />
     </Pantalla>
   )
 }
