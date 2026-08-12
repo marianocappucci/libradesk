@@ -34,6 +34,7 @@ from .routers import (
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
     reportes, sectores, servicios, tecnicos, users,
 )
+from .routers import inventario as inventario_router
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
@@ -53,7 +54,7 @@ from .services.servicios import ServicioRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
-from .services import inventario
+from .services import inventario, materiales
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -102,6 +103,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    `stock`: el plan enciende la funcionalidad, no ramifica el schema.
     #    Ver el comentario de `_PREMIUM` en `plans.py`.
     inventario.ensure_schema()
+
+    # 5. `incidencias_materiales`, el enganche entre el ticket y el stock. Va
+    #    despues del motor porque referencia sus `catalog_items`/`locations`
+    #    por id, y se escribe por ESTA conexion y no por SQLAlchemy: es lo
+    #    unico que hace atomico el par "material anotado + stock descontado".
+    materiales.ensure_schema()
 
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
@@ -278,6 +285,14 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     )
     app.include_router(
         contratos.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
+    )
+    # Stock de consumibles. Un solo router para el catálogo, los depósitos, los
+    # movimientos Y los materiales de una incidencia: los cuatro cuelgan del
+    # mismo módulo porque sin stock no hay nada de lo cual descontar, así que
+    # separar el enganche del ticket ofrecería medio circuito.
+    app.include_router(
+        inventario_router.router,
+        dependencies=staff_or_admin + [Depends(require_module("stock"))],
     )
     app.include_router(
         remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]
