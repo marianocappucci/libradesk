@@ -67,7 +67,10 @@ class ReportesService:
                 select(Equipo, Cliente, Deposito.nombre)
                 .join(Cliente, Equipo.cliente_id == Cliente.id)
                 .outerjoin(Deposito, Equipo.deposito_id == Deposito.id)
-                .where(Cliente.activo.is_(True))
+                # `== 1` y no `.is_(True)`: `clients.activo` es INTEGER desde la
+                # revision `0017`, porque asi la consulta `libracore.db.clients`.
+                # PostgreSQL rechaza `IS TRUE` contra un entero.
+                .where(Cliente.activo == 1)
             )
             if cliente_id:
                 stmt = stmt.where(Equipo.cliente_id == cliente_id)

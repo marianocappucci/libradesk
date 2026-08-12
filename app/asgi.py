@@ -14,9 +14,12 @@ from .main import create_app
 
 DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 os.makedirs(DATA_DIR, exist_ok=True)
-database_url = url_de_instancia(
-    "libradesk", default=f"sqlite:///{DATA_DIR}/libradesk.db"
-)
+# `requerida=True` y sin default: **LibraDesk corre sobre PostgreSQL y nada
+# más** (2026-08-12). El default que había acá era un archivo SQLite, así que
+# una instancia a la que le faltara la variable de entorno **arrancaba igual**,
+# contra una base vacía recién creada, y se veía sana. Que falte la URL tiene
+# que tumbar el arranque, no inventar una base.
+database_url = url_de_instancia("libradesk", requerida=True)
 
 app = create_app(database_url, DATA_DIR)
 

@@ -29,7 +29,7 @@ class Equipo(Base):
     __tablename__ = "equipos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False, index=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     tipo: Mapped[str] = mapped_column(String(100), nullable=False)
     modelo: Mapped[str | None] = mapped_column(String(255))
     marca: Mapped[str | None] = mapped_column(String(255))

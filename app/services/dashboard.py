@@ -63,7 +63,10 @@ class DashboardService:
                 ).all()
             )
             total_clientes_activos = session.execute(
-                select(func.count()).select_from(Cliente).where(Cliente.activo.is_(True))
+                # `== 1` y no `.is_(True)`: `clients.activo` es INTEGER desde la
+                # revision `0017`, porque asi la consulta `libracore.db.clients`.
+                # PostgreSQL rechaza `IS TRUE` contra un entero.
+                select(func.count()).select_from(Cliente).where(Cliente.activo == 1)
             ).scalar_one()
             total_equipos = session.execute(
                 select(func.count()).select_from(Equipo)
@@ -492,7 +495,7 @@ class DashboardService:
                     "telefono": cliente.telefono,
                     "email": cliente.email,
                     "ciudad": cliente.ciudad,
-                    "activo": cliente.activo,
+                    "activo": bool(cliente.activo),
                 } if cliente is not None else None,
                 "resumen": {
                     "total_incidencias": len(incidencias),

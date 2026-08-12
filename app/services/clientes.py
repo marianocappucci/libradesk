@@ -1,12 +1,22 @@
 """Clientes: modelo SQLAlchemy + `ClienteRepository(session_factory)`, mismo
-patron que `service_prices.py` de Gestiolibra. Mismas columnas que la
-tabla real de la Postgres que reemplaza (`clientes`), sin
-`google_contact_id` (integracion eliminada en el rebrand a LibraDesk)."""
+patron que `service_prices.py` de Gestiolibra.
+
+🔴 **Desde el 2026-08-12 la tabla es `clients`, la de LibraCore** (revision
+`0017`). LibraDesk era el unico producto de la familia con tabla de clientes
+propia; ahora comparte la del motor, como Contalibra, Restolibra y VentaLibra.
+
+Los **atributos** siguen siendo los de este producto —`nombre`, `telefono`,
+`cuit`, `domicilio`, `condicion_iva`, `fecha_creacion`— y solo cambia a que
+columna real apunta cada uno. Es deliberado: los usa medio producto y el
+contrato de `/api/clientes` los expone tal cual, asi que renombrarlos habria
+mezclado una migracion de datos con un cambio de API que el frontend ve.
+"""
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, func, select
+from libracore.db.clients import validar_cuit_no_duplicado
+from sqlalchemy import FetchedValue, Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -14,20 +24,20 @@ from . import iva
 
 
 class Cliente(Base):
-    __tablename__ = "clientes"
+    __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    nombre: Mapped[str] = mapped_column("name", String(255), nullable=False)
     empresa: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
-    telefono: Mapped[str | None] = mapped_column(String(20))
+    telefono: Mapped[str | None] = mapped_column("phone", String(20))
     ciudad: Mapped[str | None] = mapped_column(String(100))
     # CUIT y domicilio (2026-08-02). Hasta ahora el cliente solo tenia
     # `ciudad`, asi que los dos datos fiscales se tipeaban a mano **en cada
     # comprobante** aunque fueran siempre los mismos. Nullable porque las 9
     # filas reales de `compulibra` existen desde la migracion del Node.js
     # viejo y no los tienen — ver app/migrations.py.
-    cuit: Mapped[str | None] = mapped_column(String(20))
+    cuit: Mapped[str | None] = mapped_column("cuit_dni", String(20))
     # Decide si el comprobante muestra el IVA discriminado o el precio final.
     # **No** decide la alicuota: esa es del servicio. Ver `app/services/iva.py`.
     #
@@ -35,12 +45,26 @@ class Cliente(Base):
     # `iva.discrimina(None)` cae a "precio final", que es lo que espera la
     # mayoria de los clientes de una mesa de ayuda. Un default de "Responsable
     # Inscripto" le habria cambiado el comprobante a todos de golpe.
-    condicion_iva: Mapped[str | None] = mapped_column(String(50))
-    domicilio: Mapped[str | None] = mapped_column(String(255))
+    condicion_iva: Mapped[str | None] = mapped_column("iva_condition", String(50))
+    domicilio: Mapped[str | None] = mapped_column("address", String(255))
     observaciones: Mapped[str | None] = mapped_column(Text)
     tipo_facturacion: Mapped[str] = mapped_column(String(20), nullable=False, default="por_servicio")
-    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # `Integer` y no `Boolean`: `libracore.db.clients` consulta `WHERE activo = 1`
+    # y PostgreSQL no acepta un entero contra un BOOLEAN. Ver la revision `0017`.
+    activo: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # El motor la declara TEXT, no TIMESTAMP — se pierde el tipo y la precision
+    # de sub-segundo, y se paga para que la tabla sea la del motor sin
+    # divergencias por producto. `_to_dict` la serializa mirando el tipo.
+    #
+    # 🔴 `FetchedValue()` no es decorativo: la columna es NOT NULL y su valor lo
+    # pone el DEFAULT de la base. Sin esto SQLAlchemy la considera una columna
+    # comun sin valor y **manda NULL explicito** en el INSERT, que viola el NOT
+    # NULL; el `IntegrityError` resultante lo cazaba el `except` del router y lo
+    # reportaba como "email duplicado", que manda a buscar el problema al otro
+    # lado del producto.
+    fecha_creacion: Mapped[str | None] = mapped_column(
+        "created_at", Text, server_default=FetchedValue()
+    )
 
 
 def _to_dict(c: Cliente) -> dict:
@@ -62,18 +86,71 @@ def _to_dict(c: Cliente) -> dict:
         "domicilio": c.domicilio,
         "observaciones": c.observaciones,
         "tipo_facturacion": c.tipo_facturacion,
-        "activo": c.activo,
-        "fecha_creacion": c.fecha_creacion.isoformat() if c.fecha_creacion else None,
+        # La columna es INTEGER en la base (ver el modelo) pero la API venia
+        # devolviendo booleano y el frontend lo usa como tal: se convierte acá
+        # para no arrastrar el detalle del motor hasta la pantalla.
+        "activo": bool(c.activo),
+        "fecha_creacion": _fecha_iso(c.fecha_creacion),
     }
 
 
+def _fecha_iso(valor) -> str | None:
+    """`created_at` del motor es TEXT (`'YYYY-MM-DD HH:MM:SS'`), no TIMESTAMP.
+
+    Se acepta igual un `datetime` porque las filas que ya estaban se leyeron
+    como tal hasta la revision `0017`, y porque un modelo mapeado a TEXT puede
+    recibir cualquiera de los dos segun quien haya escrito la fila.
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.isoformat()
+    return str(valor).replace(" ", "T")
+
+
+def _al_motor(data: dict) -> dict:
+    """Traduce los tipos de la API a los de la tabla del motor.
+
+    Hoy es sólo `activo`, que en `/api/clientes` es booleano y en `clients` es
+    INTEGER desde la revisión `0017`. Sin esta conversión, psycopg adapta el
+    `True` de Python a un `boolean` y PostgreSQL rechaza el alta entera con
+    "column activo is of type integer but expression is of type boolean" — que
+    es lo que puso en rojo 183 tests la primera vez.
+
+    Va acá, en el borde del repositorio, por simetría con `_to_dict`, que hace
+    la conversión inversa al salir. Así el detalle del motor no se filtra ni al
+    router ni a la pantalla.
+    """
+    if "activo" in data and data["activo"] is not None:
+        data = {**data, "activo": int(data["activo"])}
+    return data
+
+
 class ClienteRepository:
+    """CRUD de clientes sobre la tabla `clients` del motor.
+
+    🔴 **Las escrituras van por SQLAlchemy y NO por `libracore.db.clients`, a
+    proposito.** El log de actividad de `libraauth` cuelga de los eventos
+    `before_flush` / `after_flush` de la sesion (ver `app/auditoria.py`, donde
+    `Cliente` esta en la lista blanca). `libracore.db.clients` escribe por su
+    conexion DB-API cruda, asi que delegarle el CRUD dejaria el alta, la
+    edicion y la baja de clientes **sin auditar y sin que nadie se entere** —
+    una regresion silenciosa en un producto con pantalla de logs y un cliente
+    real usandolo.
+
+    Lo que si se comparte es la **logica**: `validar_cuit_no_duplicado()` es
+    la misma funcion que usa `create_client()` del motor, extraida ahi para
+    este caso. Asi el chequeo de CUIT duplicado se corrige una vez, en el
+    motor, y lo heredan los cuatro productos.
+    """
+
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
 
     def create(self, **data) -> dict:
+        validar_cuit_no_duplicado(data.get("cuit"))
         with self.session_factory() as session:
-            c = Cliente(**data)
+            c = Cliente(**_al_motor(data))
             session.add(c)
             session.commit()
             session.refresh(c)
@@ -83,7 +160,10 @@ class ClienteRepository:
         with self.session_factory() as session:
             stmt = select(Cliente).order_by(Cliente.nombre)
             if solo_activos:
-                stmt = stmt.where(Cliente.activo.is_(True))
+                # `== 1` y no `.is_(True)`: la columna es INTEGER desde la
+                # revision `0017`, y `IS TRUE` contra un entero lo rechaza
+                # PostgreSQL.
+                stmt = stmt.where(Cliente.activo == 1)
             return [_to_dict(c) for c in session.execute(stmt).scalars()]
 
     def get(self, cliente_id: int) -> dict | None:
@@ -92,11 +172,15 @@ class ClienteRepository:
             return _to_dict(c) if c else None
 
     def update(self, cliente_id: int, **data) -> dict:
+        # `excluir_id`: un cliente no choca consigo mismo. Sin eso, guardarle
+        # el nombre a un cliente que tiene CUIT fallaria siempre.
+        if "cuit" in data:
+            validar_cuit_no_duplicado(data.get("cuit"), excluir_id=cliente_id)
         with self.session_factory() as session:
             c = session.get(Cliente, cliente_id)
             if c is None:
                 raise KeyError(cliente_id)
-            for key, value in data.items():
+            for key, value in _al_motor(data).items():
                 setattr(c, key, value)
             session.commit()
             session.refresh(c)
@@ -114,7 +198,7 @@ class ClienteRepository:
             c = session.get(Cliente, cliente_id)
             if c is None:
                 raise KeyError(cliente_id)
-            c.activo = activo
+            c.activo = int(activo)
             session.commit()
             session.refresh(c)
             return _to_dict(c)

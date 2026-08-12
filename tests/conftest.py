@@ -95,6 +95,18 @@ _ENV_DE_INSTANCIA = (
 _SUITE_PG_URL = os.environ.get("LIBRADESK_SUITE_POSTGRES_URL")
 _PLANTILLA_PG = "libradesk_plantilla"
 
+if not _SUITE_PG_URL:
+    raise RuntimeError(
+        "La suite de LibraDesk necesita PostgreSQL: definí "
+        "LIBRADESK_SUITE_POSTGRES_URL (ej. "
+        "postgresql+psycopg://libradesk:libradesk@localhost:5432/postgres).\n"
+        "\n"
+        "El modo SQLite se retiró el 2026-08-12: LibraDesk corre sobre "
+        "PostgreSQL en las tres instancias desde el 2026-08-11, y una suite "
+        "verde sobre SQLite no dice nada sobre el motor real — no chequea las "
+        "FK, no valida los tipos y acepta cadenas donde la base pide enteros."
+    )
+
 
 # 🔴 `str(url)` de SQLAlchemy ENMASCARA la contraseña como `***`, así que una
 # URL reconstruida con `str()` falla con "password authentication failed" —
@@ -161,8 +173,12 @@ def construir_app(data_dir: Path, database_url: str | None = None):
     """
     from app.main import create_app
 
-    url = database_url or f"sqlite:///{data_dir}/libradesk.db"
-    return create_app(url, str(data_dir))
+    if not database_url:
+        raise RuntimeError(
+            "construir_app() necesita la URL PostgreSQL del test; el fallback "
+            "a SQLite se retiró el 2026-08-12"
+        )
+    return create_app(database_url, str(data_dir))
 
 
 @pytest.fixture(scope="session")
@@ -224,22 +240,19 @@ def data_dir(_plantilla, tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def url_de_base(request) -> str | None:
-    """La base propia del test: `None` en SQLite, una base nueva en PostgreSQL.
+def url_de_base(request, _plantilla) -> str:
+    """La base propia del test: una PostgreSQL nueva, copiada de la plantilla.
 
-    `None` deja que `construir_app` arme la URL SQLite dentro del DATA_DIR,
-    exactamente como antes. En PostgreSQL cada test recibe una base recién
-    copiada de la plantilla.
+    Antes devolvía `None` en modo SQLite, para que `construir_app` armara una
+    URL de archivo dentro del DATA_DIR. Ese modo se retiró el 2026-08-12 junto
+    con SQLite, así que siempre devuelve una URL.
+
+    Pide `_plantilla` explícitamente aunque no use su valor: `CREATE DATABASE
+    ... TEMPLATE` necesita que la plantilla exista. La venía recibiendo de
+    rebote porque todo test que pedía esta fixture pedía también `data_dir`,
+    que sí la declara — un test que pidiera sólo la URL fallaba con "template
+    database does not exist", que no se parece a una dependencia faltante.
     """
-    # 🔴 `yield`, nunca `return`: esta fixture tiene un `yield` más abajo, así
-    # que es una función generadora. Un `return None` acá no devuelve None —
-    # termina el generador sin ceder nada, y pytest falla con "did not yield a
-    # value" en TODOS los tests que la piden. Costó una corrida entera: 431
-    # errores en modo SQLite con el modo PostgreSQL andando bien.
-    if not _SUITE_PG_URL:
-        yield None
-        return
-
     # El nombre sale del test y no de un contador: si algo queda colgado, el
     # nombre de la base dice cuál lo dejó. Se sanea y se recorta porque
     # PostgreSQL corta los identificadores en 63 bytes, y se le antepone un
