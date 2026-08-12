@@ -67,13 +67,29 @@ describe('configuración del destino de facturación', () => {
   })
 
   it('🔴 guardar sin tocar la contraseña no la manda vacía', async () => {
+    const user = userEvent.setup()
     montar()
     render(<FacturacionConfigCard />)
 
     const letra = await screen.findByLabelText('Letra')
-    await userEvent.clear(letra)
-    await userEvent.type(letra, 'A')
-    await userEvent.click(screen.getAllByRole('button', { name: /^Guardar$/ })[1])
+    // Se reemplaza el contenido de una sola vez (seleccionar todo + pegar) en
+    // lugar de `clear()` y después `type()`.
+    //
+    // `clear()` + `type()` son dos pasos con un estado intermedio —el campo
+    // vacío— que algo puede pisar en el medio, y acá hay quién: `DestinoCard`
+    // tiene un `useEffect(() => setDatos(inicial), [inicial])` que vuelve a
+    // sembrar el estado desde el prop. Si ese efecto de montaje se difiere y
+    // cae DESPUÉS del `clear()`, el campo vuelve a "C" y el `type('A')` escribe
+    // encima: queda **"CA"**, que es exactamente como falló (1 de 12 corridas
+    // completas medidas el 2026-08-12, siempre `expected 'CA' to be 'A'`).
+    //
+    // Reproducido con un componente sintético de la misma forma: con el efecto
+    // diferido, `clear()`+`type()` da "CA" y esto da "A". Seleccionar y pegar
+    // es un solo evento que reemplaza lo que haya —"C" o ""—, así que no hay
+    // ventana donde perder la carrera.
+    await user.tripleClick(letra)
+    await user.paste('A')
+    await user.click(screen.getAllByRole('button', { name: /^Guardar$/ })[1])
 
     await waitFor(() => expect(puts.length).toBe(1))
     // Mandar `password: ''` borraría la credencial del cliente.
@@ -82,11 +98,14 @@ describe('configuración del destino de facturación', () => {
   })
 
   it('manda la contraseña sólo cuando el usuario escribe una', async () => {
+    const user = userEvent.setup()
     montar()
     render(<FacturacionConfigCard />)
 
-    await userEvent.type(await screen.findByLabelText(/Contraseña/i), 'nueva-clave')
-    await userEvent.click(screen.getAllByRole('button', { name: /^Guardar$/ })[1])
+    // Acá el campo arranca vacío, así que no hay `clear()` ni carrera que
+    // perder: escribir es lo que hace el usuario y se deja como está.
+    await user.type(await screen.findByLabelText(/Contraseña/i), 'nueva-clave')
+    await user.click(screen.getAllByRole('button', { name: /^Guardar$/ })[1])
 
     await waitFor(() => expect(puts.length).toBe(1))
     expect(puts[0].body.valores.password).toBe('nueva-clave')
