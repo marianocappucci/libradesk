@@ -4,10 +4,17 @@
 instancias era `urllib.request.urlopen('.../health')` a secas, y tenía los dos
 defectos que este archivo fija:
 
-1. La ruta. El router de este producto declara `@router.get("/api/health")`;
-   `/health` a secas no existe. Lo contestaba el fallback de la SPA de
-   `app/asgi.py` (`/{full_path:path}` → index.html), o sea que el chequeo
-   medía que hubiera estáticos, no que la API estuviera viva.
+1. La ruta. En ese momento el router declaraba **sólo** `@router.get(
+   "/api/health")` y `/health` a secas no existía: lo contestaba el fallback de
+   la SPA de `app/asgi.py` (`/{full_path:path}` → index.html), o sea que el
+   chequeo medía que hubiera estáticos, no que la API estuviera viva.
+
+   > Desde el 2026-08-12 el router sirve **las dos**: `/health` es la canónica
+   > —la misma que los otros cinco productos— y `/api/health` quedó como alias
+   > de transición. Los composes de acá siguen apuntando al alias hasta que se
+   > los dé vuelta con su recreación de contenedor medida; el assert de
+   > `test_el_healthcheck_declarado_da_verde_con_la_app_arriba` es justamente lo
+   > que va a exigir que las dos puntas se muevan juntas.
 2. **La aserción, que es lo de fondo.** Con el `dist/` horneado, *cualquier*
    ruta devuelve 200. Un chequeo que sólo llama a `urlopen()` no puede fallar
    mientras uvicorn conteste algo — ni siquiera apuntado a una ruta inventada.
@@ -42,8 +49,10 @@ COMPOSES = {
     "dev": REPO_ROOT / "docker-compose.yml",
     "cliente": REPO_ROOT / "clientes.example.yml",
 }
-# La ruta inventada de la contraprueba. Cae en el fallback de la SPA igual que
-# `/health`, que es justamente lo que la vuelve un buen control.
+# La ruta inventada de la contraprueba: cae en el fallback de la SPA, que es
+# justamente lo que la vuelve un buen control. Tiene que seguir siendo una que
+# el router NO declare — `/health` dejó de servir para esto el 2026-08-12,
+# cuando pasó a existir.
 RUTA_INEXISTENTE = "/api/health-que-no-existe"
 
 
