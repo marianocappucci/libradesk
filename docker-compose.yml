@@ -34,8 +34,19 @@ x-libradesk-common: &libradesk-common
   mem_limit: 512m
   mem_reservation: 192m
   cpus: 1.0
+  # 🔴 El chequeo mira el CUERPO, no el codigo HTTP, y no es prolijidad.
+  # `app/asgi.py` sirve la SPA en `/{full_path:path}`, asi que **cualquier**
+  # ruta devuelve 200 con el index.html mientras haya `dist/` horneado. Un
+  # healthcheck que solo llama a `urlopen()` no puede fallar aunque la API
+  # este muerta: da healthy igual, y da healthy tambien apuntado a una ruta
+  # inventada — o sea que no distingue "app sana" de "app sirviendo
+  # estaticos". Medido el 2026-08-12 (ver tests/test_healthcheck_contenedor.py,
+  # que lo verifica por rotura contra la app real).
+  #
+  # `json.load` sobre el index.html revienta con JSONDecodeError, y eso es
+  # exactamente lo que se busca: exit != 0 -> unhealthy.
   healthcheck:
-    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+    test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/api/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
     interval: 30s
     timeout: 5s
     retries: 3

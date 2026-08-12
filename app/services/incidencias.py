@@ -39,7 +39,7 @@ class Incidencia(Base):
     __tablename__ = "incidencias"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False, index=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id", ondelete="SET NULL"), index=True)
     # El activo alquilado sobre el que se abre el ticket, cuando el problema es
     # de un equipo NUESTRO puesto en el cliente y no del parque de el.

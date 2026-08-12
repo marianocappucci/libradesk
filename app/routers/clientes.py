@@ -62,6 +62,12 @@ class ClienteOut(ClienteIn):
 def create_cliente(data: ClienteIn, clientes: ClienteRepository = Depends(get_cliente_repository)):
     try:
         return clientes.create(**data.model_dump())
+    except ValueError as e:
+        # CUIT/DNI ya usado por otro cliente. El mensaje viene del motor
+        # (`libracore.db.clients.validar_cuit_no_duplicado`) y ya dice de quien
+        # es y si esta activo o inactivo, asi que se pasa tal cual: recortarlo
+        # dejaria al usuario sabiendo que no puede y no por que.
+        raise HTTPException(409, str(e))
     except IntegrityError:
         raise HTTPException(409, "cliente ya existe (email duplicado)")
 
@@ -85,6 +91,8 @@ def update_cliente(cliente_id: int, data: ClienteIn, clientes: ClienteRepository
         return clientes.update(cliente_id, **data.model_dump())
     except KeyError:
         raise HTTPException(404, "cliente not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     except IntegrityError:
         raise HTTPException(409, "cliente ya existe (email duplicado)")
 

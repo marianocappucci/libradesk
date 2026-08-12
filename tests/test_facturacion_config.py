@@ -21,11 +21,28 @@ from app.services import facturacion_config as fc
 
 
 @pytest.fixture
-def sf(tmp_path, monkeypatch):
+def sf(monkeypatch, url_de_base):
+    """La PostgreSQL propia del test, con el schema ya construido por la cadena.
+
+    Antes armaba un SQLite y llamaba `Base.metadata.create_all()`. Con SQLite
+    retirado (2026-08-12) eso dejo de funcionar, y de la forma menos obvia: el
+    `create_all()` emite el DDL de **todo** el metadata, incluida la tabla
+    `clients`, cuyo default de `created_at` es una expresion de PostgreSQL
+    (`to_char(... AT TIME ZONE 'UTC', ...)`). SQLite la rechaza con
+    *near "AT": syntax error* — 22 tests de estos dos archivos, por una tabla
+    que ni siquiera usan.
+
+    Pedir `url_de_base` ademas evita el `create_all()`: la plantilla ya trae
+    el schema en head, que es el mismo que corre en produccion.
+    """
     monkeypatch.setenv("SECRET_KEY", "una-clave-de-sesion-larga-para-la-prueba")
-    engine = create_engine(f"sqlite:///{tmp_path}/config.db")
-    Base.metadata.create_all(engine)
-    return sessionmaker(engine)
+    engine = create_engine(url_de_base)
+    yield sessionmaker(engine)
+    # 🔴 `dispose()` obligatorio: `url_de_base` dropea la base en su teardown y
+    # `DROP DATABASE` falla con *"is being accessed by other users"* si queda
+    # una conexion viva en el pool. El error sale en el TEARDOWN del test
+    # siguiente, no en el que dejo la conexion abierta.
+    engine.dispose()
 
 
 @pytest.fixture

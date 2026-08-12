@@ -41,9 +41,17 @@ dependencies = [
     # `libracore.db.logs` que se apoya en el DEFAULT— y en SQLite `func.now()`
     # es UTC, lo que dejaria medio log tres horas corrido.
     #
-    # Este tag sale de `feature/compatibilidad-postgres`, la rama que este pin
-    # consumia durante el piloto: ya esta mergeada a `develop` y publicada.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.22.0",
+    # (Ese tag salia de `feature/compatibilidad-postgres`, la rama que este pin
+    # consumia durante el piloto: ya esta mergeada a `develop` y publicada.)
+    #
+    # v0.24.0 trae el arreglo del diff de auditoria: recorre `column_attrs` y
+    # lee por atributo, en vez de buscar nombres de COLUMNA en un indice por
+    # ATRIBUTO. Este producto es el primero de la familia donde los dos nombres
+    # diferen --el modelo de clientes de la revision `0017` mapea `nombre` a la
+    # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
+    # se escribe en la misma transaccion que la operacion, asi que el KeyError
+    # no perdia una linea de log, se llevaba puesta la operacion entera.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.24.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -137,7 +145,19 @@ dependencies = [
     #   `libradesk-postgres` (con `image: postgres:16-alpine`) va declarado
     #   ANTES que `libradesk-dev`, y en un deploy real PostgreSQL arranco
     #   corriendo la app. Ahora el servicio se elige por `container_name`.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.33.0",
+    #
+    # v1.33.0 -> v1.34.0: **el bump NO es opcional a partir de aca.**
+    # `app/services/clientes.py` importa `validar_cuit_no_duplicado()` y el
+    # modelo vive sobre la tabla `clients` con las cuatro columnas de la
+    # revision `0002` (`empresa`, `ciudad`, `observaciones`,
+    # `tipo_facturacion`). Con un pin anterior a `v1.33.0` ese import no existe
+    # y la app ni arranca.
+    #
+    # Las dos cosas ya venian desde `v1.33.0`; se pinea `v1.34.0` porque es la
+    # mas nueva y suma el arreglo de `migrar_instancias.sh` --que este producto
+    # no consume como libreria, pero es el paso de deploy que aplica las
+    # migraciones del motor a las instancias--.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.34.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra

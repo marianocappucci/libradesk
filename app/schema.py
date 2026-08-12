@@ -58,6 +58,13 @@ from .services import contratos as _contratos  # noqa: F401
 from .services import depositos as _depositos  # noqa: F401
 from .services import equipos as _equipos  # noqa: F401
 from .services import equipos_trabajo as _equipos_trabajo  # noqa: F401
+# `config_facturacion`: la creo la revision `0016` (2026-08-11) y esta linea
+# faltaba, asi que la tabla quedaba fuera de `metadata` — el mismo olvido que
+# el comentario de arriba describe para `ingresos`. No se noto porque la unica
+# senal, `test_sin_el_filtro_si_las_dropearia`, llevaba dias en rojo por otro
+# motivo (corria contra SQLite y moria antes de llegar a comparar). Un guard
+# que ya esta rojo no avisa de nada.
+from .services import facturacion_config as _facturacion_config  # noqa: F401
 from .services import facturacion_externa as _facturacion_externa  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import ingresos as _ingresos  # noqa: F401
