@@ -114,8 +114,12 @@ export function Stock() {
             <div className="flex items-end gap-3 flex-wrap">
               <div className="min-w-64">
                 <Label>Consumible</Label>
+                {/* `''` y no `undefined`: con `undefined` el Select arranca
+                    NO controlado y pasa a controlado al elegir algo, y React
+                    avisa por consola. Lo caza el test de esta pantalla, que
+                    falla ante cualquier warning. */}
                 <Select
-                  value={elegido ? String(elegido.id) : undefined}
+                  value={elegido ? String(elegido.id) : ''}
                   onValueChange={(v) =>
                     setElegido(consumibles.find((c) => String(c.id) === v) ?? null)}
                 >
