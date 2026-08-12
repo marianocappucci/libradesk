@@ -86,13 +86,15 @@ def test_el_backup_trae_la_base_y_el_logo_de_esta_instancia(client):
         ).stdout
         assert "Cliente que tiene que estar en el backup" in volcado
     else:
-        import sqlite3
-        conn = sqlite3.connect(str(copia))
-        try:
-            nombres = [f[0] for f in conn.execute("SELECT nombre FROM clientes").fetchall()]
-        finally:
-            conn.close()
-        assert "Cliente que tiene que estar en el backup" in nombres
+        # Acá vivía la rama SQLite, que abría el backup con `sqlite3.connect()`
+        # y consultaba `SELECT nombre FROM clientes`. Se retiró el 2026-08-12
+        # junto con SQLite: era código muerto —la rama PostgreSQL es la única
+        # que corre— y encima había quedado desactualizado, porque desde la
+        # revisión `0017` esa consulta sería `SELECT name FROM clients`.
+        raise AssertionError(
+            "LibraDesk sólo corre sobre PostgreSQL, así que este test no "
+            "debería llegar acá. Si llegó, la deteccion del motor cambió."
+        )
 
 
 def test_crear_listar_y_restaurar(client):

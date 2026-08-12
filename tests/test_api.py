@@ -116,6 +116,76 @@ def test_cliente_guarda_cuit_y_domicilio(client):
     assert r.json()["cuit"] is None and r.json()["domicilio"] is None
 
 
+def test_no_entran_dos_clientes_con_el_mismo_cuit(client):
+    """Lo que LibraDesk gana al compartir la tabla `clients` del motor: la
+    validacion es la misma funcion que usa `create_client()` de LibraCore
+    (`validar_cuit_no_duplicado`), no una copia.
+
+    El CUIT se compara **sin guiones**, asi que el segundo alta choca aunque
+    venga tipeado distinto -- que es el caso real: nadie lo escribe igual dos
+    veces.
+    """
+    _login(client)
+    assert client.post("/api/clientes", json={
+        "nombre": "Compulibra", "email": "uno@t.com", "cuit": "30-71234567-8",
+    }).status_code == 201
+
+    r = client.post("/api/clientes", json={
+        "nombre": "Compulibra otra vez", "email": "dos@t.com", "cuit": "30712345678",
+    })
+    assert r.status_code == 409
+    # El mensaje dice de quien es y en que estado esta: un 409 pelado deja al
+    # usuario sabiendo que no puede, y no por que.
+    assert "Compulibra" in r.json()["detail"]
+
+    # Un CUIT libre entra sin problema.
+    assert client.post("/api/clientes", json={
+        "nombre": "Otro", "email": "tres@t.com", "cuit": "27-99999999-4",
+    }).status_code == 201
+
+
+def test_editar_un_cliente_no_choca_con_su_propio_cuit(client):
+    """Sin `excluir_id` en la validacion, guardarle el nombre a un cliente que
+    tiene CUIT fallaria siempre contra su propia fila."""
+    _login(client)
+    cid = client.post("/api/clientes", json={
+        "nombre": "Compulibra", "email": "c@t.com", "cuit": "30-71234567-8",
+    }).json()["id"]
+
+    r = client.put(f"/api/clientes/{cid}", json={
+        "nombre": "Compulibra SRL", "email": "c@t.com", "cuit": "30-71234567-8",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["nombre"] == "Compulibra SRL"
+
+
+def test_el_alta_de_un_cliente_sigue_quedando_en_el_log_de_actividad(client):
+    """🔴 La garantia de no-regresion de la Fase 2.
+
+    Al adoptar la tabla `clients` del motor, la tentacion era delegarle el CRUD
+    entero a `libracore.db.clients`. No se hizo: ese modulo escribe por su
+    conexion DB-API cruda, y el log de actividad de `libraauth` cuelga de los
+    eventos de `flush` de la sesion SQLAlchemy. Delegar habria dejado alta,
+    edicion y baja de clientes **sin auditar, y sin que nada fallara**.
+
+    Este test es lo que impide que alguien haga esa simplificacion mas
+    adelante: si las escrituras se mudan a la conexion cruda, se pone rojo.
+    """
+    _login(client)
+    cid = client.post("/api/clientes", json={
+        "nombre": "Auditado", "email": "aud@t.com",
+    }).json()["id"]
+    client.put(f"/api/clientes/{cid}", json={"nombre": "Auditado SA", "email": "aud@t.com"})
+
+    logs = client.get("/api/logs", params={"entidad": "cliente"}).json()["actividad"]
+    acciones = {f["accion"] for f in logs}
+    assert "crear" in acciones, f"el alta no quedo registrada: {logs}"
+    assert "editar" in acciones, f"la edicion no quedo registrada: {logs}"
+
+    edicion = [f for f in logs if f["accion"] == "editar"][0]
+    assert edicion["cambios"] == {"nombre": ["Auditado", "Auditado SA"]}
+
+
 def _columnas(conn, tabla: str) -> set[str]:
     """Los nombres de columna de una tabla, en el motor que sea.
 
@@ -161,10 +231,14 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
 
     assert ensure_schema(engine) == "upgrade"
 
+    # 🔴 De acá en adelante la tabla es `clients` y las columnas tienen los
+    # nombres del motor: la cadena llega hasta la revision `0017`, que renombro
+    # las dos cosas al adoptar el modulo de clientes de LibraCore. Mirar
+    # `clientes` despues del upgrade era mirar la tabla de antes del renombre.
     with engine.begin() as conn:
-        columnas = _columnas(conn, "clientes")
-        filas_despues = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
-    assert {"cuit", "domicilio"} <= columnas
+        columnas = _columnas(conn, "clients")
+        filas_despues = conn.execute(text("SELECT COUNT(*) FROM clients")).scalar()
+    assert {"cuit_dni", "address"} <= columnas
     # El cliente migrado no se pierde: queda con los campos nuevos en NULL.
     assert filas_despues == filas_antes
     ficha = client.get(f"/api/clientes/{cliente_id}").json()

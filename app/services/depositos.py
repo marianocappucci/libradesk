@@ -50,7 +50,7 @@ class Deposito(Base):
     # propios con el mismo nombre — justo el caso que mas importa. La unicidad
     # se valida en el repositorio, que puede tratar el NULL como un valor.
     cliente_id: Mapped[int | None] = mapped_column(
-        ForeignKey("clientes.id", ondelete="CASCADE"), index=True,
+        ForeignKey("clients.id", ondelete="CASCADE"), index=True,
     )
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(String(500))

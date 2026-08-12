@@ -29,23 +29,32 @@ COMPROBANTE = {
 
 
 @pytest.fixture
-def puente(tmp_path):
-    """Un puente sobre una base propia.
+def puente(url_de_base):
+    """Un puente sobre la base propia del test.
 
-    No usa el `client` de conftest a propósito: ese fixture levanta las
-    migraciones, que hoy fallan por un `libracore` viejo en el venv
-    (`No module named 'libracore.db.url_de_instancia'`, ya presente en
-    `develop`). Lo que se prueba acá es el servicio, no el router, así que no
-    hace falta la app entera — y así estos tests no quedan rehenes de eso.
+    No usa el `client` de conftest a propósito: ese fixture levanta la app
+    entera, y lo que se prueba acá es el servicio, no el router.
+
+    Antes armaba un SQLite y llamaba `Base.metadata.create_all()`. Con SQLite
+    retirado (2026-08-12) eso dejó de funcionar, y de la forma menos obvia: el
+    `create_all()` emite el DDL de **todo** el metadata, incluida la tabla
+    `clients`, cuyo default de `created_at` es una expresión de PostgreSQL
+    (`to_char(... AT TIME ZONE 'UTC', ...)`). SQLite la rechaza con
+    *near "AT": syntax error* — por una tabla que estos tests ni tocan.
+
+    `url_de_base` da una base con el schema en head, así que tampoco hace
+    falta el `create_all()`.
     """
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.database import Base
-
-    engine = create_engine(f"sqlite:///{tmp_path}/puente.db")
-    Base.metadata.create_all(engine)
-    return fe.PuenteFacturacion(sessionmaker(engine))
+    engine = create_engine(url_de_base)
+    yield fe.PuenteFacturacion(sessionmaker(engine))
+    # 🔴 `dispose()` obligatorio: `url_de_base` dropea la base en su teardown y
+    # `DROP DATABASE` falla con *"is being accessed by other users"* si queda
+    # una conexion viva en el pool. El error sale en el TEARDOWN del test
+    # siguiente, no en el que dejo la conexion abierta.
+    engine.dispose()
 
 
 class AdaptadorFalso:

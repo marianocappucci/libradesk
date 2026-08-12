@@ -22,7 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # 🔴 `-alpine`, la MISMA imagen que corren las tres instancias. No es
+        # un detalle de tamaño: alpine ordena por bytes y la imagen Debian usa
+        # el collation de la locale, así que un `ORDER BY` sobre texto puede
+        # dar distinto en las dos. Un CI verde sobre otra imagen no dice nada
+        # sobre producción.
+        image: postgres:16-alpine
         env:
           POSTGRES_DB: libradesk
           POSTGRES_USER: libradesk
@@ -35,7 +40,17 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      LIBRADESK_POSTGRES_URL: postgresql+psycopg://libradesk:libradesk-ci@localhost:5432/libradesk
+      # La suite arma UNA BASE POR TEST, copiada de una plantilla, así que esta
+      # URL es la de administración: el conftest le cambia el nombre de base
+      # para crear y dropear. Apunta a `postgres` —la de mantenimiento— y no a
+      # `libradesk`, porque no se puede dropear la base a la que uno está
+      # conectado.
+      #
+      # Antes acá iba `LIBRADESK_POSTGRES_URL`, que la suite dejó de leer el
+      # 2026-08-12 al pasar todo a la base por test. Ese desfasaje puso el CI
+      # en rojo con la suite local en verde: el conftest aborta el import si
+      # falta la variable, así que fallaban los 573 tests de una.
+      LIBRADESK_SUITE_POSTGRES_URL: postgresql+psycopg://libradesk:libradesk-ci@localhost:5432/postgres
 
     steps:
       - uses: actions/checkout@v4

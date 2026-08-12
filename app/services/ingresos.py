@@ -95,7 +95,7 @@ class IngresoReparacion(Base):
         DateTime, nullable=False, index=True,
     )
     cliente_id: Mapped[int] = mapped_column(
-        ForeignKey("clientes.id"), nullable=False, index=True,
+        ForeignKey("clients.id"), nullable=False, index=True,
     )
     # El contacto del papel, escrito a mano: puede no ser el contacto que figura
     # en la ficha del cliente (manda a un empleado a dejar el equipo), y el

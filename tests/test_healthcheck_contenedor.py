@@ -94,7 +94,20 @@ def app_arriba(tmp_path_factory):
     previo = {v: os.environ.get(v) for v in ("ENV", "DATA_DIR", "DATABASE_URL")}
     os.environ["ENV"] = "development"
     os.environ["DATA_DIR"] = str(datos)
-    os.environ.pop("DATABASE_URL", None)
+    # 🔴 Antes acá iba `os.environ.pop("DATABASE_URL")`: la app caía a un
+    # default SQLite dentro del DATA_DIR. Ese default se retiró el 2026-08-12
+    # junto con SQLite —una instancia sin la variable puesta **arrancaba contra
+    # una base vacía recién creada y se veía sana**—, así que ahora `app.asgi`
+    # aborta el import si falta. Se le da una PostgreSQL propia del módulo.
+    #
+    # La base se crea acá y no con la fixture `url_de_base` del conftest porque
+    # aquella es de alcance función y este servidor de uvicorn se levanta una
+    # vez por módulo.
+    from conftest import _sql_admin, _url_de
+
+    base = "ld_healthcheck_contenedor"
+    _sql_admin(f'DROP DATABASE IF EXISTS "{base}"', f'CREATE DATABASE "{base}"')
+    os.environ["DATABASE_URL"] = _url_de(base)
 
     sys.modules.pop("app.asgi", None)
     asgi = importlib.import_module("app.asgi")

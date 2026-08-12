@@ -126,7 +126,7 @@ class Contrato(Base):
 
     # El **locatario**: quien usa el equipo y paga por el.
     cliente_id: Mapped[int] = mapped_column(
-        ForeignKey("clientes.id"), nullable=False, index=True,
+        ForeignKey("clients.id"), nullable=False, index=True,
     )
     # El **propietario**, y `NULL` significa "la empresa de esta instancia" —
     # los datos que ya vivien en `config_empresa`. Se modela asi y no con una
@@ -134,7 +134,7 @@ class Contrato(Base):
     # nosotros; un cliente-propietario es la excepcion, y esta columna la cubre
     # sin inventar una entidad que casi siempre tendria una sola fila.
     propietario_cliente_id: Mapped[int | None] = mapped_column(
-        ForeignKey("clientes.id"), index=True,
+        ForeignKey("clients.id"), index=True,
     )
 
     # Donde queda instalado. `sector_id` cuando el cliente tiene sus sectores

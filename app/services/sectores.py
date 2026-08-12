@@ -16,7 +16,7 @@ class Sector(Base):
     __table_args__ = (UniqueConstraint("cliente_id", "nombre"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False, index=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
