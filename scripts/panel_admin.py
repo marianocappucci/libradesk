@@ -39,6 +39,13 @@ configure(
     # `libracore.respaldo` (`build_backup_router` en app/main.py). Contalibra
     # y Restolibra tienen implementacion propia y todavia no.
     backup_zip=True,
+    # Ver el comentario largo en `nuevo_cliente.py`: LibraDesk sirve su salud
+    # en `/api/health` y no en `/health`. Acá no se usa (el healthcheck lo
+    # estampa el alta), pero `configure()` pisa un `_cfg` global y
+    # `libracore.admin.services` importa los dos scripts en el mismo proceso,
+    # así que si este no lo pasara, un listado después de un alta dejaría la
+    # ruta equivocada para el alta siguiente.
+    health_path="/api/health",
     postgres=True,
     product_name="LIBRADESK",
     image_name="libradesk:latest",
