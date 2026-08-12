@@ -26,6 +26,7 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { PackageCheck, ShieldCheck, Wrench } from 'lucide-react'
+import { fecha } from '@/lib/format'
 
 const TODOS = '__todos__'
 
@@ -40,10 +41,6 @@ type CierreFormValues = z.infer<typeof cierreSchema>
 function pesos(v: number | null): string {
   if (v === null) return '—'
   return v.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
-}
-
-function fecha(iso: string | null): string {
-  return iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('es-AR') : '—'
 }
 
 /**

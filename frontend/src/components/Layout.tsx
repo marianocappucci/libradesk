@@ -2,8 +2,8 @@
 // branding + navItems propios de LibraDesk — Agenda/Tareas eliminadas).
 import {
   AlertCircle, Boxes, Building2, Car, ClipboardCheck, FileSignature,
-  FileSpreadsheet, FileText, LayoutDashboard, Monitor, Receipt, ScrollText,
-  Send, Settings, UserCog, Users, Wrench,
+  FileSpreadsheet, FileText, LayoutDashboard, Monitor, PackageSearch, Receipt,
+  ScrollText, Send, Settings, UserCog, Users, Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
@@ -37,6 +37,14 @@ export const Layout = createLayout({
     // El stock propio cuelga debajo: se carga una vez y se consulta poco, a
     // diferencia de los contratos, que son el trabajo del día.
     { to: '/activos', label: 'Activos', icon: Boxes },
+    // "Stock" y no "Consumibles": es la palabra que usa el técnico. Va pegado a
+    // Activos porque los dos contestan "qué tengo y dónde", pero son cosas
+    // distintas — Activos son unidades serializadas, esto son existencias por
+    // cantidad.
+    //
+    // Gateado por módulo **en el menú** y no sólo en el backend: un ítem que
+    // aparece y devuelve 403 al tocarlo es peor que uno que no está.
+    { to: '/stock', label: 'Stock', icon: PackageSearch, module: 'stock' },
     // Presupuesto antes que remito: es el orden real del trabajo (se
     // presupuesta, se acepta, se remite).
     { to: '/presupuestos', label: 'Presupuestos', icon: FileText },

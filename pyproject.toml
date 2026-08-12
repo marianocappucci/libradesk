@@ -122,7 +122,32 @@ dependencies = [
     # sobre una tabla sin `id`, y un entero en una columna BOOLEAN) y
     # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
     # motores sin estado global.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.29.0",
+    #
+    # v1.29.0 -> v1.31.0 (2026-08-12). Son dos, y las dos pegan aca:
+    #
+    # - v1.30.0: un comprobante se fecha con SU fecha y no con el reloj, asi que
+    #   reimprimirlo da byte a byte el mismo archivo. Aplica a lo que sale por
+    #   los generadores compartidos: remitos (`generate_pdf`) y presupuestos
+    #   (`generate_pdf_presupuesto`). Los PDF propios de este repo —incidencia,
+    #   ingreso, informe— NO: heredan de `_TextoSeguroPDF` pero arman su
+    #   maqueta, y nadie les llama `fijar_fecha_documento()`, asi que se siguen
+    #   fechando con el reloj. Si se quiere la misma propiedad, es esa llamada.
+    # - v1.31.0: `pinear_image` escribia la imagen de la app en el primer
+    #   `image:` del compose. **El layout de este repo es el que lo destapo**:
+    #   `libradesk-postgres` (con `image: postgres:16-alpine`) va declarado
+    #   ANTES que `libradesk-dev`, y en un deploy real PostgreSQL arranco
+    #   corriendo la app. Ahora el servicio se elige por `container_name`.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.31.0",
+    # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
+    # `depositos` guardan unidades serializadas, no existencias-- y la decision
+    # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
+    # y VentaLibra, en vez de construirle un inventario propio. Comparte la base
+    # y la conexion de libracore, igual que remitos/presupuestos.
+    #
+    # v0.7.2 trae la transferencia entre depositos atomica y con guarda de
+    # disponibilidad, que es el caso central de este producto: el deposito
+    # central que abastece la camioneta del tecnico.
+    "libracommerce @ git+https://github.com/marianocappucci/libracommerce.git@v0.7.2",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones

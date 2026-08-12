@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import {
   AlertTriangle, ArrowLeft, FileText, MapPin, Monitor, ShieldCheck, Ticket,
 } from 'lucide-react'
+import { fechaDeDate } from '@/lib/format'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -28,7 +29,7 @@ function formatFecha(fecha: string | null): string {
   const d = soloFecha
     ? new Date(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10)))
     : new Date(fecha)
-  return d.toLocaleDateString('es-AR', { dateStyle: 'short' })
+  return fechaDeDate(d)
 }
 
 /** "vencida hace 12 días" / "vence en 5 días" / "vence hoy". El signo importa:

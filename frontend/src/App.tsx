@@ -18,6 +18,7 @@ import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
 import { RecepcionesEntregados, RecepcionesTaller } from './pages/Recepciones'
 import { Activos } from './pages/Activos'
+import { Stock } from './pages/Stock'
 import { Contratos } from './pages/Contratos'
 import { ContratoDetalle } from './pages/ContratoDetalle'
 import { Tecnicos } from './pages/Tecnicos'
@@ -83,6 +84,7 @@ export default function App() {
       <Route path="/contratos" element={<ProtectedRoute><Contratos /></ProtectedRoute>} />
       <Route path="/contratos/:id" element={<ProtectedRoute><ContratoDetalle /></ProtectedRoute>} />
       <Route path="/activos" element={<ProtectedRoute><Activos /></ProtectedRoute>} />
+      <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
       <Route path="/presupuestos/:id" element={<ProtectedRoute><PresupuestoDetalle /></ProtectedRoute>} />

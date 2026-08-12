@@ -12,7 +12,7 @@ import {
   type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
   type Tecnico,
 } from '../api'
-import { deIsoALocal, deLocalAIso } from '@/lib/format'
+import { deIsoALocal, deLocalAIso, fechaHora } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { SelectBuscable } from '@/components/select-buscable'
+import { MaterialesIncidencia } from '@/components/materiales-incidencia'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -47,8 +48,7 @@ type TimelineEntry =
   | { tipo: 'reparacion'; fecha: string; data: Reparacion }
 
 function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+  return fechaHora(fecha)
 }
 
 export function IncidenciaDetalle() {
@@ -548,6 +548,11 @@ export function IncidenciaDetalle() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Entre Actividad y las notas: el material se carga mientras se
+                trabaja el ticket, no al final. Se renderiza solo si la
+                instancia tiene el módulo `stock`. */}
+            <MaterialesIncidencia incidenciaId={incidencia.id} />
 
             <Card>
               <CardHeader><CardTitle className="text-base">Notas internas y resolución</CardTitle></CardHeader>

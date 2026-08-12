@@ -18,6 +18,7 @@
 import type { ReactNode } from 'react'
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { fechaHoraDeDate } from '@/lib/format'
 
 export function Imprimible({ children }: { children: ReactNode }) {
   return <div id="zona-impresion">{children}</div>
@@ -45,8 +46,7 @@ export function EncabezadoImpreso({ titulo, filtros, generado }: {
 }
 
 function formatearGenerado(generado?: string): string {
-  const d = generado ? new Date(generado) : new Date()
-  return d.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+  return fechaHoraDeDate(generado ? new Date(generado) : new Date())
 }
 
 export function BotonImprimir({ children = 'Imprimir', ...props }: {
