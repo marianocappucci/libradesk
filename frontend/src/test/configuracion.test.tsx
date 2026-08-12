@@ -194,10 +194,18 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
     // `Depends(require_admin)` de verdad, así que ahí mostrar el botón sería
     // ofrecer un 403.
     render(<Configuracion />, '/configuracion')
-    await screen.findByText('Datos de la empresa')
 
+    // Se espera el AVISO, no el título. "Datos de la empresa" es el
+    // `CardTitle`: está desde el primer render, mientras el formulario todavía
+    // dice "Cargando…". Esperando por él, las dos afirmaciones de abajo corrían
+    // contra un formulario que no existía: la del botón pasaba sola —no hay
+    // ningún "Guardar" durante la carga— y la del aviso perdía la carrera
+    // cuando la corrida estaba cargada. Falló 2 de 8 corridas completas
+    // medidas el 2026-08-12, siempre en ~175 ms: no es un timeout, es haber
+    // mirado antes de tiempo.
+    expect(await screen.findByText(/Solo un administrador puede modificar/))
+      .toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Solo un administrador puede modificar/)).toBeInTheDocument()
   })
 })
 

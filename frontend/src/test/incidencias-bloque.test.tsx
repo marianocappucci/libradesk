@@ -241,7 +241,13 @@ describe('Alta de incidencia — cargar el equipo ahí mismo (pedido 38)', () =>
     const dialogo = await screen.findByRole('dialog', { name: /Nuevo equipo/ })
     // Por el placeholder: los cuatro inputs del diálogo son textboxes sin
     // label asociado, así que buscar por rol encuentra los cuatro.
-    await user.type(within(dialogo).getByPlaceholderText(/Notebook, Impresora/), 'Impresora')
+    //
+    // Se pega en vez de teclear: este test abre DOS diálogos anidados sobre el
+    // listado, así que cada tecla vuelve a renderizar todo eso. Es el más caro
+    // de la suite y el que quedó al borde del timeout de 5 s cuando entró la
+    // pantalla de stock (de ~2,1 s a ~4,4 s sin que nadie lo tocara).
+    await user.click(within(dialogo).getByPlaceholderText(/Notebook, Impresora/))
+    await user.paste('Impresora')
     await user.click(within(dialogo).getByRole('button', { name: /Crear y elegir/ }))
 
     // Vuelve al alta del ticket con el equipo nuevo puesto — que es la mitad
