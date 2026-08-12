@@ -37,36 +37,44 @@ type Resultado = Envio | { origen_id: number; estado: string; detalle: string }
 // Cómo se lee cada estado. El texto importa más que el color: "enviado" no
 // quiere decir facturado, y confundirlos es el malentendido caro de esta
 // pantalla.
-const ESTADOS: Record<string, { label: string; ayuda: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+//
+// El nombre del destino **no se escribe acá**: lo manda el backend en
+// `destino_nombre`, que es el único que sabe a dónde apunta esta instancia.
+// Mientras hubo un solo destino el nombre estaba fijo en este archivo, y al
+// aparecer el segundo la pantalla siguió diciendo "Contalibra" en una
+// instancia que mandaba a SOS Contador.
+const ESTADOS: Record<string, { label: string; ayuda: (destino: string) => string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   enviado: {
     label: 'En la bandeja',
-    ayuda: 'Llegó a Contalibra y espera que alguien lo facture ahí.',
+    ayuda: (d) => `Llegó a ${d} y espera que alguien lo facture ahí.`,
     variant: 'secondary',
   },
   resuelto_remoto: {
     label: 'Resuelto allá',
-    ayuda: 'Ya lo facturaron o lo descartaron en Contalibra.',
+    ayuda: (d) => `Ya lo facturaron o lo descartaron en ${d}.`,
     variant: 'default',
   },
   error: {
     label: 'Falló',
-    ayuda: 'No llegó. Se puede reintentar: mandarlo de nuevo no duplica nada.',
+    ayuda: () => 'No llegó. Se puede reintentar: mandarlo de nuevo no duplica nada.',
     variant: 'destructive',
   },
   no_facturable: {
     label: 'No se puede',
-    ayuda: 'El comprobante no está en condiciones de facturarse.',
+    ayuda: () => 'El comprobante no está en condiciones de facturarse.',
     variant: 'outline',
   },
 }
 
-function EstadoBadge({ estado }: { estado: string }) {
-  const conf = ESTADOS[estado] ?? { label: estado, ayuda: '', variant: 'outline' as const }
-  return <Badge variant={conf.variant} title={conf.ayuda}>{conf.label}</Badge>
+function EstadoBadge({ estado, destino }: { estado: string; destino: string }) {
+  const conf = ESTADOS[estado]
+  if (!conf) return <Badge variant="outline">{estado}</Badge>
+  return <Badge variant={conf.variant} title={conf.ayuda(destino)}>{conf.label}</Badge>
 }
 
 export function Facturacion() {
   const [configurado, setConfigurado] = useState<boolean | null>(null)
+  const [destinoNombre, setDestinoNombre] = useState('el sistema de facturación')
   const [items, setItems] = useState<Pendiente[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -90,10 +98,13 @@ export function Facturacion() {
     setLoading(true)
     setError(null)
     try {
-      const data = await api.get<{ configurado: boolean; items: Pendiente[] }>(
-        '/api/facturacion/pendientes',
-      )
+      const data = await api.get<{
+        configurado: boolean; destino_nombre?: string; items: Pendiente[]
+      }>('/api/facturacion/pendientes')
       setConfigurado(data.configurado)
+      // El `??` cubre a un backend viejo que todavía no manda el campo: la
+      // pantalla se degrada al nombre genérico en vez de mostrar "undefined".
+      setDestinoNombre(data.destino_nombre ?? 'el sistema de facturación')
       setItems(data.items)
     } catch (err) {
       setError(describeError(err))
@@ -199,7 +210,7 @@ export function Facturacion() {
         if (!envio) return <span className="text-muted-foreground">—</span>
         return (
           <span className="flex items-center gap-1.5">
-            <EstadoBadge estado={envio.estado} />
+            <EstadoBadge estado={envio.estado} destino={destinoNombre} />
             {envio.estado === 'error' && envio.detalle && (
               // El `title` va en el `span` y no en el ícono: los de lucide no
               // aceptan `title` como prop en esta versión y `tsc` lo rechaza.
@@ -226,7 +237,7 @@ export function Facturacion() {
           <CardContent className="flex items-start gap-2 py-4 text-sm">
             <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <div>
-              <p className="font-medium">Esta instancia no está enlazada con Contalibra.</p>
+              <p className="font-medium">Esta instancia no está enlazada con {destinoNombre}.</p>
               <p className="text-muted-foreground">
                 El enlace se configura en el entorno del contenedor cuando se
                 contratan los dos sistemas. Mientras tanto, los comprobantes se
@@ -240,8 +251,8 @@ export function Facturacion() {
       {configurado && (
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0" />
-          Lo que se manda queda en la bandeja de Contalibra esperando que alguien
-          lo facture ahí. <strong className="text-foreground">Desde acá no se
+          Lo que se manda queda en la bandeja de {destinoNombre} esperando que
+          alguien lo facture ahí. <strong className="text-foreground">Desde acá no se
           emite ninguna factura</strong>, y reenviar algo no lo duplica.
         </p>
       )}
@@ -255,7 +266,7 @@ export function Facturacion() {
                   ? <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
                   : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
                 <span>
-                  <EstadoBadge estado={r.estado} />
+                  <EstadoBadge estado={r.estado} destino={destinoNombre} />
                   {r.detalle ? <span className="ml-2 text-muted-foreground">{r.detalle}</span> : null}
                 </span>
               </p>
@@ -291,7 +302,7 @@ export function Facturacion() {
                 <Button variant="outline" onClick={() => setElegidos([])}>Limpiar</Button>
                 <Button disabled={enviando || !configurado} onClick={enviar}>
                   <Send className="mr-1 size-4" />
-                  {enviando ? 'Enviando…' : 'Enviar a Contalibra'}
+                  {enviando ? 'Enviando…' : 'Enviar a ' + destinoNombre}
                 </Button>
               </div>
             </div>
