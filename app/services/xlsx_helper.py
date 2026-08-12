@@ -61,7 +61,7 @@ def add_meta_header(ws: Worksheet, titulo: str, filtros: list[str], col_count: i
     ws.row_dimensions[1].height = 26
 
     info = "   |   ".join(
-        [f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", *filtros]
+        [f"Generado: {datetime.now().strftime('%d-%m-%Y %H:%M')}", *filtros]
     )
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=col_count)
     c2 = ws.cell(row=2, column=1, value=info)

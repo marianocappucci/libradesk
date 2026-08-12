@@ -163,13 +163,13 @@ describe('Ficha del contrato', () => {
     // reemplazo cierra una línea el mismo día que abre la otra), así que un
     // `getByText` suelto mide cualquier cosa menos lo que interesa.
     const fila = screen.getByText('GS-A123').closest('tr')!
-    expect(within(fila).getByText('1/8/2026')).toBeInTheDocument()
-    expect(within(fila).getByText('14/9/2026')).toBeInTheDocument()
+    expect(within(fila).getByText('01-08-2026')).toBeInTheDocument()
+    expect(within(fila).getByText('14-09-2026')).toBeInTheDocument()
     expect(within(fila).getByText('Reemplazado')).toBeInTheDocument()
 
     // Y la fila del que entró arranca justo donde terminó la otra.
     const filaNueva = screen.getByText('GS-B456').closest('tr')!
-    expect(within(filaNueva).getByText('14/9/2026')).toBeInTheDocument()
+    expect(within(filaNueva).getByText('14-09-2026')).toBeInTheDocument()
     expect(within(filaNueva).getByText('Instalado')).toBeInTheDocument()
   })
 
@@ -190,7 +190,7 @@ describe('Ficha del contrato', () => {
     // El anterior conserva SU importe y su vigencia cerrada. Si el módulo
     // sobreescribiera el precio, esta fila no existiría.
     expect(screen.getByText('$ 45.000')).toBeInTheDocument()
-    expect(screen.getByText('31/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('31-10-2026')).toBeInTheDocument()
   })
 
   it('el diálogo de reemplazo avisa que el anterior no se borra', async () => {

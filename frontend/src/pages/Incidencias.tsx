@@ -26,6 +26,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { CircleAlert, Monitor, Plus } from 'lucide-react'
+import { fechaDeDate } from '@/lib/format'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -256,7 +257,7 @@ export function Incidencias() {
       header: sortableHeader('Creada'),
       size: 110,
       minSize: 95,
-      cell: ({ row }) => row.original.fecha_creacion ? new Date(row.original.fecha_creacion).toLocaleDateString('es-AR') : '—',
+      cell: ({ row }) => row.original.fecha_creacion ? fechaDeDate(new Date(row.original.fecha_creacion)) : '—',
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [clientes, equipos, categorias])

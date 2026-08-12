@@ -122,7 +122,7 @@ def _sello(iso: str | None) -> str:
         return "—"
     fecha, _, resto = iso.partition("T")
     a, m, d = fecha.split("-")
-    return f"{d}/{m}/{a} {resto[:5]}".strip()
+    return f"{d}-{m}-{a} {resto[:5]}".strip()
 
 
 def _titulo_seccion(pdf: FPDF, texto: str) -> None:

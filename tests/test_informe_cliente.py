@@ -253,7 +253,7 @@ def test_un_cierre_posterior_al_periodo_se_informa_como_pendiente(client, escena
         params={"desde": DESDE, "hasta": HASTA}).content)
     assert "Disco con errores" in texto
     # Y en el PDF no puede aparecer la fecha de cierre de febrero.
-    assert "02/02/2026" not in texto
+    assert "02-02-2026" not in texto
 
 
 def test_las_garantias_se_miden_desde_el_cierre_del_periodo(client, escenario):
@@ -324,7 +324,7 @@ def test_el_pdf_dice_lo_mismo_que_el_resumen(client, escenario):
         params={"desde": DESDE, "hasta": HASTA}).content)
 
     assert "Compulibra SRL" in texto
-    assert "01/01/2026" in texto and "31/01/2026" in texto
+    assert "01-01-2026" in texto and "31-01-2026" in texto
     # Los cuatro títulos de sección, que son el índice implícito del informe.
     for seccion in ("Resumen del período", "Detalle de incidencias",
                     "Parque de equipos", "Garantías", "Equipos en service"):
