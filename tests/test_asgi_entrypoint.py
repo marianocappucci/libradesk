@@ -18,15 +18,20 @@ Lo que se fija acá es el contrato del módulo, que es todo entorno:
    creada **viéndose sana**.
 3. Que una URL que no sea PostgreSQL se rechace.
 4. Que la app que expone sea la real y responda.
+5. Que el catch-all de la SPA **no se coma `/health`**, que es lo que permite
+   servir la salud en la raíz como el resto de la familia.
 
-No se prueba el montaje de la SPA (líneas 19-29): depende de que exista
+No se prueba el *montaje* de la SPA (líneas 19-29): depende de que exista
 `frontend/dist`, que el job de tests del CI no construye. Ese camino lo cubre
-el build de la imagen, que es donde el `dist` existe de verdad.
+el build de la imagen, que es donde el `dist` existe de verdad. Lo que sí se
+prueba (punto 5) es la **precedencia de rutas** frente a un catch-all
+equivalente, que es el mecanismo del que depende `/health`.
 """
 import importlib
 import sys
 
 import pytest
+from fastapi.responses import HTMLResponse
 from fastapi.testclient import TestClient
 
 
@@ -100,7 +105,45 @@ def test_la_app_que_expone_responde(importar_asgi, tmp_path, url_de_base):
     asgi = importar_asgi(ENV="development", DATA_DIR=tmp_path / "datos", DATABASE_URL=url_de_base)
 
     with TestClient(asgi.app, base_url="https://testserver") as c:
-        assert c.get("/api/health").status_code == 200
+        assert c.get("/health").status_code == 200
         # Y es la app completa, no un esqueleto: el login del producto entra.
         r = c.post("/auth/login", json={"username": "admin", "password": "admin"})
         assert r.status_code == 200, r.text
+
+
+def test_el_catch_all_de_la_spa_no_se_come_el_health(armar_cliente):
+    """🔴 `/health` le gana al catch-all de la SPA.
+
+    Es lo que hace posible servir la salud en la raíz como los otros cinco
+    productos, y también lo que mantenía invisible el desvío a `/api/health`:
+    con el `dist` horneado **cualquier** ruta devuelve 200 con el `index.html`,
+    así que un healthcheck que sólo mire el status da verde exista o no la
+    ruta. Medido contra `libradesk-demo` el 2026-08-12: las dos rutas daban
+    200 y sólo se distinguían parseando el cuerpo.
+
+    El catch-all se registra acá igual que en `app/asgi.py` en vez de importar
+    ese módulo, porque el suyo sólo se monta si existe `frontend/dist` y el job
+    de tests no lo construye. Lo que se fija es la precedencia: una ruta
+    explícita registrada en `create_app()` le gana a un catch-all registrado
+    después.
+
+    El assert de control —la ruta inventada **sí** cae en el `index.html`— no
+    es decorativo: sin él, un catch-all que no llegara a registrarse dejaría
+    este test en verde sin haber probado nada.
+    """
+    app, cliente = armar_cliente()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        del full_path
+        return HTMLResponse("<!doctype html><title>LibraDesk</title>")
+
+    control = cliente.get("/una-ruta-que-no-existe")
+    assert control.status_code == 200
+    assert control.headers["content-type"].startswith("text/html")
+
+    for ruta in ("/health", "/api/health"):
+        r = cliente.get(ruta)
+        assert r.status_code == 200, ruta
+        assert r.headers["content-type"].startswith("application/json"), ruta
+        assert r.json()["status"] == "ok", ruta

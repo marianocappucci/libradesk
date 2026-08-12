@@ -13,8 +13,19 @@ def _login(client) -> None:
     assert r.status_code == 200
 
 
-def test_health(client):
-    assert client.get("/api/health").status_code == 200
+@pytest.mark.parametrize("ruta", ["/health", "/api/health"])
+def test_health(client, ruta):
+    """Las dos rutas mientras dure el alias. Se asierta **el cuerpo**, no sólo
+    el 200: con la SPA horneada cualquier ruta inexistente devuelve 200 con el
+    `index.html`, así que un assert sobre el status no distingue una ruta viva
+    de una que no existe. Es el falso positivo que este producto ya pagó, y por
+    el que el healthcheck generado hace `json.load` del cuerpo desde LibraCore
+    v1.34.0. Ver `app/routers/health.py`."""
+    r = client.get(ruta)
+
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.json()["status"] == "ok"
 
 
 def test_login_and_me(client):
