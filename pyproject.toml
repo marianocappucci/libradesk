@@ -123,6 +123,16 @@ dependencies = [
     # `libracore.db.core.conectar()`, que abre contra cualquiera de los dos
     # motores sin estado global.
     "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.29.0",
+    # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
+    # `depositos` guardan unidades serializadas, no existencias-- y la decision
+    # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
+    # y VentaLibra, en vez de construirle un inventario propio. Comparte la base
+    # y la conexion de libracore, igual que remitos/presupuestos.
+    #
+    # v0.7.2 trae la transferencia entre depositos atomica y con guarda de
+    # disponibilidad, que es el caso central de este producto: el deposito
+    # central que abastece la camioneta del tecnico.
+    "libracommerce @ git+https://github.com/marianocappucci/libracommerce.git@v0.7.2",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
