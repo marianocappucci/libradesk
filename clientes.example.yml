@@ -27,8 +27,12 @@ services:
     mem_limit: 512m
     mem_reservation: 192m
     cpus: 1.0
+    # Mira el CUERPO y no el codigo HTTP: la SPA contesta 200 en cualquier
+    # ruta, asi que un `urlopen()` a secas da healthy con el backend caido.
+    # El detalle largo esta en el docker-compose.yml de dev; la verificacion
+    # por rotura, en tests/test_healthcheck_contenedor.py.
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/api/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
       interval: 30s
       timeout: 5s
       retries: 3
