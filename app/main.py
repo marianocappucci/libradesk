@@ -29,7 +29,8 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, facturacion, health, incidencias,
+    depositos, equipos, equipos_trabajo, facturacion, facturacion_config,
+    health, incidencias,
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
     reportes, sectores, servicios, tecnicos, users,
 )
@@ -42,6 +43,7 @@ from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
+from .services.facturacion_config import ConfiguracionFacturacion
 from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
@@ -165,6 +167,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # lo dice y el router contesta 409 — no hay una app distinta según haya o
     # no puente.
     app.state.puente_facturacion = PuenteFacturacion(sessions)
+    app.state.config_facturacion = ConfiguracionFacturacion(sessions)
     app.state.modules = module_repository
     app.state.auditoria = AuditoriaRepository(sessions)
     # Log de accesos (libraauth v0.8.0). Es opt-in por ausencia en el motor:
@@ -279,6 +282,15 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # remito es staff; quien decide que se le cobre al cliente, no.
     app.include_router(
         facturacion.router,
+        dependencies=[
+            Depends(require_admin), Depends(require_module("facturacion_externa")),
+        ],
+    )
+    # A qué destinos manda esta instancia y con qué credenciales. Mismas dos
+    # guardas que el puente, por el mismo motivo — y con más razón, porque acá
+    # se cargan credenciales de otro sistema.
+    app.include_router(
+        facturacion_config.router,
         dependencies=[
             Depends(require_admin), Depends(require_module("facturacion_externa")),
         ],
