@@ -22,6 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { SelectBuscable } from '@/components/select-buscable'
+import { MaterialesIncidencia } from '@/components/materiales-incidencia'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -547,6 +548,11 @@ export function IncidenciaDetalle() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Entre Actividad y las notas: el material se carga mientras se
+                trabaja el ticket, no al final. Se renderiza solo si la
+                instancia tiene el módulo `stock`. */}
+            <MaterialesIncidencia incidenciaId={incidencia.id} />
 
             <Card>
               <CardHeader><CardTitle className="text-base">Notas internas y resolución</CardTitle></CardHeader>
