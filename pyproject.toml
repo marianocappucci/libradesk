@@ -137,7 +137,7 @@ dependencies = [
     #   `libradesk-postgres` (con `image: postgres:16-alpine`) va declarado
     #   ANTES que `libradesk-dev`, y en un deploy real PostgreSQL arranco
     #   corriendo la app. Ahora el servicio se elige por `container_name`.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.32.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.33.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
