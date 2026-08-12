@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from libracore.db.clients import validar_cuit_no_duplicado
-from sqlalchemy import FetchedValue, Integer, String, Text, func, select
+from sqlalchemy import Integer, String, Text, func, select, text
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -51,20 +51,65 @@ class Cliente(Base):
     tipo_facturacion: Mapped[str] = mapped_column(String(20), nullable=False, default="por_servicio")
     # `Integer` y no `Boolean`: `libracore.db.clients` consulta `WHERE activo = 1`
     # y PostgreSQL no acepta un entero contra un BOOLEAN. Ver la revision `0017`.
-    activo: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # `server_default` y no sólo `default`: la columna tiene el default EN LA
+    # BASE (lo puso la revisión `0017`). Con sólo el default de Python, el
+    # modelo describe una tabla sin default y `create_all()` la crea así — o
+    # sea que el modelo y la cadena dejan de coincidir, y eso es exactamente
+    # lo que mide `test_alembic_construye_lo_mismo_que_create_all`.
+    activo: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     # El motor la declara TEXT, no TIMESTAMP — se pierde el tipo y la precision
     # de sub-segundo, y se paga para que la tabla sea la del motor sin
     # divergencias por producto. `_to_dict` la serializa mirando el tipo.
     #
-    # 🔴 `FetchedValue()` no es decorativo: la columna es NOT NULL y su valor lo
-    # pone el DEFAULT de la base. Sin esto SQLAlchemy la considera una columna
-    # comun sin valor y **manda NULL explicito** en el INSERT, que viola el NOT
-    # NULL; el `IntegrityError` resultante lo cazaba el `except` del router y lo
-    # reportaba como "email duplicado", que manda a buscar el problema al otro
-    # lado del producto.
-    fecha_creacion: Mapped[str | None] = mapped_column(
-        "created_at", Text, server_default=FetchedValue()
+    # 🔴 **El `server_default` no es decorativo, y son dos cosas distintas.**
+    #
+    # 1. La columna es NOT NULL y su valor lo pone la base. Sin declarar que
+    #    tiene default, SQLAlchemy la trata como una columna comun sin valor y
+    #    **manda NULL explicito** en el INSERT, que viola el NOT NULL. El
+    #    `IntegrityError` resultante lo cazaba el `except` del router y lo
+    #    reportaba como "email duplicado" — o sea que el sintoma mandaba a
+    #    buscar el problema al otro lado del producto.
+    # 2. Va el literal y no un `FetchedValue()`: el modelo tiene que poder
+    #    RECREAR la tabla igual a como la deja la cadena, no solo saber que la
+    #    base la completa. `FetchedValue()` no emite DDL, asi que `create_all()`
+    #    creaba la columna sin default y el modelo se separaba de la cadena.
+    #
+    # El literal es el que genera el adaptador PostgreSQL de LibraCore para su
+    # `TEXT DEFAULT (datetime('now'))`, y `nullable=False` viene del
+    # `fecha_creacion TIMESTAMP ... NOT NULL` de antes de la `0017`, que solo
+    # le cambio el tipo.
+    fecha_creacion: Mapped[str] = mapped_column(
+        "created_at", Text, nullable=False,
+        server_default=text(
+            "to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI:SS')"
+        ),
     )
+
+    # --- Las cinco columnas que son del motor y este producto no usa ---------
+    #
+    # `clients` es una tabla compartida: la revision `0017` la trajo con todo
+    # lo que LibraCore le pone, incluida la cuenta corriente y el espejo de
+    # LibraCommerce, que aca no se usan. Se declaran igual porque el modelo
+    # tiene que describir la tabla ENTERA: si no,
+    # `test_los_modelos_no_se_separan_de_la_cadena` ve columnas de mas y
+    # `--autogenerate` propone **borrarlas** -- que es como se destapo esto.
+    #
+    # Es el costo, previsto, de compartir la tabla: una columna nueva en el
+    # motor obliga a declararla aca tambien. Ver
+    # `wiki/analyses/clientes-transversal-familia-libra.md`.
+    auto_facturar: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    cc_resumen_auto: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    cc_resumen_frecuencia: Mapped[str] = mapped_column(
+        Text, nullable=False, default="mensual", server_default="mensual"
+    )
+    cc_resumen_ultimo_envio: Mapped[str | None] = mapped_column(Text, server_default="")
+    external_ref: Mapped[str | None] = mapped_column(Text)
 
 
 def _to_dict(c: Cliente) -> dict:

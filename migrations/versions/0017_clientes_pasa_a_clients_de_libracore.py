@@ -94,27 +94,41 @@ def upgrade():
             sa.Column(nombre, tipo, nullable=nullable, server_default=default),
         )
 
+    # 🔴 **Soltar el default ANTES de cambiar el tipo, en las dos columnas.**
+    # El `USING` convierte las FILAS, no el DEFAULT: PostgreSQL intenta castear
+    # el default viejo por su cuenta y aborta con "default for column ... cannot
+    # be cast automatically". No se ve en una base cuyo `activo` no tenga
+    # default —como las tres instancias de hoy—, y sí en una que lo tenga, que
+    # es el caso que ejercita `test_categorias`.
+    #
+    # Este error se cobró tres intentos: `created_at` en el `upgrade`, `activo`
+    # en el `downgrade` y `activo` acá. Por eso las cuatro conversiones de esta
+    # revisión siguen la misma secuencia: DROP DEFAULT → ALTER TYPE → SET
+    # DEFAULT.
+    op.execute("ALTER TABLE clients ALTER COLUMN activo DROP DEFAULT")
     op.alter_column(
         "clients", "activo",
         existing_type=sa.Boolean(), type_=sa.Integer(),
-        existing_nullable=False, server_default="1",
+        existing_nullable=False,
         postgresql_using="activo::integer",
     )
+    op.execute("ALTER TABLE clients ALTER COLUMN activo SET DEFAULT 1")
+
+    op.execute("ALTER TABLE clients ALTER COLUMN created_at DROP DEFAULT")
     op.alter_column(
         "clients", "created_at",
         existing_type=sa.DateTime(), type_=sa.Text(),
         existing_nullable=True,
         postgresql_using="to_char(created_at, 'YYYY-MM-DD HH24:MI:SS')",
     )
-    # 🔴 El default NO se convierte con el tipo: quedaba `CURRENT_TIMESTAMP`
-    # —un timestamp— sobre una columna ya TEXT, o sea que una fila nueva se
-    # guardaba como `2026-08-12 13:46:35.089981+00` mientras las migradas
-    # quedaban en `2026-08-12 13:46:35`. Dos formatos en la misma columna, y
-    # ninguno de los dos el del motor.
+    # El default nuevo: el mismo literal que genera el adaptador PostgreSQL de
+    # LibraCore para su `TEXT DEFAULT (datetime('now'))`, verificado contra la
+    # tabla `clients` de `contalibra-dev` ya migrada.
     #
-    # Se pone el mismo literal que genera el adaptador PostgreSQL de LibraCore
-    # para `TEXT DEFAULT (datetime('now'))`, verificado contra la tabla
-    # `clients` de `contalibra-dev` ya migrada.
+    # Sin esto —cuando el default viejo se dejaba puesto en vez de soltarlo—
+    # una fila nueva se guardaba como `2026-08-12 13:46:35.089981+00` mientras
+    # las migradas quedaban en `2026-08-12 13:46:35`: dos formatos en la misma
+    # columna, y ninguno de los dos el del motor.
     op.execute(
         "ALTER TABLE clients ALTER COLUMN created_at SET DEFAULT "
         "to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI:SS')"
@@ -152,12 +166,16 @@ def downgrade():
         ),
     )
     op.execute("ALTER TABLE clients ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP")
+    # Mismo caso que `created_at` justo arriba: el `USING` convierte las FILAS,
+    # no el DEFAULT. El `1` que dejo el `upgrade` no castea solo a boolean.
+    op.execute("ALTER TABLE clients ALTER COLUMN activo DROP DEFAULT")
     op.alter_column(
         "clients", "activo",
         existing_type=sa.Integer(), type_=sa.Boolean(),
-        existing_nullable=False, server_default=sa.text("true"),
+        existing_nullable=False,
         postgresql_using="activo::boolean",
     )
+    op.execute("ALTER TABLE clients ALTER COLUMN activo SET DEFAULT true")
 
     for nombre, *_ in reversed(_COLUMNAS_DEL_MOTOR):
         op.drop_column("clients", nombre)

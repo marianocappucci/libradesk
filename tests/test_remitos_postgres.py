@@ -19,7 +19,6 @@ con las tablas vacías estas mismas lecturas devuelven `[]` y pasan aunque el
 adaptador esté roto.
 """
 
-import os
 
 import pytest
 
@@ -27,7 +26,7 @@ import pytest
 ITEMS = [{"description": "Servicio tecnico", "qty": 2, "unit_price": 500.0}]
 
 
-def _preparar(url_o_ruta, data_dir, monkeypatch, limpiar_schema=False):
+def _preparar(url_o_ruta, data_dir, monkeypatch):
     """Monta la app entera y devuelve el módulo de servicios ya configurado.
 
     Se construye con `create_app()` y no llamando a `configure()` a secas, por
@@ -45,16 +44,10 @@ def _preparar(url_o_ruta, data_dir, monkeypatch, limpiar_schema=False):
     monkeypatch.setenv("ENV", "development")
     monkeypatch.setenv("DATA_DIR", str(data_dir))
 
-    if limpiar_schema:
-        # Slate limpia: este archivo siembra filas y el servicio de PostgreSQL
-        # del CI es uno solo para toda la suite.
-        import psycopg
-
-        with psycopg.connect(url_o_ruta.replace("postgresql+psycopg://", "postgresql://", 1)) as limpieza:
-            limpieza.execute("DROP SCHEMA public CASCADE")
-            limpieza.execute("CREATE SCHEMA public")
-            limpieza.commit()
-
+    # Ya no hace falta limpiar el schema a mano: la fixture `url_de_base` del
+    # conftest le da a cada test su propia base, copiada de la plantilla. Antes
+    # este archivo hacia `DROP SCHEMA public CASCADE` porque el PostgreSQL del
+    # CI era uno solo para toda la suite.
     from app.main import create_app
 
     create_app(url_o_ruta, str(data_dir))
@@ -117,10 +110,18 @@ def _comparable(valor):
 
 
 @pytest.fixture
-def resultados_sqlite(tmp_path, monkeypatch):
-    destino = tmp_path / "sqlite"
+def resultados(tmp_path, monkeypatch, url_de_base):
+    """El camino entero ejecutado contra la PostgreSQL propia del test.
+
+    Antes había dos fixtures —una SQLite y una PostgreSQL— y el test comparaba
+    los resultados entre motores. Con SQLite retirado (2026-08-12) esa
+    comparación se quedó sin premisa, así que lo que se asierta pasa a ser el
+    **valor esperado** contra el motor real, que es más fuerte: una comparación
+    entre dos motores pasa igual si los dos se equivocan del mismo modo.
+    """
+    destino = tmp_path / "datos"
     destino.mkdir()
-    rp_service = _preparar(f"sqlite:///{destino}/libradesk.db", destino, monkeypatch)
+    rp_service = _preparar(url_de_base, destino, monkeypatch)
     try:
         return _alta_y_lectura(rp_service)
     finally:
@@ -129,48 +130,47 @@ def resultados_sqlite(tmp_path, monkeypatch):
         libracore_core._database_url = None
 
 
-@pytest.fixture
-def resultados_postgres(tmp_path, monkeypatch):
-    url = os.environ.get("LIBRADESK_POSTGRES_URL")
-    if not url:
-        pytest.skip("LIBRADESK_POSTGRES_URL no configurada; el CI la provee")
-    destino = tmp_path / "postgres"
-    destino.mkdir()
-    rp_service = _preparar(url, destino, monkeypatch, limpiar_schema=True)
-    try:
-        return _alta_y_lectura(rp_service)
-    finally:
-        from libracore.db import core as libracore_core
-        libracore_core._db_path = None
-        libracore_core._database_url = None
-
-
-def test_alta_y_lecturas_dan_lo_mismo_en_los_dos_motores(resultados_sqlite, resultados_postgres):
+def test_el_camino_se_ejecuta_entero_contra_postgres(resultados):
     """El gate que faltaba: ejecutar el camino, no sólo arrancar la app.
 
-    Se comparan los resultados enteros y no un `len()`: una diferencia de
-    contenido entre motores es tan grave como una excepción y mucho más
-    difícil de ver después.
+    Los dos defectos que motivaron este archivo eran **de lectura y de
+    PostgreSQL**: `dict(fila)` moría porque el `Row` del adaptador no tenía
+    `keys()`, y `valid_until < date('now')` se traducía a `text < date`. Con
+    las tablas creadas y la app arrancando, los dos pasaban desapercibidos.
     """
-    diferencias = {
-        clave: (resultados_sqlite[clave], resultados_postgres[clave])
-        for clave in resultados_sqlite
-        if resultados_sqlite[clave] != resultados_postgres[clave]
-    }
-    assert not diferencias, f"difieren entre motores: {diferencias}"
+    remito = resultados["remito_creado"]
+    assert remito["client_name"] == "Cliente Uno"
+    # 2 x 500 + 21% = 1210. El total se calcula en el servidor, así que si la
+    # lectura devolviera basura esto no da.
+    assert remito["total"] == 1210.0
+
+    assert resultados["remito_get"] == remito
+
+    # El vencimiento automático corrió: el presupuesto con `valid_until` en el
+    # pasado quedó `vencido`, que es la consulta que fallaba con
+    # "operator does not exist: text < date".
+    vencidos = resultados["presupuestos_vencidos"]
+    assert len(vencidos) == 1
+    assert vencidos[0]["valid_until"] == "2026-01-15"
+    assert resultados["counts_by_estado"].get("vencido") == 1
 
 
-def test_las_lecturas_traen_filas_de_verdad(resultados_sqlite):
-    """Contraprueba. Sin esto, el test de arriba pasaría con todas las lecturas
-    devolviendo `[]` en los dos motores — que es exactamente cómo estas fallas
-    se escondieron durante el gate del piloto."""
-    assert len(resultados_sqlite["remitos_list"]) == 1
-    assert len(resultados_sqlite["presupuestos_list"]) == 2
-    assert resultados_sqlite["remito_get"] is not None
-    assert resultados_sqlite["remito_creado"]["total"] == pytest.approx(1210.0)
+def test_las_lecturas_traen_filas_de_verdad(resultados):
+    """Contraprueba: sin filas, las lecturas devuelven `[]` y el test de arriba
+    pasaría con el adaptador roto — que es exactamente cómo estas fallas se
+    escondieron durante el gate del piloto.
+
+    🔴 Hasta el 2026-08-12 esta contraprueba pedía la fixture **SQLite**, así
+    que nunca probó que las lecturas de PostgreSQL trajeran nada — y PostgreSQL
+    era el único motor donde el defecto existía.
+    """
+    assert len(resultados["remitos_list"]) == 1
+    assert len(resultados["presupuestos_list"]) == 2
+    assert resultados["remito_get"] is not None
+    assert resultados["remito_creado"]["total"] == pytest.approx(1210.0)
 
 
-def test_el_presupuesto_vencido_se_marca_solo_en_postgres(resultados_postgres):
+def test_el_presupuesto_vencido_se_marca_solo(resultados):
     """`valid_until < date('now')` es la consulta que fallaba con
     *"operator does not exist: text < date"*.
 
@@ -180,7 +180,7 @@ def test_el_presupuesto_vencido_se_marca_solo_en_postgres(resultados_postgres):
     diferencia entre probar que la consulta corrió y probar que hizo lo que
     tenía que hacer.
     """
-    estados = {p["number"]: p["status"] for p in resultados_postgres["presupuestos_list"]}
+    estados = {p["number"]: p["status"] for p in resultados["presupuestos_list"]}
     assert len(estados) == 2, f"se esperaban dos presupuestos, hay {estados}"
     assert sorted(estados.values()) == ["enviado", "vencido"], (
         f"el vencimiento automatico no discrimino por fecha: {estados}"

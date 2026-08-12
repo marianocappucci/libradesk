@@ -231,10 +231,14 @@ def test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja(client):
 
     assert ensure_schema(engine) == "upgrade"
 
+    # 🔴 De acá en adelante la tabla es `clients` y las columnas tienen los
+    # nombres del motor: la cadena llega hasta la revision `0017`, que renombro
+    # las dos cosas al adoptar el modulo de clientes de LibraCore. Mirar
+    # `clientes` despues del upgrade era mirar la tabla de antes del renombre.
     with engine.begin() as conn:
-        columnas = _columnas(conn, "clientes")
-        filas_despues = conn.execute(text("SELECT COUNT(*) FROM clientes")).scalar()
-    assert {"cuit", "domicilio"} <= columnas
+        columnas = _columnas(conn, "clients")
+        filas_despues = conn.execute(text("SELECT COUNT(*) FROM clients")).scalar()
+    assert {"cuit_dni", "address"} <= columnas
     # El cliente migrado no se pierde: queda con los campos nuevos en NULL.
     assert filas_despues == filas_antes
     ficha = client.get(f"/api/clientes/{cliente_id}").json()

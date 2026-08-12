@@ -144,7 +144,11 @@ def test_las_tablas_propias_siguen_estando(client):
     """El `init_schema` del motor no puede haber tocado el dominio propio."""
     from libracore.db import core as libracore_core
 
-    propias = {"clientes", "incidencias", "equipos", "depositos", "tecnicos"}
+    # `clients` y no `clientes`: la revision `0017` renombro la tabla al
+    # adoptar el modulo de clientes de LibraCore. Sigue siendo del dominio
+    # propio en lo que a este test le importa — que el `init_schema` del motor
+    # de inventario no se la lleve puesta.
+    propias = {"clients", "incidencias", "equipos", "depositos", "tecnicos"}
     del_motor = {"catalog_items", "locations", "stock_movements", "units"}
 
     with libracore_core.get_connection() as conn:
