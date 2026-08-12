@@ -53,7 +53,7 @@ from .services.servicios import ServicioRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
-from .services import inventario
+from .services import inventario, materiales
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -102,6 +102,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    `stock`: el plan enciende la funcionalidad, no ramifica el schema.
     #    Ver el comentario de `_PREMIUM` en `plans.py`.
     inventario.ensure_schema()
+
+    # 5. `incidencias_materiales`, el enganche entre el ticket y el stock. Va
+    #    despues del motor porque referencia sus `catalog_items`/`locations`
+    #    por id, y se escribe por ESTA conexion y no por SQLAlchemy: es lo
+    #    unico que hace atomico el par "material anotado + stock descontado".
+    materiales.ensure_schema()
 
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
