@@ -34,6 +34,7 @@ from .routers import (
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
     reportes, sectores, servicios, tecnicos, users,
 )
+from .routers import inventario as inventario_router
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
@@ -284,6 +285,14 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     )
     app.include_router(
         contratos.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
+    )
+    # Stock de consumibles. Un solo router para el catálogo, los depósitos, los
+    # movimientos Y los materiales de una incidencia: los cuatro cuelgan del
+    # mismo módulo porque sin stock no hay nada de lo cual descontar, así que
+    # separar el enganche del ticket ofrecería medio circuito.
+    app.include_router(
+        inventario_router.router,
+        dependencies=staff_or_admin + [Depends(require_module("stock"))],
     )
     app.include_router(
         remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]

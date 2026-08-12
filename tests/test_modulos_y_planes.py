@@ -34,7 +34,14 @@ RUTAS = {
     "remitos":      "/api/remitos",
     "presupuestos": "/api/presupuestos",
     "alquileres":   "/api/contratos",
+    "stock":        "/api/consumibles",
 }
+
+# El módulo `stock` monta UN router con dos familias de rutas: el inventario y
+# los materiales de una incidencia. La de arriba cubre la primera; ésta la
+# segunda, porque un gateo a medias dejaría un ticket anotando consumos contra
+# un inventario que el cliente no contrató.
+RUTA_MATERIALES = "/api/incidencias/{incidencia_id}/materiales"
 
 # El módulo `alquileres` monta DOS routers y el de arriba cubre uno solo. Éste
 # se chequea aparte para que el segundo no quede sin cubrir: un gateo a medias
@@ -151,6 +158,27 @@ def test_los_dos_routers_de_alquileres_van_juntos(client, destino_base):
     aplicar_plan_en_db(destino_base, "premium")
     assert client.get(RUTA_ACTIVOS).status_code == 200
     assert client.get(RUTAS["alquileres"]).status_code == 200
+
+
+def test_los_materiales_de_una_incidencia_van_con_el_stock(client, destino_base):
+    """El inventario y el consumo en el ticket cuelgan del mismo módulo.
+
+    Sin este test, gatear sólo el inventario pasaría desapercibido: `RUTAS`
+    cubre `/api/consumibles` y nadie miraría los materiales — que es la mitad
+    que le importa al técnico, y la que descuenta stock de verdad.
+    """
+    from plans import aplicar_plan_en_db
+
+    assert _existe_de_verdad(client, RUTA_MATERIALES), f"{RUTA_MATERIALES} ya no existe"
+
+    aplicar_plan_en_db(destino_base, "estandar")
+    _login(client)
+    assert client.get("/api/incidencias/1/materiales").status_code == 403
+    assert client.get(RUTAS["stock"]).status_code == 403
+
+    aplicar_plan_en_db(destino_base, "premium")
+    assert client.get("/api/incidencias/1/materiales").status_code == 200
+    assert client.get(RUTAS["stock"]).status_code == 200
 
 
 def test_aplicar_un_plan_inexistente_falla_fuerte(tmp_path):
