@@ -59,6 +59,15 @@ DESTINO_CONTALIBRA = "contalibra"
 DESTINO_SOS = "sos"
 DESTINOS = (DESTINO_CONTALIBRA, DESTINO_SOS)
 
+# Cómo se llama cada destino en la pantalla. Vive acá y no en el frontend
+# porque el que sabe a dónde manda esta instancia es el backend: con el nombre
+# escrito en el `.tsx`, la pantalla decía "Enviar a Contalibra" en una
+# instancia que manda a SOS.
+NOMBRES_DESTINO = {
+    DESTINO_CONTALIBRA: "Contalibra",
+    DESTINO_SOS: "SOS Contador",
+}
+
 # El header que espera `libraauth.session_auth.token_de_servicio_valido` del
 # otro lado. Se escribe acá y no se importa de libraauth para no atar el emisor
 # a una versión del motor de auth por una constante de una línea.
@@ -149,6 +158,11 @@ def destino() -> str:
     """
     elegido = (os.environ.get(DESTINO_ENV) or "").strip().lower()
     return elegido if elegido in DESTINOS else DESTINO_CONTALIBRA
+
+
+def nombre_destino() -> str:
+    """El nombre legible del destino, para mostrar en la pantalla."""
+    return NOMBRES_DESTINO[destino()]
 
 
 def esta_configurado() -> bool:

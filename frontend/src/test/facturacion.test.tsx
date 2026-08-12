@@ -42,7 +42,8 @@ function json(body: unknown, status = 200) {
 
 let posts: { url: string; body: unknown }[]
 
-function montar(items: unknown[], configurado = true, resultados: unknown[] = []) {
+function montar(items: unknown[], configurado = true, resultados: unknown[] = [],
+                destinoNombre = 'Contalibra') {
   posts = []
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const u = String(url)
@@ -51,7 +52,9 @@ function montar(items: unknown[], configurado = true, resultados: unknown[] = []
       return Promise.resolve(json({ resultados }))
     }
     if (u.includes('/api/facturacion/pendientes')) {
-      return Promise.resolve(json({ configurado, items }))
+      // `destino_nombre` lo manda el backend: la pantalla no sabe a dónde
+      // apunta la instancia y no tiene por qué adivinarlo.
+      return Promise.resolve(json({ configurado, destino_nombre: destinoNombre, items }))
     }
     return Promise.resolve(json({}))
   }))
@@ -77,6 +80,34 @@ describe('enviar a facturar', () => {
     await userEvent.click(screen.getAllByRole('checkbox')[0])
     const boton = await screen.findByRole('button', { name: /Enviar a Contalibra/i })
     expect(boton).toBeDisabled()
+  })
+
+  // 🔴 El destino lo decide la instancia, y la pantalla tiene que decir el que
+  // corresponde. Con el nombre escrito en el .tsx, una instancia que mandaba a
+  // SOS Contador seguía ofreciendo "Enviar a Contalibra" — reportado en
+  // producción el 2026-08-12, antes de que existiera este test.
+  it('nombra el destino que informa el backend, no uno fijo', async () => {
+    montar([REMITO], true, [], 'SOS Contador')
+    render(<Facturacion />)
+
+    expect(await screen.findByText(/bandeja de SOS Contador/i)).toBeInTheDocument()
+
+    // El botón sólo existe con algo elegido.
+    await userEvent.click((await screen.findAllByRole('checkbox'))[0])
+    expect(await screen.findByRole('button', { name: /Enviar a SOS Contador/i }))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Enviar a Contalibra/i })).toBeNull()
+  })
+
+  it('sin destino informado no inventa un nombre', async () => {
+    // Backend viejo que todavía no manda `destino_nombre`: la pantalla se
+    // degrada a un texto genérico, nunca a "undefined".
+    montar([REMITO], true, [], undefined as unknown as string)
+    render(<Facturacion />)
+
+    await userEvent.click((await screen.findAllByRole('checkbox'))[0])
+    const boton = await screen.findByRole('button', { name: /^Enviar a/i })
+    expect(boton.textContent).not.toMatch(/undefined/i)
   })
 
   it('manda lo elegido con su tipo y su id', async () => {

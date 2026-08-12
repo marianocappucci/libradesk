@@ -25,7 +25,9 @@ from ..services.facturacion_externa import (
     EnvioNoConfigurado,
     OrigenNoFacturable,
     PuenteFacturacion,
+    destino,
     esta_configurado,
+    nombre_destino,
 )
 from ..services.remitos_presupuestos import PresupuestoService, RemitoService
 
@@ -72,7 +74,12 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
     `configurado` es un booleano y **nada más**: la URL y el token no salen por
     la API ni enmascarados. Ver el docstring del servicio.
     """
-    return {"configurado": esta_configurado(), "envios": puente.listar()}
+    return {
+        "configurado": esta_configurado(),
+        "destino": destino(),
+        "destino_nombre": nombre_destino(),
+        "envios": puente.listar(),
+    }
 
 
 @router.get("/pendientes")
@@ -112,7 +119,12 @@ def pendientes(
         for p in presupuestos.list(limit=_TOPE)
         if p.get("status") in ESTADOS_PRESUPUESTO_FACTURABLES
     ]
-    return {"configurado": esta_configurado(), "items": filas}
+    return {
+        "configurado": esta_configurado(),
+        "destino": destino(),
+        "destino_nombre": nombre_destino(),
+        "items": filas,
+    }
 
 
 @router.post("/enviar")
@@ -134,9 +146,9 @@ def enviar(
     if not esta_configurado():
         raise HTTPException(
             409,
-            "Esta instancia no tiene configurado el enlace con Contalibra. "
-            "Se define en el entorno del contenedor al contratar los dos "
-            "sistemas.",
+            f"Esta instancia no tiene configurado el enlace con "
+            f"{nombre_destino()}. Se define en el entorno del contenedor al "
+            f"contratar los dos sistemas.",
         )
 
     resultados = []
