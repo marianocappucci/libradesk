@@ -71,11 +71,11 @@ _ESTADO_EQUIPO_LABEL = {
 def _fecha(valor: date | datetime | None) -> str:
     if valor is None:
         return ""
-    return valor.strftime("%d/%m/%Y")
+    return valor.strftime("%d-%m-%Y")
 
 
 def _iso_a_dmy(valor: str) -> str:
-    return f"{valor[8:10]}/{valor[5:7]}/{valor[0:4]}" if valor else ""
+    return f"{valor[8:10]}-{valor[5:7]}-{valor[0:4]}" if valor else ""
 
 
 class InformePDF(_TextoSeguroPDF):

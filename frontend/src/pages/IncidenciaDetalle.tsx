@@ -12,7 +12,7 @@ import {
   type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
   type Tecnico,
 } from '../api'
-import { deIsoALocal, deLocalAIso } from '@/lib/format'
+import { deIsoALocal, deLocalAIso, fechaHora } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,8 +47,7 @@ type TimelineEntry =
   | { tipo: 'reparacion'; fecha: string; data: Reparacion }
 
 function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+  return fechaHora(fecha)
 }
 
 export function IncidenciaDetalle() {

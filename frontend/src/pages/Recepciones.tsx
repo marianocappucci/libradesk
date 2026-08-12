@@ -36,14 +36,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_RECEPCION } from './recepciones-piezas'
 import { ClipboardCheck, PackageCheck, Printer, Plus, Trash2 } from 'lucide-react'
+import { fechaHora } from '@/lib/format'
 
 const NONE = '__none__'
 
 function sello(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('es-AR', {
-    dateStyle: 'short', timeStyle: 'short', hour12: false,
-  })
+  return fechaHora(iso)
 }
 
 type FormRecepcion = {
