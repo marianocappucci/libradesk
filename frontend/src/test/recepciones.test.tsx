@@ -11,7 +11,7 @@
 // 3. **Un equipo ya entregado no ofrece entregar ni borrar.** El backend lo
 //    rechaza, así que ofrecerlo sería ofrecer un 409.
 import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -176,6 +176,26 @@ describe('Recibir un equipo', () => {
     return { user, dialogo: await screen.findByRole('dialog') }
   }
 
+  /** Carga un campo de texto de una sola vez, en lugar de tecla por tecla.
+   *
+   *  `alta` es un `useState` de la PANTALLA, no del diálogo: cada tecla
+   *  vuelve a renderizar el listado, los dos diálogos y el de confirmación.
+   *  Medido bajo carga (la suite entera en paralelo), esa vuelta cuesta
+   *  ~150 ms, así que las 27 teclas que escribía este test eran ~4 s de los
+   *  ~4,6 s que tardaba — contra el timeout de 5 s de Vitest. Pasaba solo,
+   *  fallaba cuando la corrida estaba cargada, y el rojo aparecía en el
+   *  cambio de otro (este archivo no importa nada más que `Recepciones`).
+   *
+   *  Pegar es una acción de usuario real y dispara el mismo `onChange` sobre
+   *  el mismo input controlado; lo único que se pierde es el estado
+   *  intermedio entre letra y letra, que ningún test de este bloque afirma.
+   *  Donde el tecleo SÍ es el hecho a probar —el debounce del catálogo de
+   *  servicios— se sigue usando `type`. */
+  async function cargar(user: UserEvent, campo: HTMLElement, texto: string) {
+    await user.click(campo)
+    await user.paste(texto)
+  }
+
   it('manda los campos del pedido y NO manda cadenas vacías', async () => {
     const { user, dialogo } = await abrirAlta()
 
@@ -183,11 +203,11 @@ describe('Recibir un equipo', () => {
     await user.click(await within(await screen.findByRole('listbox'))
       .findByRole('option', { name: /Estudio Sur/ }))
 
-    await user.type(within(dialogo).getByLabelText('Tipo'), 'Notebook')
-    await user.type(within(dialogo).getByLabelText('Falla declarada por el cliente'),
-                    'No enciende')
-    await user.type(within(dialogo).getByLabelText('Accesorios entregados'),
-                    'Cargador')
+    await cargar(user, within(dialogo).getByLabelText('Tipo'), 'Notebook')
+    await cargar(user, within(dialogo).getByLabelText('Falla declarada por el cliente'),
+                 'No enciende')
+    await cargar(user, within(dialogo).getByLabelText('Accesorios entregados'),
+                 'Cargador')
     await user.click(within(dialogo).getByRole('button', { name: /Recibir e imprimir/ }))
 
     await waitFor(() => {

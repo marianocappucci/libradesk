@@ -13,7 +13,7 @@
 // 4. Si el catálogo falla, se sigue pudiendo cargar el comprobante a mano.
 import { render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import userEvent from '@testing-library/user-event'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Cliente } from '../api'
@@ -95,15 +95,44 @@ function montar() {
   return { leer: () => ultimo }
 }
 
+/** Carga el campo de una sola vez, en lugar de tecla por tecla.
+ *
+ *  El formulario es controlado y `espia` corre en cada render, así que cada
+ *  tecla vuelve a renderizar el `ComprobanteForm` entero. Medido bajo carga
+ *  (la suite entera en paralelo) eso cuesta ~150 ms por tecla: las 28 letras
+ *  de "Algo que no está en la lista" eran ~4 s de los ~4,6 s que tardaba el
+ *  test, contra el timeout de 5 s de Vitest. Aislado pasaba siempre; en la
+ *  corrida completa fallaba de a ratos y el rojo le aparecía a cualquiera.
+ *
+ *  Pegar dispara el mismo `onChange` del mismo input, que es lo único que
+ *  mira el `debounce` del catálogo. El tecleo se conserva donde ES el hecho
+ *  a probar: "agrupa lo que se escribe seguido en una sola consulta". */
+async function cargar(usuario: UserEvent, campo: HTMLElement, texto: string) {
+  await usuario.click(campo)
+  await usuario.paste(texto)
+}
+
+/** El catálogo se consulta 250 ms después de la última tecla. Estos tests
+ *  afirman lo que pasa DESPUÉS de esa consulta, así que hay que darle la
+ *  vuelta completa: sin esto se estaría afirmando sobre un formulario al que
+ *  el catálogo todavía no tuvo ocasión de pisarle nada. */
+const ESPERA_DEBOUNCE = 350
+const dejarQueElCatalogoConteste = () =>
+  new Promise((r) => setTimeout(r, ESPERA_DEBOUNCE))
+
 
 describe('🔴 El campo sigue siendo libre', () => {
   it('se puede escribir algo que no está en el catálogo y queda tal cual', async () => {
     const { leer } = montar()
     const usuario = userEvent.setup()
 
-    const campo = screen.getByLabelText(/Descripción del ítem 1/)
-    await usuario.type(campo, 'Algo que no está en la lista')
+    await cargar(usuario, screen.getByLabelText(/Descripción del ítem 1/),
+                 'Algo que no está en la lista')
 
+    // Antes esta espera era implícita: escribir 28 letras tardaba más que el
+    // debounce, así que el catálogo alcanzaba a contestar de casualidad. Ahora
+    // es explícita, que es lo que el test siempre quiso decir.
+    await dejarQueElCatalogoConteste()
     expect(leer().items[0].description).toBe('Algo que no está en la lista')
   })
 
@@ -113,7 +142,7 @@ describe('🔴 El campo sigue siendo libre', () => {
 
     await usuario.type(screen.getByLabelText(/Descripción del ítem 1/), 'M')
 
-    await new Promise((r) => setTimeout(r, 350))
+    await dejarQueElCatalogoConteste()
     expect(consultas).toHaveLength(0)
     expect(screen.queryByRole('listbox')).toBeNull()
   })
@@ -123,9 +152,10 @@ describe('🔴 El campo sigue siendo libre', () => {
     const { leer } = montar()
     const usuario = userEvent.setup()
 
-    await usuario.type(screen.getByLabelText(/Descripción del ítem 1/), 'Mantenimiento')
+    await cargar(usuario, screen.getByLabelText(/Descripción del ítem 1/),
+                 'Mantenimiento')
 
-    await new Promise((r) => setTimeout(r, 350))
+    await dejarQueElCatalogoConteste()
     expect(screen.queryByRole('listbox')).toBeNull()
     expect(leer().items[0].description).toBe('Mantenimiento')
   })
