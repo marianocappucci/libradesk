@@ -3,9 +3,14 @@ estudio contable del cliente.
 
 Mismo principio que el puente a Contalibra (`facturacion_externa.py`):
 **LibraDesk no factura y no va a facturar.** Manda el comprobante con
-`obtienecae: false`, que en SOS lo deja en la bandeja de **borradores**, sin CAE
-y sin numeración fiscal ante ARCA. El contador lo revisa y emite. Lo peor que
-puede pasar de este lado es dejar un borrador de más, que se descarta.
+`obtienecae: false`, que lo deja cargado **sin CAE y sin numeración fiscal ante
+ARCA**. El contador lo revisa y emite. Lo peor que puede pasar de este lado es
+dejar un comprobante de más, que se descarta.
+
+> El comprobante **no** queda en el listado de `borradores` de SOS, como se
+> supuso al principio: aparece en el de **facturas**, con el CAE vacío
+> (verificado el 2026-08-12 con un envío real). Es donde el contador lo tiene
+> que buscar, y se distingue de las emitidas justamente por no tener CAE.
 
 ## Lo que hace distinto a este adaptador
 
@@ -481,8 +486,8 @@ class AdaptadorSOS:
             "puntoventa": int(cfg["puntoventa"]),
             "numero": numero,
             "numerohasta": None,
-            # 🔴 El corazón del diseño: `false` deja el comprobante en
-            # borradores para que lo emita el contador. **Nunca poner `true`
+            # 🔴 El corazón del diseño: `false` deja el comprobante cargado y
+            # sin emitir, para que lo emita el contador. **Nunca poner `true`
             # acá**: pedir el CAE es lo único irreversible de todo el circuito,
             # y no es una decisión de LibraDesk.
             "obtienecae": False,

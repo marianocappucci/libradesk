@@ -128,6 +128,12 @@ class EnvioFacturacion(Base):
     # Declarar sólo uno hace que una base creada por `create_all()` —el camino
     # de una instancia nueva— no coincida con una creada por la migración.
     origen_tipo: Mapped[str] = mapped_column(String(30), default=ORIGEN_REMITO)
+    # A dónde se mandó. **No entra en la clave única**: la regla sigue siendo
+    # un comprobante = un envío. Está para poder mostrarlo ahora que hay más de
+    # un destino posible, no para permitir mandar el mismo dos veces.
+    destino: Mapped[str] = mapped_column(
+        String(30), default=DESTINO_CONTALIBRA, server_default=DESTINO_CONTALIBRA,
+    )
     origen_id: Mapped[int] = mapped_column()
     estado: Mapped[str] = mapped_column(
         String(20), default=ESTADO_ENVIADO, server_default=ESTADO_ENVIADO, index=True,
@@ -273,6 +279,8 @@ class PuenteFacturacion:
             "id": fila.id,
             "origen_tipo": fila.origen_tipo,
             "origen_id": fila.origen_id,
+            "destino": fila.destino,
+            "destino_nombre": NOMBRES_DESTINO.get(fila.destino, fila.destino),
             "estado": fila.estado,
             "comprobante_remoto_id": fila.comprobante_remoto_id,
             "detalle": fila.detalle,
@@ -283,7 +291,8 @@ class PuenteFacturacion:
     # ── Escritura ────────────────────────────────────────────────────────────
 
     def _registrar(self, origen_tipo: str, origen_id: int, estado: str,
-                   detalle: str = "", comprobante_remoto_id: int | None = None) -> dict:
+                   detalle: str = "", comprobante_remoto_id: int | None = None,
+                   destino_usado: str | None = None) -> dict:
         with self.session_factory.begin() as session:
             fila = session.scalar(
                 select(EnvioFacturacion).where(
@@ -292,16 +301,18 @@ class PuenteFacturacion:
                 )
             )
             ahora = datetime.now()
+            destino_usado = destino_usado or destino()
             if fila is None:
                 fila = EnvioFacturacion(
                     origen_tipo=origen_tipo, origen_id=origen_id, estado=estado,
                     detalle=detalle[:500], comprobante_remoto_id=comprobante_remoto_id,
-                    enviado_at=ahora, actualizado_at=ahora,
+                    destino=destino_usado, enviado_at=ahora, actualizado_at=ahora,
                 )
                 session.add(fila)
             else:
                 fila.estado = estado
                 fila.detalle = detalle[:500]
+                fila.destino = destino_usado
                 # El id remoto no se pisa con `None`: un reintento que falla no
                 # tiene por qué borrar el dato con el que después se consulta
                 # en qué quedó el envío que sí llegó.

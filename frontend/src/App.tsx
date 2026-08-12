@@ -29,7 +29,7 @@ import { Facturacion } from './pages/Facturacion'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
 import {
-  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionProveedores,
+  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion, ConfiguracionProveedores,
   ConfiguracionServicios,
 } from './pages/Configuracion'
 import { Usuarios } from './pages/Usuarios'
@@ -97,6 +97,7 @@ export default function App() {
       <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
       <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
       <Route path="/configuracion/servicios" element={<ProtectedRoute><ConfiguracionServicios /></ProtectedRoute>} />
+      <Route path="/configuracion/facturacion" element={<ProtectedRoute><ConfiguracionFacturacion /></ProtectedRoute>} />
       <Route path="/configuracion/datos" element={<ProtectedRoute><ConfiguracionDatos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       {/* El gateo real es del backend (`require_admin` en `/api/logs`): acá
