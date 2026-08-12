@@ -290,7 +290,7 @@ class IncidenciaRepository:
 
             actividad = [
                 {
-                    "fecha": a.fecha.strftime("%d/%m/%Y %H:%M") if a.fecha else "—",
+                    "fecha": a.fecha.strftime("%d-%m-%Y %H:%M") if a.fecha else "—",
                     "descripcion": a.descripcion,
                 }
                 for a in session.execute(
@@ -312,10 +312,10 @@ class IncidenciaRepository:
                 "prioridad_label": PRIORIDAD_LABELS.get(i.prioridad, i.prioridad),
                 "modalidad_label": MODALIDAD_LABELS.get(i.modalidad or "", "—"),
                 "fecha_creacion": (
-                    i.fecha_creacion.strftime("%d/%m/%Y %H:%M") if i.fecha_creacion else "—"
+                    i.fecha_creacion.strftime("%d-%m-%Y %H:%M") if i.fecha_creacion else "—"
                 ),
                 "fecha_cierre": (
-                    i.fecha_cierre.strftime("%d/%m/%Y %H:%M") if i.fecha_cierre else "—"
+                    i.fecha_cierre.strftime("%d-%m-%Y %H:%M") if i.fecha_cierre else "—"
                 ),
                 "categoria": categoria.nombre if categoria is not None else None,
                 "horas": str(i.horas_invertidas) if i.horas_invertidas is not None else None,

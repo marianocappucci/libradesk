@@ -387,7 +387,7 @@ class IngresoRepository:
             if i.fecha_entrega is not None:
                 raise ValueError(
                     f"El equipo ya se entregó el "
-                    f"{i.fecha_entrega.strftime('%d/%m/%Y %H:%M')} con el "
+                    f"{i.fecha_entrega.strftime('%d-%m-%Y %H:%M')} con el "
                     f"comprobante {i.numero_entrega}."
                 )
 

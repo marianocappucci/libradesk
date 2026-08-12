@@ -140,7 +140,7 @@ def validar_agenda(session, incidencia) -> None:
         otro = choques[0]
         raise Superpuesto(
             f"El equipo ya tiene el trabajo #{otro.id} entre "
-            f"{otro.starts_at.strftime('%d/%m %H:%M')} y "
+            f"{otro.starts_at.strftime('%d-%m %H:%M')} y "
             f"{otro.ends_at.strftime('%H:%M')}."
         )
 

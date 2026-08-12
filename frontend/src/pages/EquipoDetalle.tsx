@@ -27,6 +27,7 @@ import {
   AlertTriangle, ArrowLeft, Building2, History, MapPin, Monitor, ShieldCheck,
   Ticket, Wrench,
 } from 'lucide-react'
+import { fechaDeDate, fechaHora } from '@/lib/format'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -37,12 +38,11 @@ function formatFecha(fecha: string | null): string {
   const d = soloFecha
     ? new Date(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10)))
     : new Date(fecha)
-  return d.toLocaleDateString('es-AR', { dateStyle: 'short' })
+  return fechaDeDate(d)
 }
 
 function formatFechaHora(fecha: string | null): string {
-  if (!fecha) return '—'
-  return new Date(fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+  return fechaHora(fecha)
 }
 
 function pesos(monto: number): string {

@@ -205,4 +205,4 @@ def _fecha(valor: str | None) -> str:
         dt = datetime.fromisoformat(valor)
     except ValueError:
         return valor
-    return dt.strftime("%d/%m/%Y %H:%M") if "T" in valor else dt.strftime("%d/%m/%Y")
+    return dt.strftime("%d-%m-%Y %H:%M") if "T" in valor else dt.strftime("%d-%m-%Y")

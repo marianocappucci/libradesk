@@ -59,8 +59,29 @@ _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 # módulo prendido y el puente apagado igual, porque sin la configuración de
 # emparejamiento no hay a dónde mandar nada — ver
 # `app/services/facturacion_externa.py`.
+#
+# `stock` (2026-08-12) es el inventario de consumibles, y sale de LibraCommerce
+# en vez de código propio — ver `app/services/inventario.py`.
+# Va en premium con el mismo criterio que `alquileres`: **un LibraDesk sin
+# stock sigue siendo LibraDesk**. Una mesa de ayuda que sólo diagnostica no
+# mueve materiales; la que sí los mueve hace algo más que soporte.
+#
+# ⚠️ El motor se adopta SIEMPRE —sus tablas se crean en toda instancia, la
+# contrate o no— y lo que el plan enciende es el módulo. La asimetría es a
+# propósito: ramificar el schema por plan dejaría dos formas distintas de base
+# en producción, y ni el backup ni las migraciones podrían asumir cuál tienen
+# delante.
+#
+# ⚠️ Y una consecuencia de agregar un módulo acá: `ModuleRepository.
+# ensure_seeded()` inserta en el próximo arranque toda entrada nueva de
+# `TODOS_LOS_MODULOS` **con `habilitado=True`**, en todas las instancias. Con
+# `alquileres` eso le hizo aparecer una entrada de menú a un cliente que no la
+# había pedido (ver la página de LibraDesk en el wiki). Hoy `stock` no tiene
+# router ni pantalla, así que la fila se crea y no cambia nada visible; **el
+# día que se construya la UI hay que decidir a quién se le enciende antes de
+# desplegarla**, no después.
 _PREMIUM = _ESTANDAR | {
-    "remitos", "presupuestos", "alquileres", "facturacion_externa",
+    "remitos", "presupuestos", "alquileres", "facturacion_externa", "stock",
 }
 
 PLAN_MODULOS = {

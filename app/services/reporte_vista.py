@@ -68,7 +68,7 @@ FACT_MARCA = {"pendiente_cobro": "urgente", "facturada": "ok", "sin_facturar": "
 
 
 def fmt_fecha(value) -> str:
-    """dd/mm/aa, o '—' si no hay valor. Acepta datetime, date o el ISO string
+    """dd-mm-aa, o '—' si no hay valor. Acepta datetime, date o el ISO string
     que devuelven los repositories. Es el mismo formato en las dos salidas: si
     la pantalla formateara por su cuenta, imprimir y bajar el Excel darian dos
     fechas distintas para la misma fila."""
@@ -80,7 +80,7 @@ def fmt_fecha(value) -> str:
         except ValueError:
             return value
     if hasattr(value, "strftime"):
-        return value.strftime("%d/%m/%y")
+        return value.strftime("%d-%m-%y")
     return str(value)
 
 
