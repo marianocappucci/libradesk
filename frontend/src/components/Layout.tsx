@@ -36,11 +36,13 @@ export const Layout = createLayout({
         { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
         { to: '/clientes', label: 'Clientes', icon: Users },
         { to: '/equipos', label: 'Equipos', icon: Monitor },
-        // "de equipos" agregado al label: desde que existe el stock hay DOS
-        // cosas que se llaman depósito —dónde está un equipo serializado y
-        // cuántas unidades hay de un consumible— y el menú era el único lugar
-        // donde no se distinguían.
-        { to: '/depositos', label: 'Depósitos de equipos', icon: Building2 },
+        // "Depósitos" a secas, y la desambiguación con los de stock la hace el
+        // **grupo**: éste cuelga de Mesa de ayuda y el otro de Inventario, con
+        // el encabezado del sector a la vista. El label decía "de equipos"
+        // desde que apareció el stock, pero la pantalla se titula por su
+        // pestaña y ninguna de las dos se llama así: el menú prometía una
+        // pantalla que no existía con ese nombre.
+        { to: '/depositos', label: 'Depósitos', icon: Building2 },
         // Recepción antes que Reparaciones: es el orden real del mostrador. El
         // equipo ENTRA desde el cliente y recién después, si hace falta, SALE
         // hacia un proveedor.

@@ -75,7 +75,7 @@ function conSesion() {
 }
 
 function montar(ruta: string) {
-  render(
+  return render(
     <MemoryRouter initialEntries={[ruta]}>
       <AuthProvider>
         <App />
@@ -167,6 +167,57 @@ describe('Proveedores vive en Compras, no en Configuracion', () => {
     montar('/configuracion/proveedores')
     await screen.findAllByRole('link', { name: 'Proveedores' })
     expect(screen.queryByRole('link', { name: /Datos \/ Backup/ })).not.toBeInTheDocument()
+  })
+})
+
+// Observacion del usuario (2026-08-13), del mismo barrido que destapo
+// Proveedores: el item decia "Depositos de equipos" y la pantalla se titulaba
+// "Depositos de la empresa". Ninguna de las dos pestañas se llamaba como el
+// menu, porque el titulo cambiaba con la pestaña y el menu tenia que nombrar a
+// las dos a la vez.
+//
+// Ahora las dos se titulan "Depositos" -- la seccion -- y el conmutador dice en
+// cual estas. Mismo patron que Configuracion.
+describe('Depositos: el menu se llama como la pantalla', () => {
+  it('el item dice "Depositos" y apunta a /depositos', async () => {
+    conSesion()
+    montar('/depositos')
+    const links = await screen.findAllByRole('link', { name: 'Depósitos' })
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/depositos'])
+    // Y no quedo el label viejo en ningun lado del sidebar.
+    expect(screen.queryByRole('link', { name: /Depósitos de equipos/ })).not.toBeInTheDocument()
+  })
+
+  it('las dos pestañas se titulan igual, y el conmutador las distingue', async () => {
+    conSesion()
+    const { unmount } = montar('/depositos')
+    expect((await screen.findAllByRole('heading', { name: 'Depósitos' })).length).toBe(1)
+    expect(screen.getByRole('link', { name: 'De la empresa' }))
+      .toHaveAttribute('aria-current', 'page')
+    unmount()
+
+    montar('/depositos/clientes')
+    expect((await screen.findAllByRole('heading', { name: 'Depósitos' })).length).toBe(1)
+    expect(screen.getByRole('link', { name: 'De clientes' }))
+      .toHaveAttribute('aria-current', 'page')
+    // El que estaba activo en la otra pestaña, aca no lo esta: si las dos
+    // quedaran marcadas, titular igual las dos pantallas dejaria de tener
+    // forma de saber donde estas.
+    expect(screen.getByRole('link', { name: 'De la empresa' }))
+      .not.toHaveAttribute('aria-current')
+  })
+
+  it('"Depositos de stock" sigue siendo otro item, en otro grupo', async () => {
+    // Es la razon por la que el label decia "de equipos". La desambiguacion
+    // ahora la hace el grupo (Mesa de ayuda vs Inventario), pero los dos items
+    // tienen que seguir existiendo y llevar a rutas distintas.
+    conSesion()
+    montar('/depositos')
+    // Se espera por el item de stock y no por el de equipos: si esperara por
+    // "Depositos" a secas, este test se caeria por el label del OTRO item y no
+    // probaria nada sobre este.
+    expect(await screen.findByRole('link', { name: /Depósitos de stock/ }))
+      .toHaveAttribute('href', '/depositos-stock')
   })
 })
 

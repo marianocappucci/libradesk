@@ -25,7 +25,7 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, Plus, Users } from 'lucide-react'
+import { Building2, Check, Plus, Users } from 'lucide-react'
 
 const TODOS = '__todos__'
 
@@ -137,8 +137,11 @@ export function DepositosClientes() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Mismo título e ícono que la otra pestaña, a propósito: las dos son
+            "Depósitos" y quien dice en cuál estás es el conmutador de abajo.
+            Un ícono distinto con el mismo título se lee como otra pantalla. */}
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Users className="size-5" />Depósitos de clientes
+          <Building2 className="size-5" />Depósitos
         </h2>
         <Button onClick={abrirNuevo}><Plus />Nuevo depósito</Button>
       </div>

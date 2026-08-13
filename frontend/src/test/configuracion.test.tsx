@@ -180,7 +180,10 @@ describe('El conmutador es el mismo que el de depósitos', () => {
     // `grid gap-4` en las dos— y el test pasaba por el motivo equivocado:
     // seguía en verde aunque se duplicara el control.
     const { unmount } = render(<Depositos />, '/depositos')
-    await screen.findByText('Depósitos de la empresa')
+    // Se espera por la pestaña y no por el título: desde el 2026-08-13 las dos
+    // pantallas de depósitos se titulan igual ("Depósitos"), así que el título
+    // ya no identifica a ésta. Y la pestaña es justo lo que este test mide.
+    await screen.findByRole('link', { name: 'De la empresa' })
     const claseDepositos = pestania('De la empresa').parentElement!.className
     expect(claseDepositos).toContain('rounded-md')
     unmount()
