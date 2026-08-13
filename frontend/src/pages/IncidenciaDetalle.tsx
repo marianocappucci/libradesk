@@ -209,6 +209,11 @@ export function IncidenciaDetalle() {
         categoria_id: actualizado.categoria_id,
         titulo: actualizado.titulo,
         descripcion: actualizado.descripcion,
+        // Por el mismo motivo que los tres de la agenda, unas líneas más
+        // arriba: sin estas dos, cambiarle la prioridad a un ticket le borraba
+        // el N° del comprobante firmado y quién había llamado.
+        nro_cds: actualizado.nro_cds,
+        reclamante: actualizado.reclamante,
         estado: actualizado.estado,
         prioridad: actualizado.prioridad,
         horas_invertidas: actualizado.horas_invertidas,
@@ -785,6 +790,35 @@ export function IncidenciaDetalle() {
                   onBlur={(e) => {
                     const valor = e.target.value ? Number(e.target.value) : null
                     if (valor !== incidencia.horas_invertidas) actualizarCampo({ horas_invertidas: valor })
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                {/* El N° del Comprobante de Servicios: el talonario preimpreso
+                    que el técnico completa en el lugar y el cliente firma.
+                    Tipearlo acá es lo que ata esa conformidad con el ticket.
+                    Va pegado a las horas porque es el mismo momento de carga —
+                    se vuelve de la visita con el papel en la mano. */}
+                <Label htmlFor="nro-cds">N° CDS</Label>
+                <Input
+                  id="nro-cds"
+                  placeholder="0001-00041996"
+                  defaultValue={incidencia.nro_cds ?? ''}
+                  onBlur={(e) => {
+                    const valor = e.target.value.trim() || null
+                    if (valor !== incidencia.nro_cds) actualizarCampo({ nro_cds: valor })
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="reclamante">Reclamante</Label>
+                <Input
+                  id="reclamante"
+                  placeholder="Quién llamó"
+                  defaultValue={incidencia.reclamante ?? ''}
+                  onBlur={(e) => {
+                    const valor = e.target.value.trim() || null
+                    if (valor !== incidencia.reclamante) actualizarCampo({ reclamante: valor })
                   }}
                 />
               </div>

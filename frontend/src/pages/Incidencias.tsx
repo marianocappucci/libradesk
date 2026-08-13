@@ -216,6 +216,20 @@ export function Incidencias() {
   ), [incidencias, categorias, filtroEstado, filtroPrioridad, filtroCliente, filtroCategoria])
 
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
+    {
+      // Antes del título y con ancho fijo: es el número del papel firmado, y
+      // la pregunta que se le hace a esta grilla teniendo el talonario en la
+      // mano es "¿qué reclamo es éste?". Ordenable porque el talonario es
+      // correlativo, así que ordenar por CDS es ordenar por orden de visita.
+      accessorKey: 'nro_cds',
+      header: sortableHeader('N° CDS'),
+      size: 120, minSize: 100,
+      cell: ({ row }) => row.original.nro_cds
+        ? <span className="tabular-nums">{row.original.nro_cds}</span>
+        // Guión y no vacío: distingue "sin comprobante" de una celda que no
+        // cargó.
+        : <span className="text-muted-foreground">—</span>,
+    },
     { accessorKey: 'titulo', header: sortableHeader('Título'), size: 240, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.titulo}>{row.original.titulo}</span> },
     { accessorKey: 'cliente_id', header: 'Cliente', size: 150, minSize: 110, cell: ({ row }) => clienteNombre(row.original.cliente_id) },
     { accessorKey: 'equipo_id', header: 'Equipo', size: 130, minSize: 100, cell: ({ row }) => equipoNombre(row.original.equipo_id) },

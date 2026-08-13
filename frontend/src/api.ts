@@ -519,6 +519,12 @@ export type Incidencia = {
   equipo_trabajo_id: number | null
   titulo: string
   descripcion: string | null
+  /** El número del talonario de Comprobante de Servicios (`0001-00041996`):
+   *  la llave entre el papel que firma el cliente y este ticket. Null en los
+   *  reclamos resueltos en remoto, que no tienen comprobante. */
+  nro_cds: string | null
+  /** Quién llamó, cuando no es el contacto habitual del cliente. */
+  reclamante: string | null
   estado: EstadoIncidencia
   prioridad: PrioridadIncidencia
   horas_invertidas: number | null

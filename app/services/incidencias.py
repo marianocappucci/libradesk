@@ -17,6 +17,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+# Sin riesgo de import circular: `materiales` no importa nada del producto,
+# solo los dos motores.
+from . import materiales
 
 ESTADOS_VALIDOS = ("abierto", "en_progreso", "resuelta", "cerrado")
 PRIORIDADES_VALIDAS = ("alta", "media", "baja")
@@ -101,6 +104,15 @@ class Incidencia(Base):
     )
     titulo: Mapped[str] = mapped_column(String(255), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
+    # El numero del talonario preimpreso de Comprobante de Servicios --el
+    # papel que el tecnico completa en el lugar y el cliente firma--. Es la
+    # unica llave entre esa conformidad y este ticket. String y no entero:
+    # `0001-00041996` es un formato de imprenta, no una secuencia de este
+    # sistema. Ver la revision `0019`.
+    nro_cds: Mapped[str | None] = mapped_column(String(30), index=True)
+    # Quien llamo, distinto del cliente. Texto libre porque es lo que hay: un
+    # nombre de pila anotado por quien atiende el telefono.
+    reclamante: Mapped[str | None] = mapped_column(String(120))
     estado: Mapped[str] = mapped_column(String(50), nullable=False, default="abierto", index=True)
     prioridad: Mapped[str] = mapped_column(String(20), nullable=False, default="media")
     horas_invertidas: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
@@ -152,6 +164,8 @@ def _to_dict(i: Incidencia) -> dict:
         "categoria_id": i.categoria_id,
         "titulo": i.titulo,
         "descripcion": i.descripcion,
+        "nro_cds": i.nro_cds,
+        "reclamante": i.reclamante,
         "estado": i.estado,
         "prioridad": i.prioridad,
         "horas_invertidas": float(i.horas_invertidas) if i.horas_invertidas is not None else None,
@@ -329,9 +343,24 @@ class IncidenciaRepository:
                 "vendedor": persona(i.vendedor_id),
                 "titulo": i.titulo,
                 "descripcion": i.descripcion,
+                "nro_cds": i.nro_cds,
+                "reclamante": i.reclamante,
                 "resolucion": i.resolucion,
                 "notas": i.notas,
                 "actividad": actividad,
+                # Los materiales consumidos, que es la columna "Materiales
+                # Utilizados" del comprobante en papel de Lagrace.
+                #
+                # 🔴 Se leen por `materiales.listar()` y NO por SQLAlchemy: esa
+                # tabla la escribe la conexion de LibraCore, no el ORM (es lo
+                # que hace atomico el par "material anotado + stock
+                # descontado"). Consultarla desde esta sesion daria una lectura
+                # de otra transaccion.
+                #
+                # Sin `incluir_devueltos`: lo que se devolvio al deposito no se
+                # uso, y un comprobante que lo liste esta cobrando algo que
+                # volvio.
+                "materiales": materiales.listar(i.id),
             }
 
     def update(self, incidencia_id: int, usuario_actor: str | None = None, **data) -> dict:
