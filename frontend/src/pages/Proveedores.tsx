@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError, type Proveedor } from '../api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Truck from '~icons/fluent-color/building-people-20'
@@ -158,13 +158,25 @@ export function Proveedores() {
 
   return (
     <div className="grid gap-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
+      {/* El alta va arriba y a la derecha, como en Clientes y Equipos. Estaba
+          dentro de la tarjeta, debajo de un `CardDescription` de cuatro
+          líneas, y en una notebook había que bajar la vista para encontrarla
+          (reporte del usuario, 2026-08-13). */}
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Truck className="size-5" />Proveedores
         </h2>
+        {nuevo === null && editando === null && (
+          <Button
+            onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
+          >
+            <FilePlus />Nuevo proveedor
+          </Button>
+        )}
+      </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Proveedores</CardTitle>
           <CardDescription>
             A quién se le compra, y a quién se le manda un equipo cuando sale a
             service. Son una tabla y no un texto libre para que “Compu Service”
@@ -174,17 +186,6 @@ export function Proveedores() {
         </CardHeader>
         <CardContent className="grid gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
-
-          {nuevo === null && editando === null && (
-            <div>
-              <Button
-                variant="outline"
-                onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
-              >
-                <FilePlus />Nuevo proveedor
-              </Button>
-            </div>
-          )}
 
           {nuevo !== null && (
             <Formulario
