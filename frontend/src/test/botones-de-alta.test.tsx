@@ -13,12 +13,18 @@
 // —ver la cabecera de `proveedores.test.tsx`—; estas dos pantallas quedaron
 // afuera de aquella pasada. Por eso el test se escribe acá y con rol `staff`
 // fijo: con `admin` pasaría igual con el gate puesto y no probaría nada.
+//
+// El archivo cubre además **Reparaciones, que no tiene alta y no debe
+// tenerla**, porque el usuario reportó las tres juntas: desde afuera "no hay
+// botón" se ve igual en una pantalla rota y en una deliberada. Acá quedan al
+// lado, con lo que se fija de cada una.
 import { render as renderRTL, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Clientes } from '../pages/Clientes'
 import { Equipos } from '../pages/Equipos'
+import { Reparaciones } from '../pages/Reparaciones'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { role: 'staff' }, loading: false }),
@@ -57,6 +63,7 @@ beforeEach(() => {
     if (u.includes('/api/clientes')) return Promise.resolve(json([CLIENTE]))
     if (u.includes('/api/equipos')) return Promise.resolve(json([EQUIPO]))
     if (u.includes('/api/depositos')) return Promise.resolve(json([]))
+    if (u.includes('/api/reparaciones')) return Promise.resolve(json([]))
     return Promise.resolve(json([]))
   }))
 })
@@ -98,5 +105,30 @@ describe('🔴 Equipos: el ABM lo ve un staff, no sólo un admin', () => {
 
     expect(screen.getByRole('button', { name: 'Editar equipo' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Eliminar equipo' })).toBeInTheDocument()
+  })
+})
+
+// Reparaciones es el caso contrario y hay que dejarlo escrito, porque desde
+// afuera "no hay botón" se ve igual en las tres pantallas.
+describe('Reparaciones no tiene alta a propósito, y ahora lo dice', () => {
+  it('explica desde dónde se abre una reparación, con link al ticket', async () => {
+    render(<Reparaciones />, '/reparaciones')
+    await screen.findByText('No hay ningún equipo en service.')
+
+    // El texto y el link, por separado: sin el link el cartel manda al usuario
+    // a buscar la pantalla a mano, que es media solución.
+    expect(screen.getByText(/Se abren desde el ticket/)).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /Ir a Incidencias/ })
+    expect(link).toHaveAttribute('href', '/incidencias')
+  })
+
+  it('sigue sin ofrecer un alta suelta', async () => {
+    // El control del caso de arriba: el cartel explica una ausencia, así que
+    // si mañana alguien agrega el botón el cartel pasa a mentir y nadie se
+    // entera — el test lo pisa antes.
+    render(<Reparaciones />, '/reparaciones')
+    await screen.findByText('No hay ningún equipo en service.')
+
+    expect(screen.queryByRole('button', { name: /Nueva reparación/i })).not.toBeInTheDocument()
   })
 })

@@ -272,7 +272,7 @@ export function Reparaciones() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Wrench className="size-5" />
           Reparaciones
@@ -280,6 +280,17 @@ export function Reparaciones() {
             <Badge variant="secondary">{abiertas} en service</Badge>
           )}
         </h2>
+        {/* Donde el resto de las pantallas tiene el alta, ésta explica por qué
+            no la tiene. El motivo está en el docstring de arriba y no cambia;
+            lo que faltaba era decírselo al que mira la pantalla: sin este
+            texto parece una pantalla a la que se le olvidaron el botón
+            (reporte del usuario, 2026-08-13). */}
+        <p className="text-right text-xs text-muted-foreground">
+          Se abren desde el ticket, con “Reemplazar equipo”.{' '}
+          <Link to="/incidencias" className="underline underline-offset-2">
+            Ir a Incidencias
+          </Link>
+        </p>
       </div>
 
       <Card>
