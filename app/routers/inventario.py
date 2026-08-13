@@ -13,12 +13,11 @@ porque **comparten el gate**: sin el modulo `stock` no hay stock del cual
 descontar, asi que el endpoint no tendria que existir.
 """
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..services import inventario, materiales
+from ..services.fecha import ahora as _ahora
 from ..auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["stock"])
@@ -182,7 +181,7 @@ def ajustar(item_id: int, payload: AjusteIn, user: dict = Depends(get_current_us
     try:
         inventario.ajustar(
             item_id, payload.deposito_id, payload.cantidad,
-            nota=payload.nota, usuario_id=int(user["id"]), fecha=datetime.now(),
+            nota=payload.nota, usuario_id=int(user["id"]), fecha=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -196,7 +195,7 @@ def transferir(payload: TransferenciaIn, user: dict = Depends(get_current_user))
     try:
         inventario.transferir(
             payload.item_id, payload.origen_id, payload.destino_id, payload.cantidad,
-            nota=payload.nota, usuario_id=int(user["id"]), fecha=datetime.now(),
+            nota=payload.nota, usuario_id=int(user["id"]), fecha=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -222,7 +221,7 @@ def cargar_material(incidencia_id: int, payload: MaterialIn,
     try:
         return materiales.cargar(
             incidencia_id, payload.item_id, payload.deposito_id, payload.cantidad,
-            usuario_id=int(user["id"]), cuando=datetime.now(),
+            usuario_id=int(user["id"]), cuando=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -235,7 +234,7 @@ def quitar_material(incidencia_id: int, material_id: int,
     appendea la reversion, para que quede el rastro de quien lo saco."""
     del incidencia_id
     try:
-        materiales.quitar(material_id, usuario_id=int(user["id"]), cuando=datetime.now())
+        materiales.quitar(material_id, usuario_id=int(user["id"]), cuando=_ahora())
     except ValueError as e:
         raise HTTPException(404, str(e))
 

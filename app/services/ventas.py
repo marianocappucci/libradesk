@@ -47,7 +47,6 @@ antes, que es exactamente lo que el motor hace dentro de la suya.
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 
 from libracommerce.db.repository import SqliteCommerceRepository
@@ -59,6 +58,8 @@ from libracommerce.usecases.inventory import (
 )
 from libracommerce.usecases.sales import confirm_sale
 from libracore.db import core as libracore_core
+
+from .fecha import ahora as _ahora
 
 #: Como se cobro. `cuenta_corriente` es el unico que genera deuda; los demas
 #: son informativos para el reporte de ventas.
@@ -175,7 +176,7 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
         for i in items
     )
     subtotal = sum(l.quantity * l.unit_price for l in lineas)
-    hoy = datetime.now()
+    hoy = _ahora()
 
     with libracore_core.get_connection() as conn:
         repo = _repo(conn)

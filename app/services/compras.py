@@ -24,7 +24,6 @@ se traduce el id en las dos direcciones con `party_de_proveedor()` /
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 
 from libracommerce.db.repository import SqliteCommerceRepository
@@ -40,6 +39,7 @@ from libracommerce.usecases.purchasing import confirm_purchase_receipt
 from libracore.db import core as libracore_core
 
 from . import comercial
+from .fecha import ahora as _ahora
 
 #: Los seis tipos de movimiento que usa Integridad se mapean asi: `RP`
 #: (recepcion de proveedores) es una recepcion de compra; `EP` (envio a
@@ -159,7 +159,7 @@ def crear_orden(proveedor_id: int, items: list[dict], *, notas: str = "",
                 None, _proximo_numero(conn, "purchase_orders", "OC"),
                 comercial.party_de_proveedor(proveedor_id), lineas,
                 status=PurchaseOrderStatus.DRAFT, branch_id=sucursal_id,
-                ordered_at=datetime.now(), notes=notas, created_by=usuario_id,
+                ordered_at=_ahora(), notes=notas, created_by=usuario_id,
             )
         )
         return {"id": orden.id, "numero": orden.number}
@@ -236,7 +236,7 @@ def crear_recepcion(proveedor_id: int, deposito_id: int, items: list[dict], *,
                     created_by=usuario_id,
                 ),
                 location_id=deposito_id,
-                occurred_at=datetime.now(),
+                occurred_at=_ahora(),
             )
         return {"id": recepcion.id, "items": len(recepcion.items)}
 
