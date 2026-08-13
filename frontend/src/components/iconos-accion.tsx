@@ -36,6 +36,7 @@ import ArrowLeftRaw from '~icons/fluent/arrow-left-20-filled'
 import ArrowRepeatAllRaw from '~icons/fluent/arrow-repeat-all-20-filled'
 import ArrowSwapRaw from '~icons/fluent/arrow-swap-20-filled'
 import ArrowTrendingLinesRaw from '~icons/fluent/arrow-trending-lines-20-filled'
+import ArrowTurnRightDownRaw from '~icons/fluent/arrow-turn-right-down-20-filled'
 import ArrowUndoRaw from '~icons/fluent/arrow-undo-20-filled'
 import ArrowUploadRaw from '~icons/fluent/arrow-upload-20-filled'
 import BoxRaw from '~icons/fluent/box-20-filled'
@@ -128,6 +129,9 @@ export const CheckCircle2 = conRecuadro(CheckmarkCircleRaw)
 export const ChevronRight = conRecuadro(ChevronRightRaw)
 export const CircleAlert = conRecuadro(ErrorCircleRaw)
 export const Coins = conRecuadro(CoinMultipleRaw)
+// Marca de anidado en la lista de tipos de incidencia: es un glifo estructural
+// de la lista, no una acción, así que va sin recuadro.
+export const CornerDownRight = sinRecuadro(ArrowTurnRightDownRaw)
 export const Download = conRecuadro(ArrowDownloadRaw)
 export const Eraser = conRecuadro(EraserRaw)
 export const Eye = conRecuadro(EyeRaw)

@@ -42,7 +42,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { CornerDownRight } from 'lucide-react'
+import { CornerDownRight } from '@/components/iconos-accion'
 import Settings from '~icons/fluent-color/settings-20'
 import { Check, Download, Pencil, Plus, Trash2, Upload, X } from '@/components/iconos-accion'
 
