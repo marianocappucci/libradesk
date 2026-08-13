@@ -126,9 +126,13 @@ const ESTADO_VARIANT: Record<string, 'secondary' | 'outline' | 'destructive'> = 
 
 export function Egresos() {
   const { datos, error, cargando, conError } = useDatos<Egreso[]>('/api/egresos', [])
-  const { datos: resumen } = useDatos<{ total: number; pagado: number; pendiente: number }>(
-    '/api/egresos/resumen', { total: 0, pagado: 0, pendiente: 0 },
-  )
+  // ⚠️ La clave del total es `total_periodo`, no `total`. Con el nombre
+  // equivocado el tipo compila igual y la tarjeta muestra «—» al lado de dos
+  // cifras correctas, que se lee como "no hay egresos" en vez de "leí mal la
+  // respuesta". Lo mismo que pasó con `cliente_id` en cuenta corriente.
+  const { datos: resumen } = useDatos<{
+    total_periodo: number; pagado: number; pendiente: number
+  }>('/api/egresos/resumen', { total_periodo: 0, pagado: 0, pendiente: 0 })
   const { datos: proveedores } = useDatos<Proveedor[]>('/api/proveedores', [])
   const [abierto, setAbierto] = useState<Egreso | null>(null)
 
@@ -138,7 +142,7 @@ export function Egresos() {
     <Pagina titulo="Egresos" icono={Wallet} error={error}
             acciones={<FormEgreso proveedores={proveedores} onGuardar={conError} />}>
       <Cifras items={[
-        { label: 'Total del período', valor: pesos(resumen.total) },
+        { label: 'Total del período', valor: pesos(resumen.total_periodo) },
         { label: 'Pagado', valor: pesos(resumen.pagado) },
         { label: 'Pendiente', valor: pesos(resumen.pendiente) },
       ]} />
