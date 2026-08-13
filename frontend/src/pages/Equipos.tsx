@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Monitor from '~icons/fluent-color/laptop-16'
-import { Eye, Pencil, Plus, Trash2 } from '@/components/iconos-accion'
+import { Eye, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.
@@ -311,7 +311,7 @@ export function Equipos() {
         {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={abrirNuevo}><Plus />Nuevo equipo</Button>
+              <Button onClick={abrirNuevo}><FilePlus />Nuevo equipo</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
               <DialogHeader>

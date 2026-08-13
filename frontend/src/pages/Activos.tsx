@@ -28,7 +28,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import History from '~icons/fluent-color/history-16'
 import IconoActivos from '~icons/fluent-color/briefcase-20'
-import { Boxes, Pencil, Plus, Trash2 } from '@/components/iconos-accion'
+import { Boxes, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 
@@ -286,7 +286,7 @@ export function Activos() {
         </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={abrirNuevo}><Plus />Nuevo activo</Button>
+            <Button onClick={abrirNuevo}><FilePlus />Nuevo activo</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>

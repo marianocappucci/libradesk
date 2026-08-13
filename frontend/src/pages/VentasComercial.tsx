@@ -31,7 +31,7 @@ import Coins from '~icons/fluent-color/coin-multiple-16'
 import Wallet from '~icons/fluent-color/savings-16'
 // `Eye` llegó de develop (el PDF del recibo se abre con un ojo, PR #127) y es
 // una ACCIÓN, así que entra por el módulo de acciones como el resto.
-import { Eye, Plus, Trash2 } from '@/components/iconos-accion'
+import { Eye, FilePlus, Trash2 } from '@/components/iconos-accion'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string
@@ -218,7 +218,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nueva venta</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva venta</Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader><DialogTitle>Nueva venta</DialogTitle></DialogHeader>

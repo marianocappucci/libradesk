@@ -28,7 +28,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import FileSignature from '~icons/fluent-color/document-edit-16'
-import { Plus } from '@/components/iconos-accion'
+import { FilePlus } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 
@@ -223,7 +223,7 @@ export function Contratos() {
         </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={abrirNuevo}><Plus />Nuevo contrato</Button>
+            <Button onClick={abrirNuevo}><FilePlus />Nuevo contrato</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>

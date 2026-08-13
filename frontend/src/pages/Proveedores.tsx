@@ -23,7 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Truck from '~icons/fluent-color/building-people-20'
-import { Pencil, Plus, Trash2 } from '@/components/iconos-accion'
+import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */
@@ -181,7 +181,7 @@ export function Proveedores() {
                 variant="outline"
                 onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
               >
-                <Plus />Nuevo proveedor
+                <FilePlus />Nuevo proveedor
               </Button>
             </div>
           )}

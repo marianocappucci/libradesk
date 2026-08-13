@@ -28,7 +28,7 @@ import {
 import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
 import Wallet from '~icons/fluent-color/savings-16'
 import IconoOrdenesCompra from '~icons/fluent-color/approvals-app-24'
-import { Plus, Trash2 } from '@/components/iconos-accion'
+import { FilePlus, Trash2 } from '@/components/iconos-accion'
 
 type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {
@@ -314,7 +314,7 @@ function FormOrden({ proveedores, productos, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nueva orden</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva orden</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva orden de compra</DialogTitle></DialogHeader>
@@ -365,7 +365,7 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Recibir mercadería</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Recibir mercadería</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Recepción de mercadería</DialogTitle></DialogHeader>
@@ -440,7 +440,7 @@ function FormEgreso({ proveedores, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nuevo egreso</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo egreso</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo egreso</DialogTitle></DialogHeader>

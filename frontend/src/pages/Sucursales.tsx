@@ -17,7 +17,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import MapPin from '~icons/fluent-color/location-ripple-16'
-import { Plus } from '@/components/iconos-accion'
+import { FilePlus } from '@/components/iconos-accion'
 
 export function Sucursales() {
   const { datos, error, cargando, conError } = useDatos<Sucursal[]>('/api/sucursales?solo_activas=false', [])
@@ -75,7 +75,7 @@ function FormSucursal({ onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nueva sucursal</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva sucursal</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva sucursal</DialogTitle></DialogHeader>

@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import IconoStock from '~icons/fluent-color/vault-24'
-import { ArrowLeftRight, Building2, Minus, Plus } from '@/components/iconos-accion'
+import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
 
 export type Consumible = {
   id: number
@@ -309,7 +309,7 @@ function NuevoConsumible({ onListo }: ConAccion) {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-2" /> Nuevo consumible</Button>
+        <Button size="sm"><FilePlus className="h-4 w-4 mr-2" /> Nuevo consumible</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo consumible</DialogTitle></DialogHeader>

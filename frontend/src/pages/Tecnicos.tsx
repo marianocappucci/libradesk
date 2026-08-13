@@ -18,7 +18,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Wrench from '~icons/fluent-color/wrench-16'
 import UserCog from '~icons/fluent-color/person-key-20'
-import { Pencil, Plus, Trash2 } from '@/components/iconos-accion'
+import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 
 const tecnicoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -219,7 +219,7 @@ export function Tecnicos() {
         </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={abrirNuevo}><Plus />Nuevo técnico</Button>
+            <Button onClick={abrirNuevo}><FilePlus />Nuevo técnico</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>

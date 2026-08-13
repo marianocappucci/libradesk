@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import IconoProductos from '~icons/fluent-color/apps-24'
-import { AlertTriangle, Pencil, Plus } from '@/components/iconos-accion'
+import { AlertTriangle, FilePlus, Pencil } from '@/components/iconos-accion'
 
 export type Producto = {
   id: number
@@ -162,7 +162,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
           ? <Button variant="ghost" size="icon" title="Editar" aria-label="Editar producto">
               <Pencil className="h-4 w-4" />
             </Button>
-          : <Button><Plus className="mr-2 h-4 w-4" /> Nuevo producto</Button>}
+          : <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo producto</Button>}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
