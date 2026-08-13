@@ -29,7 +29,7 @@ import CircleAlert from '~icons/fluent-color/alert-urgent-16'
 import Monitor from '~icons/fluent-color/laptop-16'
 import { fechaDeDate } from '@/lib/format'
 import AlertCircle from '~icons/fluent-color/alert-urgent-20'
-import { Plus } from '@/components/iconos-accion'
+import { FilePlus, PlusCircle } from '@/components/iconos-accion'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -315,7 +315,7 @@ export function Incidencias() {
         </h2>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
-            <Button onClick={startCreate}><Plus />Nueva incidencia</Button>
+            <Button onClick={startCreate}><FilePlus />Nueva incidencia</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
@@ -376,7 +376,7 @@ export function Incidencias() {
                       disabled={!form.watch('cliente_id')}
                       onClick={abrirAltaEquipo}
                     >
-                      <Plus className="size-3" />
+                      <PlusCircle className="size-3" />
                       {form.watch('cliente_id')
                         ? 'El equipo no está en la lista'
                         : 'Elegí un cliente para poder agregar un equipo'}

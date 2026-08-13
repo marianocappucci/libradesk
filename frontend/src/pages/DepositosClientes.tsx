@@ -27,7 +27,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Building2 from '~icons/fluent-color/building-16'
 import Users from '~icons/fluent-color/people-16'
-import { Check, Plus } from '@/components/iconos-accion'
+import { Check, FilePlus } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 
@@ -145,7 +145,7 @@ export function DepositosClientes() {
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Building2 className="size-5" />Depósitos
         </h2>
-        <Button onClick={abrirNuevo}><Plus />Nuevo depósito</Button>
+        <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
       </div>
 
       <ConmutadorDepositos actual="clientes" />

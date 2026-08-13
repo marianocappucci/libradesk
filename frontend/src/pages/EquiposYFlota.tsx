@@ -44,7 +44,7 @@ import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
 import IconoFlota from '~icons/fluent-color/people-team-20'
-import { Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink } from '@/components/iconos-accion'
+import { Car, Check, FilePlus, LinkIcon, Pencil, Trash2, Unlink } from '@/components/iconos-accion'
 
 const SIN = '__sin__'
 
@@ -217,10 +217,10 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
             dos siempre visibles haría que "Nuevo vehículo" apareciera parado en
             la agenda, donde no es lo que se vino a hacer. */}
         {seccion === 'equipos' && (
-          <Button onClick={() => abrirEquipo(null)}><Plus />Nuevo equipo</Button>
+          <Button onClick={() => abrirEquipo(null)}><FilePlus />Nuevo equipo</Button>
         )}
         {seccion === 'flota' && (
-          <Button onClick={() => abrirVehiculo(null)}><Plus />Nuevo vehículo</Button>
+          <Button onClick={() => abrirVehiculo(null)}><FilePlus />Nuevo vehículo</Button>
         )}
       </div>
 

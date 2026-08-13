@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import IconoDepositosStock from '~icons/fluent-color/vault-24'
 import IconoListasPrecio from '~icons/fluent-color/list-bar-24'
-import { Percent, Plus } from '@/components/iconos-accion'
+import { FilePlus, Percent } from '@/components/iconos-accion'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ function FormDeposito({ sucursales, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nuevo depósito</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo depósito</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo depósito de stock</DialogTitle></DialogHeader>
@@ -304,7 +304,7 @@ function FormLista({ onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> Nueva lista</Button>
+        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva lista</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva lista de precios</DialogTitle></DialogHeader>

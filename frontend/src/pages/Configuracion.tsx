@@ -42,9 +42,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { CornerDownRight } from '@/components/iconos-accion'
+import {
+  Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
+} from '@/components/iconos-accion'
 import Settings from '~icons/fluent-color/settings-20'
-import { Check, Download, Pencil, Plus, Trash2, Upload, X } from '@/components/iconos-accion'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -180,7 +181,7 @@ function CategoriasCard() {
         <span className={`flex-1 text-sm ${esHija ? '' : 'font-medium'}`}>{c.nombre}</span>
         {!esHija && (
           <Button size="sm" variant="ghost" className="h-8" onClick={() => setNueva({ parent_id: c.id, nombre: '' })}>
-            <Plus />Subcategoría
+            <PlusCircle />Subcategoría
           </Button>
         )}
         <Button size="icon" variant="outline" className="size-8" title="Renombrar" aria-label={`Renombrar ${c.nombre}`} onClick={() => setRenombrando({ id: c.id, nombre: c.nombre })}><Pencil /></Button>
@@ -226,7 +227,7 @@ function CategoriasCard() {
         ) : (
           <div>
             <Button variant="outline" onClick={() => setNueva({ parent_id: null, nombre: '' })}>
-              <Plus />Nueva categoría
+              <FilePlus />Nueva categoría
             </Button>
           </div>
         )}
@@ -724,7 +725,7 @@ function ServiciosCard() {
                 nombre: '', descripcion: '', precio: '0', iva_rate: '0.21', activo: true,
               })}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <PlusCircle className="mr-2 h-4 w-4" />
               Agregar servicio
             </Button>
           </div>

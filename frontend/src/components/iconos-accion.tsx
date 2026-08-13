@@ -31,15 +31,17 @@ import type { ComponentProps, ComponentType } from 'react'
 import { cn } from '@/lib/utils'
 
 import AddRaw from '~icons/fluent/add-20-filled'
+import AddCircleRaw from '~icons/fluent/add-circle-20-filled'
 import ArrowDownloadRaw from '~icons/fluent/arrow-download-20-filled'
 import ArrowLeftRaw from '~icons/fluent/arrow-left-20-filled'
-import ArrowRepeatAllRaw from '~icons/fluent/arrow-repeat-all-20-filled'
 import ArrowSwapRaw from '~icons/fluent/arrow-swap-20-filled'
+import ArrowSyncRaw from '~icons/fluent/arrow-sync-20-filled'
 import ArrowTrendingLinesRaw from '~icons/fluent/arrow-trending-lines-20-filled'
 import ArrowTurnRightDownRaw from '~icons/fluent/arrow-turn-right-down-20-filled'
 import ArrowUndoRaw from '~icons/fluent/arrow-undo-20-filled'
 import ArrowUploadRaw from '~icons/fluent/arrow-upload-20-filled'
 import BoxRaw from '~icons/fluent/box-20-filled'
+import BoxArrowUpRaw from '~icons/fluent/box-arrow-up-20-filled'
 import BoxCheckmarkRaw from '~icons/fluent/box-checkmark-20-filled'
 import BoxMultipleRaw from '~icons/fluent/box-multiple-20-filled'
 import BuildingRaw from '~icons/fluent/building-20-filled'
@@ -48,14 +50,14 @@ import ChatRaw from '~icons/fluent/chat-20-filled'
 import CheckmarkRaw from '~icons/fluent/checkmark-20-filled'
 import CheckmarkCircleRaw from '~icons/fluent/checkmark-circle-20-filled'
 import ChevronRightRaw from '~icons/fluent/chevron-right-20-filled'
-import CoinMultipleRaw from '~icons/fluent/coin-multiple-20-filled'
 import DeleteRaw from '~icons/fluent/delete-20-filled'
 import DesktopRaw from '~icons/fluent/desktop-20-filled'
 import DismissRaw from '~icons/fluent/dismiss-20-filled'
 import DismissCircleRaw from '~icons/fluent/dismiss-circle-20-filled'
-import DocumentArrowDownRaw from '~icons/fluent/document-arrow-down-20-filled'
+import DocumentAddRaw from '~icons/fluent/document-add-20-filled'
 import DocumentCheckmarkRaw from '~icons/fluent/document-checkmark-20-filled'
 import DocumentErrorRaw from '~icons/fluent/document-error-20-filled'
+import DocumentPdfRaw from '~icons/fluent/document-pdf-20-filled'
 import DocumentTextRaw from '~icons/fluent/document-text-20-filled'
 import EditRaw from '~icons/fluent/edit-20-filled'
 import EraserRaw from '~icons/fluent/eraser-20-filled'
@@ -67,6 +69,7 @@ import KeyRaw from '~icons/fluent/key-20-filled'
 import LinkRaw from '~icons/fluent/link-20-filled'
 import LinkDismissRaw from '~icons/fluent/link-dismiss-20-filled'
 import LocationRaw from '~icons/fluent/location-20-filled'
+import MoneyRaw from '~icons/fluent/money-20-filled'
 import PenRaw from '~icons/fluent/pen-20-filled'
 import PeopleRaw from '~icons/fluent/people-20-filled'
 import PersonDeleteRaw from '~icons/fluent/person-delete-20-filled'
@@ -128,7 +131,11 @@ export const Check = conRecuadro(CheckmarkRaw)
 export const CheckCircle2 = conRecuadro(CheckmarkCircleRaw)
 export const ChevronRight = conRecuadro(ChevronRightRaw)
 export const CircleAlert = conRecuadro(ErrorCircleRaw)
-export const Coins = conRecuadro(CoinMultipleRaw)
+// Cobrar. Hoy no lo importa ninguna pantalla —"Recibos" es el título de una
+// sección y el ítem del menú, o sea identidad, y ésos salen de `fluent-color`.
+// Queda igual porque es el nombre canónico del vocabulario para cuando aparezca
+// un botón de cobrar.
+export const Coins = conRecuadro(MoneyRaw)
 // Marca de anidado en la lista de tipos de incidencia: es un glifo estructural
 // de la lista, no una acción, así que va sin recuadro.
 export const CornerDownRight = sinRecuadro(ArrowTurnRightDownRaw)
@@ -136,7 +143,7 @@ export const Download = conRecuadro(ArrowDownloadRaw)
 export const Eraser = conRecuadro(EraserRaw)
 export const Eye = conRecuadro(EyeRaw)
 export const FileCheck = conRecuadro(DocumentCheckmarkRaw)
-export const FileDown = conRecuadro(DocumentArrowDownRaw)
+export const FileDown = conRecuadro(DocumentPdfRaw)
 export const FileText = conRecuadro(DocumentTextRaw)
 export const FileWarning = conRecuadro(DocumentErrorRaw)
 export const History = conRecuadro(HistoryRaw)
@@ -149,15 +156,31 @@ export const Minus = conRecuadro(SubtractRaw)
 export const Monitor = conRecuadro(DesktopRaw)
 export const Package = conRecuadro(BoxRaw)
 export const PackageCheck = conRecuadro(BoxCheckmarkRaw)
-export const PackagePlus = conRecuadro(BoxRaw)
+// "Colocar equipo". Dibujaba el MISMO `box` que `Package`, o sea dos conceptos
+// con un glifo: no era una preferencia, era un defecto. `box-add` no existe en
+// Fluent; `box-arrow-up` es la caja que sale, que es lo que hace la acción.
+export const PackagePlus = conRecuadro(BoxArrowUpRaw)
 export const Pencil = conRecuadro(EditRaw)
 export const PenLine = conRecuadro(PenRaw)
 export const Percent = conRecuadro(TagPercentRaw)
-// `Plus` va SIEMPRE sin recuadro: de sus usos, 17 están en el botón primario
-// "Nuevo …", que ya es un bloque de color.
+// Los tres "más" del vocabulario, que NO son el mismo concepto:
+//
+//   `FilePlus`   crear un registro nuevo — el botón "Nuevo …" de cada pantalla.
+//   `PlusCircle` agregar algo a lo que ya existe — una subcategoría, un
+//                servicio, un equipo que no estaba en la lista.
+//   `Plus`       el signo más a secas. Queda para el par +/− del ajuste de
+//                stock, donde es aritmética y no un alta: un documento-con-más
+//                al lado de un `Subtract` no significaría nada.
+//
+// Los tres van SIN recuadro. `FilePlus` porque sus usos son el botón primario,
+// que ya es un bloque de color (con recuadro, el glifo blanco desaparece).
+// `PlusCircle` porque el glifo ya trae su propio círculo: meterlo en un
+// cuadrado es dibujar dos contenedores.
+export const FilePlus = sinRecuadro(DocumentAddRaw)
+export const PlusCircle = sinRecuadro(AddCircleRaw)
 export const Plus = sinRecuadro(AddRaw)
 export const Printer = conRecuadro(PrintRaw)
-export const Repeat = conRecuadro(ArrowRepeatAllRaw)
+export const Repeat = conRecuadro(ArrowSyncRaw)
 export const Search = conRecuadro(SearchRaw)
 export const Send = conRecuadro(SendRaw)
 export const ShieldCheck = conRecuadro(ShieldCheckmarkRaw)
