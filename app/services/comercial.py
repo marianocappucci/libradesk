@@ -116,6 +116,16 @@ CREATE TABLE IF NOT EXISTS cajas (
     created_at  TEXT DEFAULT (datetime('now'))
 );
 
+-- 🔴 Las tres ultimas columnas NO estan en el `CREATE TABLE` de LibraCore: se
+-- las agrega su bloque de migraciones con `ALTER TABLE`, que corre dentro de
+-- `init_core_schema()` --el que este producto no llama--. Copiar solo el DDL
+-- deja la tabla sin ellas, y `get_cc_saldo()` **consulta `cm.medio_pago`**:
+-- el saldo de cuenta corriente muere con `column cm.medio_pago does not
+-- exist`. Verificado contra PostgreSQL antes de que llegara a la demo.
+--
+-- Es el mismo pozo que ya documenta `remitos_presupuestos.py` para
+-- `usuario_id`, y la razon de fondo por la que copiar DDL a mano es deuda:
+-- el `CREATE TABLE` del motor **no describe la tabla que el motor consulta**.
 CREATE TABLE IF NOT EXISTS caja_movimientos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha       TEXT NOT NULL,
@@ -125,7 +135,10 @@ CREATE TABLE IF NOT EXISTS caja_movimientos (
     referencia  TEXT DEFAULT '',
     factura_id  INTEGER,
     created_at  TEXT DEFAULT (datetime('now')),
-    turno_id    INTEGER
+    turno_id    INTEGER,
+    caja_id     INTEGER REFERENCES cajas(id) ON DELETE SET NULL,
+    medio_pago  TEXT DEFAULT '',
+    usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS categorias_egreso (
