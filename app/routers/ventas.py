@@ -7,7 +7,7 @@ precio y como se cobro. El comprobante fiscal sale despues, por el puente de
 Gate por plan: `ventas`, puesto en `main.py`.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
@@ -97,6 +97,25 @@ def obtener_recibo(recibo_id: int):
     if recibo is None:
         raise HTTPException(404, "El recibo no existe.")
     return recibo
+
+
+@router.get("/recibos/{recibo_id}/pdf")
+def recibo_pdf(recibo_id: int):
+    """El comprobante para entregar o mandar por mail.
+
+    `inline` y no `attachment`, igual que remitos y la orden de trabajo: lo
+    normal es mirarlo y mandarlo a la impresora.
+    """
+    contenido = recibos.pdf(recibo_id)
+    if contenido is None:
+        raise HTTPException(404, "El recibo no existe.")
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="recibo-{recibo_id}.pdf"',
+        },
+    )
 
 
 @router.post("/ventas/{venta_id}/recibo", status_code=201)

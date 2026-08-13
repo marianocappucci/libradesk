@@ -92,3 +92,23 @@ def emitir_de_cobranza(cc_pago_id: int, usuario_id: int | None = None,
 def anular(recibo_id: int, motivo: str = "", usuario_id: int | None = None) -> bool:
     """Un recibo no se borra: se anula. Igual que una factura."""
     return _db.anular_recibo(recibo_id, motivo=motivo, usuario_id=usuario_id)
+
+
+def pdf(recibo_id: int) -> bytes | None:
+    """El PDF del recibo, tal como se le entrega al cliente.
+
+    Sale de `generate_pdf_recibo_doc()` del motor, que arma el papel a partir
+    del **snapshot** guardado en la fila --no de un JOIN contra los cobros
+    vigentes--. Eso es lo que hace que reimprimirlo devuelva byte a byte el
+    mismo comprobante que el cliente ya se llevó: un cobro posterior sobre la
+    misma operación no cambia el papel viejo.
+
+    Devuelve `None` si el recibo no existe, para que el router conteste 404 en
+    vez de un PDF vacío --que es lo que se vería como "no pasó nada".
+    """
+    from libracore.pdf_generator import generate_pdf_recibo_doc
+
+    recibo = _db.get_recibo(recibo_id)
+    if recibo is None:
+        return None
+    return generate_pdf_recibo_doc(recibo)

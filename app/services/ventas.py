@@ -81,7 +81,17 @@ def listar(limit: int = 200) -> list[dict]:
                    c.name AS cliente_nombre,
                    (SELECT COALESCE(SUM(vp.monto), 0) FROM ventas_pagos vp
                      WHERE vp.venta_id = s.id AND vp.medio = 'cuenta_corriente')
-                   AS en_cuenta_corriente
+                   AS en_cuenta_corriente,
+                   -- El recibo VIGENTE de esta venta, si ya se emitió. Sin
+                   -- esto la pantalla no puede distinguir "emitir" de "ver", y
+                   -- el botón termina emitiendo en silencio algo que ya
+                   -- existía. Se excluyen los anulados a propósito: un recibo
+                   -- anulado no es el comprobante de nada, y la venta vuelve a
+                   -- estar pendiente de recibo.
+                   (SELECT r.id FROM recibos r
+                     WHERE r.origen_tipo = 'venta' AND r.origen_id = s.id
+                       AND r.anulado = 0
+                     ORDER BY r.id DESC LIMIT 1) AS recibo_id
             FROM sales s
             LEFT JOIN clients c ON c.id = s.customer_party_id
             ORDER BY s.occurred_on DESC, s.id DESC
@@ -97,7 +107,8 @@ def listar(limit: int = 200) -> list[dict]:
          # ese dia. Si despues le cambiaron la razon social, el comprobante
          # viejo tiene que seguir diciendo lo que decia.
          "cliente": r["customer_name_snapshot"] or r["cliente_nombre"] or "Consumidor final",
-         "en_cuenta_corriente": float(r["en_cuenta_corriente"] or 0)}
+         "en_cuenta_corriente": float(r["en_cuenta_corriente"] or 0),
+         "recibo_id": r["recibo_id"]}
         for r in filas
     ]
 
