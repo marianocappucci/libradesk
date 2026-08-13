@@ -36,10 +36,17 @@ from sqlalchemy import DateTime, String, UniqueConstraint, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from ..database import Base
+from . import cuenta_corriente, fecha
 
 logger = logging.getLogger(__name__)
 
 PRODUCTO = "libradesk"
+
+# Prefijo de la `referencia` de los débitos que nacen del puente. Existe para
+# que no choquen con las que arma el resto del producto (`sale-12`) y para poder
+# reconocerlos después: son los únicos que se pueden haber cargado por un
+# comprobante que del otro lado terminen descartando.
+REFERENCIA_DEBITO = "facturacion-externa-"
 
 URL_ENV = "CONTALIBRA_URL"
 TOKEN_ENV = "CONTALIBRA_SERVICE_TOKEN"
@@ -329,7 +336,69 @@ class PuenteFacturacion:
         devuelve. Mandar diez comprobantes y que el tercero tumbe la request
         dejaría al usuario sin saber cuáles llegaron; así los diez tienen una
         fila que dice qué pasó con cada uno.
+
+        Cuando el envío queda en `enviado`, además **carga la deuda en la cuenta
+        corriente del cliente** — ver `_debitar_en_cuenta_corriente`.
         """
+        envio = self._enviar(origen_tipo, comprobante)
+        if envio["estado"] == ESTADO_ENVIADO:
+            self._debitar_en_cuenta_corriente(origen_tipo, comprobante)
+        return envio
+
+    def _debitar_en_cuenta_corriente(self, origen_tipo: str, comprobante: dict) -> None:
+        """Carga el comprobante recién enviado como deuda del cliente.
+
+        **Por qué al enviar y no al facturar** (decidido con el humano el
+        2026-08-13): LibraDesk *no tiene* un estado "facturado". `enviado` es lo
+        único que sabe con certeza; `resuelto_remoto` significa "del otro lado ya
+        lo tienen", se produce **sólo al reintentar** y no distingue una factura
+        emitida de un comprobante descartado. Nadie le avisa a este sistema
+        cuando se emite el CAE. Debitar al enviar es la aproximación que el
+        modelo permite hoy; el precio es que un comprobante descartado allá deja
+        un débito de más, que hay que revertir a mano.
+
+        **Idempotente por `referencia`**: `create_cc_debito` devuelve el id que
+        ya existía en vez de insertar de nuevo, así que reintentar un envío no
+        fía dos veces lo mismo. La referencia lleva el prefijo del puente para
+        no chocar con las que arma el resto del producto (`sale-12`).
+
+        🔴 **No propaga el error.** El comprobante YA está del otro lado cuando
+        esto corre: si el débito falla, tumbar acá perdería la fila del envío y
+        el próximo intento lo mandaría de nuevo. Se loguea y sigue — queda una
+        deuda sin cargar, que es recuperable, en vez de un envío sin registrar,
+        que no.
+
+        > ⚠️ **Doble conteo conocido, sin resolver.** Una venta en cuenta
+        > corriente ya genera su propio débito. Si el remito de ese mismo trabajo
+        > se manda a facturar, el cliente queda debiendo las dos cosas. Hace
+        > falta un vínculo venta↔remito que hoy el modelo no tiene, y **cómo
+        > llevarlo es una decisión de [[lagrace-comunicaciones]]**, no técnica.
+        """
+        cliente_id = comprobante.get("client_id")
+        total = float(comprobante.get("total") or 0)
+        # Sin cliente de la base no hay cuenta a la que cargar: el comprobante
+        # se pudo emitir a nombre suelto (`client_name` sin `client_id`).
+        if not cliente_id or total <= 0:
+            return
+
+        origen_id = int(comprobante["id"])
+        numero = comprobante.get("number") or origen_id
+        try:
+            cuenta_corriente.create_cc_debito(
+                int(cliente_id), total, fecha.hoy(),
+                concepto=f"{origen_tipo.capitalize()} {numero} enviado a facturar "
+                         f"a {nombre_destino()}",
+                referencia=f"{REFERENCIA_DEBITO}{origen_tipo}-{origen_id}",
+            )
+        except Exception:
+            logger.exception(
+                "El %s %s se envio pero no se pudo debitar en cuenta corriente",
+                origen_tipo, origen_id,
+            )
+
+    def _enviar(self, origen_tipo: str, comprobante: dict) -> dict:
+        """El envío en sí. Lo separa de `enviar` para que el débito quede en un
+        solo lugar y cubra los dos destinos, que tienen returns propios."""
         if origen_tipo not in ORIGENES:
             raise ValueError(f"origen_tipo invalido: {origen_tipo!r}")
 
