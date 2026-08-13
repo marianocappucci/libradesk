@@ -12,6 +12,7 @@ import {
   ComprobanteForm, comprobanteADraft, draftAPayload, draftVacio, formatMoney,
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
 
 export function Remitos() {
   const navigate = useNavigate()
@@ -124,7 +125,13 @@ export function Remitos() {
       accessorKey: 'number', header: sortableHeader('Número'), size: 130, minSize: 110,
       cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.number}</span>,
     },
-    { accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95 },
+    {
+      accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95,
+      // Sin `cell` la tabla imprime el valor crudo, que es el ISO que manda la
+      // API (`2026-08-11`). El orden se sigue calculando sobre `date`, no sobre
+      // lo que se muestra: por eso el formateo va acá y no en el `accessorFn`.
+      cell: ({ row }) => fecha(row.original.date),
+    },
     {
       accessorKey: 'client_name', header: sortableHeader('Cliente'), size: 220, minSize: 140,
       meta: { stretch: true },

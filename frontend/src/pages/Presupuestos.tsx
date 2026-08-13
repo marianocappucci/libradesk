@@ -19,6 +19,7 @@ import {
   ComprobanteForm, comprobanteADraft, draftAPayload, draftVacio, formatMoney,
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 
@@ -191,9 +192,16 @@ export function Presupuestos() {
       accessorKey: 'number', header: sortableHeader('Número'), size: 150, minSize: 120,
       cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.number}</span>,
     },
-    { accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95 },
+    {
+      accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95,
+      // Sin `cell` la tabla imprime el valor crudo, que es el ISO que manda la
+      // API (`2026-08-11`). El orden se sigue calculando sobre `date`, no sobre
+      // lo que se muestra: por eso el formateo va acá y no en el `accessorFn`.
+      cell: ({ row }) => fecha(row.original.date),
+    },
     {
       accessorKey: 'valid_until', header: sortableHeader('Válido hasta'), size: 120, minSize: 100,
+      cell: ({ row }) => fecha(row.original.valid_until),
     },
     {
       accessorKey: 'client_name', header: sortableHeader('Cliente'), size: 200, minSize: 140,

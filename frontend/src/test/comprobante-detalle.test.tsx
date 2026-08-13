@@ -95,7 +95,10 @@ describe('detalle de presupuesto', () => {
     expect(await screen.findByText(/Compulibra SRL/)).toBeInTheDocument()
     expect(screen.getByText(/30-71234567-8/)).toBeInTheDocument()
     expect(screen.getByText(/Av. Rivadavia 1234/)).toBeInTheDocument()
-    expect(screen.getByText(/2026-09-01/)).toBeInTheDocument()
+    // La validez se muestra formateada, no en el ISO que devuelve la API. Esta
+    // línea afirmaba `2026-09-01` y era la que sostenía el formato viejo en el
+    // detalle (cambiada el 2026-08-13, junto con el de las grillas).
+    expect(screen.getByText(/01-09-2026/)).toBeInTheDocument()
     expect(screen.getByText(/Entrega en 48 h/)).toBeInTheDocument()
   })
 
