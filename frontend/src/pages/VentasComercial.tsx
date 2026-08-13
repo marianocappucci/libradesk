@@ -26,7 +26,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ClipboardList, Coins, Plus, Trash2, Wallet } from 'lucide-react'
+import { ClipboardList, Coins, Eye, Plus, Trash2, Wallet } from 'lucide-react'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string
@@ -123,12 +123,20 @@ function AccionRecibo({ venta, onEmitido }: {
 
   const id = venta.recibo_id ?? reciénEmitido
   if (id) {
+    // Ya emitido: sólo se muestra, así que alcanza el ícono. **La rama de
+    // emitir de acá abajo conserva su texto a propósito** — crea un
+    // comprobante, y un botón que emite tiene que decir que emite (ver el
+    // comentario de la columna en `Ventas`).
     return (
-      <Button asChild variant="outline" size="sm">
-        <a href={`/api/recibos/${id}/pdf`} target="_blank" rel="noreferrer">
-          <Coins className="mr-2 h-3.5 w-3.5" /> Ver recibo
-        </a>
-      </Button>
+      <div className="pl-4">
+        <Button asChild variant="outline" size="icon-sm">
+          <a href={`/api/recibos/${id}/pdf`} target="_blank" rel="noreferrer"
+             title="Ver el PDF del recibo"
+             aria-label={`Ver el recibo de la venta ${venta.numero}`}>
+            <Eye />
+          </a>
+        </Button>
+      </div>
     )
   }
 
@@ -338,16 +346,27 @@ export function Recibos() {
             render: (r) => r.anulado ? <Badge variant="destructive">Anulado</Badge> : null },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (r) => pesos(r.total) },
-          { clave: 'pdf', titulo: '', ancho: '90px',
+          { clave: 'pdf', titulo: '', ancho: '70px',
             // También en los anulados: el papel anulado sigue siendo el
             // documento de lo que pasó, y es lo que hay que poder mostrar si
             // alguien pregunta por qué se anuló.
+            //
+            // El `pl-4` separa el botón de la columna de importes, que va
+            // pegada a la derecha: sin él, el ojo queda contra el total y las
+            // dos cosas se leen como una sola.
             render: (r) => (
-              <Button asChild variant="outline" size="sm">
-                <a href={`/api/recibos/${r.id}/pdf`} target="_blank" rel="noreferrer">
-                  Ver
-                </a>
-              </Button>
+              <div className="pl-4">
+                <Button asChild variant="outline" size="icon-sm">
+                  {/* Sin texto, el botón necesita nombre accesible propio, y el
+                      número lo hace distinguible entre filas. El `title` da la
+                      misma información al pasar el mouse. */}
+                  <a href={`/api/recibos/${r.id}/pdf`} target="_blank" rel="noreferrer"
+                     title="Ver el PDF del recibo"
+                     aria-label={`Ver el recibo ${String(r.punto_venta).padStart(4, '0')}-${String(r.numero).padStart(8, '0')}`}>
+                    <Eye />
+                  </a>
+                </Button>
+              </div>
             ) },
         ]}
       />
