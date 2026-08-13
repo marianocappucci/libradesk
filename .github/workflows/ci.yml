@@ -139,6 +139,37 @@ jobs:
       - name: Run tests
         run: pytest -v --cov --cov-report=term-missing
 
+      # 🔴 `tests/` tenia un test de shell desde el 2026-08-07 y NADIE lo
+      # corria: pytest no los junta y el workflow no los nombraba. O sea que la
+      # logica de `scripts/deploy_cliente.sh` --la que decide a que servicio se
+      # le reescribe la imagen-- estaba cubierta en el papel y sin ejecutar. Se
+      # cablearon el 2026-08-13, al agregar el segundo.
+      #
+      # El `for` corre TODOS y recien al final falla, para que un rojo no tape
+      # al siguiente. Y si el glob no matchea nada el paso ABORTA: sin eso,
+      # renombrar el directorio lo dejaria en verde corriendo cero tests.
+      - name: Tests de shell (scripts/)
+        run: |
+          set -u
+          encontrados=0
+          fallidos=""
+          for t in tests/test_*.sh; do
+            [ -e "$t" ] || continue
+            encontrados=$((encontrados + 1))
+            echo "::group::$t"
+            bash "$t" || fallidos="$fallidos $t"
+            echo "::endgroup::"
+          done
+          if [ "$encontrados" -eq 0 ]; then
+            echo "::error::No se encontro ningun tests/test_*.sh: el paso no corrio nada."
+            exit 1
+          fi
+          echo "Corridos: $encontrados"
+          if [ -n "$fallidos" ]; then
+            echo "::error::Fallaron:$fallidos"
+            exit 1
+          fi
+
   # Los tests del frontend corren en su propio job: no comparten nada con
   # los de Python y asi el reporte dice cual de los dos fallo, en vez de un
   # unico job rojo. Sumado el 2026-07-31, junto con la primera suite de

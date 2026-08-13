@@ -123,9 +123,55 @@ IMAGE_REF="libradesk:$VERSION"
 # Ahora la clave del servicio se LEE -- no se supone: en el compose de compulibra
 # el servicio y el `container_name` no coinciden -- y se ubica su linea `image:`
 # por numero.
-CLAVE_APP="$(docker compose -f "$COMPOSE_FILE" config --services | grep -vE -- '-db$')"
-CLAVE_APP="${CLAVE_APP%%$'\n'*}"
-[ -n "$CLAVE_APP" ] || { echo "[ERROR] No se pudo leer el servicio de la app en $COMPOSE_FILE"; exit 1; }
+#
+# 🔴 Y se elige por la IMAGEN QUE DECLARA, no por como se llama. El primer
+# intento descartaba el sidecar por el sufijo `-db`, que es la convencion de las
+# instancias hechas a mano (`demo`, `compulibra`) pero NO la del generador del
+# backoffice: `lagrace` --la primera instancia creada desde
+# `admin.libradesk.com.ar`-- nombro su sidecar `libradesk-lagrace-postgres`. Con
+# eso el `grep -v` dejaba pasar los DOS servicios, se tomaba el primero, y el
+# deploy apuntaba a la base. Lo freno la guarda de abajo, que es justamente para
+# lo que esta; pero una guarda que salta en el uso normal es un criterio de
+# seleccion equivocado, no una guarda que ande bien.
+#
+# El nombre del servicio NO se puede normalizar de este lado: es el alias de red
+# con el que la app se conecta a su base (`DATABASE_URL` lo nombra), asi que
+# renombrarlo aca dejaria la instancia sin base. El criterio robusto es el mismo
+# que ya validaba la guarda: el servicio de la app es el que declara una imagen
+# `libradesk:`.
+#
+# Va en una funcion para que `tests/test_deploy_elige_servicio.sh` pueda
+# ejercitarla con un `docker` falso, igual que `podar_tags_viejos()`.
+# $1 = archivo de compose. Imprime un nombre de servicio por linea. El
+# encabezado va sin comentario al lado a proposito: el test lo extrae con
+# `sed -n '/^servicios_de_la_app() {$/,/^}$/p'`, igual que podar_tags_viejos().
+servicios_de_la_app() {
+  docker compose -f "$1" config --format json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    servicios = json.load(sys.stdin).get("services", {})
+except ValueError:
+    sys.exit(1)
+for nombre, cfg in servicios.items():
+    if str(cfg.get("image") or "").startswith("libradesk:"):
+        print(nombre)
+'
+}
+
+CLAVE_APP="$(servicios_de_la_app "$COMPOSE_FILE")"
+CUANTOS="$(printf '%s' "$CLAVE_APP" | grep -c . || true)"
+if [ "$CUANTOS" != "1" ]; then
+  echo "[ERROR] En $COMPOSE_FILE hay $CUANTOS servicios con una imagen 'libradesk:'," >&2
+  echo "        y tiene que haber exactamente uno." >&2
+  if [ "$CUANTOS" = "0" ]; then
+    echo "        Con 0: el compose no declara la app, o 'docker compose config' fallo" >&2
+    echo "        (falta una variable del .env, por ejemplo)." >&2
+  else
+    echo "        Servicios encontrados:" >&2
+    printf '          %s\n' $CLAVE_APP >&2
+  fi
+  exit 1
+fi
 
 LINEA_SVC="$(awk -v s="  ${CLAVE_APP}:" '$0 == s { print NR; exit }' "$COMPOSE_FILE")"
 [ -n "$LINEA_SVC" ] || { echo "[ERROR] No se encontro el bloque del servicio '$CLAVE_APP'"; exit 1; }
