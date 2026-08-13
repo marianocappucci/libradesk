@@ -9,9 +9,10 @@ defectos que este archivo fija:
    la SPA de `app/asgi.py` (`/{full_path:path}` → index.html), o sea que el
    chequeo medía que hubiera estáticos, no que la API estuviera viva.
 
-   > Desde el 2026-08-12 el router sirve **las dos**: `/health` es la canónica
-   > —la misma que los otros cinco productos— y `/api/health` quedó como alias
-   > de transición. Los composes de acá ya apuntan a `/health`.
+   > Desde el 2026-08-12 el router sirve `/health`, la misma que los otros
+   > cinco productos, y los composes de acá la piden. `/api/health` fue alias de
+   > transición ese día y ya no existe — o sea que **la ruta vieja volvió a ser
+   > una de las que contesta el catch-all**, que es lo que este archivo mide.
 2. **La aserción, que es lo de fondo.** Con el `dist/` horneado, *cualquier*
    ruta devuelve 200. Un chequeo que sólo llama a `urlopen()` no puede fallar
    mientras uvicorn conteste algo — ni siquiera apuntado a una ruta inventada.

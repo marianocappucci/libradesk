@@ -115,7 +115,7 @@ def test_el_catch_all_de_la_spa_no_se_come_el_health(armar_cliente):
     """🔴 `/health` le gana al catch-all de la SPA.
 
     Es lo que hace posible servir la salud en la raíz como los otros cinco
-    productos, y también lo que mantenía invisible el desvío a `/api/health`:
+    productos, y también lo que mantenía invisible el desvío a la ruta vieja:
     con el `dist` horneado **cualquier** ruta devuelve 200 con el `index.html`,
     así que un healthcheck que sólo mire el status da verde exista o no la
     ruta. Medido contra `libradesk-demo` el 2026-08-12: las dos rutas daban
@@ -130,6 +130,12 @@ def test_el_catch_all_de_la_spa_no_se_come_el_health(armar_cliente):
     El assert de control —la ruta inventada **sí** cae en el `index.html`— no
     es decorativo: sin él, un catch-all que no llegara a registrarse dejaría
     este test en verde sin haber probado nada.
+
+    Y desde que se sacó el alias, `/api/health` **es** uno de esos controles: se
+    lo come el catch-all igual que a cualquier ruta inventada. Vale la pena
+    verlo escrito, porque es la forma en que este cambio puede lastimar a algo
+    de afuera — un chequeo que haya quedado apuntado ahí no recibe un 404, sino
+    un 200 con HTML, y si sólo mira el código dice "ok" para siempre.
     """
     app, cliente = armar_cliente()
 
@@ -138,12 +144,18 @@ def test_el_catch_all_de_la_spa_no_se_come_el_health(armar_cliente):
         del full_path
         return HTMLResponse("<!doctype html><title>LibraDesk</title>")
 
-    control = cliente.get("/una-ruta-que-no-existe")
-    assert control.status_code == 200
-    assert control.headers["content-type"].startswith("text/html")
+    for control in ("/una-ruta-que-no-existe", "/api/health"):
+        r = cliente.get(control)
+        # Los dos mensajes se distinguen a proposito: llevando los dos el mismo
+        # texto, el rojo no decia si la ruta habia dejado de contestar o si
+        # habia vuelto a ser una ruta del router, que son diagnosticos opuestos.
+        assert r.status_code == 200, f"{control}: el catch-all no contesto (HTTP {r.status_code})"
+        assert r.headers["content-type"].startswith("text/html"), (
+            f"{control}: contesto {r.headers['content-type']}, o sea que la sirve el router "
+            "y no el catch-all — dejo de servir como control"
+        )
 
-    for ruta in ("/health", "/api/health"):
-        r = cliente.get(ruta)
-        assert r.status_code == 200, ruta
-        assert r.headers["content-type"].startswith("application/json"), ruta
-        assert r.json()["status"] == "ok", ruta
+    r = cliente.get("/health")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.json()["status"] == "ok"
