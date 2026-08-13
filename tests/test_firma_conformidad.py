@@ -146,20 +146,29 @@ def test_firmar_un_ticket_inexistente_da_404(client):
                       json={"imagen": _data_url()}).status_code == 404
 
 
-def test_la_conformidad_sale_impresa_en_la_orden_de_trabajo(ticket, client):
-    """El nombre de quien firmó y sus observaciones, en el PDF.
+def _imagenes_embebidas(contenido: bytes) -> int:
+    """Cuántas imágenes tiene realmente el PDF.
 
-    La **imagen** no se puede afirmar leyendo texto —pypdf extrae texto, no
-    dibujos— así que lo que se verifica es que el PDF crezca al agregarla: sin
-    eso, un `pdf.image()` que fallara en silencio dejaría el bloque con el
-    nombre y sin la firma, que es un comprobante que no prueba nada.
+    🔴 **Este helper existe por un falso verde encontrado por mutación.** La
+    primera versión del test afirmaba `len(despues) > len(antes)` —que el PDF
+    creciera— y con `pdf.image()` fallando y cayendo al texto de respaldo
+    **los once tests seguían pasando**: los bytes del mensaje alcanzaban para
+    que creciera. O sea que la suite daba verde con un comprobante que tiene el
+    nombre del firmante y ninguna firma, que es un papel que no prueba nada.
+
+    Contar los XObject de imagen mide la cosa, no un efecto lateral de la cosa.
     """
+    return sum(len(p.images) for p in PdfReader(BytesIO(contenido)).pages)
+
+
+def test_la_conformidad_sale_impresa_en_la_orden_de_trabajo(ticket, client):
+    """El nombre, las observaciones **y la firma** en la orden de trabajo."""
     antes = client.get(f"/api/incidencias/{ticket['id']}/pdf").content
-    texto_antes = _texto_pdf(antes).upper()
-    assert "CONFORMIDAD DEL CLIENTE" not in texto_antes, (
+    assert "CONFORMIDAD DEL CLIENTE" not in _texto_pdf(antes).upper(), (
         "sin firma no tiene que haber sección — si no, el PDF se vuelve un "
         "formulario para firmar a mano, que es lo que esto reemplaza"
     )
+    imagenes_antes = _imagenes_embebidas(antes)
 
     client.put(f"/api/incidencias/{ticket['id']}/firma", json={
         "imagen": _data_url(_png(300, 90)), "firmante": "Facundo Pérez",
@@ -171,4 +180,10 @@ def test_la_conformidad_sale_impresa_en_la_orden_de_trabajo(ticket, client):
     assert "CONFORMIDAD DEL CLIENTE" in texto.upper()
     assert "Facundo Pérez" in texto
     assert "Trabajo conforme." in texto
-    assert len(despues) > len(antes), "el PDF no creció: la imagen no se embebió"
+
+    # La firma misma. Un `pdf.image()` que falle cae al texto de respaldo, y
+    # eso deja el bloque completo salvo lo único que importa.
+    assert _imagenes_embebidas(despues) == imagenes_antes + 1, (
+        "la firma no quedó embebida en el PDF"
+    )
+    assert "no se pudo representar" not in texto, "cayó al texto de respaldo"
