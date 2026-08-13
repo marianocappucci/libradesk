@@ -145,6 +145,9 @@ def crear_orden(proveedor_id: int, items: list[dict], *, notas: str = "",
     """`items` = `[{"item_id": int, "cantidad": float, "costo": float}, ...]`."""
     if not items:
         raise ValueError("La orden de compra necesita al menos un item.")
+    # El proveedor puede haberse creado despues del arranque: sin su espejo en
+    # `parties`, la FK NOT NULL de abajo rebota. Ver `comercial.asegurar_parties`.
+    comercial.asegurar_parties()
     lineas = tuple(
         PurchaseOrderItem(
             item_id=int(i["item_id"]),
@@ -215,6 +218,7 @@ def crear_recepcion(proveedor_id: int, deposito_id: int, items: list[dict], *,
     """
     if not items:
         raise ValueError("La recepcion necesita al menos un item.")
+    comercial.asegurar_parties()
     lineas = tuple(
         PurchaseReceiptItem(
             item_id=int(i["item_id"]),
