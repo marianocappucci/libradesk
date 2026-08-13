@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import Truck from '~icons/fluent-color/building-store-20'
+import Truck from '~icons/fluent-color/building-people-20'
 import { Pencil, Plus, Trash2 } from '@/components/iconos-accion'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario

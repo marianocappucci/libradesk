@@ -32,9 +32,22 @@ import Users from '~icons/fluent-color/people-16'
 import Wallet from '~icons/fluent-color/savings-16'
 import Wrench from '~icons/fluent-color/wrench-16'
 import PackageSearch from '~icons/fluent-color/vault-16'
-import Truck from '~icons/fluent-color/building-store-16'
+// Elegidos por el humano el 2026-08-13 mirando un comparador de candidatos.
+// Estos 6 ítems venían mostrando el icono MONOCROMO EN RECUADRO en un sidebar
+// de colores: el barrido los había mandado ahí por descarte, porque
+// `fluent-color` no tiene camión, ni caja/paquete, ni etiqueta de precio, ni
+// carrito — son 890 iconos de concepto, no de logística, y a 16 px hay 157.
+// Ninguno es literal: se eligió el más cercano de los que existen.
+import Activos from '~icons/fluent-color/briefcase-16'
+import EquiposFlota from '~icons/fluent-color/people-team-16'
+import DepositosStock from '~icons/fluent-color/vault-16'
+import ListasPrecio from '~icons/fluent-color/list-bar-16'
+import OrdenesCompra from '~icons/fluent-color/approvals-app-16'
+import Productos from '~icons/fluent-color/apps-16'
+// Proveedores sale de `building-store` para no chocar con Depósitos de stock:
+// dos ítems del mismo menú no pueden compartir dibujo.
+import Truck from '~icons/fluent-color/building-people-16'
 import { createLayout } from 'libra-ui/Layout'
-import { Boxes, Car, Package, ShoppingCart, Tags } from '@/components/iconos-accion'
 
 export const Layout = createLayout({
   productName: 'LibraDesk',
@@ -64,7 +77,7 @@ export const Layout = createLayout({
         // hacia un proveedor.
         { to: '/recepciones', label: 'Recepción de equipos', icon: ClipboardCheck },
         { to: '/reparaciones', label: 'Reparaciones', icon: Wrench },
-        { to: '/equipos-trabajo', label: 'Equipos y flota', icon: Car },
+        { to: '/equipos-trabajo', label: 'Equipos y flota', icon: EquiposFlota },
       ],
     },
 
@@ -72,17 +85,17 @@ export const Layout = createLayout({
     {
       label: 'Inventario',
       items: [
-        { to: '/productos', label: 'Productos', icon: Package, module: 'stock' },
+        { to: '/productos', label: 'Productos', icon: Productos, module: 'stock' },
         { to: '/stock', label: 'Stock', icon: PackageSearch, module: 'stock' },
-        { to: '/depositos-stock', label: 'Depósitos de stock', icon: Boxes, module: 'stock' },
-        { to: '/listas-precio', label: 'Listas de precios', icon: Tags, module: 'cuenta_corriente' },
+        { to: '/depositos-stock', label: 'Depósitos de stock', icon: DepositosStock, module: 'stock' },
+        { to: '/listas-precio', label: 'Listas de precios', icon: ListasPrecio, module: 'cuenta_corriente' },
       ],
     },
 
     {
       label: 'Compras',
       items: [
-        { to: '/ordenes-compra', label: 'Órdenes de compra', icon: ShoppingCart, module: 'compras' },
+        { to: '/ordenes-compra', label: 'Órdenes de compra', icon: OrdenesCompra, module: 'compras' },
         { to: '/recepciones-compra', label: 'Recepción de mercadería', icon: ArrowDownToLine, module: 'compras' },
         { to: '/egresos', label: 'Egresos', icon: Wallet, module: 'compras' },
         // Proveedores vive en Compras y no en Configuración: es a quien se le
@@ -117,7 +130,7 @@ export const Layout = createLayout({
         // entiende. Adentro la entidad es el contrato, que es lo que permite
         // que comodato, préstamo y leasing entren sin rehacer el módulo.
         { to: '/contratos', label: 'Equipos en alquiler', icon: FileSignature, module: 'alquileres' },
-        { to: '/activos', label: 'Activos', icon: Boxes, module: 'alquileres' },
+        { to: '/activos', label: 'Activos', icon: Activos, module: 'alquileres' },
       ],
     },
 
