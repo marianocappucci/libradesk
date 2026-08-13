@@ -44,6 +44,11 @@ class IncidenciaIn(BaseModel):
     categoria_id: int | None = None
     titulo: str
     descripcion: str | None = None
+    #: El numero del talonario de Comprobante de Servicios (`0001-00041996`).
+    #: Opcional: un reclamo resuelto en remoto no tiene papel que numerar.
+    nro_cds: str | None = None
+    #: Quien llamo, cuando no es el contacto habitual del cliente.
+    reclamante: str | None = None
     estado: str = "abierto"
     prioridad: str = "media"
     horas_invertidas: float | None = None

@@ -65,6 +65,16 @@ class _IncidenciaPDF(_TextoSeguroPDF, FPDF):
                 ("Fecha:", self.datos["fecha_creacion"]),
                 ("Estado:", self.datos["estado_label"]),
             ]
+            # El N° CDS va en el encabezado, al lado del número de ticket, y no
+            # enterrado en una sección: **es la llave con el papel firmado**.
+            # Quien tiene el talonario en la mano busca por ese número, y abajo
+            # de todo el documento no sirve para eso.
+            #
+            # Sólo si existe: un reclamo resuelto en remoto no tiene
+            # comprobante, y una etiqueta con un guión al lado del número de
+            # ticket se lee como "acá falta algo" en vez de "no corresponde".
+            if self.datos.get("nro_cds"):
+                info.append(("N° CDS:", self.datos["nro_cds"]))
             self.set_y(_draw_header_block(
                 self, _LETRA, _TITULO, "", info, self.empresa,
             ))
@@ -95,6 +105,41 @@ def _campo(pdf: FPDF, etiqueta: str, valor: str | None, ancho: float = _CW / 2) 
     pdf.cell(28, _LINEA, f"{etiqueta}:")
     pdf.set_text_color(*_INK)
     pdf.cell(ancho - 28, _LINEA, valor or "—")
+
+
+def _materiales(pdf: FPDF, materiales: list[dict]) -> None:
+    """La columna «Materiales Utilizados» del comprobante en papel.
+
+    **Si no hay materiales la sección no se dibuja**, a diferencia de
+    Descripción o Resolución, que sí muestran un guión. El criterio no es
+    estético: la mayoría de los tickets de una mesa de ayuda no consumen nada
+    —un diagnóstico, una configuración remota— y un encabezado «MATERIALES
+    UTILIZADOS» seguido de un guión en todos ellos entrena a saltear la
+    sección justo en los que sí la tienen.
+
+    ⚠️ **No lleva importes.** Los materiales salen del inventario con su costo,
+    no con un precio de venta, y este documento es una orden de trabajo: poner
+    plata acá lo volvería un presupuesto sin serlo. Lo que se cobra sale de la
+    venta, que es otro comprobante.
+    """
+    if not materiales:
+        return
+    _titulo_seccion(pdf, "Materiales utilizados")
+    pdf.set_font("Helvetica", "", 8)
+    for m in materiales:
+        pdf.set_text_color(*_INK)
+        # La cantidad primero y alineada: la pregunta que se le hace a esta
+        # tabla es "cuánto salió del depósito", no "qué había".
+        cantidad = f"{m['cantidad']:g}"
+        pdf.cell(16, _LINEA, cantidad, align="R")
+        pdf.cell(4, _LINEA, "")
+        lineas = _wrap_text(pdf, m.get("descripcion") or "—", _CW - 20)
+        pdf.cell(_CW - 20, _LINEA, lineas[0] if lineas else "—")
+        pdf.ln(_LINEA)
+        for extra in lineas[1:]:
+            pdf.cell(20, _LINEA, "")
+            pdf.cell(_CW - 20, _LINEA, extra)
+            pdf.ln(_LINEA)
 
 
 def _parrafo(pdf: FPDF, texto: str | None) -> None:
@@ -157,10 +202,20 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
     _campo(pdf, "Ejecutó", datos["tecnico"])
     pdf.ln(_LINEA)
     _campo(pdf, "Vendedor", datos["vendedor"], _CW)
+    pdf.ln(_LINEA)
+    # Quien llamó, cuando no es el contacto habitual. Va en Personal y no en
+    # Ticket porque es una persona, no un atributo del reclamo.
+    _campo(pdf, "Reclamante", datos.get("reclamante"), _CW)
     pdf.ln(_LINEA + 1)
 
     _titulo_seccion(pdf, "Descripción")
     _parrafo(pdf, datos["descripcion"])
+
+    # Entre la descripción y la resolución a propósito: es el orden del papel
+    # que ellos completan (reclamo efectuado → materiales utilizados →
+    # observaciones del técnico). Ver
+    # `wiki/sources/lagrace-relevamiento-whatsapp.md`.
+    _materiales(pdf, datos.get("materiales") or [])
 
     _titulo_seccion(pdf, "Resolución")
     _parrafo(pdf, datos["resolucion"])
