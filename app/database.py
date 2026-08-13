@@ -29,9 +29,28 @@ def configure(database_url: str) -> None:
         raise ValueError(
             f"LibraDesk requiere PostgreSQL y recibió: {database_url.split('://')[0]}://…"
         )
+    # 🔴 `postgresql://` a secas HAY QUE NORMALIZARLO ANTES DE `create_engine`.
+    #
+    # SQLAlchemy resuelve el esquema pelado al dialecto **psycopg2**, que este
+    # producto no instala: la dependencia es `psycopg[binary]` (psycopg 3). Y no
+    # falla al conectarse sino al IMPORTARSE, con `ModuleNotFoundError: No
+    # module named 'psycopg2'`, así que el contenedor ni siquiera llega a
+    # levantar — crash loop y healthcheck que nunca pasa.
+    #
+    # Las dos formas entran a la guarda de arriba porque las dos existen en el
+    # parque: LibraCore conecta con `psycopg.connect()`, que acepta la forma
+    # libpq, así que sus composes la escriben pelada y para él está bien. El que
+    # necesita el sufijo es SQLAlchemy. Normalizar acá —en vez de exigir que el
+    # compose venga perfecto— es lo que hace que este producto arranque
+    # cualquiera sea la forma en que se lo escribieron.
+    #
+    # Encontrado el 2026-08-13 en `libradesk-lagrace`, la primera instancia
+    # creada por el alta del backoffice: 28 reinicios. Las anteriores tenían el
+    # sufijo puesto A MANO, que es por qué nadie lo había visto.
+    url_sqlalchemy = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     # `pool_pre_ping` evita entregar una conexión que el sidecar cerró durante
     # un restart.
-    _engine = create_engine(database_url, pool_pre_ping=True)
+    _engine = create_engine(url_sqlalchemy, pool_pre_ping=True)
     _session_factory = sessionmaker(bind=_engine)
 
 
