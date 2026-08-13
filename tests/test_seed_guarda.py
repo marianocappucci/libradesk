@@ -11,8 +11,9 @@ quedan mezclados.
 """
 import pytest
 
+from app.routers.incidencias import IncidenciaIn
 from app.services.incidencias import ESTADOS_VALIDOS
-from scripts.seed_dev import CIERRES, url_no_productiva
+from scripts.seed_dev import CAMPOS_INCIDENCIA, CIERRES, url_no_productiva
 
 
 @pytest.mark.parametrize("url", [
@@ -123,3 +124,45 @@ def test_toda_incidencia_terminada_explica_como_se_resolvio():
     for titulo, _, horas, resolucion, _ in CIERRES:
         assert resolucion and resolucion.strip(), f"«{titulo}» sin resolución"
         assert horas and horas > 0, f"«{titulo}» sin horas"
+
+
+# ── El PUT que reemplaza ────────────────────────────────────────────────────
+#
+# `PUT /api/incidencias/{id}` **reemplaza**, no parchea: lo que no viaja en el
+# cuerpo se pierde contra el default del modelo. El seed hace dos PUT parciales
+# y reenvía el resto desde una lista.
+#
+# 🔴 La lista estaba escrita a mano y le faltaban cuatro campos, justo debajo de
+# un comentario que advertía "hay que reenviar todo lo demás o se borra". El
+# 2026-08-13 el PUT de la agenda le borró el `estado_facturacion` a "Cambio de
+# switch en el rack" sobre la demo, y la pantalla de facturación se quedó sin
+# ejemplo de `no_facturable`. No falló nada: el PUT devolvió 200.
+
+def test_la_lista_de_campos_no_se_queda_atras_del_modelo():
+    """El que agrega un campo a `IncidenciaIn` se entera acá, no en la demo.
+
+    Es la única forma de que esto no se repita: mientras la lista se mantenga a
+    mano y nada la compare contra el modelo, el próximo campo nuevo se va a
+    borrar igual y tampoco va a fallar nada.
+    """
+    del_modelo = set(IncidenciaIn.model_fields)
+    de_la_lista = set(CAMPOS_INCIDENCIA)
+    assert de_la_lista == del_modelo, (
+        f"faltan en el seed: {sorted(del_modelo - de_la_lista)}; "
+        f"sobran: {sorted(de_la_lista - del_modelo)}"
+    )
+
+
+def test_no_se_reenvian_los_campos_que_pone_el_producto():
+    """`id`, `fecha_creacion` y `fecha_cierre` son de `IncidenciaOut`.
+
+    Hoy Pydantic los ignoraría, pero apoyarse en eso es apoyarse en un default
+    que se puede cambiar — y `fecha_cierre` la calcula el producto al pasar a
+    un estado terminal: mandarla de vuelta sería pisarla.
+    """
+    for campo in ("id", "fecha_creacion", "fecha_cierre"):
+        assert campo not in CAMPOS_INCIDENCIA
+
+
+def test_no_hay_campos_repetidos_en_la_lista():
+    assert len(CAMPOS_INCIDENCIA) == len(set(CAMPOS_INCIDENCIA))
