@@ -20,6 +20,11 @@ mirarse. La agenda (fase B del pedido 42) sigue el mismo criterio: dos trabajos
 **pegados** en el mismo equipo —uno termina 11:00, el otro empieza 11:00—, dos
 **equipos distintos a la misma hora**, y un ticket **sin agendar**.
 
+> El 2026-08-13 se agregó un ticket en **`resuelta`**: era el único de los
+> cuatro estados de incidencia que el seed no producía, así que el verde del
+> semáforo —el punto de la grilla y, desde ese día, la píldora de Estado— no
+> se veía nunca en la demo. Falta todavía uno en **`en_progreso`**.
+
 **Es idempotente por nombre**: si el registro ya existe no lo duplica, así que
 se puede correr después de cada deploy sin ensuciar.
 
@@ -40,6 +45,39 @@ from datetime import date, datetime, time, timedelta
 from http.cookiejar import CookieJar
 
 HOY = date.today()
+
+#: Los tickets que el seed deja **terminados**, por título.
+#:
+#: `(título, estado, horas, resolución, estado_facturacion)`.
+#:
+#: A nivel de módulo y no adentro de `sembrar()` para que se pueda mirar sin
+#: correr el seed contra una instancia — ver `tests/test_seed_guarda.py`.
+#:
+#: 🔴 **Por título y no por índice de la lista.** Hasta el 2026-08-13 esto era
+#: `(0, ...)`, `(1, ...)`, `(2, ...)` sobre lo que devolviera
+#: `GET /api/incidencias`, que **no promete orden y no contiene sólo lo que
+#: siembra este script**. En la demo, cargada además con tickets para la
+#: presentación, los índices 0-2 cayeron en otros tres: quedó "Revisión de
+#: cableado" con la resolución *"Se reemplazó la fuente y se probó 24 h."* y
+#: "Instalación de access point" con *"Actualización de firmware y prueba de
+#: impresión"*. Nada fallaba; la demo mostraba resoluciones que no tenían nada
+#: que ver con su ticket.
+#:
+#: `resuelta` entra en la misma tanda porque es el mismo movimiento —el producto
+#: trata `resuelta` y `cerrado` como los dos estados terminales, ver
+#: `ESTADOS_CERRADOS` en `app/services/informes.py`— y porque era el único de
+#: los cuatro estados que el seed no producía.
+CIERRES = [
+    ("Se corta el teléfono en recepción", "cerrado", 2.5,
+     "Se reemplazó la fuente y se probó 24 h.", None),
+    ("La impresora no toma papel", "cerrado", 1.0,
+     "Actualización de firmware y prueba de impresión.", "facturado"),
+    ("Cambio de switch en el rack", "cerrado", 4.0,
+     "Recableado del rack y etiquetado.", "no_facturable"),
+    ("Cambio de disco en el servidor de archivos", "resuelta", 3.0,
+     "Disco reemplazado y RAID reconstruido. A la espera de que el cliente "
+     "confirme para cerrar.", None),
+]
 
 
 class Api:
@@ -345,6 +383,12 @@ def sembrar(api: Api) -> None:
          "Sofía Núñez", "Sofía Núñez", turno(9), 60, sur),
         ("Revisión de cableado", "on_site", "Lucía Fernández",
          "Diego Ramos", None, turno(14, 30), 180, sur),
+        # Éste queda en `resuelta` (ver `cierres`), que es el único de los
+        # cuatro estados que el seed no producía: había abiertas y cerradas y
+        # nada en el medio, así que el verde del semáforo no se veía nunca —
+        # ni el punto de la grilla ni la píldora de Estado.
+        ("Cambio de disco en el servidor de archivos", "on_site",
+         "Lucía Fernández", "Diego Ramos", None, turno(16), 120, norte),
     ]
     # 🔴 La idempotencia por título tiene un costo que se pagó de verdad: un
     # ticket de ejemplo cargado por un seed VIEJO no se entera de los campos que
@@ -617,7 +661,7 @@ def sembrar(api: Api) -> None:
         })
         contar("traslados", True)
 
-    # ── Incidencias cerradas: es lo que alimenta el reporte de facturacion ──
+    # ── Incidencias terminadas: alimentan el reporte de facturacion ─────────
     # El reporte pide `estado == "cerrado"` sobre clientes `por_servicio`, y el
     # seed no cerraba ninguna: daba 0 filas. `fecha_cierre` no se puede mandar
     # en el alta — la pone el producto al pasar a cerrado, asi que se cierra
@@ -626,23 +670,26 @@ def sembrar(api: Api) -> None:
     # Con los tres estados de facturacion a la vez (sin facturar, facturado y
     # no facturable) el filtro de la pantalla tiene las tres opciones con
     # resultados; con una sola no se ve que el filtro haga algo.
-    cierres = [
-        (0, 2.5, "Se reemplazó la fuente y se probó 24 h.", None),
-        (1, 1.0, "Actualización de firmware y prueba de impresión.", "facturado"),
-        (2, 4.0, "Recableado del rack y etiquetado.", "no_facturable"),
-    ]
-    incidencias = api.get("/api/incidencias") or []
-    for indice, horas, resolucion, estado_fact in cierres:
-        if indice >= len(incidencias):
+    #
+    # La tabla vive en `CIERRES`, a nivel de modulo, con el porque de que sea
+    # **por titulo y no por indice**. El titulo es la misma clave que usa la
+    # idempotencia de mas arriba.
+    por_titulo = {i["titulo"]: i for i in (api.get("/api/incidencias") or [])}
+    for titulo, estado, horas, resolucion, estado_fact in CIERRES:
+        inc = por_titulo.get(titulo)
+        # Si no esta, es que la lista de `tickets` y esta lista se
+        # desincronizaron: se avisa en vez de seguir en silencio, que es como
+        # se llega a una demo con un estado sin ejemplos.
+        if inc is None:
+            print(f"  ⚠️  no se encontró el ticket «{titulo}» para dejarlo {estado}")
             continue
-        inc = incidencias[indice]
-        if inc.get("estado") == "cerrado":
+        if inc.get("estado") in ("cerrado", "resuelta"):
             continue
         api.put(f"/api/incidencias/{inc['id']}", {
             **{k: inc.get(k) for k in (
                 "cliente_id", "equipo_id", "tecnico_id", "titulo", "descripcion",
                 "prioridad", "categoria_id", "sector_id", "modalidad")},
-            "estado": "cerrado",
+            "estado": estado,
             "horas_invertidas": horas,
             "resolucion": resolucion,
             "estado_facturacion": estado_fact,
