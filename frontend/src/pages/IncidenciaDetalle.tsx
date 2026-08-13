@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MODALIDAD_LABELS,
+  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_COLOR, ESTADO_LABELS, MODALIDAD_LABELS,
   MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
@@ -372,7 +372,14 @@ export function IncidenciaDetalle() {
           {incidencia && (
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               {incidencia.titulo}
-              <Badge variant={incidencia.estado === 'cerrado' || incidencia.estado === 'resuelta' ? 'default' : 'outline'}>
+              {/* El mismo semáforo que la grilla, adentro del badge de estado:
+                  quien viene de la lista reconoce el color y no tiene que
+                  releer la palabra para saber dónde está parado el ticket.
+                  El color va DENTRO del badge y no al lado del título para que
+                  se lea como un atributo del estado y no como otra marca. */}
+              <Badge variant={incidencia.estado === 'cerrado' || incidencia.estado === 'resuelta' ? 'default' : 'outline'}
+                     className="gap-1.5">
+                <span className={`inline-block h-2 w-2 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
                 {ESTADO_LABELS[incidencia.estado]}
               </Badge>
               <Badge variant={incidencia.prioridad === 'alta' ? 'destructive' : 'outline'}>
@@ -596,10 +603,23 @@ export function IncidenciaDetalle() {
               <div className="grid gap-1.5">
                 <Label>Estado</Label>
                 <Select value={incidencia.estado} onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  {/* El punto también en el trigger y en cada opción: al
+                      cambiar el estado se ve a qué color se está pasando, que
+                      es la mitad de lo que uno decide al moverlo. */}
+                  <SelectTrigger>
+                    <span className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(ESTADO_LABELS) as (keyof typeof ESTADO_LABELS)[]).map((e) => (
-                      <SelectItem key={e} value={e}>{ESTADO_LABELS[e]}</SelectItem>
+                      <SelectItem key={e} value={e}>
+                        <span className="flex items-center gap-2">
+                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[e]}`} />
+                          {ESTADO_LABELS[e]}
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
