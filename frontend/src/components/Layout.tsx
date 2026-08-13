@@ -67,10 +67,12 @@ export const Layout = createLayout({
         { to: '/ordenes-compra', label: 'Órdenes de compra', icon: ShoppingCart, module: 'compras' },
         { to: '/recepciones-compra', label: 'Recepción de mercadería', icon: ArrowDownToLine, module: 'compras' },
         { to: '/egresos', label: 'Egresos', icon: Wallet, module: 'compras' },
-        // Proveedores vive en Compras y no en Configuración aunque su ABM esté
-        // allá: es a quien se le compra, y es donde lo busca quien carga una
-        // orden. La ruta es la misma pantalla.
-        { to: '/configuracion/proveedores', label: 'Proveedores', icon: Truck },
+        // Proveedores vive en Compras y no en Configuración: es a quien se le
+        // compra, y es donde lo busca quien carga una orden. Y tiene pantalla
+        // propia — mientras apuntó a `/configuracion/proveedores`, entrar por
+        // acá mostraba el título y el conmutador de Configuración, o sea la
+        // pantalla de ajustes con el listado colgando al pie.
+        { to: '/proveedores', label: 'Proveedores', icon: Truck },
       ],
     },
 
