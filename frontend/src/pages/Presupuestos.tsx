@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import Download from '~icons/streamline-plump/download-box-2'
-import FileCheck from '~icons/streamline-plump/file-check-alternate'
-import Pencil from '~icons/streamline-plump/pencil-square'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type Cliente, type EstadoPresupuesto,
   type Presupuesto,
@@ -22,8 +19,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
 import FileText from '~icons/fluent-color/document-text-20'
+import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 

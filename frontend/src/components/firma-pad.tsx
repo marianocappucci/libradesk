@@ -12,8 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import PenLine from '~icons/streamline-plump/pen-1'
-import Eraser from '~icons/streamline-plump/eraser'
+import { Eraser, PenLine } from '@/components/iconos-accion'
 
 export type Firma = {
   imagen: string

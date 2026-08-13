@@ -25,10 +25,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import ShieldCheck from '~icons/streamline-plump/user-protection-check'
 import Wrench from '~icons/fluent-color/wrench-16'
 import { fecha } from '@/lib/format'
-import PackageCheck from '~icons/streamline-plump/archive-box'
+import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 

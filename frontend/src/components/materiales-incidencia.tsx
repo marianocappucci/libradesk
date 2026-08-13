@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import type { Consumible, StockPorDeposito } from '../pages/Stock'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
+import { Trash2 } from '@/components/iconos-accion'
 
 type Material = {
   id: number

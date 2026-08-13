@@ -19,11 +19,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import Repeat from '~icons/streamline-plump/synchronize'
-import TrendingUp from '~icons/streamline-plump/graph-bar-increase'
-import { ArrowLeft } from 'lucide-react'
-import PackagePlus from '~icons/streamline-plump/archive-box'
-import Undo2 from '~icons/streamline-plump/return-3'
+import { ArrowLeft, PackagePlus, Repeat, TrendingUp, Undo2 } from '@/components/iconos-accion'
 
 const HOY = () => new Date().toISOString().slice(0, 10)
 

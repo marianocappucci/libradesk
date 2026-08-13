@@ -43,12 +43,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
-import Check from '~icons/streamline-plump/check-thick'
-import Pencil from '~icons/streamline-plump/pencil-square'
 import Users from '~icons/fluent-color/people-16'
-import { Car, LinkIcon, Plus } from 'lucide-react'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
-import Unlink from '~icons/streamline-plump/broken-link-2'
+import { Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink } from '@/components/iconos-accion'
 
 const SIN = '__sin__'
 

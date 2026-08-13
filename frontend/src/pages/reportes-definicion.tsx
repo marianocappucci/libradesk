@@ -12,7 +12,7 @@
 import { ESTADO_LABELS, PRIORIDAD_LABELS } from '../api'
 import Monitor from '~icons/fluent-color/laptop-16'
 import Wallet from '~icons/fluent-color/savings-16'
-import { Ticket } from 'lucide-react'
+import { Ticket } from '@/components/iconos-accion'
 
 export const TODOS = '__todos__'
 

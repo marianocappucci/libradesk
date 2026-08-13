@@ -11,7 +11,7 @@
 import type { Pestania } from '@/components/conmutador'
 import CalendarDays from '~icons/fluent-color/calendar-16'
 import Users from '~icons/fluent-color/people-16'
-import { Car } from 'lucide-react'
+import { Car } from '@/components/iconos-accion'
 
 export const PESTANIAS_EQUIPOS: readonly Pestania[] = [
   { clave: 'equipos', to: '/equipos-trabajo', label: 'Equipos de trabajo', icono: Users },

@@ -22,10 +22,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import Pencil from '~icons/streamline-plump/pencil-square'
-import { Plus } from 'lucide-react'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
 import { Truck } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from '@/components/iconos-accion'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */

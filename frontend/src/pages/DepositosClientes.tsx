@@ -26,9 +26,8 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import Building2 from '~icons/fluent-color/building-16'
-import Check from '~icons/streamline-plump/check-thick'
 import Users from '~icons/fluent-color/people-16'
-import { Plus } from 'lucide-react'
+import { Check, Plus } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 

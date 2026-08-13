@@ -27,9 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import History from '~icons/fluent-color/history-16'
-import Pencil from '~icons/streamline-plump/pencil-square'
-import { Boxes, Plus } from 'lucide-react'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
+import { Boxes, Pencil, Plus, Trash2 } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 

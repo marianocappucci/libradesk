@@ -31,8 +31,9 @@ import UserCog from '~icons/fluent-color/person-key-20'
 import Users from '~icons/fluent-color/people-16'
 import Wallet from '~icons/fluent-color/savings-16'
 import Wrench from '~icons/fluent-color/wrench-16'
-import { Boxes, Car, Package, PackageSearch, ShoppingCart, Tags, Truck } from 'lucide-react'
+import { PackageSearch, Truck } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
+import { Boxes, Car, Package, ShoppingCart, Tags } from '@/components/iconos-accion'
 
 export const Layout = createLayout({
   productName: 'LibraDesk',

@@ -20,9 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import AlertTriangle from '~icons/streamline-plump/warning-diamond'
-import Pencil from '~icons/streamline-plump/pencil-square'
-import { Package, Plus } from 'lucide-react'
+import { AlertTriangle, Package, Pencil, Plus } from '@/components/iconos-accion'
 
 export type Producto = {
   id: number

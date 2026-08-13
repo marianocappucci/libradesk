@@ -18,7 +18,7 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { fechaHoraDeDate } from '@/lib/format'
-import Printer from '~icons/streamline-plump/printer'
+import { Printer } from '@/components/iconos-accion'
 
 export function Imprimible({ children }: { children: ReactNode }) {
   return <div id="zona-impresion">{children}</div>

@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import CheckCircle2 from '~icons/streamline-plump/check-thick'
 import FileText from '~icons/fluent-color/document-text-16'
 import Receipt from '~icons/fluent-color/receipt-16'
 import Send from '~icons/fluent-color/send-16'
-import TriangleAlert from '~icons/streamline-plump/warning-diamond'
-import { Info, XCircle } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import SendAccion from '~icons/streamline-plump/mail-send'
+import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
 
 type Envio = {
   id: number

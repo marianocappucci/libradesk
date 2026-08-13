@@ -19,9 +19,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import ArrowLeftRight from '~icons/streamline-plump/synchronize'
-import Building2 from '~icons/streamline-plump/building-office'
-import { Boxes, Minus, Plus } from 'lucide-react'
+import { ArrowLeftRight, Boxes, Building2, Minus, Plus } from '@/components/iconos-accion'
 
 export type Consumible = {
   id: number

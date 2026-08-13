@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import Download from '~icons/streamline-plump/download-box-2'
-import Pencil from '~icons/streamline-plump/pencil-square'
 import { api, ApiError, type Cliente, type Remito } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,8 +12,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
 import Receipt from '~icons/fluent-color/receipt-20'
+import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
 
 export function Remitos() {
   const navigate = useNavigate()

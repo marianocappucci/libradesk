@@ -20,7 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Boxes, Percent, Plus, Tags } from 'lucide-react'
+import { Boxes, Percent, Plus, Tags } from '@/components/iconos-accion'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────
 

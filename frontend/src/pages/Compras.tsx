@@ -27,8 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
 import Wallet from '~icons/fluent-color/savings-16'
-import { Plus, ShoppingCart } from 'lucide-react'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
+import { Plus, ShoppingCart, Trash2 } from '@/components/iconos-accion'
 
 type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {

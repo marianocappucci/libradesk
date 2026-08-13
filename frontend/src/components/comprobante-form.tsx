@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
+import { Trash2 } from '@/components/iconos-accion'
 
 /** `tax_rate` es el PORCENTAJE como string ('21', '10.5'), no la fracción: es
  *  lo que muestra el `<select>` y lo que se leía en el campo del documento

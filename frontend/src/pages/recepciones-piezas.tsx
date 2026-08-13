@@ -9,7 +9,7 @@
  */
 import type { Pestania } from '@/components/conmutador'
 import Warehouse from '~icons/fluent-color/building-multiple-20'
-import { PackageCheck } from 'lucide-react'
+import { PackageCheck } from '@/components/iconos-accion'
 
 export const PESTANIAS_RECEPCION: readonly Pestania[] = [
   { clave: 'taller', to: '/recepciones', label: 'En el taller', icono: Warehouse },

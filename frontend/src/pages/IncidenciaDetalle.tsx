@@ -29,16 +29,11 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
-import Check from '~icons/streamline-plump/check-thick'
 import History from '~icons/fluent-color/history-16'
 import MessageSquare from '~icons/fluent-color/comment-16'
 import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
 import Wrench from '~icons/fluent-color/wrench-16'
-import { ArrowLeft, PackageCheck } from 'lucide-react'
-import ArrowLeftRightAccion from '~icons/streamline-plump/synchronize'
-import ShieldCheckAccion from '~icons/streamline-plump/user-protection-check'
-import Printer from '~icons/streamline-plump/printer'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
+import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
 
 const NONE = '__none__'
 

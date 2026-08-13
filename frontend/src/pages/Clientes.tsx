@@ -40,12 +40,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // atribucion tiene que existir en algun lado visible del producto ANTES de
 // que salga a produccion. Hoy no esta puesta: es una prueba.
 import Users from '~icons/fluent-color/people-16'
-import Check from '~icons/streamline-plump/check-thick'
-import MapPin from '~icons/streamline-plump/location-pin'
-import Pencil from '~icons/streamline-plump/pencil-square'
-import Trash2 from '~icons/streamline-plump/recycle-bin'
-import Undo2 from '~icons/streamline-plump/return-3'
-import { Plus, X } from 'lucide-react'
+import { Check, MapPin, Pencil, Plus, Trash2, Undo2, X } from '@/components/iconos-accion'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
