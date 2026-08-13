@@ -118,8 +118,15 @@ export function Depositos() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* "Depósitos" y no "Depósitos de la empresa": el título nombra la
+            sección y el conmutador de abajo dice en cuál de las dos estás,
+            mismo patrón que Configuración. Mientras el título cambiaba con la
+            pestaña, el ítem del menú no podía llamarse como ninguna de las dos
+            pantallas — de ahí el "Depósitos de equipos" que no aparecía en
+            ningún lado adentro. El párrafo de abajo sigue siendo distinto por
+            pestaña: eso es lo que explica dónde estás parado. */}
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Building2 className="size-5" />Depósitos de la empresa
+          <Building2 className="size-5" />Depósitos
         </h2>
         <Button onClick={abrirNuevo}><Plus />Nuevo depósito</Button>
       </div>

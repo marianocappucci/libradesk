@@ -252,3 +252,80 @@ describe('Alta de incidencia — cargar el equipo ahí mismo (pedido 38)', () =>
     expect(await screen.findByText(/Impresora HP/)).toBeInTheDocument()
   })
 })
+
+// La píldora de Estado lleva el color del semáforo (pedido del usuario,
+// 2026-08-13). Antes "Abierto" y "En progreso" salían las dos con el mismo
+// contorno gris, y el color de la fila vivía sólo en el punto de la primera
+// columna, lejos de la palabra que significa lo mismo.
+//
+// 🔴 **Estos tests miran clases, no color renderizado.** En jsdom no hay hoja
+// de Tailwind: el estilo computado devolvería el default para las cuatro, así
+// que un test sobre color pasaría en verde con las cuatro píldoras iguales. Lo
+// que se puede fijar acá es que la clase LLEGA al elemento y que las cuatro son
+// distintas. El color de verdad se verificó midiendo estilo computado en el
+// navegador, que es donde el CSS existe.
+describe('El estado se lee por color, no sólo por texto', () => {
+  const POR_ESTADO = [
+    { estado: 'abierto', label: 'Abierto', fondo: 'bg-red-50', borde: 'border-red-300' },
+    { estado: 'en_progreso', label: 'En progreso', fondo: 'bg-amber-50', borde: 'border-amber-300' },
+    { estado: 'resuelta', label: 'Resuelta', fondo: 'bg-emerald-50', borde: 'border-emerald-300' },
+    { estado: 'cerrado', label: 'Cerrado', fondo: 'bg-slate-100', borde: 'border-slate-300' },
+  ]
+
+  function conCuatroEstados() {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url)
+      if (u.includes('/api/incidencias')) {
+        return Promise.resolve(json(POR_ESTADO.map((e, i) => ({
+          ...INCIDENCIA, id: i + 1, titulo: `Ticket ${i + 1}`, estado: e.estado,
+        }))))
+      }
+      if (u.includes('/api/clientes')) return Promise.resolve(json([CLIENTE]))
+      if (u.includes('/api/equipos')) return Promise.resolve(json([EQUIPO]))
+      return Promise.resolve(json([]))
+    }))
+  }
+
+  it('cada estado pinta su propia píldora: fondo suave y borde más intenso', async () => {
+    conCuatroEstados()
+    render(<Incidencias />, '/incidencias')
+    await screen.findByText('Ticket 1')
+
+    for (const e of POR_ESTADO) {
+      const pildora = screen.getByText(e.label)
+      expect(pildora.className).toContain(e.fondo)
+      expect(pildora.className).toContain(e.borde)
+      // tailwind-merge se queda con la última clase de cada grupo. Si el orden
+      // se invirtiera, la clase igual llegaría al DOM pero perdería contra la
+      // de la variante y la píldora saldría gris como antes — o sea que
+      // afirmar sólo la presencia del color no alcanza.
+      expect(pildora.className).not.toContain('border-transparent')
+      expect(pildora.className).not.toContain('bg-primary')
+    }
+  })
+
+  it('🔴 las cuatro píldoras son distintas entre sí', async () => {
+    // El grupo de control. Sin esto, un mapa que devolviera la misma clase para
+    // los cuatro estados pasaría el test de arriba en uno de los cuatro casos y
+    // la grilla volvería a no distinguir nada.
+    conCuatroEstados()
+    render(<Incidencias />, '/incidencias')
+    await screen.findByText('Ticket 1')
+
+    const clases = POR_ESTADO.map((e) => screen.getByText(e.label).className)
+    expect(new Set(clases).size).toBe(4)
+  })
+
+  it('el punto del semáforo sigue estando, y con el tono fuerte', async () => {
+    // El color acompaña al texto, no lo reemplaza: el punto de la primera
+    // columna es lo que hace escaneable la grilla desde el borde izquierdo, y
+    // usa el tono fuerte (`bg-red-500`), no el suave de la píldora.
+    conCuatroEstados()
+    render(<Incidencias />, '/incidencias')
+    await screen.findByText('Ticket 1')
+
+    const punto = screen.getAllByLabelText('Abierto')[0]
+    expect(punto.className).toContain('bg-red-500')
+    expect(punto.className).toContain('rounded-full')
+  })
+})

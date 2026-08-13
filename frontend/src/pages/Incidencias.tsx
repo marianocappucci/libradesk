@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
-  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
+  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_PILDORA, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
   type CategoriaIncidencia, type Cliente, type Equipo, type Incidencia,
 } from '../api'
@@ -278,8 +278,18 @@ export function Incidencias() {
       header: sortableHeader('Estado'),
       size: 120,
       minSize: 95,
+      // La píldora lleva el color del semáforo (pedido del usuario,
+      // 2026-08-13). Antes era `default`/`outline` según si estaba terminado,
+      // así que "Abierto" y "En progreso" —los dos estados que hay que mirar—
+      // salían con el mismo contorno gris, y el color de la fila vivía sólo en
+      // el punto de la primera columna, a media fila de la palabra que
+      // significa lo mismo.
+      //
+      // `variant="outline"` y el color por `className`: `cn()` es tailwind-merge,
+      // así que estas clases le ganan a las de la variante dentro de su propio
+      // grupo (bg, text, border) sin pelear por especificidad.
       cell: ({ row }) => (
-        <Badge variant={row.original.estado === 'cerrado' || row.original.estado === 'resuelta' ? 'default' : 'outline'}>
+        <Badge variant="outline" className={ESTADO_PILDORA[row.original.estado]}>
           {ESTADO_LABELS[row.original.estado]}
         </Badge>
       ),

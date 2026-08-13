@@ -515,6 +515,42 @@ export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
   cerrado: 'bg-slate-400',
 }
 
+/** El mismo semáforo, pero para pintar la píldora de Estado (pedido del
+ *  usuario, 2026-08-13): fondo del color en versión suave y **borde un escalón
+ *  más intenso**, que es lo que hace que se lea como una píldora y no como un
+ *  bloque de color.
+ *
+ *  Por qué la píldora y no sólo el punto: el punto del semáforo vive en la
+ *  primera columna, a varios centímetros de la palabra "Abierto". El color y el
+ *  texto que significan lo mismo estaban separados por toda la fila, así que
+ *  para leer el estado había que mirar dos lugares.
+ *
+ *  🔴 **Clases completas y literales, igual que arriba** — un
+ *  `bg-${color}-50` armado en runtime no sobrevive al purge de Tailwind y la
+ *  píldora sale transparente sin que nada falle.
+ *
+ *  El texto va en el tono fuerte (`-700`) y no en `foreground`: sobre un fondo
+ *  teñido, el gris del tema pierde contraste justo en los estados que más se
+ *  miran.
+ *
+ *  ⚠️ **Sin variantes `dark:`, y no por olvido.** La primera versión las traía.
+ *  `index.css` declara `@custom-variant dark (&:is(.dark *))`, o sea que el
+ *  modo oscuro es **por clase**, y en este producto nadie agrega `.dark` a
+ *  ningún lado: el bloque `.dark` del CSS es boilerplate de shadcn que no se
+ *  activa nunca. Medido en el navegador con `prefers-color-scheme: dark`
+ *  puesto — las píldoras seguían con los colores claros. Eran clases muertas
+ *  que además hacían creer que el tema oscuro estaba contemplado. El día que se
+ *  encienda de verdad, esto y `ESTADO_COLOR` se revisan juntos.
+ */
+export const ESTADO_PILDORA: Record<EstadoIncidencia, string> = {
+  abierto: 'bg-red-50 text-red-700 border-red-300',
+  en_progreso: 'bg-amber-50 text-amber-700 border-amber-300',
+  resuelta: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+  // Slate y no un color: un ticket cerrado no pide atención, y pintarlo igual
+  // de fuerte que los abiertos vacía el semáforo de significado.
+  cerrado: 'bg-slate-100 text-slate-600 border-slate-300',
+}
+
 export const PRIORIDAD_LABELS: Record<PrioridadIncidencia, string> = {
   alta: 'Alta',
   media: 'Media',
