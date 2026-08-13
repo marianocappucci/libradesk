@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
 
 type Envio = {
   id: number
@@ -183,7 +184,12 @@ export function Facturacion() {
       ),
     },
     { accessorKey: 'numero', header: sortableHeader('Número'), size: 140 },
-    { accessorKey: 'fecha', header: sortableHeader('Fecha'), size: 110 },
+    {
+      accessorKey: 'fecha', header: sortableHeader('Fecha'), size: 110,
+      // Es la fecha del remito o presupuesto de origen: la misma que muestran
+      // sus propias grillas, así que se formatea igual.
+      cell: ({ row }) => fecha(row.original.fecha),
+    },
     {
       accessorKey: 'cliente',
       header: sortableHeader('Cliente'),

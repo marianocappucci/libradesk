@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ComprobanteDetalle, DetalleEstado } from '@/components/comprobante-detalle'
+import { fecha } from '@/lib/format'
 
 const VARIANTE: Record<EstadoPresupuesto, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   borrador: 'outline',
@@ -110,7 +111,7 @@ export function PresupuestoDetalle() {
         }
         datosExtra={
           <>
-            <p><span className="text-muted-foreground">Válido hasta:</span> {p.valid_until || '—'}</p>
+            <p><span className="text-muted-foreground">Válido hasta:</span> {fecha(p.valid_until)}</p>
             <p>
               <span className="text-muted-foreground">Estado:</span>{' '}
               <Badge variant={VARIANTE[st]}>{ESTADO_PRESUPUESTO_LABELS[st]}</Badge>

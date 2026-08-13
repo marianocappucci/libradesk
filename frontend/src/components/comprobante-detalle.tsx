@@ -12,6 +12,7 @@ import { ArrowLeft, FileDown, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
 import type { ComprobanteItem } from '../api'
 
 export type ComprobanteDetalleData = {
@@ -93,7 +94,7 @@ export function ComprobanteDetalle({
           </CardHeader>
           <CardContent className="grid gap-1.5 text-sm">
             <p><span className="text-muted-foreground">Número:</span> <span className="font-mono">{c.number}</span></p>
-            <p><span className="text-muted-foreground">Fecha:</span> {c.date}</p>
+            <p><span className="text-muted-foreground">Fecha:</span> {fecha(c.date)}</p>
             {datosExtra}
             {c.observations && (
               <p className="whitespace-pre-line">
