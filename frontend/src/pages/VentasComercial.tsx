@@ -1,0 +1,389 @@
+// Ventas, recibos y cuenta corriente.
+//
+// 🔑 **Acá no se emite ninguna factura.** El comprobante fiscal lo emite SOS
+// Contador; una venta de LibraDesk es el comprobante interno —qué se vendió, a
+// quién, a cuánto y cómo se cobró— y es lo que después se manda a facturar
+// desde «Enviar a facturar».
+//
+// Por eso no hay tipo A/B/C, ni CAE, ni punto de venta fiscal en ninguna de
+// estas pantallas. Si aparecen, algo se entendió mal.
+import { useState } from 'react'
+import { api } from '../api'
+import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
+import { useSucursal } from '@/components/sucursal'
+import { fecha, pesos } from '@/lib/format'
+import type { Cliente } from '../api'
+import type { Producto } from './Productos'
+import type { DepositoStock } from './Inventario'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { ClipboardList, Coins, Plus, Trash2, Wallet } from 'lucide-react'
+
+type Venta = {
+  id: number; numero: string; estado: string; fecha: string
+  total: number; cliente: string; cliente_id: number | null
+  en_cuenta_corriente: number
+}
+type Recibo = {
+  id: number; numero: number; punto_venta: number; fecha: string
+  cliente_razon: string; total: number; anulado: number; concepto: string
+}
+type ClienteSaldo = { cliente_id: number; nombre: string; saldo: number }
+type MovimientoCC = {
+  fecha: string; tipo: string; concepto: string; monto: number; referencia: string
+}
+
+const MEDIOS = [
+  { valor: 'efectivo', label: 'Efectivo' },
+  { valor: 'transferencia', label: 'Transferencia' },
+  { valor: 'cheque', label: 'Cheque' },
+  { valor: 'tarjeta', label: 'Tarjeta' },
+  { valor: 'cuenta_corriente', label: 'Cuenta corriente' },
+]
+
+// ── Ventas ─────────────────────────────────────────────────────────────────
+
+export function Ventas() {
+  const { datos, error, cargando, conError } = useDatos<Venta[]>('/api/ventas', [])
+  const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
+  const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
+  const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
+
+  if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
+
+  return (
+    <Pagina titulo="Ventas" icono={ClipboardList} error={error}
+            acciones={<FormVenta clientes={clientes} productos={productos}
+                                 depositos={depositos} onGuardar={conError} />}>
+      <p className="text-sm text-muted-foreground">
+        Comprobante interno. La factura la emite SOS Contador desde{' '}
+        <strong>Enviar a facturar</strong>.
+      </p>
+      <Tabla<Venta>
+        vacio="Todavía no hay ventas registradas."
+        filas={datos}
+        columnas={[
+          { clave: 'numero', titulo: 'Número', ancho: '130px',
+            render: (v) => <span className="tabular-nums">{v.numero}</span> },
+          { clave: 'fecha', titulo: 'Fecha', ancho: '110px', render: (v) => fecha(v.fecha) },
+          { clave: 'cliente', titulo: 'Cliente', render: (v) => v.cliente },
+          { clave: 'cc', titulo: 'En cta. cte.', ancho: '130px', alinear: 'derecha',
+            render: (v) => v.en_cuenta_corriente > 0
+              ? <Badge variant="outline">{pesos(v.en_cuenta_corriente)}</Badge>
+              : <span className="text-muted-foreground">—</span> },
+          { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
+            render: (v) => pesos(v.total) },
+          { clave: 'acciones', titulo: '', ancho: '110px',
+            render: (v) => (
+              <Button variant="ghost" size="sm"
+                      onClick={() => conError(() => api.post(`/api/ventas/${v.id}/recibo`))}>
+                Recibo
+              </Button>
+            ) },
+        ]}
+      />
+    </Pagina>
+  )
+}
+
+function FormVenta({ clientes, productos, depositos, onGuardar }: {
+  clientes: Cliente[]; productos: Producto[]; depositos: DepositoStock[]
+  onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
+}) {
+  const { activa } = useSucursal()
+  const [abierto, setAbierto] = useState(false)
+  const [clienteId, setClienteId] = useState('')
+  const [depositoId, setDepositoId] = useState('')
+  const [medio, setMedio] = useState('efectivo')
+  const [productoId, setProductoId] = useState('')
+  const [lineas, setLineas] = useState<
+    { item_id: number | null; descripcion: string; cantidad: string; precio: string }[]
+  >([])
+
+  const total = lineas.reduce(
+    (acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precio) || 0), 0,
+  )
+
+  function agregar() {
+    const p = productos.find((x) => x.id === Number(productoId))
+    if (!p) return
+    setLineas([...lineas, {
+      item_id: p.id, descripcion: p.nombre, cantidad: '1',
+      precio: String(p.precio || p.costo || 0),
+    }])
+    setProductoId('')
+  }
+
+  function agregarServicio() {
+    // Una línea sin `item_id` es un servicio: se cobra y no mueve stock. Es
+    // como el motor distingue producto de servicio, y en una mesa de ayuda la
+    // mano de obra es la mitad de lo que se factura.
+    setLineas([...lineas, { item_id: null, descripcion: '', cantidad: '1', precio: '' }])
+  }
+
+  async function guardar() {
+    const ok = await onGuardar(() => api.post('/api/ventas', {
+      cliente_id: clienteId ? Number(clienteId) : null,
+      deposito_id: Number(depositoId),
+      sucursal_id: activa?.id ?? null,
+      items: lineas.map((l) => ({
+        item_id: l.item_id, descripcion: l.descripcion,
+        cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0,
+      })),
+      pagos: total > 0 ? [{ medio, monto: total }] : [],
+    }))
+    if (ok) { setAbierto(false); setLineas([]); setClienteId('') }
+  }
+
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button><Plus className="mr-2 h-4 w-4" /> Nueva venta</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>Nueva venta</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="v-cliente">Cliente</Label>
+              <Select value={clienteId} onValueChange={setClienteId}>
+                <SelectTrigger id="v-cliente"><SelectValue placeholder="Consumidor final" /></SelectTrigger>
+                <SelectContent>
+                  {clientes.filter((c) => c.activo).map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="v-dep">Depósito</Label>
+              <Select value={depositoId} onValueChange={setDepositoId}>
+                <SelectTrigger id="v-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
+                <SelectContent>
+                  {depositos.filter((d) => d.activo).map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Ítems</Label>
+            <div className="flex gap-2">
+              <Select value={productoId} onValueChange={setProductoId}>
+                <SelectTrigger><SelectValue placeholder="Elegir producto…" /></SelectTrigger>
+                <SelectContent>
+                  {productos.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.nombre} · stock {p.stock}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={agregar} disabled={!productoId}>Agregar</Button>
+              <Button variant="outline" onClick={agregarServicio}>Servicio</Button>
+            </div>
+            {lineas.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                {l.item_id === null ? (
+                  <Input value={l.descripcion} className="flex-1" placeholder="Mano de obra…"
+                         aria-label="Descripción"
+                         onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))} />
+                ) : (
+                  <span className="flex-1 truncate text-sm">{l.descripcion}</span>
+                )}
+                <Input type="number" value={l.cantidad} className="w-20" aria-label="Cantidad"
+                       onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x))} />
+                <Input type="number" value={l.precio} className="w-28" aria-label="Precio"
+                       onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, precio: e.target.value } : x))} />
+                <Button variant="ghost" size="icon" aria-label="Quitar ítem"
+                        onClick={() => setLineas(lineas.filter((_, j) => j !== i))}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <Label htmlFor="v-medio">Cómo se cobra</Label>
+              <Select value={medio} onValueChange={setMedio}>
+                <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MEDIOS.map((m) => (
+                    <SelectItem key={m.valor} value={m.valor}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-lg font-semibold tabular-nums">{pesos(total)}</p>
+          </div>
+          {medio === 'cuenta_corriente' && !clienteId && (
+            // Una venta en cuenta corriente sin cliente no tiene a quién
+            // cargarle la deuda: quedaría cobrada y sin deudor.
+            <p className="text-sm text-destructive">
+              Una venta en cuenta corriente necesita un cliente.
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+          <Button onClick={guardar}
+                  disabled={!depositoId || lineas.length === 0
+                            || (medio === 'cuenta_corriente' && !clienteId)}>
+            Registrar venta
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Recibos ────────────────────────────────────────────────────────────────
+
+export function Recibos() {
+  const { datos, error, cargando } = useDatos<Recibo[]>('/api/recibos', [])
+
+  if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
+
+  return (
+    <Pagina titulo="Recibos" icono={Coins} error={error}>
+      <p className="text-sm text-muted-foreground">
+        El comprobante de que entró plata. Se emite desde una venta o desde un
+        pago de cuenta corriente, y <strong>no se borra: se anula</strong>.
+      </p>
+      <Tabla<Recibo>
+        vacio="Todavía no se emitieron recibos."
+        filas={datos}
+        columnas={[
+          { clave: 'numero', titulo: 'Número', ancho: '130px',
+            render: (r) => (
+              <span className="tabular-nums">
+                {String(r.punto_venta).padStart(4, '0')}-{String(r.numero).padStart(8, '0')}
+              </span>
+            ) },
+          { clave: 'fecha', titulo: 'Fecha', ancho: '110px', render: (r) => fecha(r.fecha) },
+          { clave: 'cliente', titulo: 'Cliente', render: (r) => r.cliente_razon },
+          { clave: 'concepto', titulo: 'Concepto',
+            render: (r) => <span className="text-muted-foreground">{r.concepto || '—'}</span> },
+          { clave: 'estado', titulo: '', ancho: '90px',
+            render: (r) => r.anulado ? <Badge variant="destructive">Anulado</Badge> : null },
+          { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
+            render: (r) => pesos(r.total) },
+        ]}
+      />
+    </Pagina>
+  )
+}
+
+// ── Cuenta corriente ───────────────────────────────────────────────────────
+
+export function CuentaCorriente() {
+  const { datos, error, cargando, conError } = useDatos<{
+    resumen: { clientes_con_saldo: number; total_adeudado: number; saldo_mayor: number }
+    clientes: ClienteSaldo[]
+  }>('/api/cuenta-corriente', {
+    resumen: { clientes_con_saldo: 0, total_adeudado: 0, saldo_mayor: 0 }, clientes: [],
+  })
+  const [abierto, setAbierto] = useState<ClienteSaldo | null>(null)
+
+  if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
+
+  return (
+    <Pagina titulo="Cuenta corriente" icono={Wallet} error={error}>
+      <Cifras items={[
+        { label: 'Clientes con saldo', valor: datos.resumen.clientes_con_saldo },
+        { label: 'Total adeudado', valor: pesos(datos.resumen.total_adeudado) },
+        { label: 'Saldo mayor', valor: pesos(datos.resumen.saldo_mayor) },
+      ]} />
+      <Tabla<ClienteSaldo>
+        vacio="Ningún cliente tiene saldo pendiente."
+        filas={datos.clientes}
+        onFila={setAbierto}
+        columnas={[
+          { clave: 'nombre', titulo: 'Cliente', render: (c) => c.nombre },
+          { clave: 'saldo', titulo: 'Saldo', ancho: '150px', alinear: 'derecha',
+            render: (c) => (
+              <span className={c.saldo > 0 ? 'font-semibold text-destructive' : ''}>
+                {pesos(c.saldo)}
+              </span>
+            ) },
+        ]}
+      />
+      {abierto && (
+        <DetalleCuenta cliente={abierto} onCerrar={() => setAbierto(null)}
+                       onCambio={conError} />
+      )}
+    </Pagina>
+  )
+}
+
+function DetalleCuenta({ cliente, onCerrar, onCambio }: {
+  cliente: ClienteSaldo
+  onCerrar: () => void
+  onCambio: (accion: () => Promise<unknown>) => Promise<boolean>
+}) {
+  const { datos, recargar } = useDatos<{ saldo: number; movimientos: MovimientoCC[] }>(
+    `/api/cuenta-corriente/${cliente.cliente_id}`, { saldo: 0, movimientos: [] },
+  )
+  const [monto, setMonto] = useState('')
+
+  async function cobrar() {
+    const ok = await onCambio(() => api.post('/api/cuenta-corriente/pagos', {
+      cliente_id: cliente.cliente_id, monto: Number(monto),
+      fecha: new Date().toISOString().slice(0, 10), concepto: 'Pago a cuenta',
+    }))
+    if (ok) { setMonto(''); await recargar() }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onCerrar() }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>{cliente.nombre}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm">
+            Saldo: <span className="text-lg font-semibold tabular-nums">{pesos(datos.saldo)}</span>
+          </p>
+          <div className="max-h-72 overflow-y-auto">
+            <Tabla<MovimientoCC>
+              vacio="Sin movimientos."
+              filas={datos.movimientos}
+              columnas={[
+                { clave: 'fecha', titulo: 'Fecha', ancho: '110px',
+                  render: (m) => fecha(m.fecha) },
+                { clave: 'concepto', titulo: 'Concepto', render: (m) => m.concepto },
+                { clave: 'monto', titulo: 'Monto', ancho: '130px', alinear: 'derecha',
+                  render: (m) => (
+                    <span className={m.tipo === 'debito' ? '' : 'text-emerald-600'}>
+                      {m.tipo === 'debito' ? '' : '−'}{pesos(m.monto)}
+                    </span>
+                  ) },
+              ]}
+            />
+          </div>
+          <div className="flex items-end gap-2 rounded-md border bg-muted/40 p-3">
+            <div>
+              <Label htmlFor="cc-monto">Registrar cobro</Label>
+              <Input id="cc-monto" type="number" value={monto} className="w-36"
+                     onChange={(e) => setMonto(e.target.value)} />
+            </div>
+            <Button onClick={cobrar} disabled={!monto || Number(monto) <= 0}>Cobrar</Button>
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button variant="outline">Cerrar</Button></DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, DateTime, String, UniqueConstraint, func, select,
+    Boolean, DateTime, String, Text, UniqueConstraint, func, select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -41,6 +41,22 @@ class Proveedor(Base):
     # ofrecerse en los selects.
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # --- Las tres columnas que son del motor (revision `0018`) ---------------
+    #
+    # `proveedores` paso a ser una tabla compartida: `libracore.db.egresos` la
+    # lee para el circuito de compras, y su version declara `cuit_dni`,
+    # `address` e `iva_condition`. El ABM de service de LibraDesk no las usa.
+    #
+    # 🔴 **Se declaran igual porque el modelo tiene que describir la tabla
+    # ENTERA.** Si no, la base queda distinta segun la haya hecho Alembic o
+    # `create_all()`, y `--autogenerate` propone **borrarlas**. Es el mismo
+    # costo, previsto, que ya paga `clientes.py` desde que `clients` es
+    # compartida — y aca lo destapo
+    # `test_alembic_construye_lo_mismo_que_create_all`, no una revision a ojo.
+    cuit_dni: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    address: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    iva_condition: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
 
 
 def _to_dict(p: Proveedor) -> dict:

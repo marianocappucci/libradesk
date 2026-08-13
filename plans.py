@@ -72,16 +72,37 @@ _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 # en producción, y ni el backup ni las migraciones podrían asumir cuál tienen
 # delante.
 #
+# Los tres del bloque comercial (2026-08-12), que siguen a `stock` y le dan a
+# LibraDesk la forma que ya tiene Contalibra — **sin emisión de factura**, que
+# la hace SOS Contador:
+#
+# - `compras`: órdenes de compra, recepción de mercadería y egresos con estado
+#   de pago. Gate propio y no colgado de `stock` porque se puede llevar
+#   inventario sin registrar a quién se le compró. Al revés no: una recepción
+#   necesita un depósito donde entrar, así que quien contrata `compras` tiene
+#   `stock` — lo garantiza este archivo, no el código.
+# - `ventas`: el comprobante interno de venta más los recibos.
+# - `cuenta_corriente`: saldo por cliente, y las listas de precios, que viajan
+#   en el mismo router.
+#
+# Las **sucursales** no están acá a propósito: no se gatean. Son estructura de
+# la empresa, como los sectores y las categorías.
+#
 # ⚠️ Y una consecuencia de agregar un módulo acá: `ModuleRepository.
 # ensure_seeded()` inserta en el próximo arranque toda entrada nueva de
 # `TODOS_LOS_MODULOS` **con `habilitado=True`**, en todas las instancias. Con
 # `alquileres` eso le hizo aparecer una entrada de menú a un cliente que no la
-# había pedido (ver la página de LibraDesk en el wiki). Hoy `stock` no tiene
-# router ni pantalla, así que la fila se crea y no cambia nada visible; **el
-# día que se construya la UI hay que decidir a quién se le enciende antes de
-# desplegarla**, no después.
+# había pedido (ver la página de LibraDesk en el wiki).
+#
+# 🔴 **Y esta vez sí cambia algo visible.** La nota que estaba acá decía que
+# `stock` "no tiene router ni pantalla, así que la fila se crea y no cambia nada
+# visible" — quedó vieja el mismo día en que se escribió. Hoy los cuatro módulos
+# tienen router **y** pantalla, así que al desplegar esto
+# **`libradesk-compulibra`, que es un cliente real, ve cuatro entradas nuevas de
+# menú** si nadie las apaga antes. Se decide antes del deploy, no después.
 _PREMIUM = _ESTANDAR | {
     "remitos", "presupuestos", "alquileres", "facturacion_externa", "stock",
+    "compras", "ventas", "cuenta_corriente",
 }
 
 PLAN_MODULOS = {

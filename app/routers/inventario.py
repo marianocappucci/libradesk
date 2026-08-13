@@ -13,12 +13,11 @@ porque **comparten el gate**: sin el modulo `stock` no hay stock del cual
 descontar, asi que el endpoint no tendria que existir.
 """
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..services import inventario, materiales
+from ..services.fecha import ahora as _ahora
 from ..auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["stock"])
@@ -31,12 +30,23 @@ class ConsumibleIn(BaseModel):
     nombre: str
     costo: float = 0.0
     stock_minimo: float = 0.0
+    precio: float = 0.0
+    unidad: str = "u"
+    descripcion: str = ""
+    categoria_id: int | None = None
+    #: Solo en el alta. Para agregar otro codigo hay endpoint dedicado.
+    codigo: str = ""
+    activo: bool = True
 
 
 class DepositoStockIn(BaseModel):
     nombre: str
     descripcion: str = ""
     es_default: bool = False
+    #: La sucursal a la que pertenece. Va a `locations.branch_id`, que el motor
+    #: ya declara sin FK. Ver `app/services/comercial.py`.
+    sucursal_id: int | None = None
+    activo: bool = True
 
 
 class AjusteIn(BaseModel):
@@ -72,7 +82,36 @@ def listar_consumibles(solo_activos: bool = True):
 @router.post("/consumibles", status_code=201)
 def crear_consumible(payload: ConsumibleIn):
     try:
-        return inventario.crear_item(payload.nombre, payload.costo, payload.stock_minimo)
+        return inventario.crear_item(
+            payload.nombre, payload.costo, payload.stock_minimo,
+            precio=payload.precio, unidad=payload.unidad,
+            descripcion=payload.descripcion, categoria_id=payload.categoria_id,
+            codigo=payload.codigo,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.put("/consumibles/{item_id}")
+def editar_consumible(item_id: int, payload: ConsumibleIn):
+    try:
+        inventario.editar_item(
+            item_id, nombre=payload.nombre, costo=payload.costo,
+            stock_minimo=payload.stock_minimo, precio=payload.precio,
+            unidad=payload.unidad, descripcion=payload.descripcion,
+            categoria_id=payload.categoria_id, activo=payload.activo,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True}
+
+
+@router.delete("/consumibles/{item_id}", status_code=204)
+def dar_de_baja_consumible(item_id: int):
+    """Baja **logica**: el consumible deja de ofrecerse y sus movimientos
+    historicos quedan intactos. Ver `inventario.baja_item()`."""
+    try:
+        inventario.baja_item(item_id)
     except ValueError as e:
         raise HTTPException(422, str(e))
 
@@ -96,10 +135,23 @@ def listar_depositos_stock():
 def crear_deposito_stock(payload: DepositoStockIn):
     try:
         return inventario.crear_deposito(
-            payload.nombre, payload.descripcion, payload.es_default
+            payload.nombre, payload.descripcion, payload.es_default,
+            sucursal_id=payload.sucursal_id,
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+@router.put("/depositos-stock/{deposito_id}")
+def editar_deposito_stock(deposito_id: int, payload: DepositoStockIn):
+    try:
+        inventario.editar_deposito(
+            deposito_id, payload.nombre, payload.descripcion,
+            activo=payload.activo, sucursal_id=payload.sucursal_id,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True}
 
 
 # ── Existencias ──────────────────────────────────────────────────────────
@@ -129,7 +181,7 @@ def ajustar(item_id: int, payload: AjusteIn, user: dict = Depends(get_current_us
     try:
         inventario.ajustar(
             item_id, payload.deposito_id, payload.cantidad,
-            nota=payload.nota, usuario_id=int(user["id"]), fecha=datetime.now(),
+            nota=payload.nota, usuario_id=int(user["id"]), fecha=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -143,7 +195,7 @@ def transferir(payload: TransferenciaIn, user: dict = Depends(get_current_user))
     try:
         inventario.transferir(
             payload.item_id, payload.origen_id, payload.destino_id, payload.cantidad,
-            nota=payload.nota, usuario_id=int(user["id"]), fecha=datetime.now(),
+            nota=payload.nota, usuario_id=int(user["id"]), fecha=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -169,7 +221,7 @@ def cargar_material(incidencia_id: int, payload: MaterialIn,
     try:
         return materiales.cargar(
             incidencia_id, payload.item_id, payload.deposito_id, payload.cantidad,
-            usuario_id=int(user["id"]), cuando=datetime.now(),
+            usuario_id=int(user["id"]), cuando=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -182,6 +234,71 @@ def quitar_material(incidencia_id: int, material_id: int,
     appendea la reversion, para que quede el rastro de quien lo saco."""
     del incidencia_id
     try:
-        materiales.quitar(material_id, usuario_id=int(user["id"]), cuando=datetime.now())
+        materiales.quitar(material_id, usuario_id=int(user["id"]), cuando=_ahora())
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ── Categorias ───────────────────────────────────────────────────────────
+
+
+class CategoriaIn(BaseModel):
+    nombre: str
+    parent_id: int | None = None
+
+
+@router.get("/consumibles-categorias")
+def listar_categorias():
+    return inventario.listar_categorias()
+
+
+@router.post("/consumibles-categorias", status_code=201)
+def crear_categoria(payload: CategoriaIn):
+    try:
+        return inventario.crear_categoria(payload.nombre, payload.parent_id)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+# ── Codigos ──────────────────────────────────────────────────────────────
+
+
+class CodigoIn(BaseModel):
+    codigo: str
+    principal: bool = False
+
+
+@router.get("/consumibles/{item_id}/codigos")
+def listar_codigos(item_id: int):
+    return inventario.codigos_de(item_id)
+
+
+@router.post("/consumibles/{item_id}/codigos", status_code=201)
+def agregar_codigo(item_id: int, payload: CodigoIn):
+    try:
+        return inventario.agregar_codigo(item_id, payload.codigo, payload.principal)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.get("/consumibles-buscar")
+def buscar_por_codigo(codigo: str):
+    """Busqueda exacta por codigo. 404 si no hay, para que el front distinga
+    "no existe" de "existe y esta en cero" sin mirar el cuerpo."""
+    item = inventario.buscar_por_codigo(codigo)
+    if item is None:
+        raise HTTPException(404, "No hay ningun consumible con ese codigo.")
+    return item
+
+
+# ── La vista de conjunto ─────────────────────────────────────────────────
+
+
+@router.get("/stock/grilla")
+def grilla_stock():
+    return inventario.grilla_stock()
+
+
+@router.get("/stock/bajo-minimo")
+def stock_bajo_minimo():
+    return inventario.bajo_minimo()

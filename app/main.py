@@ -28,13 +28,16 @@ from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
-    activos, agenda, categorias, clientes, contratos, dashboard,
-    depositos, equipos, equipos_trabajo, facturacion, facturacion_config,
-    health, incidencias,
+    activos, agenda, categorias, clientes, comercial, compras, contratos,
+    dashboard, depositos, equipos, equipos_trabajo, facturacion,
+    facturacion_config, health, incidencias,
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
-    reportes, sectores, servicios, tecnicos, users,
+    reportes, sectores, servicios, sucursales, tecnicos, users,
 )
 from .routers import inventario as inventario_router
+# Alias por el mismo motivo que `inventario_router`: `app.services.ventas` ya
+# ocupa el nombre en este módulo.
+from .routers import ventas as ventas_router
 from .auditoria import AUDITABLES
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
@@ -54,6 +57,7 @@ from .services.servicios import ServicioRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
+from .services import comercial as comercial_service
 from .services import inventario, materiales
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
@@ -109,6 +113,20 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    por id, y se escribe por ESTA conexion y no por SQLAlchemy: es lo
     #    unico que hace atomico el par "material anotado + stock descontado".
     materiales.ensure_schema()
+
+    # 6. El schema comercial: las tablas que LibraDesk le toma prestadas a
+    #    LibraCore (egresos, recibos, cuenta corriente) más `sucursales`. Va
+    #    DESPUÉS del motor de comercio porque `ventas_pagos` referencia
+    #    `sales`. Ver `app/services/comercial.py`.
+    comercial_service.ensure_schema()
+
+    # 7. El espejo de `parties`. Sin esto no hay ni una venta ni una recepción
+    #    de compra: sus FK contra esa tabla son NOT NULL y está vacía, porque
+    #    LibraDesk escribe clientes y proveedores por SQLAlchemy y el espejo de
+    #    LibraCore nunca se dispara. Es idempotente y barato (dos INSERT ...
+    #    SELECT con anti-join), así que corre en cada arranque y así adopta
+    #    también los clientes que ya existían.
+    comercial_service.sincronizar_parties()
 
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
@@ -294,6 +312,30 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
         inventario_router.router,
         dependencies=staff_or_admin + [Depends(require_module("stock"))],
     )
+    # Compras: órdenes, recepción de mercadería y egresos. Gate propio y no
+    # colgado de `stock` a propósito: se puede llevar inventario sin registrar
+    # a quién se le compró, y de hecho es como arranca la mayoría. Al revés no
+    # —una recepción sin depósito no tiene dónde entrar—, así que `compras`
+    # implica `stock` y eso lo garantiza el plan, no el código.
+    app.include_router(
+        compras.router,
+        dependencies=staff_or_admin + [Depends(require_module("compras"))],
+    )
+    # Ventas y recibos. **Sin emisión de factura**: el comprobante fiscal lo
+    # emite SOS Contador por el puente de `facturacion_externa`.
+    app.include_router(
+        ventas_router.router,
+        dependencies=staff_or_admin + [Depends(require_module("ventas"))],
+    )
+    # Listas de precios y cuenta corriente.
+    app.include_router(
+        comercial.router,
+        dependencies=staff_or_admin + [Depends(require_module("cuenta_corriente"))],
+    )
+    # Sucursales: SIN gate de módulo, igual que sectores y categorías. Son
+    # estructura de la empresa; lo que se contrata es poder vender o comprar en
+    # ellas, no que existan.
+    app.include_router(sucursales.router, dependencies=staff_or_admin)
     app.include_router(
         remitos.router, dependencies=staff_or_admin + [Depends(require_module("remitos"))]
     )
