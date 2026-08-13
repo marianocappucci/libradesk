@@ -4,6 +4,8 @@
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, select
 
+from app import database
+
 
 # Acá vivía `test_sqlite_backend_keeps_the_existing_contract`, que fijaba el
 # contrato del backend SQLite del piloto. Se retiró el 2026-08-12 junto con
@@ -63,3 +65,48 @@ def test_application_starts_against_postgres(tmp_path, monkeypatch, url_de_base)
     app = create_app(url_de_base, str(tmp_path))
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
+
+
+# ————————————————————————————————————————————————————————————————
+# El driver: `postgresql://` a secas es psycopg2, y acá no existe
+# ————————————————————————————————————————————————————————————————
+
+@pytest.mark.parametrize("esquema", ["postgresql", "postgresql+psycopg"])
+def test_configure_siempre_termina_en_psycopg3(esquema):
+    """La medicion directa: sea cual sea la forma que traiga el compose, el
+    engine tiene que quedar hablando psycopg 3.
+
+    `postgresql://` a secas lo resuelve SQLAlchemy al dialecto **psycopg2**, que
+    este producto no instala —la dependencia es `psycopg[binary]`—. Y no falla
+    al conectarse: falla al IMPORTARSE, con `ModuleNotFoundError`, o sea que el
+    contenedor entra en crash loop sin llegar a levantar.
+
+    Paso el 2026-08-13 con `libradesk-lagrace`, la primera instancia creada por
+    el alta del backoffice: 28 reinicios. Las anteriores tenian el sufijo puesto
+    a mano.
+    """
+    database.configure(f"{esquema}://u:p@host:5432/libradesk")
+    try:
+        assert database.get_engine().dialect.driver == "psycopg"
+    finally:
+        database.get_engine().dispose()
+
+
+def test_sin_normalizar_el_engine_ni_se_construye():
+    """Contraprueba de la de arriba, y la razon por la que normalizar no es
+    cosmetico: `create_engine` con el esquema pelado revienta ACÁ MISMO, en este
+    entorno, exactamente como en el contenedor.
+
+    Si algun dia alguien instala psycopg2 en la imagen, este test se pone rojo —
+    y esa es la señal correcta: querria decir que el crash loop dejo de
+    reproducirse por una dependencia nueva, no porque el defecto se arreglara.
+    """
+    with pytest.raises(ModuleNotFoundError, match="psycopg2"):
+        create_engine("postgresql://u:p@host:5432/libradesk")
+
+
+def test_configure_sigue_rechazando_lo_que_no_es_postgres():
+    """La normalizacion no puede haber ablandado la guarda: `sqlite://` tiene
+    que seguir siendo un error, no convertirse en algo con `+psycopg` pegado."""
+    with pytest.raises(ValueError, match="PostgreSQL"):
+        database.configure("sqlite:///tmp/x.db")
