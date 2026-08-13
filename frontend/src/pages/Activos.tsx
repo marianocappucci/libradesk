@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import History from '~icons/fluent-color/history-16'
+import IconoActivos from '~icons/fluent-color/briefcase-20'
 import { Boxes, Pencil, Plus, Trash2 } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
@@ -281,7 +282,7 @@ export function Activos() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Boxes className="size-5" />Activos en alquiler
+          <IconoActivos className="size-5" />Activos en alquiler
         </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

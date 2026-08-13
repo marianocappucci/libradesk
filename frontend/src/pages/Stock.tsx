@@ -19,7 +19,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowLeftRight, Boxes, Building2, Minus, Plus } from '@/components/iconos-accion'
+import IconoStock from '~icons/fluent-color/vault-24'
+import { ArrowLeftRight, Building2, Minus, Plus } from '@/components/iconos-accion'
 
 export type Consumible = {
   id: number
@@ -94,7 +95,7 @@ export function Stock() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Boxes className="h-6 w-6" /> Stock de consumibles
+          <IconoStock className="h-6 w-6" /> Stock de consumibles
         </h1>
         <div className="flex gap-2">
           <NuevoConsumible onListo={(fn) => conError(fn)} />

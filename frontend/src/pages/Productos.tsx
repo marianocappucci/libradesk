@@ -20,7 +20,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Package, Pencil, Plus } from '@/components/iconos-accion'
+import IconoProductos from '~icons/fluent-color/apps-24'
+import { AlertTriangle, Pencil, Plus } from '@/components/iconos-accion'
 
 export type Producto = {
   id: number
@@ -65,7 +66,7 @@ export function Productos() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Productos" icono={Package} error={error}
+    <Pagina titulo="Productos" icono={IconoProductos} error={error}
             acciones={<FormProducto categorias={categorias} onGuardar={conError} />}>
       <div className="flex items-center gap-3 flex-wrap">
         <Input placeholder="Buscar por nombre, código o categoría…"

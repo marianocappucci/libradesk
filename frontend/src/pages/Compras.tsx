@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/dialog'
 import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
 import Wallet from '~icons/fluent-color/savings-16'
-import { Plus, ShoppingCart, Trash2 } from '@/components/iconos-accion'
+import IconoOrdenesCompra from '~icons/fluent-color/approvals-app-24'
+import { Plus, Trash2 } from '@/components/iconos-accion'
 
 type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {
@@ -57,7 +58,7 @@ export function OrdenesCompra() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Órdenes de compra" icono={ShoppingCart} error={error}
+    <Pagina titulo="Órdenes de compra" icono={IconoOrdenesCompra} error={error}
             acciones={<FormOrden proveedores={proveedores} productos={productos}
                                  onGuardar={conError} />}>
       <Tabla<Orden>
