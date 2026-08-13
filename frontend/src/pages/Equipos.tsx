@@ -9,7 +9,6 @@ import {
   opcionesDeposito, ubicacionTexto,
   type Cliente, type Deposito, type Equipo,
 } from '../api'
-import { useAuth } from '../context/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,8 +65,6 @@ const ESTADOS_EQUIPO = ['activo', 'en_reparacion', 'almacenado', 'baja']
 const TODOS = 'todos'
 
 export function Equipos() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const navigate = useNavigate()
 
   const [equipos, setEquipos] = useState<Equipo[]>([])
@@ -281,26 +278,27 @@ export function Equipos() {
         ),
       },
     ]
-    // La ficha es de solo lectura, así que la ve cualquier usuario logueado;
-    // editar y borrar siguen siendo admin-only.
+    // Sin gate de rol: `equipos.router` se monta con `staff_or_admin` (ver
+    // `app/main.py`), así que el alta, la edición y la baja las puede hacer
+    // cualquier usuario logueado. Estaban detrás de `role === 'admin'`, y eso
+    // dejaba a la recepcionista —que es quien carga el equipo cuando entra por
+    // el mostrador— sin ningún botón: la pantalla se veía como una lista de
+    // sólo lectura aunque la API le aceptara el POST. Quien decide es el
+    // backend, como en el resto de las pantallas del producto.
     base.push({
       id: 'actions',
       header: () => <div className="text-right">Acciones</div>,
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
           <Button size="icon" variant="outline" title="Ver ficha del equipo" aria-label="Ver ficha del equipo" onClick={() => navigate(`/equipos/${row.original.id}`)}><Eye /></Button>
-          {isAdmin && (
-            <>
-              <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
-              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
-            </>
-          )}
+          <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
+          <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
         </div>
       ),
     })
     return base
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, clientes])
+  }, [clientes])
 
   return (
     <div className="grid gap-4">
@@ -308,7 +306,6 @@ export function Equipos() {
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Monitor className="size-5" />Equipos
         </h2>
-        {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo equipo</Button>
@@ -447,7 +444,6 @@ export function Equipos() {
             </Form>
             </DialogContent>
           </Dialog>
-        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

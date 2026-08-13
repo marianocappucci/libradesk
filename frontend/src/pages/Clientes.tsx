@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { api, ApiError, type Cliente, type Sector } from '../api'
-import { useAuth } from '../context/AuthContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,8 +74,6 @@ const EMPTY_VALUES: ClienteFormValues = {
 }
 
 export function Clientes() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const navigate = useNavigate()
 
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -301,28 +298,34 @@ export function Clientes() {
         ),
       },
     ]
-    if (isAdmin) {
-      base.push({
-        id: 'actions',
-        header: () => <div className="text-right">Acciones</div>,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button size="icon" variant="outline" title="Sectores del cliente" aria-label="Sectores del cliente" onClick={() => abrirSectores(row.original)}><MapPin /></Button>
-            <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
-            {/* El tacho desactiva, no borra; y un cliente inactivo ofrece
-                reactivarse. Mismo par de botones que Contalibra. */}
-            {row.original.activo ? (
-              <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Desactivar cliente" aria-label="Desactivar cliente" onClick={() => setClienteADesactivar(row.original)}><Trash2 /></Button>
-            ) : (
-              <Button size="icon" variant="outline" title="Reactivar cliente" aria-label="Reactivar cliente" onClick={() => toggleActivo(row.original)}><Undo2 /></Button>
-            )}
-          </div>
-        ),
-      })
-    }
+    // Sin gate de rol: `clientes.router` se monta con `staff_or_admin` (ver
+    // `app/main.py`), así que el alta, la edición y la baja las puede hacer
+    // cualquier usuario logueado. Estaban detrás de `role === 'admin'`, y eso
+    // dejaba a la recepcionista —que es quien da de alta al cliente cuando
+    // entra con el equipo— sin ningún botón: la pantalla se veía como una
+    // lista de sólo lectura aunque la API le aceptara el POST. El resto de las
+    // pantallas del producto (incidencias, contratos, presupuestos) nunca
+    // gatearon por rol; quien decide es el backend.
+    base.push({
+      id: 'actions',
+      header: () => <div className="text-right">Acciones</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="outline" title="Sectores del cliente" aria-label="Sectores del cliente" onClick={() => abrirSectores(row.original)}><MapPin /></Button>
+          <Button size="icon" variant="outline" title="Editar cliente" aria-label="Editar cliente" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
+          {/* El tacho desactiva, no borra; y un cliente inactivo ofrece
+              reactivarse. Mismo par de botones que Contalibra. */}
+          {row.original.activo ? (
+            <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Desactivar cliente" aria-label="Desactivar cliente" onClick={() => setClienteADesactivar(row.original)}><Trash2 /></Button>
+          ) : (
+            <Button size="icon" variant="outline" title="Reactivar cliente" aria-label="Reactivar cliente" onClick={() => toggleActivo(row.original)}><Undo2 /></Button>
+          )}
+        </div>
+      ),
+    })
     return base
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin])
+  }, [])
 
   return (
     <div className="grid gap-4">
@@ -330,7 +333,6 @@ export function Clientes() {
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Users className="size-5" />Clientes
         </h2>
-        {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo cliente</Button>
@@ -451,7 +453,6 @@ export function Clientes() {
             </Form>
             </DialogContent>
           </Dialog>
-        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
