@@ -27,7 +27,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { FileSignature, Plus } from 'lucide-react'
+import FileSignature from '~icons/fluent-color/document-edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
 
 const TODOS = '__todos__'
 

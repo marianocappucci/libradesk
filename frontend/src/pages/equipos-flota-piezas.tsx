@@ -9,7 +9,9 @@
  *  consumen — se toca cuando entra o sale un vehículo, no todas las mañanas.
  */
 import type { Pestania } from '@/components/conmutador'
-import { CalendarDays, Car, Users } from 'lucide-react'
+import CalendarDays from '~icons/fluent-color/calendar-16'
+import Users from '~icons/fluent-color/people-16'
+import { Car } from 'lucide-react'
 
 export const PESTANIAS_EQUIPOS: readonly Pestania[] = [
   { clave: 'equipos', to: '/equipos-trabajo', label: 'Equipos de trabajo', icono: Users },

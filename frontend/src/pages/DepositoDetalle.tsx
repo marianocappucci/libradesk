@@ -26,7 +26,10 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import { ArrowLeft, ArrowLeftRight, Building2, Monitor } from 'lucide-react'
+import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
+import Building2 from '~icons/fluent-color/building-16'
+import Monitor from '~icons/fluent-color/laptop-16'
+import { ArrowLeft } from 'lucide-react'
 
 // Destino "ninguno": el equipo sale del depósito y vuelve al sector del
 // cliente. Radix no admite un <SelectItem value="">.

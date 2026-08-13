@@ -19,7 +19,10 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowLeftRight, Boxes, Building2, Minus, Plus } from 'lucide-react'
+import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
+import Building2 from '~icons/fluent-color/building-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import { Boxes, Minus } from 'lucide-react'
 
 export type Consumible = {
   id: number

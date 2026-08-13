@@ -11,13 +11,27 @@
 // cliente) y "Recepción de mercadería" en Compras (entra stock de un
 // proveedor), aunque las dos sean "recepciones". Agruparlas juntas por el
 // nombre sería juntar dos cosas que nunca hace la misma persona.
-import {
-  AlertCircle, ArrowDownToLine, Boxes, Building2, Car, ClipboardCheck,
-  ClipboardList, Coins, FileSignature, FileSpreadsheet, FileText,
-  LayoutDashboard, MapPin, Monitor, Package, PackageSearch, Receipt,
-  ScrollText, Send, Settings, ShoppingCart, Tags, Truck, UserCog, Users,
-  Wallet, Wrench,
-} from 'lucide-react'
+import AlertCircle from '~icons/fluent-color/alert-urgent-16'
+import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
+import Building2 from '~icons/fluent-color/building-16'
+import ClipboardCheck from '~icons/fluent-color/clipboard-task-16'
+import ClipboardList from '~icons/fluent-color/clipboard-16'
+import Coins from '~icons/fluent-color/coin-multiple-16'
+import FileSignature from '~icons/fluent-color/document-edit-16'
+import FileSpreadsheet from '~icons/fluent-color/table-16'
+import FileText from '~icons/fluent-color/document-text-16'
+import LayoutDashboard from '~icons/fluent-color/board-16'
+import MapPin from '~icons/fluent-color/location-ripple-16'
+import Monitor from '~icons/fluent-color/laptop-16'
+import Receipt from '~icons/fluent-color/receipt-16'
+import ScrollText from '~icons/fluent-color/text-bullet-list-square-16'
+import Send from '~icons/fluent-color/send-16'
+import Settings from '~icons/fluent-color/settings-16'
+import UserCog from '~icons/fluent-color/person-key-20'
+import Users from '~icons/fluent-color/people-16'
+import Wallet from '~icons/fluent-color/savings-16'
+import Wrench from '~icons/fluent-color/wrench-16'
+import { Boxes, Car, Package, PackageSearch, ShoppingCart, Tags, Truck } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 
 export const Layout = createLayout({

@@ -8,7 +8,9 @@
 // que cambia es de donde salen los datos.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, FileDown, Receipt } from 'lucide-react'
+import FileDown from '~icons/fluent-color/document-16'
+import Receipt from '~icons/fluent-color/receipt-16'
+import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/components/comprobante-form'

@@ -11,7 +11,9 @@
  */
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronRight, FileSpreadsheet, Table2 } from 'lucide-react'
+import FileSpreadsheet from '~icons/fluent-color/table-16'
+import Table2 from '~icons/fluent-color/table-16'
+import { ChevronRight } from 'lucide-react'
 import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
 
 function ItemReporte({ reporte }: { reporte: Reporte }) {

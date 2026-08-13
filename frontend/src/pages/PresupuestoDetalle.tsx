@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import {
-  CheckCircle2, FileCheck, Pencil, Send, Trash2, Undo2, XCircle,
-} from 'lucide-react'
+import CheckCircle2 from '~icons/fluent-color/checkmark-circle-16'
+import FileCheck from '~icons/fluent-color/document-16'
+import Pencil from '~icons/fluent-color/edit-16'
+import Send from '~icons/fluent-color/send-16'
+import XCircle from '~icons/fluent-color/dismiss-circle-16'
+import { Trash2, Undo2 } from 'lucide-react'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type EstadoPresupuesto, type Presupuesto,
 } from '../api'

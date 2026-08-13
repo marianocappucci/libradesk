@@ -16,7 +16,10 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Pencil, Plus, Trash2, Wrench } from 'lucide-react'
+import Pencil from '~icons/fluent-color/edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import Wrench from '~icons/fluent-color/wrench-16'
+import { Trash2 } from 'lucide-react'
 
 const tecnicoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),

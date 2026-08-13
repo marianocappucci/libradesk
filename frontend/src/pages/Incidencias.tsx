@@ -25,7 +25,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { CircleAlert, Monitor, Plus } from 'lucide-react'
+import CircleAlert from '~icons/fluent-color/alert-urgent-16'
+import Monitor from '~icons/fluent-color/laptop-16'
+import Plus from '~icons/fluent-color/add-circle-16'
 import { fechaDeDate } from '@/lib/format'
 
 const NONE = '__none__'

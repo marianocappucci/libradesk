@@ -27,7 +27,11 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Eye, Monitor, Pencil, Plus, Trash2 } from 'lucide-react'
+import Eye from '~icons/fluent-color/content-view-16'
+import Monitor from '~icons/fluent-color/laptop-16'
+import Pencil from '~icons/fluent-color/edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import { Trash2 } from 'lucide-react'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.

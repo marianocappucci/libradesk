@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Download, FileCheck, Pencil, Trash2 } from 'lucide-react'
+import Download from '~icons/fluent-color/arrow-square-down-20'
+import FileCheck from '~icons/fluent-color/document-16'
+import Pencil from '~icons/fluent-color/edit-16'
+import { Trash2 } from 'lucide-react'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type Cliente, type EstadoPresupuesto,
   type Presupuesto,

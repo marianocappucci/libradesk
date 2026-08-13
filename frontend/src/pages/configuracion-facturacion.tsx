@@ -15,7 +15,10 @@
  *  `app/services/facturacion_config.py`.
  */
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, KeyRound, Send, Trash2 } from 'lucide-react'
+import AlertTriangle from '~icons/fluent-color/warning-16'
+import Check from '~icons/fluent-color/checkmark-circle-16'
+import Send from '~icons/fluent-color/send-16'
+import { KeyRound, Trash2 } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

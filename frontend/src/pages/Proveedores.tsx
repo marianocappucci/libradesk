@@ -22,7 +22,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import Pencil from '~icons/fluent-color/edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import { Trash2 } from 'lucide-react'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */

@@ -28,10 +28,13 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  ArrowLeft, ArrowLeftRight, Check, History, MessageSquare, PackageCheck,
-  Printer, ShieldCheck, Trash2, Wrench,
-} from 'lucide-react'
+import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
+import Check from '~icons/fluent-color/checkmark-circle-16'
+import History from '~icons/fluent-color/history-16'
+import MessageSquare from '~icons/fluent-color/comment-16'
+import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
+import Wrench from '~icons/fluent-color/wrench-16'
+import { ArrowLeft, PackageCheck, Printer, Trash2 } from 'lucide-react'
 
 const NONE = '__none__'
 

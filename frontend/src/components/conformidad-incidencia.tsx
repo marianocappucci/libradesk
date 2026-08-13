@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FirmaPad, type Firma } from '@/components/firma-pad'
-import { PenLine } from 'lucide-react'
+import PenLine from '~icons/fluent-color/edit-16'
 
 export function ConformidadIncidencia({ incidenciaId }: { incidenciaId: number }) {
   const [firma, setFirma] = useState<Firma | null>(null)

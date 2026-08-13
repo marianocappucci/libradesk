@@ -26,7 +26,10 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Boxes, History, Pencil, Plus, Trash2 } from 'lucide-react'
+import History from '~icons/fluent-color/history-16'
+import Pencil from '~icons/fluent-color/edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import { Boxes, Trash2 } from 'lucide-react'
 
 const TODOS = '__todos__'
 

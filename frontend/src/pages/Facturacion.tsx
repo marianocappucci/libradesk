@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import {
-  CheckCircle2, FileText, Info, Receipt, Send, TriangleAlert, XCircle,
-} from 'lucide-react'
+import CheckCircle2 from '~icons/fluent-color/checkmark-circle-16'
+import FileText from '~icons/fluent-color/document-text-16'
+import Receipt from '~icons/fluent-color/receipt-16'
+import Send from '~icons/fluent-color/send-16'
+import TriangleAlert from '~icons/fluent-color/warning-16'
+import XCircle from '~icons/fluent-color/dismiss-circle-16'
+import { Info } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

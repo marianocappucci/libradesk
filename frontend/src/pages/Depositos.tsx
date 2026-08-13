@@ -29,7 +29,9 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Building2, Check, Plus } from 'lucide-react'
+import Building2 from '~icons/fluent-color/building-16'
+import Check from '~icons/fluent-color/checkmark-circle-16'
+import Plus from '~icons/fluent-color/add-circle-16'
 
 export function Depositos() {
   const [depositos, setDepositos] = useState<Deposito[]>([])

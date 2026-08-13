@@ -42,7 +42,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, CornerDownRight, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import Check from '~icons/fluent-color/checkmark-circle-16'
+import Download from '~icons/fluent-color/arrow-square-down-20'
+import Pencil from '~icons/fluent-color/edit-16'
+import Plus from '~icons/fluent-color/add-circle-16'
+import X from '~icons/fluent-color/dismiss-circle-16'
+import { CornerDownRight, Trash2, Upload } from 'lucide-react'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
