@@ -478,6 +478,29 @@ export const ESTADO_LABELS: Record<EstadoIncidencia, string> = {
   cerrado: 'Cerrado',
 }
 
+/** El semáforo de la grilla: un color por estado.
+ *
+ * Es cómo se lee la pantalla de un vistazo, y sale del sistema que usan hoy
+ * (`wiki/sources/lagrace-relevamiento-whatsapp.md`): cada fila lleva un punto
+ * de color a la izquierda —el "botón rosa" que menciona Cristina— con **rosa =
+ * asignado** y **naranja = pendiente**. La equivalencia con nuestros estados:
+ * `abierto` es su PENDIENTE y `en_progreso` es su ASIGNADO.
+ *
+ * 🔴 **Clases completas y literales, no interpoladas.** Tailwind hace purge
+ * escaneando el fuente: un `bg-${color}-500` armado en runtime no existe en el
+ * CSS final y el punto sale **transparente**, sin que nada falle. Por eso el
+ * mapa tiene la clase entera escrita.
+ *
+ * Vive acá y no en la página porque el detalle del reclamo usa el mismo color:
+ * dos definiciones es cómo terminan siendo dos semáforos distintos.
+ */
+export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
+  abierto: 'bg-orange-500',
+  en_progreso: 'bg-pink-500',
+  resuelta: 'bg-emerald-500',
+  cerrado: 'bg-slate-400',
+}
+
 export const PRIORIDAD_LABELS: Record<PrioridadIncidencia, string> = {
   alta: 'Alta',
   media: 'Media',

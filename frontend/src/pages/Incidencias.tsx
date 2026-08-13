@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
-  api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
+  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
   type CategoriaIncidencia, type Cliente, type Equipo, type Incidencia,
 } from '../api'
@@ -216,6 +216,24 @@ export function Incidencias() {
   ), [incidencias, categorias, filtroEstado, filtroPrioridad, filtroCliente, filtroCategoria])
 
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
+    {
+      // El semáforo. Va primero y sin encabezado: es una marca, no un dato que
+      // se lea. `aria-label` porque un punto de color no le dice nada a un
+      // lector de pantalla — y la columna de Estado, que sí es texto, sigue
+      // estando: el color acompaña, no reemplaza.
+      id: 'semaforo',
+      header: () => null,
+      size: 28,
+      minSize: 28,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span
+          className={`inline-block h-2.5 w-2.5 rounded-full ${ESTADO_COLOR[row.original.estado]}`}
+          aria-label={ESTADO_LABELS[row.original.estado]}
+          title={ESTADO_LABELS[row.original.estado]}
+        />
+      ),
+    },
     {
       // Antes del título y con ancho fijo: es el número del papel firmado, y
       // la pregunta que se le hace a esta grilla teniendo el talonario en la

@@ -16,6 +16,7 @@ from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
 from .services.facturacion_config import ConfiguracionFacturacion
 from .services.facturacion_externa import PuenteFacturacion
+from .services.firma import FirmaRepository
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.proveedores import ProveedorRepository
@@ -55,6 +56,10 @@ def get_deposito_repository(request: Request) -> DepositoRepository:
 
 def get_incidencia_repository(request: Request) -> IncidenciaRepository:
     return request.app.state.incidencias
+
+
+def get_firma_repository(request: Request) -> FirmaRepository:
+    return request.app.state.firmas
 
 
 def get_reemplazo_service(request: Request) -> ReemplazoService:

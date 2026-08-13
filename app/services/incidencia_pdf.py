@@ -142,6 +142,69 @@ def _materiales(pdf: FPDF, materiales: list[dict]) -> None:
             pdf.ln(_LINEA)
 
 
+#: Alto reservado para el bloque de conformidad, en mm. Se mide antes de
+#: dibujar por el mismo motivo que el aviso no fiscal: si el salto de página lo
+#: parte, la firma queda en una carilla y el nombre de quien firmó en la otra
+#: — que es exactamente el documento que no sirve como conformidad.
+_ALTO_CONFORMIDAD = 46
+
+
+def _conformidad(pdf: FPDF, firma: dict | None) -> None:
+    """La firma del cliente, su nombre y sus observaciones.
+
+    Es lo que en el comprobante en papel de Lagrace habilita el cobro: el pie
+    dice que la firma certifica la conformidad del trabajo. Acá abajo va el
+    mismo bloque, con la imagen tomada en el celular del técnico.
+
+    **Si no hay firma, no se dibuja nada.** Un recuadro vacío con la leyenda
+    «Firma del cliente» convertiría este PDF en un formulario para imprimir y
+    firmar a mano — que es justo el circuito que esto viene a reemplazar. Un
+    trabajo sin conformidad se ve por lo que falta, no por un renglón punteado.
+    """
+    if not firma or not firma.get("imagen"):
+        return
+
+    if pdf.get_y() + _ALTO_CONFORMIDAD > pdf.h - 20:
+        pdf.add_page()
+
+    _titulo_seccion(pdf, "Conformidad del cliente")
+
+    if firma.get("observaciones"):
+        # Las observaciones ANTES de la firma: es lo que el cliente escribió
+        # arriba de firmar, y leerlas después invierte el orden en que se
+        # prestó la conformidad.
+        _parrafo(pdf, firma["observaciones"])
+        pdf.ln(1)
+
+    y = pdf.get_y()
+    try:
+        # fpdf2 acepta un data URL directamente desde la 2.7; se le pasa tal
+        # cual en vez de decodificarlo acá para no tener dos lugares que sepan
+        # de base64 (el otro es `firma.py`, que además valida).
+        pdf.image(firma["imagen"], x=_LX, y=y, h=22)
+    except Exception:
+        # 🔴 Un PDF que no sale es peor que uno sin la imagen: el técnico
+        # necesita el comprobante igual. El servicio valida que sea un PNG real
+        # antes de guardar, así que llegar acá significa que algo se corrompió
+        # después — y en ese caso se imprime el resto y se deja constancia.
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*_MUTED)
+        pdf.cell(_CW, _LINEA, "[la firma registrada no se pudo representar]")
+        pdf.ln(_LINEA)
+    else:
+        pdf.set_y(y + 23)
+
+    pdf.set_draw_color(*_LINE)
+    pdf.line(_LX, pdf.get_y(), _LX + 70, pdf.get_y())
+    pdf.ln(1.5)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*_INK)
+    pdf.cell(70, _LINEA, firma.get("firmante") or "Firma del cliente")
+    pdf.set_text_color(*_MUTED)
+    pdf.cell(_CW - 70, _LINEA, firma.get("fecha") or "")
+    pdf.ln(_LINEA)
+
+
 def _parrafo(pdf: FPDF, texto: str | None) -> None:
     pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(*_INK)
@@ -238,6 +301,8 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
                 pdf.cell(32, _LINEA, "")
                 pdf.cell(_CW - 32, _LINEA, extra)
                 pdf.ln(_LINEA)
+
+    _conformidad(pdf, datos.get("firma"))
 
     # El aviso va al final y con lugar reservado, por el defecto que ya se pagó
     # en el informe: `_draw_no_fiscal_notice` traza el recuadro y recién después
