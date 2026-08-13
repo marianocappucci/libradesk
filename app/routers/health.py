@@ -11,9 +11,12 @@ producto. Contalibra y Restolibra tienen exactamente la misma forma —API bajo
 `/api` más el catch-all de la SPA— y sirven `/health` en la raíz sin problema:
 la ruta explícita se registra antes que el catch-all y le gana.
 
-`/api/health` queda como alias mientras los consumidores sigan apuntando ahí
-(el `docker-compose.yml` de este repo, el `HEALTH_PATH` del backoffice y el
-`health_path` del provisioning). Se saca cuando no quede ninguno.
+`/api/health` queda como alias mientras algo siga apuntando ahí. Del lado del
+repo ya no queda nada: los dos composes y los dos scripts de provisioning se
+dieron vuelta el 2026-08-12. Lo que falta vive fuera de acá — el `HEALTH_PATH`
+de `libradesk-admin` en el backoffice, y los composes de las instancias ya
+generadas en el VPS, que tienen la ruta vieja estampada desde su alta y sólo
+cambian al recrearlas. El alias se saca cuando no quede ninguno.
 """
 from datetime import datetime, timezone
 

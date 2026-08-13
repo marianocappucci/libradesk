@@ -62,4 +62,4 @@ def test_application_starts_against_postgres(tmp_path, monkeypatch, url_de_base)
 
     app = create_app(url_de_base, str(tmp_path))
     with TestClient(app) as client:
-        assert client.get("/api/health").status_code == 200
+        assert client.get("/health").status_code == 200

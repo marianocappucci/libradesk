@@ -45,8 +45,15 @@ x-libradesk-common: &libradesk-common
   #
   # `json.load` sobre el index.html revienta con JSONDecodeError, y eso es
   # exactamente lo que se busca: exit != 0 -> unhealthy.
+  #
+  # ⚠️ La ruta es `/health` desde el 2026-08-12 — la misma que los otros cinco
+  # productos. **Requiere una imagen que la sirva** (PR #112 en adelante); con
+  # una anterior, este chequeo cae en el catch-all de la SPA y el contenedor
+  # queda unhealthy para siempre. O sea: recrear con `--build`, o verificar
+  # antes que la imagen tenga la ruta. `/api/health` sigue existiendo como
+  # alias hasta que no quede ningun compose apuntandole.
   healthcheck:
-    test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/api/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
+    test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
     interval: 30s
     timeout: 5s
     retries: 3

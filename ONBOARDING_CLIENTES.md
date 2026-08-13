@@ -101,10 +101,14 @@ contenedor y —si hay dominio— crea el proxy y el certificado en Nginx Proxy 
 
 Lo mismo por navegador desde el backoffice, en **https://admin.libradesk.com.ar**.
 
-> **El `/health` de LibraDesk es `/api/health`, no `/health`.** Con la ruta por defecto, un
-> chequeo cae en el fallback de la SPA y devuelve `200` con HTML sin haber tocado la app: un
-> verde que no prueba nada. Ya está contemplado en la config del backoffice; tenerlo en cuenta
-> si se arma cualquier monitoreo nuevo.
+> **La salud se chequea en `/health`, y el chequeo tiene que mirar el CUERPO.** Con la SPA
+> horneada **cualquier** ruta devuelve `200` con HTML, así que un monitoreo que sólo mire el
+> código HTTP da verde sin haber tocado la app — incluso apuntado a una ruta inventada. Pedir
+> `/health` y verificar que el cuerpo sea un JSON con `status: ok`.
+>
+> Hasta el 2026-08-12 este producto servía su salud **sólo** en `/api/health`, y esa ruta sigue
+> respondiendo como alias de transición. Si aparece un compose o una config de monitoreo que la
+> use, es de antes: la canónica es `/health`, la misma que los otros cinco productos.
 
 ### DNS y dominio
 
