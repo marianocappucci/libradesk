@@ -49,9 +49,26 @@ movimientos = partial(_cc.get_cc_movimientos, origen=VENTAS_LIBRACOMMERCE)
 movimientos_periodo = partial(
     _cc.get_cc_movimientos_periodo, origen=VENTAS_LIBRACOMMERCE
 )
-clientes_con_saldo = partial(
-    _cc.get_clientes_con_saldo_cc, origen=VENTAS_LIBRACOMMERCE
-)
+
+
+def clientes_con_saldo() -> list[dict]:
+    """Los clientes con movimientos, con los nombres de campo de ESTE producto.
+
+    ⚠️ El motor devuelve las columnas crudas de `clients` --`id`, `name`,
+    `cuit_dni`-- y el contrato de `/api/clientes` de LibraDesk usa `cliente_id`
+    y `nombre`. Traducir aca y no en la pantalla es lo que evita que cada vista
+    invente su propio mapeo.
+
+    🔴 No es teorico: la primera version de la pantalla de cuenta corriente leia
+    `cliente_id` y `nombre` directo de esta respuesta y **renderizaba filas en
+    blanco con saldo correcto**. No fallaba, no avisaba: mostraba una tabla de
+    deudores sin nombre. Lo destapo `test_comercial_api.py`.
+    """
+    return [
+        {"cliente_id": c["id"], "nombre": c["name"],
+         "cuit": c.get("cuit_dni") or "", "saldo": float(c["saldo"])}
+        for c in _cc.get_clientes_con_saldo_cc(origen=VENTAS_LIBRACOMMERCE)
+    ]
 
 
 def resumen() -> dict:

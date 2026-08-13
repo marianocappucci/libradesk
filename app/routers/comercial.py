@@ -129,10 +129,13 @@ def detalle_cuenta_corriente(cliente_id: int):
 @router.post("/cuenta-corriente/pagos", status_code=201)
 def registrar_pago(payload: MovimientoCCIn, user: dict = Depends(get_current_user)):
     """Un abono del cliente. Resta del saldo."""
+    # ⚠️ `caja_id` NO tiene default en el motor: los ocho parametros son
+    # obligatorios. Omitirlo es `TypeError` en la primera cobranza, y no lo
+    # detecta ningun test de schema — se ve recien apretando el boton. Va en
+    # None porque LibraDesk no tiene caja (ver `app/services/comercial.py`).
     pago_id = cuenta_corriente.create_cc_pago(
-        cliente_id=payload.cliente_id, monto=payload.monto, fecha=payload.fecha,
-        concepto=payload.concepto, referencia=payload.referencia,
-        medio_pago=payload.medio_pago, usuario_id=int(user["id"]),
+        payload.cliente_id, payload.monto, payload.fecha, payload.concepto,
+        payload.referencia, payload.medio_pago, None, int(user["id"]),
     )
     return {"id": pago_id}
 

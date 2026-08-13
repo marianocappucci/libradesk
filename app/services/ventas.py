@@ -59,6 +59,8 @@ from libracommerce.usecases.inventory import (
 from libracommerce.usecases.sales import confirm_sale
 from libracore.db import core as libracore_core
 
+from . import comercial
+
 from .fecha import ahora as _ahora
 
 #: Como se cobro. `cuenta_corriente` es el unico que genera deuda; los demas
@@ -163,6 +165,10 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
     for p in pagos:
         if p.get("medio") not in MEDIOS_PAGO:
             raise ValueError(f"Medio de pago desconocido: {p.get('medio')!r}")
+    # `sales.customer_party_id` tiene FK contra `parties`, y un cliente dado de
+    # alta despues del arranque todavia no esta espejado. Ver
+    # `comercial.asegurar_parties`.
+    comercial.asegurar_parties()
 
     lineas = tuple(
         SaleItem(

@@ -392,6 +392,30 @@ def sincronizar_parties() -> dict:
     return creados
 
 
+def asegurar_parties() -> None:
+    """Sincroniza el espejo **antes de una operacion que lo necesita**.
+
+    🔴 **Correr el espejo solo en el arranque no alcanza, y es un error que se
+    ve recien en produccion.** Un proveedor dado de alta despues del boot no
+    tiene `party`, asi que la primera recepcion de compra a su nombre muere con
+    `violates foreign key constraint purchase_receipts_supplier_party_id_fkey`.
+    Lo destapo `test_comercial_api.py`, no el flujo manual: al probar los
+    servicios a mano se llamaba a `sincronizar_parties()` explicitamente entre
+    el alta y la compra, que es justo lo que la app no hacia.
+
+    Se llama desde `compras` y `ventas`, que son los tres puntos donde un id de
+    `parties` viaja a una FK. Va aca y no en el alta de clientes/proveedores a
+    proposito: **cubre tambien los que entran por otro camino** --una
+    importacion, un script, el backoffice-- sin que cada camino tenga que
+    acordarse.
+
+    Es idempotente y barato: dos `INSERT ... SELECT` con anti-join sobre tablas
+    de cientos de filas. Si algun dia son decenas de miles, se cambia por un
+    espejo de una sola fila; hoy seria optimizar algo que no duele.
+    """
+    sincronizar_parties()
+
+
 def party_de_proveedor(proveedor_id: int) -> int:
     """El id dentro de `parties` que le corresponde a un proveedor."""
     return proveedor_id + _OFFSET_PROVEEDOR
