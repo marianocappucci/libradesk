@@ -27,14 +27,22 @@ P7. Se replica igual a proposito.
 
 ## El descuento de stock
 
-`confirm_sale()` descuenta stock por linea de producto (los servicios no mueven
-nada) y se le pasa **`validar_stock=True`**, que **no es el default del motor**.
-El default es `False` por compatibilidad con el mostrador: ahi el cliente ya
-tiene el producto en la mano y negarse a cobrar es peor que quedar en negativo.
+`confirm_sale()` descuenta stock por linea de producto; los servicios no mueven
+nada. **LibraDesk si valida disponibilidad**, y eso no es el default del motor:
+ahi es `False` por compatibilidad con el mostrador, donde el cliente ya tiene el
+producto en la mano y negarse a cobrar es peor que quedar en negativo.
 
 Una mesa de ayuda es el caso contrario --la venta se carga despues del trabajo,
 contra un deposito que alguien conto-- asi que un negativo es un error de carga
 y conviene que aborte. Decidido para este producto, no heredado.
+
+⚠️ **La validacion se hace explicita en `crear()` en vez de pasar
+`validar_stock=True`.** No es lo mismo por una razon mecanica: con ese flag el
+motor **abre su propia transaccion**, y `repo.transaction()` no admite
+anidamiento --usar los dos juntos tira `RuntimeError: transaction() no admite
+anidamiento`, verificado--. Como los pagos tambien tienen que entrar en la
+misma transaccion, la abre este modulo y llama a `verificar_disponibilidad()`
+antes, que es exactamente lo que el motor hace dentro de la suya.
 """
 
 from __future__ import annotations
@@ -45,7 +53,10 @@ from decimal import Decimal
 from libracommerce.db.repository import SqliteCommerceRepository
 from libracommerce.domain.catalog import CatalogItemType
 from libracommerce.domain.sales import Sale, SaleItem, SaleStatus
-from libracommerce.usecases.inventory import StockInsuficienteError
+from libracommerce.usecases.inventory import (
+    StockInsuficienteError,
+    verificar_disponibilidad,
+)
 from libracommerce.usecases.sales import confirm_sale
 from libracore.db import core as libracore_core
 
@@ -178,7 +189,18 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
             nombre_cliente = fila["name"]
 
         try:
+            # 🔴 `confirm_sale(validar_stock=True)` abre **su propia**
+            # transaccion, y `repo.transaction()` no admite anidamiento: usar
+            # las dos cosas juntas revienta con `RuntimeError`. Asi que la
+            # transaccion la abre este modulo --que es el que necesita meter
+            # tambien los pagos adentro-- y la validacion se hace explicita
+            # antes, que es exactamente lo que el motor hace dentro de la suya.
             with repo.transaction():
+                for linea in lineas:
+                    if linea.item_id is not None:
+                        verificar_disponibilidad(
+                            repo, linea.item_id, deposito_id, linea.quantity
+                        )
                 venta = confirm_sale(
                     repo,
                     Sale(
@@ -194,7 +216,7 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
                     ),
                     location_id=deposito_id,
                     occurred_at=hoy,
-                    validar_stock=True,
+                    validar_stock=False,
                 )
                 for p in pagos:
                     conn.execute(
