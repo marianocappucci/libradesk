@@ -478,25 +478,39 @@ export const ESTADO_LABELS: Record<EstadoIncidencia, string> = {
   cerrado: 'Cerrado',
 }
 
-/** El semáforo de la grilla: un color por estado.
+/** El semáforo de estado: un color por estado, en la grilla y en la ficha.
  *
- * Es cómo se lee la pantalla de un vistazo, y sale del sistema que usan hoy
- * (`wiki/sources/lagrace-relevamiento-whatsapp.md`): cada fila lleva un punto
- * de color a la izquierda —el "botón rosa" que menciona Cristina— con **rosa =
- * asignado** y **naranja = pendiente**. La equivalencia con nuestros estados:
- * `abierto` es su PENDIENTE y `en_progreso` es su ASIGNADO.
+ * **Semáforo estándar, no el código de colores de Integridad.** La primera
+ * versión copiaba el de ellos —rosa = asignado, naranja = pendiente—, y eso es
+ * una convención arbitraria que hay que aprender: rosa no significa nada por sí
+ * solo. El estándar de service desk se lee sin leyenda y en cualquier producto:
+ *
+ * | Estado | Color | Qué comunica |
+ * |---|---|---|
+ * | `abierto` | rojo | nadie lo tomó todavía — **requiere acción** |
+ * | `en_progreso` | ámbar | alguien está trabajando en eso |
+ * | `resuelta` | verde | listo, a la espera de cierre |
+ * | `cerrado` | gris | archivado, sin acción pendiente |
+ *
+ * Rojo-ámbar-verde es el semáforo de la calle y gris es "apagado": la fila se
+ * interpreta antes de leer la palabra, que es exactamente para lo que sirve.
+ *
+ * ⚠️ **Que un ticket nuevo salga rojo no es una alarma exagerada**: en la
+ * grilla de ellos, un reclamo sin técnico asignado ES lo que hay que mirar
+ * primero. El día que la mayoría esté en rojo, el color está diciendo algo
+ * cierto sobre la operación.
  *
  * 🔴 **Clases completas y literales, no interpoladas.** Tailwind hace purge
  * escaneando el fuente: un `bg-${color}-500` armado en runtime no existe en el
  * CSS final y el punto sale **transparente**, sin que nada falle. Por eso el
  * mapa tiene la clase entera escrita.
  *
- * Vive acá y no en la página porque el detalle del reclamo usa el mismo color:
+ * Vive acá y no en la página porque la grilla y la ficha usan el mismo color:
  * dos definiciones es cómo terminan siendo dos semáforos distintos.
  */
 export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
-  abierto: 'bg-orange-500',
-  en_progreso: 'bg-pink-500',
+  abierto: 'bg-red-500',
+  en_progreso: 'bg-amber-500',
   resuelta: 'bg-emerald-500',
   cerrado: 'bg-slate-400',
 }
