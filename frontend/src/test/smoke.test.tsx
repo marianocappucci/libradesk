@@ -134,6 +134,42 @@ describe('guard de rutas', () => {
   })
 })
 
+// Reporte del usuario (2026-08-13): entrar por Compras -> Proveedores mostraba
+// la pantalla de Configuracion. El item del menu apuntaba a
+// `/configuracion/proveedores`, que era una pestaña, asi que traia el titulo y
+// el conmutador de Configuracion enteros.
+//
+// Va aca y no en `proveedores.test.tsx` a proposito: ese archivo mockea
+// `useAuth`, y lo que hay que probar es el cableado real -- el href que el
+// sidebar pone y adonde lleva la ruta.
+describe('Proveedores vive en Compras, no en Configuracion', () => {
+  it('el item del menu apunta a /proveedores', async () => {
+    conSesion()
+    montar('/proveedores')
+    const links = await screen.findAllByRole('link', { name: 'Proveedores' })
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/proveedores'])
+  })
+
+  it('la pantalla no trae el conmutador de Configuracion', async () => {
+    conSesion()
+    montar('/proveedores')
+    await screen.findAllByRole('link', { name: 'Proveedores' })
+    // "Datos / Backup" solo existe como pestaña de Configuracion: si aparece,
+    // esta pantalla volvio a rendir el conmutador. El sidebar tiene el item
+    // "Configuracion", que es otra cosa y sigue estando.
+    expect(screen.queryByRole('link', { name: /Datos \/ Backup/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Empresa' })).not.toBeInTheDocument()
+  })
+
+  it('la ruta vieja redirige en vez de romperse', async () => {
+    // Quedo linkeada en documentacion y en favoritos desde que era pestaña.
+    conSesion()
+    montar('/configuracion/proveedores')
+    await screen.findAllByRole('link', { name: 'Proveedores' })
+    expect(screen.queryByRole('link', { name: /Datos \/ Backup/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('las pantallas de recuperacion son publicas', () => {
   // Invariante con comentario propio en App.tsx: son publicas a proposito,
   // porque quien las necesita no puede iniciar sesion. Si el guard las

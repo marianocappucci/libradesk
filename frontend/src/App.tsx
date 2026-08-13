@@ -30,9 +30,10 @@ import { Facturacion } from './pages/Facturacion'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
 import {
-  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion, ConfiguracionProveedores,
+  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion,
   ConfiguracionServicios,
 } from './pages/Configuracion'
+import { Proveedores } from './pages/Proveedores'
 import { Usuarios } from './pages/Usuarios'
 import { Logs } from './pages/Logs'
 // El módulo comercial (2026-08-12).
@@ -109,6 +110,7 @@ export default function App() {
       <Route path="/ordenes-compra" element={<ProtectedRoute><OrdenesCompra /></ProtectedRoute>} />
       <Route path="/recepciones-compra" element={<ProtectedRoute><RecepcionesCompra /></ProtectedRoute>} />
       <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
+      <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
       <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
       <Route path="/recibos" element={<ProtectedRoute><Recibos /></ProtectedRoute>} />
       <Route path="/cuenta-corriente" element={<ProtectedRoute><CuentaCorriente /></ProtectedRoute>} />
@@ -125,7 +127,10 @@ export default function App() {
       {/* Una ruta por pestaña, no un `useState`: así se puede linkear una
           sección y el botón "atrás" del navegador hace lo que se espera. */}
       <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
-      <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
+      {/* Proveedores dejó de ser pestaña y pasó a `/proveedores`. La ruta vieja
+          redirige en vez de desaparecer: quedó linkeada en documentación y en
+          favoritos del navegador desde que era pestaña. */}
+      <Route path="/configuracion/proveedores" element={<Navigate to="/proveedores" replace />} />
       <Route path="/configuracion/servicios" element={<ProtectedRoute><ConfiguracionServicios /></ProtectedRoute>} />
       <Route path="/configuracion/facturacion" element={<ProtectedRoute><ConfiguracionFacturacion /></ProtectedRoute>} />
       <Route path="/configuracion/datos" element={<ProtectedRoute><ConfiguracionDatos /></ProtectedRoute>} />
