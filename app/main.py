@@ -49,6 +49,7 @@ from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
 from .services.facturacion_config import ConfiguracionFacturacion
 from .services.facturacion_externa import PuenteFacturacion
+from .services.firma import FirmaRepository
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
@@ -181,6 +182,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.equipos = EquipoRepository(sessions)
     app.state.depositos = DepositoRepository(sessions)
     app.state.incidencias = IncidenciaRepository(sessions)
+    app.state.firmas = FirmaRepository(sessions)
     app.state.reemplazos = ReemplazoService(sessions)
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)

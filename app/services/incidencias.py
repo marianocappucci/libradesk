@@ -178,6 +178,27 @@ def _to_dict(i: Incidencia) -> dict:
     }
 
 
+def _firma_para_pdf(session, incidencia_id: int) -> dict | None:
+    """La conformidad, con la fecha ya formateada para imprimir.
+
+    El import va adentro y no arriba: `firma.py` importa `fecha.py`, que
+    importa LibraCore, y este módulo lo carga `main.py` antes de configurar los
+    motores. Subirlo rompería el arranque con un import circular por la puerta
+    de atrás.
+    """
+    from .firma import FirmaIncidencia
+
+    f = session.get(FirmaIncidencia, incidencia_id)
+    if f is None:
+        return None
+    return {
+        "imagen": f.imagen,
+        "firmante": f.firmante,
+        "observaciones": f.observaciones,
+        "fecha": f.firmado_at.strftime("%d-%m-%Y %H:%M") if f.firmado_at else "—",
+    }
+
+
 def _actividad_to_dict(a: ActividadIncidencia) -> dict:
     return {
         "id": a.id,
@@ -361,6 +382,10 @@ class IncidenciaRepository:
                 # uso, y un comprobante que lo liste esta cobrando algo que
                 # volvio.
                 "materiales": materiales.listar(i.id),
+                # La conformidad del cliente. Se lee en ESTA sesión y no por el
+                # repositorio de firmas para no abrir una segunda: el PDF es
+                # una sola consulta materializada.
+                "firma": _firma_para_pdf(session, i.id),
             }
 
     def update(self, incidencia_id: int, usuario_actor: str | None = None, **data) -> dict:

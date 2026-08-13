@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { SelectBuscable } from '@/components/select-buscable'
 import { MaterialesIncidencia } from '@/components/materiales-incidencia'
+import { ConformidadIncidencia } from '@/components/conformidad-incidencia'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -558,6 +559,11 @@ export function IncidenciaDetalle() {
                 trabaja el ticket, no al final. Se renderiza solo si la
                 instancia tiene el módulo `stock`. */}
             <MaterialesIncidencia incidenciaId={incidencia.id} />
+
+            {/* Después de los materiales y antes de las notas internas:
+                es el orden del comprobante en papel, y también el del
+                trabajo — se firma cuando ya está todo cargado. */}
+            <ConformidadIncidencia incidenciaId={incidencia.id} />
 
             <Card>
               <CardHeader><CardTitle className="text-base">Notas internas y resolución</CardTitle></CardHeader>

@@ -5,10 +5,12 @@ from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..dependencies import (
+    get_firma_repository,
     get_equipo_repository, get_incidencia_repository, get_reemplazo_service,
 )
 from ..services import incidencia_pdf
 from ..services.equipos import EquipoRepository
+from ..services.firma import FirmaRepository
 from ..services.incidencias import IncidenciaRepository
 from ..services.reemplazo import (
     DESTINOS, CierreService, DatosService, ReemplazoService,
@@ -261,3 +263,68 @@ def reemplazar_equipo(
         raise HTTPException(404, f"{que} {cual} not found")
     except ValueError as err:
         raise HTTPException(422, str(err))
+
+
+# ── La conformidad del cliente ───────────────────────────────────────────
+#
+# Cierra la brecha 7: en el comprobante en papel de Lagrace, la firma certifica
+# la conformidad del trabajo y es lo que habilita el cobro a 15 días. Vive en
+# el router de incidencias y no en uno propio porque **no es una entidad**: es
+# un atributo del ticket que resulta caro de traer siempre (ver
+# ).
+
+
+class FirmaIn(BaseModel):
+    #: Data URL de un PNG, tal cual lo produce .
+    imagen: str
+    firmante: str = ""
+    #: "Observaciones del Cliente" del papel. Del cliente, no del técnico.
+    observaciones: str = ""
+
+
+@router.get("/{incidencia_id}/firma")
+def obtener_firma(
+    incidencia_id: int,
+    firmas: FirmaRepository = Depends(get_firma_repository),
+):
+    """404 si el ticket no está firmado.
+
+    404 y no  con 200: la pantalla necesita distinguir "sin firmar" de
+    "no pude leerla", y un cuerpo nulo con 200 no lo hace.
+    """
+    firma = firmas.obtener(incidencia_id)
+    if firma is None:
+        raise HTTPException(404, "Este ticket todavía no tiene conformidad.")
+    return firma
+
+
+@router.put("/{incidencia_id}/firma")
+def guardar_firma(
+    incidencia_id: int,
+    payload: FirmaIn,
+    firmas: FirmaRepository = Depends(get_firma_repository),
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+    user: dict = Depends(get_current_user),
+):
+    """PUT y no POST: una incidencia tiene UNA conformidad. Volver a firmar
+    reemplaza — es cómo se corrige una firma mal tomada delante del cliente."""
+    # Se comprueba que el ticket exista antes de escribir: la FK lo atajaría
+    # igual, pero con un 500 de integridad en vez de un 404 que se entiende.
+    if incidencias.get(incidencia_id) is None:
+        raise HTTPException(404, "La incidencia no existe.")
+    try:
+        return firmas.guardar(
+            incidencia_id, payload.imagen, firmante=payload.firmante,
+            observaciones=payload.observaciones, usuario_id=int(user["id"]),
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.delete("/{incidencia_id}/firma", status_code=204)
+def borrar_firma(
+    incidencia_id: int,
+    firmas: FirmaRepository = Depends(get_firma_repository),
+):
+    if not firmas.borrar(incidencia_id):
+        raise HTTPException(404, "Este ticket no tiene conformidad.")
