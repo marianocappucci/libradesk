@@ -32,6 +32,9 @@ type Venta = {
   id: number; numero: string; estado: string; fecha: string
   total: number; cliente: string; cliente_id: number | null
   en_cuenta_corriente: number
+  /** El recibo vigente de esta venta, si ya se emitió. `null` = todavía no.
+   *  Un recibo anulado no cuenta: la venta vuelve a estar pendiente. */
+  recibo_id: number | null
 }
 type Recibo = {
   id: number; numero: number; punto_venta: number; fecha: string
@@ -82,16 +85,71 @@ export function Ventas() {
               : <span className="text-muted-foreground">—</span> },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (v) => pesos(v.total) },
-          { clave: 'acciones', titulo: '', ancho: '110px',
-            render: (v) => (
-              <Button variant="ghost" size="sm"
-                      onClick={() => conError(() => api.post(`/api/ventas/${v.id}/recibo`))}>
-                Recibo
-              </Button>
-            ) },
+          { clave: 'acciones', titulo: '', ancho: '150px',
+            // 🔴 La primera versión era un botón «Recibo» que hacía el POST y
+            // nada más: emitía un comprobante **en silencio** y no mostraba
+            // nada. Quien lo tocaba no sabía si había pasado algo, y volver a
+            // tocarlo parecía no hacer nada tampoco (el motor es idempotente y
+            // devuelve el mismo recibo). Un botón que emite un comprobante
+            // tiene que decir que lo emite, y después mostrarlo.
+            render: (v) => <AccionRecibo venta={v} onEmitido={conError} /> },
         ]}
       />
     </Pagina>
+  )
+}
+
+/** «Ver recibo» si ya está emitido; «Emitir recibo» si todavía no.
+ *
+ * Las dos ramas terminan **abriendo el PDF**, que es lo que la persona quiere:
+ * el comprobante para entregar o mandar. Emitir sin mostrar es la mitad de la
+ * operación, y es lo que hacía la primera versión.
+ *
+ * El PDF se abre por navegación directa (`<a target="_blank">`) y no con
+ * `window.open()`: es una descarga con cookie de sesión, y `window.open`
+ * depende de que el navegador permita popups. Mismo patrón que Remitos.
+ *
+ * ⚠️ En la rama de emitir hay que abrir la pestaña **después** de que el POST
+ * conteste, porque recién ahí se conoce el id. Eso puede activar el bloqueo de
+ * popups —la apertura ya no cuelga del click—, así que si falla se muestra el
+ * recibo emitido como enlace en vez de dejar a la persona sin nada.
+ */
+function AccionRecibo({ venta, onEmitido }: {
+  venta: Venta
+  onEmitido: (accion: () => Promise<unknown>) => Promise<boolean>
+}) {
+  const [emitiendo, setEmitiendo] = useState(false)
+  const [reciénEmitido, setReciénEmitido] = useState<number | null>(null)
+
+  const id = venta.recibo_id ?? reciénEmitido
+  if (id) {
+    return (
+      <Button asChild variant="outline" size="sm">
+        <a href={`/api/recibos/${id}/pdf`} target="_blank" rel="noreferrer">
+          <Coins className="mr-2 h-3.5 w-3.5" /> Ver recibo
+        </a>
+      </Button>
+    )
+  }
+
+  async function emitir() {
+    setEmitiendo(true)
+    let emitido: number | null = null
+    const ok = await onEmitido(async () => {
+      const r = await api.post<{ id: number }>(`/api/ventas/${venta.id}/recibo`)
+      emitido = r.id
+    })
+    setEmitiendo(false)
+    if (ok && emitido) {
+      setReciénEmitido(emitido)
+      window.open(`/api/recibos/${emitido}/pdf`, '_blank', 'noreferrer')
+    }
+  }
+
+  return (
+    <Button variant="ghost" size="sm" onClick={emitir} disabled={emitiendo}>
+      {emitiendo ? 'Emitiendo…' : 'Emitir recibo'}
+    </Button>
   )
 }
 
@@ -280,6 +338,17 @@ export function Recibos() {
             render: (r) => r.anulado ? <Badge variant="destructive">Anulado</Badge> : null },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (r) => pesos(r.total) },
+          { clave: 'pdf', titulo: '', ancho: '90px',
+            // También en los anulados: el papel anulado sigue siendo el
+            // documento de lo que pasó, y es lo que hay que poder mostrar si
+            // alguien pregunta por qué se anuló.
+            render: (r) => (
+              <Button asChild variant="outline" size="sm">
+                <a href={`/api/recibos/${r.id}/pdf`} target="_blank" rel="noreferrer">
+                  Ver
+                </a>
+              </Button>
+            ) },
         ]}
       />
     </Pagina>

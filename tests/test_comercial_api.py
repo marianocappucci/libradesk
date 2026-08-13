@@ -278,3 +278,96 @@ def test_las_rutas_comerciales_existen_de_verdad(client):
                  "/api/cuenta-corriente/pagos", "/api/cuenta-corriente/debitos",
                  "/api/stock/grilla", "/api/stock/bajo-minimo"):
         assert ruta in paths, f"{ruta} no la sirve ningun router"
+
+
+def test_la_venta_dice_si_ya_tiene_recibo(comercial):
+    """La pantalla necesita distinguir «emitir» de «ver».
+
+    Sin este dato el botón no puede decir la verdad, y la primera versión
+    terminaba emitiendo en silencio un comprobante que a veces ya existía.
+    """
+    c = comercial
+    ids = _crear_base(c)
+    c.post("/api/recepciones-compra", json={
+        "proveedor_id": ids["proveedor"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "cantidad": 50, "costo": 95}],
+    })
+    venta_id = c.post("/api/ventas", json={
+        "cliente_id": ids["cliente"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "descripcion": "PLUG",
+                   "cantidad": 2, "precio": 160}],
+        "pagos": [{"medio": "efectivo", "monto": 320}],
+    }).json()["id"]
+
+    assert c.get("/api/ventas").json()[0]["recibo_id"] is None
+
+    recibo_id = c.post(f"/api/ventas/{venta_id}/recibo").json()["id"]
+    assert c.get("/api/ventas").json()[0]["recibo_id"] == recibo_id
+
+
+def test_un_recibo_anulado_deja_la_venta_pendiente_otra_vez(comercial):
+    """Un recibo anulado no es el comprobante de nada.
+
+    Si siguiera contando, la pantalla ofrecería «Ver recibo» de un papel sin
+    validez y no habría forma de emitir el que corresponde.
+    """
+    c = comercial
+    ids = _crear_base(c)
+    c.post("/api/recepciones-compra", json={
+        "proveedor_id": ids["proveedor"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "cantidad": 50, "costo": 95}],
+    })
+    venta_id = c.post("/api/ventas", json={
+        "cliente_id": ids["cliente"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "descripcion": "PLUG",
+                   "cantidad": 2, "precio": 160}],
+        "pagos": [{"medio": "efectivo", "monto": 320}],
+    }).json()["id"]
+    recibo_id = c.post(f"/api/ventas/{venta_id}/recibo").json()["id"]
+    assert c.get("/api/ventas").json()[0]["recibo_id"] == recibo_id
+
+    assert c.post(f"/api/recibos/{recibo_id}/anular",
+                  json={"motivo": "mal emitido"}).status_code == 200
+
+    assert c.get("/api/ventas").json()[0]["recibo_id"] is None
+
+
+def test_el_recibo_se_puede_ver_en_pdf(comercial):
+    """El botón tiene que entregar el comprobante, no sólo emitirlo.
+
+    Se lee el PDF de vuelta con pypdf: un  con
+    cero bytes adentro pasa igual un assert sobre el status, y es exactamente
+    lo que se vería como «le doy click y no pasa nada».
+    """
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    c = comercial
+    ids = _crear_base(c)
+    c.post("/api/recepciones-compra", json={
+        "proveedor_id": ids["proveedor"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "cantidad": 50, "costo": 95}],
+    })
+    venta_id = c.post("/api/ventas", json={
+        "cliente_id": ids["cliente"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "descripcion": "PLUG RJ 45 CAT 6",
+                   "cantidad": 2, "precio": 160}],
+        "pagos": [{"medio": "efectivo", "monto": 320}],
+    }).json()["id"]
+    recibo_id = c.post(f"/api/ventas/{venta_id}/recibo").json()["id"]
+
+    r = c.get(f"/api/recibos/{recibo_id}/pdf")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf"
+
+    texto = "\n".join(p.extract_text() for p in PdfReader(BytesIO(r.content)).pages)
+    # El cliente y el importe: si el PDF sale pero vacío, esto lo caza.
+    assert "Neumyser" in texto
+    assert "320" in texto
+
+
+def test_el_pdf_de_un_recibo_inexistente_da_404(comercial):
+    """404 y no un PDF vacío: un archivo de cero bytes se ve como «no pasó
+    nada», que es el peor error posible para un comprobante."""
+    assert comercial.get("/api/recibos/999999/pdf").status_code == 404
