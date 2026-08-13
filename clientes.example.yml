@@ -31,8 +31,12 @@ services:
     # ruta, asi que un `urlopen()` a secas da healthy con el backend caido.
     # El detalle largo esta en el docker-compose.yml de dev; la verificacion
     # por rotura, en tests/test_healthcheck_contenedor.py.
+    #
+    # ⚠️ `/health` desde el 2026-08-12: requiere una imagen que la sirva
+    # (PR #112 en adelante). Con una anterior el chequeo cae en el catch-all
+    # de la SPA y la instancia queda unhealthy para siempre.
     healthcheck:
-      test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/api/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
+      test: ["CMD", "python3", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); assert json.load(r)['status'] == 'ok'"]
       interval: 30s
       timeout: 5s
       retries: 3

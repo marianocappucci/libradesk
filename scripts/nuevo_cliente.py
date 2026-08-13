@@ -26,6 +26,22 @@ from libracore.provisioning.nuevo_cliente import (
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
 configure(
+    # `health_path` **no se pasa**, y esa ausencia es el cambio: desde el
+    # 2026-08-12 este producto sirve su salud en `/health`, que es el default
+    # del motor y la ruta de los otros cinco. Hasta esa fecha había acá un
+    # `health_path="/api/health"` porque LibraDesk era el único que la servía
+    # bajo el prefijo de su API, y sin ese argumento toda instancia nueva nacía
+    # con el healthcheck apuntado a una ruta que este producto no tenía. Se
+    # normalizó el desvío en vez de seguir parametrizándolo — ver
+    # `app/routers/health.py`.
+    #
+    # Que la ruta efectiva sea una que el router realmente sirve lo verifica
+    # `tests/test_healthcheck_contenedor.py`, contra ESTE archivo y contra
+    # `panel_admin.py` por separado: son dos llamadas a un `configure()` que
+    # pisa un `_cfg` GLOBAL, y `libracore.admin.services` importa los dos en el
+    # mismo proceso (`_nc()` y `_pa()`), así que gana el último import. Con las
+    # dos en el default no hay nada que desincronizar; el test es lo que impide
+    # que vuelvan a separarse.
     postgres=True,
     product_name="LIBRADESK",
     image_name="libradesk:latest",
