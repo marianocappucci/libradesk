@@ -21,8 +21,9 @@ caja, ni tesoreria--.
 > publicar una version y mover el pin de seis productos. Ver
 > `wiki/analyses/libradesk-modulo-comercial-plan.md`, fase 0.
 
-## Las tres FK que hubo que sacar, y por que no es inocuo
+## Las FK que hubo que tocar, por dos motivos distintos
 
+**Motivo 1 — la tabla padre no existe en este producto.**
 `libracore.db.core.get_connection()` corre `PRAGMA foreign_keys = ON` en toda
 conexion. Con el pragma activo **SQLite resuelve la tabla padre al preparar el
 chequeo**, asi que una FK que apunta a una tabla inexistente hace fallar
@@ -40,6 +41,26 @@ por `sales` de LibraCommerce, no por la tabla `ventas` de LibraCore, asi que
 `VENTAS_LIBRACOMMERCE` que consume la cuenta corriente --y es la razon por la
 que el orden del arranque importa: esto corre DESPUES de
 `inventario.ensure_schema()`, que es quien crea `sales`.
+
+**Motivo 2 — la tabla padre la maneja Alembic y esta no.** Este archivo escribe
+DDL crudo; `proveedores` y `clients` los versiona la cadena de `migrations/`.
+Una FK que cruza los dos sistemas deja la tabla del lado Alembic **imposible de
+recrear**: el `downgrade` la borra para rehacerla y PostgreSQL lo rechaza porque
+algo la referencia, asi que **se rompe la cadena entera, no solo este modulo**.
+
+| Columna | FK original |
+|---|---|
+| `egresos.proveedor_id` | `proveedores(id)` |
+| `cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `cc_resumenes_enviados.cliente_id`, `recibos.cliente_id` | `clients(id)` |
+
+Las cinco quedan como INTEGER pelado y **la integridad la sostiene el router**,
+igual que `client_id` en `remitos_presupuestos.py`. No se descubrio pensando:
+lo destapo `test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja`, que
+hace un downgrade real hasta el baseline.
+
+> La regla que queda, y vale para el proximo modulo que copie DDL: **el DDL
+> crudo no referencia tablas de Alembic**. Al reves si --`egresos_pagos` cuelga
+> de `egresos` y las dos son de aca--.
 
 ## Tres tablas que se crean para quedar VACIAS, y no es desprolijidad
 
@@ -63,13 +84,14 @@ respuesta correcta para un producto que no factura ni maneja caja. Es el mismo
 criterio con el que el motor documenta `cc_debitos`: *"queda vacia en los
 productos que no la usan, asi que su saldo no cambia"*.
 
-## Lo que SI conserva sus FK
+## Por que este modulo no se podria haber escrito la semana pasada
 
-`cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `cc_resumenes_enviados.
-cliente_id` y `recibos.cliente_id` apuntan a `clients`, **y esa tabla ahora
-existe**: la revision `0017` (2026-08-12) llevo la tabla de clientes de
-LibraDesk a la compartida de LibraCore. Antes de esa revision este modulo no
-habria podido escribirse.
+Aunque las FK contra `clients` no queden declaradas, el modulo **depende** de
+que esa tabla sea la del motor: `get_cc_saldo()` hace
+`SELECT cuit_dni FROM clients` y los cuatro `cliente_id` de arriba guardan su
+id. La revision `0017` (2026-08-12) llevo la tabla de clientes de LibraDesk a la
+compartida de LibraCore; antes de eso el motor habria leido una tabla que no
+existia.
 """
 
 from __future__ import annotations
@@ -146,10 +168,19 @@ CREATE TABLE IF NOT EXISTS categorias_egreso (
     nombre TEXT NOT NULL UNIQUE
 );
 
+-- ⚠️ `proveedor_id` va SIN la FK a `proveedores` que declara LibraCore, y no es
+-- una omision: **`proveedores` la maneja Alembic y esta tabla no**. Una FK que
+-- cruza los dos sistemas de schema deja la tabla de Alembic imposible de
+-- recrear —PostgreSQL rechaza el `DROP TABLE proveedores` del downgrade porque
+-- algo la referencia— y eso rompe la cadena entera, no sólo este modulo.
+-- Lo destapo `test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja`, que
+-- hace un downgrade real hasta el baseline.
+-- La integridad la sostiene el router, igual que `client_id` en
+-- `remitos_presupuestos.py`.
 CREATE TABLE IF NOT EXISTS egresos (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha            TEXT NOT NULL,
-    proveedor_id     INTEGER REFERENCES proveedores(id) ON DELETE SET NULL,
+    proveedor_id     INTEGER,
     proveedor_nombre TEXT NOT NULL DEFAULT '',
     tipo_comprobante TEXT NOT NULL DEFAULT 'otro',
     numero           TEXT DEFAULT '',
@@ -188,7 +219,7 @@ CREATE TABLE IF NOT EXISTS ventas_pagos (
 
 CREATE TABLE IF NOT EXISTS cc_pagos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    cliente_id  INTEGER NOT NULL,
     monto       REAL NOT NULL,
     fecha       TEXT NOT NULL,
     concepto    TEXT DEFAULT '',
@@ -201,7 +232,7 @@ CREATE TABLE IF NOT EXISTS cc_pagos (
 
 CREATE TABLE IF NOT EXISTS cc_debitos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    cliente_id  INTEGER NOT NULL,
     monto       REAL NOT NULL,
     fecha       TEXT NOT NULL,
     concepto    TEXT DEFAULT '',
@@ -212,7 +243,7 @@ CREATE TABLE IF NOT EXISTS cc_debitos (
 
 CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id    INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    cliente_id    INTEGER NOT NULL,
     fecha         TEXT NOT NULL,
     periodo_desde TEXT NOT NULL,
     periodo_hasta TEXT NOT NULL,
@@ -229,7 +260,7 @@ CREATE TABLE IF NOT EXISTS recibos (
     punto_venta       INTEGER NOT NULL DEFAULT 1,
     numero            INTEGER NOT NULL,
     fecha             TEXT NOT NULL,
-    cliente_id        INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    cliente_id        INTEGER,
     cliente_razon     TEXT NOT NULL,
     cliente_cuit      TEXT DEFAULT '',
     cliente_domicilio TEXT DEFAULT '',
