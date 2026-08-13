@@ -27,7 +27,8 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Eye, Monitor, Pencil, Plus, Trash2 } from 'lucide-react'
+import Monitor from '~icons/fluent-color/laptop-16'
+import { Eye, Pencil, Plus, Trash2 } from '@/components/iconos-accion'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.
@@ -304,7 +305,9 @@ export function Equipos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Equipos</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Monitor className="size-5" />Equipos
+        </h2>
         {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>

@@ -43,9 +43,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
-import {
-  Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink, Users,
-} from 'lucide-react'
+import Users from '~icons/fluent-color/people-16'
+import { Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink } from '@/components/iconos-accion'
 
 const SIN = '__sin__'
 

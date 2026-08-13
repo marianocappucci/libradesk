@@ -35,8 +35,9 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_RECEPCION } from './recepciones-piezas'
-import { ClipboardCheck, PackageCheck, Printer, Plus, Trash2 } from 'lucide-react'
+import ClipboardCheck from '~icons/fluent-color/clipboard-task-16'
 import { fechaHora } from '@/lib/format'
+import { PackageCheck, Plus, Printer, Trash2 } from '@/components/iconos-accion'
 
 const NONE = '__none__'
 

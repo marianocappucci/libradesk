@@ -11,8 +11,10 @@
  */
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronRight, FileSpreadsheet, Table2 } from 'lucide-react'
+import FileSpreadsheet from '~icons/fluent-color/table-16'
+import Table2 from '~icons/fluent-color/table-16'
 import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
+import { ChevronRight } from '@/components/iconos-accion'
 
 function ItemReporte({ reporte }: { reporte: Reporte }) {
   return (
@@ -36,7 +38,9 @@ export function Reportes() {
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-lg font-semibold">Reportes</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <FileSpreadsheet className="size-5" />Reportes
+        </h2>
         <p className="text-sm text-muted-foreground">
           Cada reporte se ve en pantalla con sus filtros, y desde ahí se imprime o se
           baja en Excel.

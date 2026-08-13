@@ -28,10 +28,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  ArrowLeft, ArrowLeftRight, Check, History, MessageSquare, PackageCheck,
-  Printer, ShieldCheck, Trash2, Wrench,
-} from 'lucide-react'
+import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
+import History from '~icons/fluent-color/history-16'
+import MessageSquare from '~icons/fluent-color/comment-16'
+import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
+import Wrench from '~icons/fluent-color/wrench-16'
+import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
 
 const NONE = '__none__'
 
@@ -405,7 +407,7 @@ export function IncidenciaDetalle() {
               </a>
             </Button>
             <Button size="sm" variant="outline" onClick={abrirReemplazo}>
-              <ArrowLeftRight />Reemplazar equipo
+              <ArrowLeftRightAccion />Reemplazar equipo
             </Button>
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 />Eliminar
@@ -493,7 +495,7 @@ export function IncidenciaDetalle() {
                                 <strong>{entry.data.equipo_descripcion}</strong>
                                 {entry.data.en_garantia && (
                                   <Badge variant="outline" className="gap-1">
-                                    <ShieldCheck className="size-3" />Garantía
+                                    <ShieldCheckAccion className="size-3" />Garantía
                                   </Badge>
                                 )}
                               </span>

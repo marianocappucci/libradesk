@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Download, FileCheck, Pencil, Trash2 } from 'lucide-react'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type Cliente, type EstadoPresupuesto,
   type Presupuesto,
@@ -20,6 +19,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
+import FileText from '~icons/fluent-color/document-text-20'
+import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 
@@ -292,7 +293,9 @@ export function Presupuestos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Presupuestos</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <FileText className="size-5" />Presupuestos
+        </h2>
         {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
       </div>
 

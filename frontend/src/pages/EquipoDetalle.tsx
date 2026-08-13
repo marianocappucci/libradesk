@@ -23,11 +23,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import {
-  AlertTriangle, ArrowLeft, Building2, History, MapPin, Monitor, ShieldCheck,
-  Ticket, Wrench,
-} from 'lucide-react'
+import Building2 from '~icons/fluent-color/building-16'
+import History from '~icons/fluent-color/history-16'
+import MapPin from '~icons/fluent-color/location-ripple-16'
+import Monitor from '~icons/fluent-color/laptop-16'
+import Wrench from '~icons/fluent-color/wrench-16'
 import { fechaDeDate, fechaHora } from '@/lib/format'
+import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'

@@ -8,12 +8,13 @@
 // que cambia es de donde salen los datos.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, FileDown, Receipt } from 'lucide-react'
+import Receipt from '~icons/fluent-color/receipt-16'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import type { ComprobanteItem } from '../api'
+import { ArrowLeft, FileDown } from '@/components/iconos-accion'
 
 export type ComprobanteDetalleData = {
   id: number

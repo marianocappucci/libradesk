@@ -4,7 +4,6 @@
 // por pagina se habria desincronizado igual que paso con el markup de la
 // fila de medicamentos en Farmacia.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
 import type { Cliente, ComprobanteItem, EstadoPresupuesto, Servicio } from '../api'
 import { api, ESTADO_PRESUPUESTO_LABELS } from '../api'
 import { Button } from '@/components/ui/button'
@@ -15,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Trash2 } from '@/components/iconos-accion'
 
 /** `tax_rate` es el PORCENTAJE como string ('21', '10.5'), no la fracción: es
  *  lo que muestra el `<select>` y lo que se leía en el campo del documento

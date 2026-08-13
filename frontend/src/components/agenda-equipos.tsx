@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Car } from 'lucide-react'
+import { Car } from '@/components/iconos-accion'
 
 /** Hoy en `YYYY-MM-DD`, hora local.
  *

@@ -25,6 +25,17 @@ export default mergeConfig(
       env: { TZ: 'America/Argentina/Buenos_Aires' },
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
+      // 15 s en vez de los 5 s por defecto, por los iconos `fluent-color`
+      // (2026-08-13). `unplugin-icons` compila cada SVG con svgr la primera
+      // vez que se importa, y son 52 iconos repartidos en 43 archivos: con la
+      // caché de Vite fría la compilación de la suite pasó de 6,4 s a 53 s y
+      // dos tests se pasaron del presupuesto de 5 s **sin que nada estuviera
+      // roto** (en caliente los 201 pasaban). CI siempre corre en frío, así
+      // que sin esto el rojo sería sistemático ahí y verde en local.
+      //
+      // No se toca el presupuesto de los tests: se corrige el techo, que
+      // estaba calibrado para un pipeline sin este paso de compilación.
+      testTimeout: 15_000,
       coverage: {
         provider: 'v8',
         // Trinquete, no meta. Los tests de los SPAs son de HUMO a proposito

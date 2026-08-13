@@ -26,7 +26,12 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ClipboardList, Coins, Eye, Plus, Trash2, Wallet } from 'lucide-react'
+import ClipboardList from '~icons/fluent-color/clipboard-16'
+import Coins from '~icons/fluent-color/coin-multiple-16'
+import Wallet from '~icons/fluent-color/savings-16'
+// `Eye` llegó de develop (el PDF del recibo se abre con un ojo, PR #127) y es
+// una ACCIÓN, así que entra por el módulo de acciones como el resto.
+import { Eye, Plus, Trash2 } from '@/components/iconos-accion'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string

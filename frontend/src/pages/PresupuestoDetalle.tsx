@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  CheckCircle2, FileCheck, Pencil, Send, Trash2, Undo2, XCircle,
-} from 'lucide-react'
-import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type EstadoPresupuesto, type Presupuesto,
 } from '../api'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ComprobanteDetalle, DetalleEstado } from '@/components/comprobante-detalle'
 import { fecha } from '@/lib/format'
+import { CheckCircle2, FileCheck, Pencil, Send, Trash2, Undo2, XCircle } from '@/components/iconos-accion'
 
 const VARIANTE: Record<EstadoPresupuesto, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   borrador: 'outline',

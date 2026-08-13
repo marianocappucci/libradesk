@@ -21,10 +21,15 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SelectBuscable } from '@/components/select-buscable'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import { ArrowLeft, Download, Search } from 'lucide-react'
 import {
   TODOS, buscarReporte, queryDeValores, valoresIniciales, type Campo,
 } from './reportes-definicion'
+// Los dos botones de acción de esta pantalla son PRIMARIOS (ya son un bloque de
+// color), así que sus iconos van sin recuadro — ver la nota de `sinRecuadro` en
+// iconos-accion.tsx. `ArrowLeft` sí lo lleva: está en un botón `outline`.
+import {
+  ArrowLeft, DownloadPlano as Download, SearchPlano as Search,
+} from '@/components/iconos-accion'
 
 export function ReporteDetalle() {
   const { slug } = useParams<{ slug: string }>()

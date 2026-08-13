@@ -42,7 +42,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, CornerDownRight, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { CornerDownRight } from '@/components/iconos-accion'
+import Settings from '~icons/fluent-color/settings-20'
+import { Check, Download, Pencil, Plus, Trash2, Upload, X } from '@/components/iconos-accion'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -476,10 +478,58 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
 function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-4">
-      <h2 className="text-lg font-semibold">Configuración</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Settings className="size-5" />Configuración
+        </h2>
       <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
       {children}
+      <CreditosIconos />
     </div>
+  )
+}
+
+/** Atribución de los sets de iconos.
+ *
+ *  Las tres licencias (MIT, MIT e ISC) piden que se conserve el aviso de
+ *  copyright en las distribuciones, y un producto que se sirve compilado es una
+ *  distribución. No es un cartel de agradecimiento: es la condición bajo la que
+ *  se pueden usar.
+ *
+ *  Va al pie de Configuración —una vez, en el shell y no en cada pestaña—
+ *  porque es donde alguien busca "de qué está hecho esto" y no estorba a quien
+ *  vino a cambiar un ajuste.
+ *
+ *  Ojo si se agrega un set nuevo: hubo un momento en que el candidato para los
+ *  iconos de acción era Streamline Plump (CC BY 4.0), que **exige** atribución
+ *  visible, e Icons8 Plumpy, cuyo tier gratuito exige un enlace. Se descartaron
+ *  los dos a favor de Fluent monocromo, que es MIT. Si alguna vez entra un set
+ *  con CC BY o con obligación de enlace, esta tarjeta deja de ser buena
+ *  práctica y pasa a ser un requisito legal — y el enlace tiene que ser un
+ *  enlace de verdad, no texto.
+ */
+function CreditosIconos() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Iconos:{' '}
+      <a
+        className="underline underline-offset-2"
+        href="https://github.com/microsoft/fluentui-system-icons"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Fluent UI System Icons
+      </a>{' '}
+      © Microsoft (MIT) y{' '}
+      <a
+        className="underline underline-offset-2"
+        href="https://lucide.dev"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Lucide
+      </a>{' '}
+      (ISC).
+    </p>
   )
 }
 

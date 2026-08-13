@@ -19,7 +19,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, PackagePlus, Repeat, TrendingUp, Undo2 } from 'lucide-react'
+import { ArrowLeft, PackagePlus, Repeat, TrendingUp, Undo2 } from '@/components/iconos-accion'
 
 const HOY = () => new Date().toISOString().slice(0, 10)
 

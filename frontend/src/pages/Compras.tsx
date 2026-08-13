@@ -25,7 +25,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowDownToLine, Plus, ShoppingCart, Trash2, Wallet } from 'lucide-react'
+import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
+import Wallet from '~icons/fluent-color/savings-16'
+import { Plus, ShoppingCart, Trash2 } from '@/components/iconos-accion'
 
 type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {

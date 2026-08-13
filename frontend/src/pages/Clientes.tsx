@@ -22,7 +22,25 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, MapPin, Pencil, Plus, Trash2, Undo2, Users, X } from 'lucide-react'
+// PRUEBA (2026-08-13): esta pantalla usa el reparto de DOS sets en vez de uno.
+//
+//  - `fluent-color` (MIT, color horneado) para IDENTIDAD: el titulo de una
+//    seccion, donde el icono etiqueta de que se habla y no cambia nunca.
+//  - `streamline-plump` (CC BY 4.0, `stroke="currentColor"`) para ACCION: los
+//    botones. Al heredar el color, el tacho SI se pone rojo con el
+//    `text-destructive` del boton, que es lo que el set de color no podia
+//    hacer. Ese es el punto de la prueba.
+//
+// `Plus` y `X` se quedan en lucide: ninguno de los dos sets tiene un signo
+// "mas" ni una cruz de cerrar a secas (lo verifique contra los 890 y los 1499
+// nombres). Son monocromos igual, asi que se comportan como el resto de las
+// acciones y el reparto no se rompe.
+//
+// ⚠️ CC BY 4.0 EXIGE ATRIBUCION a Streamline. Si este reparto se adopta, la
+// atribucion tiene que existir en algun lado visible del producto ANTES de
+// que salga a produccion. Hoy no esta puesta: es una prueba.
+import Users from '~icons/fluent-color/people-16'
+import { Check, MapPin, Pencil, Plus, Trash2, Undo2, X } from '@/components/iconos-accion'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -319,7 +337,9 @@ export function Clientes() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Clientes</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Users className="size-5" />Clientes
+        </h2>
         {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>

@@ -19,7 +19,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowLeftRight, Boxes, Building2, Minus, Plus } from 'lucide-react'
+import { ArrowLeftRight, Boxes, Building2, Minus, Plus } from '@/components/iconos-accion'
 
 export type Consumible = {
   id: number

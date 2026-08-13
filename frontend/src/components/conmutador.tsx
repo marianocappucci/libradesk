@@ -11,7 +11,7 @@
  *  que recargar la página deje al usuario donde estaba.
  */
 import { Link } from 'react-router-dom'
-import type { LucideIcon } from 'lucide-react'
+import type { ComponentType } from 'react'
 import { Button } from '@/components/ui/button'
 
 export type Pestania = {
@@ -19,7 +19,11 @@ export type Pestania = {
   clave: string
   to: string
   label: string
-  icono: LucideIcon
+  // No `LucideIcon`: ese tipo es un `forwardRef` sobre `svg`, y desde que los
+  // iconos de acción vienen envueltos en un recuadro (`<span>`, ver
+  // `iconos-accion.tsx`) ya no encajan. La forma que de verdad se necesita acá
+  // es la misma que piden `Pagina` y `libra-ui/Layout`.
+  icono: ComponentType<{ className?: string }>
 }
 
 export function Conmutador({ pestanias, actual }: {

@@ -25,8 +25,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PackageCheck, ShieldCheck, Wrench } from 'lucide-react'
+import Wrench from '~icons/fluent-color/wrench-16'
 import { fecha } from '@/lib/format'
+import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 
