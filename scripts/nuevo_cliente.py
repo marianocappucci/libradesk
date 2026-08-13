@@ -26,26 +26,22 @@ from libracore.provisioning.nuevo_cliente import (
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
 configure(
-    # **LibraDesk es el único de los seis que no sirve su salud en `/health`**:
-    # `app/routers/health.py` declara `@router.get("/api/health")`. Los otros
-    # cinco usan `/health` — Gestiolibra, MedLibra y VentaLibra con este mismo
-    # archivo y esta misma forma, sólo que sin el `/api` en el literal.
+    # `health_path` **no se pasa**, y esa ausencia es el cambio: desde el
+    # 2026-08-12 este producto sirve su salud en `/health`, que es el default
+    # del motor y la ruta de los otros cinco. Hasta esa fecha había acá un
+    # `health_path="/api/health"` porque LibraDesk era el único que la servía
+    # bajo el prefijo de su API, y sin ese argumento toda instancia nueva nacía
+    # con el healthcheck apuntado a una ruta que este producto no tenía. Se
+    # normalizó el desvío en vez de seguir parametrizándolo — ver
+    # `app/routers/health.py`.
     #
-    # Sin esto, el healthcheck que se le estampa a cada instancia nueva apunta
-    # a `/health`, que en este producto lo contesta el catch-all de la SPA con
-    # el index.html. Hasta libracore v1.34.0 eso pasaba desapercibido porque el
-    # chequeo era un `urlopen()` a secas y cualquier 200 le alcanzaba; desde
-    # v1.34.0 hace `json.load` del cuerpo, así que la instancia nueva nacería
-    # `unhealthy` para siempre. Medido el 2026-08-12 contra `libradesk-demo`:
-    # `/health` da exit 1, `/api/health` da exit 0.
-    #
-    # Va también en `panel_admin.py`, y no es duplicación decorativa:
-    # `configure()` pisa un `_cfg` GLOBAL, y `libracore.admin.services` importa
-    # los dos scripts en el mismo proceso (`_pa()` y `_nc()`). Gana el último
-    # import. Si sólo lo pusiera acá, un listado posterior a un alta dejaría
-    # `_cfg.health_path` de vuelta en `/health` y el próximo alta volvería a
-    # generar el compose equivocado.
-    health_path="/api/health",
+    # Que la ruta efectiva sea una que el router realmente sirve lo verifica
+    # `tests/test_healthcheck_contenedor.py`, contra ESTE archivo y contra
+    # `panel_admin.py` por separado: son dos llamadas a un `configure()` que
+    # pisa un `_cfg` GLOBAL, y `libracore.admin.services` importa los dos en el
+    # mismo proceso (`_nc()` y `_pa()`), así que gana el último import. Con las
+    # dos en el default no hay nada que desincronizar; el test es lo que impide
+    # que vuelvan a separarse.
     postgres=True,
     product_name="LIBRADESK",
     image_name="libradesk:latest",

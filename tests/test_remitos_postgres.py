@@ -3,7 +3,7 @@
 Por qué existe, que es lo que menos se ve:
 
 `tests/test_database_backend.py::test_application_starts_against_postgres` es el
-gate que cerró la F1 del piloto — y lo único que asierta es que `/api/health`
+gate que cerró la F1 del piloto — y lo único que asierta es que `/health`
 responde 200. Eso prueba que las 31 tablas **nacen** en PostgreSQL, no que se
 puedan leer. El 2026-08-09, con ese gate en verde y 483 tests sin salteos, **5
 de las 7 lecturas de `libracore.db.remitos_presupuestos` fallaban** contra
