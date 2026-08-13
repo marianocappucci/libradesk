@@ -46,6 +46,36 @@ from http.cookiejar import CookieJar
 
 HOY = date.today()
 
+#: Todos los campos de `IncidenciaIn`, para reenviarlos en un PUT.
+#:
+#: `PUT /api/incidencias/{id}` **reemplaza**, no parchea: lo que no viaja se
+#: pierde contra el default del modelo. Este script hace dos PUT parciales —el
+#: que completa la agenda de un ticket viejo y el que lo da por terminado— y
+#: los dos tienen que reenviar el resto.
+#:
+#: 🔴 **Esta lista estaba escrita a mano y le faltaban cuatro campos**
+#: (`estado_facturacion`, `nro_cds`, `reclamante`, `activo`), justo debajo de un
+#: comentario que advertía *"hay que reenviar todo lo demás o se borra"*. El
+#: 2026-08-13, al correr el seed sobre la demo, el PUT de la agenda le borró el
+#: `estado_facturacion` a "Cambio de switch en el rack" y la pantalla de
+#: facturación se quedó sin ejemplo de `no_facturable`. **No falló nada.**
+#:
+#: Los tres que faltan a propósito —`id`, `fecha_creacion`, `fecha_cierre`— son
+#: de `IncidenciaOut`: los pone el producto y no se mandan de vuelta.
+#:
+#: `test_la_lista_de_campos_no_se_queda_atras_del_modelo` la compara contra
+#: `IncidenciaIn`, así que agregar un campo nuevo al modelo pone el test en rojo
+#: en vez de dejar que el seed lo borre en silencio.
+CAMPOS_INCIDENCIA = (
+    "cliente_id", "equipo_id", "activo_id", "tecnico_id",
+    "recepcionista_id", "vendedor_id", "modalidad",
+    "fecha_programada", "duracion_minutos", "equipo_trabajo_id",
+    "sector_id", "categoria_id", "titulo", "descripcion",
+    "nro_cds", "reclamante", "estado", "prioridad",
+    "horas_invertidas", "notas", "resolucion", "estado_facturacion",
+    "activo",
+)
+
 #: Los tickets que el seed deja **terminados**, por título.
 #:
 #: `(título, estado, horas, resolución, estado_facturacion)`.
@@ -417,21 +447,9 @@ def sembrar(api: Api) -> None:
             }
             if faltantes:
                 # El PUT lleva el objeto entero, así que hay que reenviar todo
-                # lo demás o se borra. Los campos se listan explícitamente y no
-                # se manda `ya` crudo: trae `id`, `fecha_creacion` y
-                # `fecha_cierre`, que no son de `IncidenciaIn` — hoy Pydantic
-                # los ignora, pero apoyarse en eso es apoyarse en un default
-                # que se puede cambiar.
-                previos = {
-                    campo: ya.get(campo) for campo in (
-                        "cliente_id", "equipo_id", "activo_id", "tecnico_id",
-                        "recepcionista_id", "vendedor_id", "modalidad",
-                        "fecha_programada", "duracion_minutos",
-                        "equipo_trabajo_id", "sector_id", "categoria_id",
-                        "titulo", "descripcion", "estado", "prioridad",
-                        "horas_invertidas", "notas", "resolucion",
-                    )
-                }
+                # lo demás o se borra. La lista está en `CAMPOS_INCIDENCIA`,
+                # con un test que la compara contra el modelo.
+                previos = {campo: ya.get(campo) for campo in CAMPOS_INCIDENCIA}
                 api.put(f"/api/incidencias/{ya['id']}", {**previos, **faltantes})
                 contar("incidencias_completadas", True)
             continue
@@ -685,10 +703,12 @@ def sembrar(api: Api) -> None:
             continue
         if inc.get("estado") in ("cerrado", "resuelta"):
             continue
+        # Mismo criterio que el PUT de la agenda: se reenvía el objeto entero.
+        # Esta lista era todavía más corta —nueve campos— así que cerrar un
+        # ticket le borraba de paso el `recepcionista_id`, el `vendedor_id` y
+        # los tres campos de la agenda, que este mismo seed acababa de poner.
         api.put(f"/api/incidencias/{inc['id']}", {
-            **{k: inc.get(k) for k in (
-                "cliente_id", "equipo_id", "tecnico_id", "titulo", "descripcion",
-                "prioridad", "categoria_id", "sector_id", "modalidad")},
+            **{k: inc.get(k) for k in CAMPOS_INCIDENCIA},
             "estado": estado,
             "horas_invertidas": horas,
             "resolucion": resolucion,
