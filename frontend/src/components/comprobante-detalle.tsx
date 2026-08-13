@@ -8,7 +8,7 @@
 // que cambia es de donde salen los datos.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import FileDown from '~icons/fluent-color/document-16'
+import FileDown from '~icons/streamline-plump/download-box-2'
 import Receipt from '~icons/fluent-color/receipt-16'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'

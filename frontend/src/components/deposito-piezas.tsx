@@ -17,12 +17,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Link } from 'react-router-dom'
 import Building2 from '~icons/fluent-color/building-16'
-import Eye from '~icons/fluent-color/content-view-16'
+import Eye from '~icons/streamline-plump/eye-optic'
 import Monitor from '~icons/fluent-color/laptop-16'
-import Pencil from '~icons/fluent-color/edit-16'
-import Star from '~icons/fluent-color/star-16'
+import Pencil from '~icons/streamline-plump/pencil-square'
+import Star from '~icons/streamline-plump/star-circle'
 import Users from '~icons/fluent-color/people-16'
-import { Trash2 } from 'lucide-react'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
 
 const PESTANIAS_DEPOSITOS: readonly Pestania[] = [
   { clave: 'propios', to: '/depositos', label: 'De la empresa', icono: Building2 },

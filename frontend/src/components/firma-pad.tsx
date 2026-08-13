@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import PenLine from '~icons/fluent-color/edit-16'
-import { Eraser } from 'lucide-react'
+import PenLine from '~icons/streamline-plump/pen-1'
+import Eraser from '~icons/streamline-plump/eraser'
 
 export type Firma = {
   imagen: string

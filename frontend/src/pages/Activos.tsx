@@ -27,9 +27,9 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import History from '~icons/fluent-color/history-16'
-import Pencil from '~icons/fluent-color/edit-16'
-import Plus from '~icons/fluent-color/add-circle-16'
-import { Boxes, Trash2 } from 'lucide-react'
+import Pencil from '~icons/streamline-plump/pencil-square'
+import { Boxes, Plus } from 'lucide-react'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
 
 const TODOS = '__todos__'
 
@@ -282,7 +282,9 @@ export function Activos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Activos en alquiler</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Boxes className="size-5" />Activos en alquiler
+        </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><Plus />Nuevo activo</Button>

@@ -28,7 +28,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import FileSignature from '~icons/fluent-color/document-edit-16'
-import Plus from '~icons/fluent-color/add-circle-16'
+import { Plus } from 'lucide-react'
 
 const TODOS = '__todos__'
 
@@ -218,7 +218,9 @@ export function Contratos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Equipos en alquiler</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <FileSignature className="size-5" />Equipos en alquiler
+        </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><Plus />Nuevo contrato</Button>

@@ -21,8 +21,8 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SelectBuscable } from '@/components/select-buscable'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import Download from '~icons/fluent-color/arrow-square-down-20'
-import Search from '~icons/fluent-color/search-visual-16'
+import Download from '~icons/streamline-plump/download-box-2'
+import Search from '~icons/streamline-plump/search-visual'
 import { ArrowLeft } from 'lucide-react'
 import {
   TODOS, buscarReporte, queryDeValores, valoresIniciales, type Campo,

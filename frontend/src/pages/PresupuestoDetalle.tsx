@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import CheckCircle2 from '~icons/fluent-color/checkmark-circle-16'
-import FileCheck from '~icons/fluent-color/document-16'
-import Pencil from '~icons/fluent-color/edit-16'
-import Send from '~icons/fluent-color/send-16'
-import XCircle from '~icons/fluent-color/dismiss-circle-16'
-import { Trash2, Undo2 } from 'lucide-react'
+import CheckCircle2 from '~icons/streamline-plump/check-thick'
+import FileCheck from '~icons/streamline-plump/file-check-alternate'
+import Pencil from '~icons/streamline-plump/pencil-square'
+import Send from '~icons/streamline-plump/mail-send'
+import { XCircle } from 'lucide-react'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type EstadoPresupuesto, type Presupuesto,
 } from '../api'
@@ -14,6 +13,8 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ComprobanteDetalle, DetalleEstado } from '@/components/comprobante-detalle'
 import { fecha } from '@/lib/format'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
+import Undo2 from '~icons/streamline-plump/return-3'
 
 const VARIANTE: Record<EstadoPresupuesto, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   borrador: 'outline',

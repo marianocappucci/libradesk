@@ -42,12 +42,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import Check from '~icons/fluent-color/checkmark-circle-16'
-import Download from '~icons/fluent-color/arrow-square-down-20'
-import Pencil from '~icons/fluent-color/edit-16'
-import Plus from '~icons/fluent-color/add-circle-16'
-import X from '~icons/fluent-color/dismiss-circle-16'
-import { CornerDownRight, Trash2, Upload } from 'lucide-react'
+import Check from '~icons/streamline-plump/check-thick'
+import Download from '~icons/streamline-plump/download-box-2'
+import Pencil from '~icons/streamline-plump/pencil-square'
+import { CornerDownRight, Plus, X } from 'lucide-react'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
+import Upload from '~icons/streamline-plump/upload-box-1'
+import Settings from '~icons/fluent-color/settings-20'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -481,7 +482,9 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
 function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-4">
-      <h2 className="text-lg font-semibold">Configuración</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Settings className="size-5" />Configuración
+        </h2>
       <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
       {children}
     </div>

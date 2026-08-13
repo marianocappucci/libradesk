@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import Pencil from '~icons/fluent-color/edit-16'
-import { Trash2 } from 'lucide-react'
+import Pencil from '~icons/streamline-plump/pencil-square'
 import { api, ApiError, type Remito } from '../api'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ComprobanteDetalle, DetalleEstado } from '@/components/comprobante-detalle'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
 
 export function RemitoDetalle() {
   const { id } = useParams<{ id: string }>()

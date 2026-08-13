@@ -36,9 +36,11 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_RECEPCION } from './recepciones-piezas'
 import ClipboardCheck from '~icons/fluent-color/clipboard-task-16'
-import Plus from '~icons/fluent-color/add-circle-16'
-import { PackageCheck, Printer, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { fechaHora } from '@/lib/format'
+import PackageCheck from '~icons/streamline-plump/archive-box'
+import Printer from '~icons/streamline-plump/printer'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
 
 const NONE = '__none__'
 

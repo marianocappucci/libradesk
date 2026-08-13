@@ -20,8 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import Plus from '~icons/fluent-color/add-circle-16'
-import { Boxes, Percent, Tags } from 'lucide-react'
+import { Boxes, Percent, Plus, Tags } from 'lucide-react'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────
 

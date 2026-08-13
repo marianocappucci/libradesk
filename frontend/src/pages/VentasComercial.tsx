@@ -28,9 +28,9 @@ import {
 } from '@/components/ui/dialog'
 import ClipboardList from '~icons/fluent-color/clipboard-16'
 import Coins from '~icons/fluent-color/coin-multiple-16'
-import Plus from '~icons/fluent-color/add-circle-16'
 import Wallet from '~icons/fluent-color/savings-16'
-import { Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string

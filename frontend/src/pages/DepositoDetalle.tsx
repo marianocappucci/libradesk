@@ -28,8 +28,9 @@ import {
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
 import Building2 from '~icons/fluent-color/building-16'
-import Monitor from '~icons/fluent-color/laptop-16'
+import Monitor from '~icons/streamline-plump/computer-pc-desktop'
 import { ArrowLeft } from 'lucide-react'
+import ArrowLeftRightAccion from '~icons/streamline-plump/synchronize'
 
 // Destino "ninguno": el equipo sale del depósito y vuelve al sector del
 // cliente. Radix no admite un <SelectItem value="">.
@@ -184,7 +185,7 @@ export function DepositoDetalle() {
             disabled={seleccion.size === 0}
             onClick={() => { setMoverError(null); setMoverOpen(true) }}
           >
-            <ArrowLeftRight />
+            <ArrowLeftRightAccion />
             Mover {seleccion.size > 0 ? `(${seleccion.size})` : ''}
           </Button>
         </div>

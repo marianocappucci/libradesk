@@ -342,7 +342,9 @@ export function Clientes() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Clientes</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Users className="size-5" />Clientes
+        </h2>
         {isAdmin && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>

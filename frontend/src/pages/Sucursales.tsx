@@ -17,7 +17,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import MapPin from '~icons/fluent-color/location-ripple-16'
-import Plus from '~icons/fluent-color/add-circle-16'
+import { Plus } from 'lucide-react'
 
 export function Sucursales() {
   const { datos, error, cargando, conError } = useDatos<Sucursal[]>('/api/sucursales?solo_activas=false', [])

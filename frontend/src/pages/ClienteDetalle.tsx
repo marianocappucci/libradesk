@@ -14,12 +14,11 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import AlertTriangle from '~icons/fluent-color/warning-16'
-import FileText from '~icons/fluent-color/document-text-16'
+import AlertTriangle from '~icons/streamline-plump/warning-diamond'
 import MapPin from '~icons/fluent-color/location-ripple-16'
 import Monitor from '~icons/fluent-color/laptop-16'
-import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
-import { ArrowLeft, Ticket } from 'lucide-react'
+import ShieldCheck from '~icons/streamline-plump/user-protection-check'
+import { ArrowLeft, FileText, Ticket } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 
 function formatFecha(fecha: string | null): string {

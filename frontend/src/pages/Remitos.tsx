@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import Download from '~icons/fluent-color/arrow-square-down-20'
-import Pencil from '~icons/fluent-color/edit-16'
-import { Trash2 } from 'lucide-react'
+import Download from '~icons/streamline-plump/download-box-2'
+import Pencil from '~icons/streamline-plump/pencil-square'
 import { api, ApiError, type Cliente, type Remito } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,6 +14,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
+import Trash2 from '~icons/streamline-plump/recycle-bin'
+import Receipt from '~icons/fluent-color/receipt-20'
 
 export function Remitos() {
   const navigate = useNavigate()
@@ -178,7 +179,9 @@ export function Remitos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Remitos</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Receipt className="size-5" />Remitos
+        </h2>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </div>
 
