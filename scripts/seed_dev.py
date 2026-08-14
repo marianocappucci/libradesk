@@ -286,7 +286,7 @@ def sembrar(api: Api) -> None:
     # Deja los tres estados que la pantalla distingue: un vehículo asignado
     # (que es la respuesta a "en qué sale el equipo"), uno libre y uno en
     # taller. Con los tres iguales, media pantalla quedaría sin mirarse.
-    equipos_spec = [
+    cuadrillas_spec = [
         ("Cuadrilla Norte", "Rubén Actis", ["Diego Ramos", "Sofía Núñez"],
          "Zona norte y centro"),
         ("Cuadrilla Sur", "Carla Vega", ["Diego Ramos"], "Zona sur"),
@@ -297,7 +297,7 @@ def sembrar(api: Api) -> None:
     # primera sin que se notara hasta necesitarla después.
     equipos_ya = api.get("/api/equipos-trabajo") or []
     cuadrillas: dict[str, dict] = {e["nombre"]: e for e in equipos_ya}
-    for nombre, jefe, integrantes, obs in equipos_spec:
+    for nombre, jefe, integrantes, obs in cuadrillas_spec:
         if nombre in cuadrillas:
             continue
         cuadrillas[nombre] = api.post("/api/equipos-trabajo", {
@@ -748,10 +748,22 @@ def sembrar(api: Api) -> None:
         ("Depósito central", otro["id"], "Monitor", "Samsung", "S24R650", "SM-31007", dentro_de(210), "operativo"),
         ("Depósito central", cliente["id"], "UPS", "APC", "BX1500M", "APC-6621", dentro_de(-120), "operativo"),
         # Los dos depositos que son del cliente: sus equipos son de ese cliente.
-        ("Pañol", 1, "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
-        ("Pañol", 1, "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
-        ("Sala de racks", 2, "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
-        ("Sala de racks", 2, "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
+        #
+        # 🔴 **Acá habia ids literales (`1` y `2`) y rompian el seed entero.**
+        # Los depositos «Pañol» y «Sala de racks» se crean mas arriba con
+        # `cliente["id"]` y `otro["id"]`, y esos salen de `clientes[0]` y
+        # `clientes[1]` — de una lista que el producto devuelve **ordenada por
+        # nombre**, no por id (`ClienteRepository.list()`). O sea que `otro` es
+        # el id 2 nada mas que si ese cliente cae segundo alfabeticamente.
+        #
+        # En dev no caia: `otro` era el id 4 («Clinica del Sol»), asi que el
+        # equipo salia con `cliente_id=2` hacia un deposito del 4 y el producto
+        # lo rechazaba con 422 — **con razon**. El seed moria ahi y todo lo que
+        # viene despues no se sembraba.
+        ("Pañol", cliente["id"], "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
+        ("Pañol", cliente["id"], "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
+        ("Sala de racks", otro["id"], "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
+        ("Sala de racks", otro["id"], "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
     ]
     ya_serie = {e.get("serial") for e in (api.get("/api/equipos") or [])}
     for dep, cli_id, tipo, marca, modelo, serial, garantia, estado in equipos_spec:
