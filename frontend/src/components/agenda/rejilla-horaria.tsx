@@ -106,24 +106,34 @@ export function RejillaHoraria({ columnas }: { columnas: ColumnaRejilla[] }) {
 
   return (
     <div className="overflow-hidden rounded-md border">
-      {/* Encabezados. Fuera del área que scrollea, para que al bajar por la
-          tarde se siga sabiendo qué columna es cuál. */}
-      <div className="flex border-b bg-muted/30">
-        <div className="w-14 shrink-0" />
-        <div className="grid flex-1" style={anchoColumnas}>
-          {columnas.map((c) => (
-            <div
-              key={c.clave}
-              className={cn('min-w-0 border-l px-2 py-1.5 text-center', c.esHoy && 'bg-primary/5')}
-            >
-              {c.encabezado}
-            </div>
-          ))}
+      {/* 🔴 Encabezado y cuerpo van DENTRO del mismo contenedor que scrollea, y
+          el encabezado se queda pegado arriba con `sticky`.
+          Hasta el 2026-08-14 el encabezado estaba **afuera**: como sólo el
+          cuerpo scrollea, la barra de scroll le comía ~15 px de ancho al cuerpo
+          y no al encabezado, así que las columnas se iban desfasando y el
+          desfase se acumulaba hacia la derecha —LUN casi alineado, DOM corrido
+          un dedo—. Lo reportó el humano con una captura.
+          Adentro del mismo caja no hay aritmética que hacer: los dos anchos
+          disponibles son el mismo por construcción. */}
+      <div ref={cuerpo} data-rejilla-scroll className="max-h-[60vh] overflow-y-auto">
+        <div className="sticky top-0 z-30 flex border-b bg-muted/95 backdrop-blur">
+          <div className="w-14 shrink-0" />
+          <div className="grid flex-1" style={anchoColumnas}>
+            {columnas.map((c) => (
+              <div
+                key={c.clave}
+                data-columna-encabezado={c.clave}
+                className={cn('min-w-0 border-l px-2 py-1.5 text-center', c.esHoy && 'bg-primary/5')}
+              >
+                {c.encabezado}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div ref={cuerpo} className="max-h-[60vh] overflow-y-auto">
-        <div className="flex">
+        {/* `pt-2` para que la etiqueta de la primera hora, que va subida media
+            línea, no quede cortada contra el encabezado. */}
+        <div className="flex pt-2">
           {/* Canaleta de horas. La etiqueta va **subida media línea** para que
               quede a caballo de su raya, como en un calendario de papel. */}
           <div className="w-14 shrink-0" style={{ height: alto }}>

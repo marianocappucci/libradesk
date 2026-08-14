@@ -173,25 +173,31 @@ export function Agenda() {
         </div>
       </div>
 
+      {/* La barra de navegación, con la forma de Google Calendar: `Hoy`, las dos
+          flechas y el título, **en ese orden y anclados a la izquierda**.
+          🔴 El orden importa y no es cosmético. Hasta el 2026-08-14 el grupo
+          estaba pegado al borde **derecho** (`justify-between` con el
+          conmutador), así que su ancho lo fijaba el largo del título: pasar de
+          "Agosto 2026" a "10 al 16 de agosto de 2026" corría las flechas de
+          lugar, y apretar dos veces seguidas obligaba a perseguirlas con el
+          mouse. Lo reportó el humano. Anclado a la izquierda, el título crece
+          hacia la derecha y los controles no se mueven nunca. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Conmutador pestanias={pestanias} actual={vista} />
         <div className="flex items-center gap-1">
-          <Button size="icon" variant="outline" asChild aria-label="Anterior">
-            <Link to={href({ dia: correr(vista, dia, -1) })}><ChevronLeft /></Link>
-          </Button>
-          <Button size="sm" variant="outline" asChild>
+          <Button size="sm" variant="outline" className="rounded-full px-4" asChild>
             <Link to={href({ dia: hoy })}>Hoy</Link>
           </Button>
-          <Button size="icon" variant="outline" asChild aria-label="Siguiente">
+          <Button size="icon" variant="ghost" className="rounded-full" asChild aria-label="Anterior">
+            <Link to={href({ dia: correr(vista, dia, -1) })}><ChevronLeft /></Link>
+          </Button>
+          <Button size="icon" variant="ghost" className="rounded-full" asChild aria-label="Siguiente">
             <Link to={href({ dia: correr(vista, dia, 1) })}><ChevronRight /></Link>
           </Button>
-          {/* El título del rango va acá y no arriba: es lo que cambia cuando se
-              aprietan las flechas, y separado de ellas obliga a mirar a dos
-              lados para saber qué se está viendo. */}
-          <span className="ml-2 text-sm font-medium first-letter:uppercase">
+          <span className="ml-2 text-xl first-letter:uppercase">
             {titulo(vista, dia)}
           </span>
         </div>
+        <Conmutador pestanias={pestanias} actual={vista} />
       </div>
 
       {/* La referencia de colores: sin ella el color del chip no significa nada

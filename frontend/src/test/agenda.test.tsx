@@ -407,6 +407,56 @@ describe('Agenda — la rejilla horaria', () => {
     }
   })
 
+  it('🔴 los controles van ANTES del título, para que no se muevan', async () => {
+    // Lo reportó el humano: al cambiar de día las flechas se corrían de lugar.
+    // El grupo estaba pegado al borde derecho, así que su ancho lo fijaba el
+    // largo del título — "Agosto 2026" y "10 al 16 de agosto de 2026" no miden
+    // lo mismo — y apretar dos veces seguidas obligaba a perseguir el botón.
+    //
+    // En jsdom no hay layout, así que la posición no se puede medir: lo que se
+    // afirma es la **causa estructural**, que el título vaya después de los
+    // controles dentro del mismo grupo anclado a la izquierda. Si alguien lo
+    // vuelve a poner delante —o separa el grupo del título—, esto se pone rojo.
+    renderAgenda(`?vista=mes&dia=${MARTES}`)
+    await screen.findByRole('link', { name: 'Hoy' })
+
+    // `asChild`: el `<a>` ES el botón, así que su padre ya es el grupo.
+    const grupo = screen.getByRole('link', { name: 'Hoy' }).parentElement as HTMLElement
+    const orden = [...grupo.children].map((n) => n.textContent?.trim() ?? '')
+    expect(orden[0]).toBe('Hoy')
+    expect(orden.at(-1)).toMatch(/agosto de 2026/i)
+  })
+
+  it('🔴 el encabezado y el cuerpo scrollean en la MISMA caja', async () => {
+    // Lo reportó el humano con una captura: las cabeceras estaban desfasadas de
+    // las filas. La causa es la barra de scroll — con el encabezado afuera del
+    // contenedor que scrollea, la barra le come ~15 px de ancho SÓLO al cuerpo y
+    // las columnas se van corriendo, con el desfase acumulándose hacia la
+    // derecha (el lunes casi alineado, el domingo corrido un dedo).
+    //
+    // En jsdom no hay layout, así que medir el ancho daría 0 para todo y el test
+    // pasaría con el defecto entero puesto. Lo que sí se puede afirmar es la
+    // causa estructural: los dos tienen que colgar del mismo contenedor que
+    // scrollea, que es lo que hace que el ancho disponible sea el mismo por
+    // construcción.
+    renderAgenda(SEMANA)
+    await screen.findByText('Cambio de switch')
+
+    const caja = document.querySelector('[data-rejilla-scroll]') as HTMLElement
+    expect(caja).toBeInTheDocument()
+    for (const clave of [MARTES, JUEVES]) {
+      expect(caja.contains(columna(clave))).toBe(true)
+      expect(caja.contains(
+        document.querySelector(`[data-columna-encabezado="${clave}"]`),
+      )).toBe(true)
+    }
+    // Y el encabezado tiene que quedar pegado arriba, o al bajar por la tarde se
+    // deja de saber qué columna es cuál.
+    const encabezado = document.querySelector('[data-columna-encabezado]')
+      ?.parentElement?.parentElement as HTMLElement
+    expect(encabezado.className).toMatch(/sticky/)
+  })
+
   it('un trabajo fuera del horario laboral estira la ventana, no se recorta', async () => {
     // La rejilla arranca a las 07:00. Una salida a las 05:00 tiene que bajar el
     // piso: si la ventana recortara, el trabajo desaparecería de la grilla sin
