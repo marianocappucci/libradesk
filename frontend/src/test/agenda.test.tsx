@@ -47,7 +47,9 @@ const DE_BAJA = { ...SUR, id: 3, nombre: 'Cuadrilla Vieja', activo: false }
 
 const TRABAJO = {
   incidencia_id: 77, titulo: 'Cambio de switch', cliente_id: 5,
-  cliente_nombre: 'Estudio Sur', estado: 'abierto', modalidad: 'on_site',
+  cliente_nombre: 'Estudio Sur',
+  cliente_domicilio: 'Av. San Martín 1240', cliente_ciudad: 'Suipacha',
+  estado: 'abierto', modalidad: 'on_site',
   desde: '2026-08-11T09:00:00', hasta: '2026-08-11T11:00:00',
   duracion_minutos: 120, vehiculos: ['AB123CD'],
 }
@@ -119,6 +121,55 @@ describe('Agenda del día', () => {
     await waitFor(() => {
       expect(pedidos.some((p) => p.url.includes('desde=2026-12-24'))).toBe(true)
     })
+  })
+
+  it('muestra el domicilio del cliente, que es lo que ordena el recorrido', async () => {
+    render(<AgendaEquipos equipos={[NORTE]} />)
+    expect(await screen.findByText('Av. San Martín 1240, Suipacha')).toBeInTheDocument()
+  })
+
+  it('un trabajo sin domicilio no deja un renglón vacío', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json([{
+      ...TRABAJO, cliente_domicilio: null, cliente_ciudad: null,
+    }]))))
+    render(<AgendaEquipos equipos={[NORTE]} />)
+    await screen.findByText('Cambio de switch')
+    // El nombre del cliente sigue estando; lo que no tiene que aparecer es la
+    // segunda línea con una coma suelta o un guión.
+    expect(screen.getByText('Estudio Sur')).toBeInTheDocument()
+    expect(screen.queryByText(', ')).not.toBeInTheDocument()
+  })
+
+  it('el botón de hoja de ruta apunta al equipo y al día que se está mirando', async () => {
+    // El día sale del selector, no de `hoy`: la hoja se imprime la noche
+    // anterior tanto como a la mañana. Con un `hoy` hardcodeado este test
+    // pasaría igual, así que abajo se cambia el día y se vuelve a mirar.
+    const user = userEvent.setup()
+    render(<AgendaEquipos equipos={[NORTE]} />)
+    await screen.findByText('Cambio de switch')
+
+    const boton = screen.getByRole('link', { name: /hoja de ruta/i })
+    expect(boton).toHaveAttribute(
+      'href', expect.stringContaining('/api/agenda/equipo/1/hoja-de-ruta'),
+    )
+
+    await user.clear(screen.getByLabelText('Día'))
+    await user.type(screen.getByLabelText('Día'), '2026-12-24')
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /hoja de ruta/i }))
+        .toHaveAttribute('href', '/api/agenda/equipo/1/hoja-de-ruta?dia=2026-12-24')
+    })
+  })
+
+  it('cada equipo tiene la suya: son salidas distintas', async () => {
+    render(<AgendaEquipos equipos={[NORTE, SUR]} />)
+    await screen.findByText('Cambio de switch')
+
+    const enlaces = screen.getAllByRole('link', { name: /hoja de ruta/i })
+      .map((a) => a.getAttribute('href'))
+    expect(enlaces.some((h) => h?.includes('/equipo/1/'))).toBe(true)
+    expect(enlaces.some((h) => h?.includes('/equipo/2/'))).toBe(true)
   })
 
   it('abre en el día de hoy en hora local, no en UTC', async () => {

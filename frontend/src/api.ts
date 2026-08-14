@@ -770,6 +770,11 @@ export type TrabajoAgendado = {
   titulo: string
   cliente_id: number | null
   cliente_nombre: string | null
+  /** Dónde queda. Va en la agenda y no sólo en la hoja de ruta: el recorrido
+   *  del día se arma mirando esta pantalla, y armarlo sin ver las direcciones
+   *  es la misma carencia con otra ropa. */
+  cliente_domicilio: string | null
+  cliente_ciudad: string | null
   estado: EstadoIncidencia
   modalidad: ModalidadIncidencia | null
   desde: string
