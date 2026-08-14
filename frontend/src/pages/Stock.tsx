@@ -5,6 +5,14 @@
 // el eje es el consumible y no el depósito — se elige qué material y la tabla
 // dice cuánto hay en cada lugar, que es el orden en que lo piensa el técnico.
 // Un ABM de depósitos existe, pero abajo y chico: se carga una vez.
+//
+// ## Por qué el stock se pide SIN filtrar y se filtra acá
+//
+// La tabla muestra los depósitos de la sucursal activa, pero **la transferencia
+// necesita ver los de las otras** — si no, el depósito al que se quiere mandar
+// la mercadería es justamente el que no aparece en el selector. Pedir la lista
+// completa una vez y recortarla para la tabla resuelve las dos cosas con un
+// request; pedirla filtrada obligaría a un segundo pedido para el destino.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,6 +30,7 @@ import {
 import { PackageSearch as IconoStock } from 'lucide-react'
 import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
 import { TituloPantalla } from '@/components/titulo-pantalla'
+import { useSucursal } from '@/components/sucursal'
 
 export type Consumible = {
   id: number
@@ -37,6 +46,10 @@ export type DepositoStock = {
   activo: boolean
   descripcion: string
   es_default: boolean
+  //: `null` = depósito sin sucursal, que es el caso de la empresa de un solo
+  //: local. No es "sin asignar todavía".
+  sucursal_id: number | null
+  sucursal: string
 }
 
 export type StockPorDeposito = DepositoStock & { stock: number }
@@ -48,6 +61,7 @@ export function Stock() {
   const [porDeposito, setPorDeposito] = useState<StockPorDeposito[]>([])
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(true)
+  const { activa } = useSucursal()
 
   const cargarBase = useCallback(async () => {
     const [items, deps] = await Promise.all([
@@ -68,13 +82,24 @@ export function Stock() {
   useEffect(() => { void cargarBase() }, [cargarBase])
   useEffect(() => { void cargarStock(elegido) }, [elegido, cargarStock])
 
+  // Lo que se ve en la tabla: los depósitos de la sucursal activa. Con «Todas»
+  // elegido, todos. `porDeposito` sigue completo para la transferencia.
+  const visibles = useMemo(
+    () => (activa ? porDeposito.filter((d) => d.sucursal_id === activa.id) : porDeposito),
+    [porDeposito, activa],
+  )
+
   const total = useMemo(
-    () => porDeposito.reduce((acc, d) => acc + d.stock, 0),
-    [porDeposito],
+    () => visibles.reduce((acc, d) => acc + d.stock, 0),
+    [visibles],
   )
 
   // El mínimo se compara contra el TOTAL y no contra cada depósito: tener 5
   // plugs en la camioneta y 200 en el central no es faltante, es logística.
+  //
+  // ⚠️ Con una sucursal elegida, ese total es **el de la sucursal**, así que un
+  // consumible puede figurar bajo mínimo acá y sobrar en la empresa. Es lo que
+  // hace útil la vista —dice dónde reponer— y por eso el cartel lo aclara.
   const bajoMinimo = elegido !== null && elegido.stock_minimo > 0 && total < elegido.stock_minimo
 
   async function conError(accion: () => Promise<unknown>) {
@@ -115,7 +140,7 @@ export function Stock() {
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-end gap-3 flex-wrap">
               <div className="min-w-64">
-                <Label>Consumible</Label>
+                <Label htmlFor="st-consumible">Consumible</Label>
                 {/* `''` y no `undefined`: con `undefined` el Select arranca
                     NO controlado y pasa a controlado al elegir algo, y React
                     avisa por consola. Lo caza el test de esta pantalla, que
@@ -125,7 +150,9 @@ export function Stock() {
                   onValueChange={(v) =>
                     setElegido(consumibles.find((c) => String(c.id) === v) ?? null)}
                 >
-                  <SelectTrigger><SelectValue placeholder="Elegí un consumible" /></SelectTrigger>
+                  <SelectTrigger id="st-consumible">
+                    <SelectValue placeholder="Elegí un consumible" />
+                  </SelectTrigger>
                   <SelectContent>
                     {consumibles.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
@@ -135,18 +162,21 @@ export function Stock() {
               </div>
               {elegido && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Total:</span>
+                  <span className="text-sm text-muted-foreground">
+                    {activa ? `Total en ${activa.nombre}:` : 'Total:'}
+                  </span>
                   <Badge variant={bajoMinimo ? 'destructive' : 'secondary'}>{total}</Badge>
                   {bajoMinimo && (
                     <span className="text-xs text-destructive">
                       por debajo del mínimo ({elegido.stock_minimo})
+                      {activa && ' contando sólo esta sucursal'}
                     </span>
                   )}
                 </div>
               )}
               {elegido && depositos.length > 1 && (
                 <Transferir
-                  item={elegido} depositos={porDeposito}
+                  item={elegido} origenes={visibles} destinos={porDeposito}
                   onListo={(fn) => conError(fn)}
                 />
               )}
@@ -162,12 +192,17 @@ export function Stock() {
                   </tr>
                 </thead>
                 <tbody>
-                  {porDeposito.map((d) => (
+                  {visibles.map((d) => (
                     <tr key={d.id} className="border-b last:border-0">
                       <td className="py-2">
                         {d.nombre}
                         {d.es_default && (
                           <span className="ml-2 text-xs text-muted-foreground">(por defecto)</span>
+                        )}
+                        {/* La sucursal se muestra sólo mirando «Todas»: con una
+                            elegida sería la misma etiqueta en cada fila. */}
+                        {!activa && d.sucursal && (
+                          <span className="ml-2 text-xs text-muted-foreground">· {d.sucursal}</span>
                         )}
                       </td>
                       <td className="py-2 text-right tabular-nums">{d.stock}</td>
@@ -223,15 +258,32 @@ function Ajuste({ item, deposito, onListo }: ConAccion & {
   )
 }
 
-function Transferir({ item, depositos, onListo }: ConAccion & {
-  item: Consumible; depositos: StockPorDeposito[]
+/**
+ * Mueve consumibles entre depósitos, sean o no de la misma sucursal.
+ *
+ * `origenes` son los depósitos visibles (los de la sucursal activa) y
+ * `destinos` **son todos**: mandar mercadería a otra sucursal es el caso que
+ * este diálogo tiene que poder hacer, y filtrando el destino sería el único
+ * que no.
+ *
+ * ⚠️ **Es un movimiento directo, no un envío con recepción.** Sale y entra en la
+ * misma transacción: apenas se confirma, el sistema ya cuenta la mercadería en
+ * el destino aunque físicamente esté en la camioneta. El cartel de abajo lo dice
+ * cuando la transferencia cruza sucursales, que es cuando el viaje dura.
+ */
+function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
+  item: Consumible; origenes: StockPorDeposito[]; destinos: StockPorDeposito[]
 }) {
   const [abierto, setAbierto] = useState(false)
   const [origen, setOrigen] = useState('')
   const [destino, setDestino] = useState('')
   const [cantidad, setCantidad] = useState('')
 
-  const disponible = depositos.find((d) => String(d.id) === origen)?.stock ?? 0
+  const depOrigen = origenes.find((d) => String(d.id) === origen) ?? null
+  const depDestino = destinos.find((d) => String(d.id) === destino) ?? null
+  const disponible = depOrigen?.stock ?? 0
+  const cruzaSucursal = depOrigen !== null && depDestino !== null
+    && depOrigen.sucursal_id !== depDestino.sucursal_id
   const n = Number(cantidad)
   const valido = origen !== '' && destino !== '' && origen !== destino
     && Number.isFinite(n) && n > 0 && n <= disponible
@@ -247,11 +299,14 @@ function Transferir({ item, depositos, onListo }: ConAccion & {
         <DialogHeader><DialogTitle>Transferir {item.nombre}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Desde</Label>
+            {/* `htmlFor` + `id`: sin la asociación el select no tiene nombre
+                accesible y queda como "un combobox más" del diálogo, tanto para
+                un lector de pantalla como para quien lo busque desde un test. */}
+            <Label htmlFor="tr-origen">Desde</Label>
             <Select value={origen} onValueChange={setOrigen}>
-              <SelectTrigger><SelectValue placeholder="Depósito de origen" /></SelectTrigger>
+              <SelectTrigger id="tr-origen"><SelectValue placeholder="Depósito de origen" /></SelectTrigger>
               <SelectContent>
-                {depositos.map((d) => (
+                {origenes.map((d) => (
                   <SelectItem key={d.id} value={String(d.id)}>
                     {d.nombre} ({d.stock})
                   </SelectItem>
@@ -260,12 +315,17 @@ function Transferir({ item, depositos, onListo }: ConAccion & {
             </Select>
           </div>
           <div>
-            <Label>Hacia</Label>
+            <Label htmlFor="tr-destino">Hacia</Label>
             <Select value={destino} onValueChange={setDestino}>
-              <SelectTrigger><SelectValue placeholder="Depósito de destino" /></SelectTrigger>
+              <SelectTrigger id="tr-destino"><SelectValue placeholder="Depósito de destino" /></SelectTrigger>
               <SelectContent>
-                {depositos.filter((d) => String(d.id) !== origen).map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
+                {destinos.filter((d) => String(d.id) !== origen).map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.nombre}
+                    {d.sucursal && (
+                      <span className="ml-2 text-xs text-muted-foreground">· {d.sucursal}</span>
+                    )}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -282,6 +342,14 @@ function Transferir({ item, depositos, onListo }: ConAccion & {
               </p>
             )}
           </div>
+          {cruzaSucursal && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              Sale de {depOrigen.sucursal || 'sin sucursal'} y entra en{' '}
+              {depDestino.sucursal || 'sin sucursal'}. El stock se mueve en el
+              acto: el destino lo cuenta apenas confirmes, aunque la mercadería
+              todavía esté viajando.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild><Button variant="ghost">Cancelar</Button></DialogClose>
@@ -291,7 +359,9 @@ function Transferir({ item, depositos, onListo }: ConAccion & {
               onListo(() => api.post('/api/consumibles/transferir', {
                 item_id: item.id, origen_id: Number(origen),
                 destino_id: Number(destino), cantidad: n,
-                nota: 'Transferencia entre depósitos',
+                nota: cruzaSucursal
+                  ? `Transferencia ${depOrigen.sucursal || 'sin sucursal'} → ${depDestino.sucursal || 'sin sucursal'}`
+                  : 'Transferencia entre depósitos',
               }))
               setAbierto(false); setCantidad('')
             }}
@@ -346,6 +416,7 @@ function NuevoConsumible({ onListo }: ConAccion) {
 function NuevoDeposito({ onListo }: ConAccion) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
+  const { activa } = useSucursal()
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
@@ -367,12 +438,23 @@ function NuevoDeposito({ onListo }: ConAccion) {
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
                  placeholder="Camioneta Norte" />
         </div>
+        {/* Se dice a qué sucursal va a quedar asignado en vez de ofrecer un
+            selector más: con «Todas» elegido queda sin sucursal, que es lo
+            correcto para la empresa de un solo local. Reasignarlo después es
+            editarlo desde Depósitos de stock. */}
+        {activa && (
+          <p className="text-xs text-muted-foreground">
+            Queda en la sucursal {activa.nombre}.
+          </p>
+        )}
         <DialogFooter>
           <DialogClose asChild><Button variant="ghost">Cancelar</Button></DialogClose>
           <Button
             disabled={nombre.trim() === ''}
             onClick={() => {
-              onListo(() => api.post('/api/depositos-stock', { nombre: nombre.trim() }))
+              onListo(() => api.post('/api/depositos-stock', {
+                nombre: nombre.trim(), sucursal_id: activa?.id ?? null,
+              }))
               setAbierto(false); setNombre('')
             }}
           >Crear</Button>

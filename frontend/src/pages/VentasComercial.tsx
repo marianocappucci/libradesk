@@ -13,7 +13,7 @@ import { api } from '../api'
 import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
 import { DetalleEstado } from '@/components/comprobante-detalle'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useSucursal } from '@/components/sucursal'
+import { useSucursal, useSucursalUrl } from '@/components/sucursal'
 import { fecha, pesos } from '@/lib/format'
 import type { Cliente } from '../api'
 import type { Producto } from './Productos'
@@ -89,9 +89,14 @@ const ESTADOS: Record<string, { label: string; variant: 'default' | 'secondary' 
 
 export function Ventas() {
   const navigate = useNavigate()
-  const { datos, error, cargando, conError } = useDatos<Venta[]>('/api/ventas', [])
+  const conSucursal = useSucursalUrl()
+  const { activa } = useSucursal()
+  const { datos, error, cargando, conError } =
+    useDatos<Venta[]>(conSucursal('/api/ventas'), [])
   const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
   const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
+  // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
+  // —el central que abastece a las dos— y el selector muestra cuál es cuál.
   const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -103,7 +108,14 @@ export function Ventas() {
       <p className="text-sm text-muted-foreground">
         Comprobante interno. La factura la emite SOS Contador desde{' '}
         <strong>Enviar a facturar</strong>.
+        {activa && ` Se muestran las ventas de ${activa.nombre}.`}
       </p>
+      {activa && (
+        <p className="text-xs text-muted-foreground">
+          La <strong>cuenta corriente no se filtra</strong>: el saldo de un
+          cliente es uno solo entre sucursales.
+        </p>
+      )}
       <Tabla<Venta>
         vacio="Todavía no hay ventas registradas."
         filas={datos}

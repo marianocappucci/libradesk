@@ -1,10 +1,14 @@
 // Sucursales de la empresa.
 //
-// 🟡 **Alcance corto y declarado.** El ABM existe, la sucursal se elige en el
-// encabezado y viaja en el alta de depósitos, ventas y órdenes de compra — pero
-// **ninguna pantalla filtra por sucursal todavía**. La nota de abajo lo dice en
-// la pantalla misma en vez de esconderlo, porque una demo donde el selector
-// parece filtrar y no filtra es peor que una sin selector.
+// **Sucursal es un eje transversal** (decidido el 2026-08-14). Esta pantalla es
+// el ABM; lo que cada módulo hace con la sucursal está en `components/sucursal.tsx`.
+//
+// **No hay botón de borrar y no es un olvido**: las cuatro columnas `branch_id`
+// del motor no tienen FK contra esta tabla, así que un borrado dejaría depósitos,
+// ventas, órdenes y precios apuntando a un id inexistente, sin error y sin
+// cascada. Lo que hay es baja lógica, y encima gateada: una sucursal con
+// depósitos de stock activos no se puede dar de baja, porque ese stock quedaría
+// invisible sin que nadie lo haya movido.
 import { useState } from 'react'
 import { api } from '../api'
 import { Pagina, Tabla, useDatos } from '@/components/comercial-ui'
@@ -19,66 +23,99 @@ import {
 import { MapPin } from 'lucide-react'
 import { FilePlus } from '@/components/iconos-accion'
 
+//: La respuesta trae además cuántos depósitos de stock activos cuelgan de cada
+//: sucursal. Se muestra en la grilla porque es exactamente lo que impide darla
+//: de baja: sin el número, el 422 aparece sin explicación a la vista.
+type SucursalFila = Sucursal & { activa: boolean; depositos: number }
+
 export function Sucursales() {
-  const { datos, error, cargando, conError } = useDatos<Sucursal[]>('/api/sucursales?solo_activas=false', [])
+  const { datos, error, cargando, conError } =
+    useDatos<SucursalFila[]>('/api/sucursales?solo_activas=false', [])
   const { recargar: recargarContexto } = useSucursal()
+
+  // El selector del encabezado vive en un contexto propio: sin esto, un alta o
+  // una baja no se reflejan ahí hasta recargar la página entera.
+  async function guardarYRefrescar(fn: () => Promise<unknown>) {
+    const ok = await conError(fn)
+    if (ok) await recargarContexto()
+    return ok
+  }
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
     <Pagina titulo="Sucursales" icono={MapPin} error={error}
-            acciones={
-              <FormSucursal onGuardar={async (fn) => {
-                const ok = await conError(fn)
-                // El selector del encabezado vive en un contexto propio: sin
-                // esto, la sucursal recién creada no aparece ahí hasta recargar
-                // la página entera.
-                if (ok) await recargarContexto()
-                return ok
-              }} />
-            }>
+            acciones={<FormSucursal onGuardar={guardarYRefrescar} />}>
       <p className="text-sm text-muted-foreground">
-        Los depósitos de stock, las ventas y las órdenes de compra se pueden
-        asignar a una sucursal. El resto de las pantallas todavía no filtra por
-        sucursal.
+        El stock, los depósitos, las ventas, las compras y las listas de precio
+        se filtran por la sucursal elegida arriba. La mesa de ayuda y la cuenta
+        corriente no: el saldo de un cliente es uno solo entre sucursales.
       </p>
-      <Tabla<Sucursal>
+      <Tabla<SucursalFila>
         vacio="Todavía no hay sucursales cargadas."
         filas={datos}
         columnas={[
           { clave: 'codigo', titulo: 'Código', ancho: '110px',
             render: (s) => <span className="tabular-nums text-muted-foreground">{s.codigo || '—'}</span> },
-          { clave: 'nombre', titulo: 'Sucursal', render: (s) => s.nombre },
+          { clave: 'nombre', titulo: 'Sucursal',
+            render: (s) => (
+              <span className={s.activa ? '' : 'text-muted-foreground line-through'}>
+                {s.nombre}
+              </span>
+            ) },
           { clave: 'direccion', titulo: 'Dirección',
             render: (s) => <span className="text-muted-foreground">{s.direccion || '—'}</span> },
+          { clave: 'depositos', titulo: 'Depósitos', ancho: '110px',
+            render: (s) => <span className="tabular-nums">{s.depositos}</span> },
+          { clave: 'acciones', titulo: '', ancho: '220px',
+            render: (s) => (
+              <div className="flex justify-end gap-2">
+                <FormSucursal sucursal={s} onGuardar={guardarYRefrescar} />
+                <Button variant="outline" size="sm"
+                        onClick={() => guardarYRefrescar(() =>
+                          api.post(`/api/sucursales/${s.id}/estado`, { activa: !s.activa }))}>
+                  {s.activa ? 'Dar de baja' : 'Reactivar'}
+                </Button>
+              </div>
+            ) },
         ]}
       />
     </Pagina>
   )
 }
 
-function FormSucursal({ onGuardar }: {
+function FormSucursal({ sucursal, onGuardar }: {
+  sucursal?: SucursalFila
   onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
+  const editando = sucursal !== undefined
   const [abierto, setAbierto] = useState(false)
-  const [nombre, setNombre] = useState('')
-  const [codigo, setCodigo] = useState('')
-  const [direccion, setDireccion] = useState('')
+  const [nombre, setNombre] = useState(sucursal?.nombre ?? '')
+  const [codigo, setCodigo] = useState(sucursal?.codigo ?? '')
+  const [direccion, setDireccion] = useState(sucursal?.direccion ?? '')
 
   async function guardar() {
-    const ok = await onGuardar(() => api.post('/api/sucursales', {
-      nombre: nombre.trim(), codigo, direccion,
-    }))
-    if (ok) { setAbierto(false); setNombre(''); setCodigo(''); setDireccion('') }
+    const cuerpo = { nombre: nombre.trim(), codigo, direccion }
+    const ok = await onGuardar(() =>
+      editando
+        ? api.put(`/api/sucursales/${sucursal.id}`, cuerpo)
+        : api.post('/api/sucursales', cuerpo))
+    if (!ok) return
+    setAbierto(false)
+    if (!editando) { setNombre(''); setCodigo(''); setDireccion('') }
   }
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva sucursal</Button>
+        {editando
+          ? <Button variant="outline" size="sm">Editar</Button>
+          : <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva sucursal</Button>}
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Nueva sucursal</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{editando ? 'Editar sucursal' : 'Nueva sucursal'}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label htmlFor="s-nombre">Nombre</Label>
@@ -97,7 +134,9 @@ function FormSucursal({ onGuardar }: {
         </div>
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-          <Button onClick={guardar} disabled={!nombre.trim()}>Crear</Button>
+          <Button onClick={guardar} disabled={!nombre.trim()}>
+            {editando ? 'Guardar' : 'Crear'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

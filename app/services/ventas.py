@@ -98,12 +98,23 @@ def _sql_recibo_vigente(origen_id: str) -> str:
     """
 
 
-def listar(limit: int = 200) -> list[dict]:
+def listar(limit: int = 200, sucursal_id: int | None = None) -> list[dict]:
+    """Las ventas, opcionalmente recortadas a una sucursal (`sales.branch_id`).
+
+    ⚠️ **La cuenta corriente NO se filtra por sucursal** aunque las ventas si.
+    El saldo de un cliente es uno solo entre sucursales --es la decision que
+    define todo el eje, ver `comercial.listar_sucursales()`--, asi que la suma
+    de `en_cuenta_corriente` de esta lista filtrada **no es** el saldo de nadie:
+    es cuanto de lo vendido en esta sucursal fue a cuenta corriente.
+    """
+    where = "" if sucursal_id is None else "WHERE s.branch_id = ?"
+    params: tuple = () if sucursal_id is None else (sucursal_id,)
     with libracore_core.get_connection() as conn:
         filas = conn.execute(
             f"""
             SELECT s.id, s.number, s.status, s.occurred_on, s.total,
                    s.customer_party_id, s.customer_name_snapshot,
+                   s.branch_id,
                    c.name AS cliente_nombre,
                    (SELECT COALESCE(SUM(vp.monto), 0) FROM ventas_pagos vp
                      WHERE vp.venta_id = s.id AND vp.medio = 'cuenta_corriente')
@@ -111,10 +122,11 @@ def listar(limit: int = 200) -> list[dict]:
                    ({_sql_recibo_vigente("s.id")}) AS recibo_id
             FROM sales s
             LEFT JOIN clients c ON c.id = s.customer_party_id
+            {where}
             ORDER BY s.occurred_on DESC, s.id DESC
             LIMIT ?
             """,
-            (limit,),
+            params + (limit,),
         ).fetchall()
     return [
         {"id": r["id"], "numero": r["number"], "estado": r["status"],
@@ -124,6 +136,7 @@ def listar(limit: int = 200) -> list[dict]:
          # ese dia. Si despues le cambiaron la razon social, el comprobante
          # viejo tiene que seguir diciendo lo que decia.
          "cliente": r["customer_name_snapshot"] or r["cliente_nombre"] or "Consumidor final",
+         "sucursal_id": r["branch_id"],
          "en_cuenta_corriente": float(r["en_cuenta_corriente"] or 0),
          "recibo_id": r["recibo_id"]}
         for r in filas
@@ -216,6 +229,9 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
 
     with libracore_core.get_connection() as conn:
         repo = _repo(conn)
+        # `sales.branch_id` no tiene FK contra `sucursales`: sin esta guarda, un
+        # id inventado entra y la venta desaparece de toda pantalla filtrada.
+        comercial.verificar_sucursal(conn, sucursal_id)
         nombre_cliente = ""
         if cliente_id:
             fila = conn.execute(

@@ -75,8 +75,15 @@ class MaterialIn(BaseModel):
 
 
 @router.get("/consumibles")
-def listar_consumibles(solo_activos: bool = True):
-    return inventario.listar_items(solo_activos=solo_activos)
+def listar_consumibles(solo_activos: bool = True, sucursal_id: int | None = None):
+    """`sucursal_id` recorta **el stock**, no el catálogo.
+
+    El catálogo es de la empresa: un consumible que en esta sucursal está en
+    cero sigue existiendo, y esconderlo haría que no se pueda pedir. Lo que
+    cambia con el filtro es la columna de stock y el `bajo_minimo`.
+    """
+    return inventario.listar_items(solo_activos=solo_activos,
+                                   sucursal_id=sucursal_id)
 
 
 @router.post("/consumibles", status_code=201)
@@ -120,7 +127,7 @@ def dar_de_baja_consumible(item_id: int):
 
 
 @router.get("/depositos-stock")
-def listar_depositos_stock():
+def listar_depositos_stock(sucursal_id: int | None = None):
     """Prefijo distinto de `/api/depositos` a proposito.
 
     Aquel es el de equipos serializados —donde esta un equipo cuando no esta
@@ -128,7 +135,7 @@ def listar_depositos_stock():
     distintos que en castellano se llaman igual; colgarlos de la misma ruta
     seria pedir que alguien los confunda.
     """
-    return inventario.listar_depositos()
+    return inventario.listar_depositos(sucursal_id=sucursal_id)
 
 
 @router.post("/depositos-stock", status_code=201)
@@ -158,16 +165,21 @@ def editar_deposito_stock(deposito_id: int, payload: DepositoStockIn):
 
 
 @router.get("/consumibles/{item_id}/stock")
-def stock_de(item_id: int):
+def stock_de(item_id: int, sucursal_id: int | None = None):
     """El stock del consumible en cada deposito, incluidos los que estan en 0.
 
     Se devuelven los ceros a proposito: la pregunta que se le hace a esta
     pantalla es "¿de donde saco un plug?", y un deposito que falta de la lista
     es indistinguible de uno que existe y esta vacio.
+
+    ⚠️ **La pantalla de transferencia NO debe pasar `sucursal_id`.** Mover
+    mercadería a otra sucursal exige ver los depósitos de la otra sucursal en
+    el selector de destino; con el filtro puesto, el destino que se busca es
+    justamente el que no aparece.
     """
     return [
         {**dep, "stock": inventario.stock_actual(item_id, dep["id"])}
-        for dep in inventario.listar_depositos()
+        for dep in inventario.listar_depositos(sucursal_id=sucursal_id)
     ]
 
 
@@ -190,16 +202,23 @@ def ajustar(item_id: int, payload: AjusteIn, user: dict = Depends(get_current_us
 
 @router.post("/consumibles/transferir")
 def transferir(payload: TransferenciaIn, user: dict = Depends(get_current_user)):
+    """Mueve stock entre dos depósitos, sean de la misma sucursal o no.
+
+    **No hay un endpoint aparte para "transferir entre sucursales"** y es a
+    propósito: el movimiento es el mismo y el destino ya dice a qué sucursal
+    va. Dos endpoints obligarían a la pantalla a elegir cuál llamar mirando el
+    depósito, que es exactamente lo que el servicio ya hace y mejor. La
+    respuesta trae `entre_sucursales` para que la pantalla lo pueda decir.
+    """
     if payload.origen_id == payload.destino_id:
         raise HTTPException(422, "El depósito origen y destino deben ser distintos.")
     try:
-        inventario.transferir(
+        return inventario.transferir(
             payload.item_id, payload.origen_id, payload.destino_id, payload.cantidad,
             nota=payload.nota, usuario_id=int(user["id"]), fecha=_ahora(),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"ok": True}
 
 
 # ── Materiales de una incidencia ─────────────────────────────────────────
@@ -295,10 +314,24 @@ def buscar_por_codigo(codigo: str):
 
 
 @router.get("/stock/grilla")
-def grilla_stock():
-    return inventario.grilla_stock()
+def grilla_stock(sucursal_id: int | None = None):
+    return inventario.grilla_stock(sucursal_id=sucursal_id)
 
 
 @router.get("/stock/bajo-minimo")
-def stock_bajo_minimo():
-    return inventario.bajo_minimo()
+def stock_bajo_minimo(sucursal_id: int | None = None):
+    return inventario.bajo_minimo(sucursal_id=sucursal_id)
+
+
+@router.get("/stock/transferencias")
+def listar_transferencias(sucursal_id: int | None = None,
+                          solo_entre_sucursales: bool = False,
+                          limit: int = 200):
+    """El historial de transferencias, reconstruido desde el ledger.
+
+    `sucursal_id` trae las que tocan esa sucursal **de los dos lados** — lo que
+    salió y lo que entró.
+    """
+    return inventario.transferencias(
+        sucursal_id, solo_entre_sucursales=solo_entre_sucursales, limit=limit
+    )

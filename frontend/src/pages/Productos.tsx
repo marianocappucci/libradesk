@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { Pagina, Tabla, useDatos } from '@/components/comercial-ui'
+import { useSucursal, useSucursalUrl } from '@/components/sucursal'
 import { pesos } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,7 +50,13 @@ const UNIDADES = [
 ]
 
 export function Productos() {
-  const { datos: productos, error, cargando, conError } = useDatos<Producto[]>('/api/consumibles?solo_activos=false', [])
+  // El catálogo NO se recorta por sucursal: un producto que acá está en cero
+  // sigue existiendo y hay que poder pedirlo. Lo que sí cambia con el filtro es
+  // la columna de stock y, con ella, quién figura bajo el mínimo.
+  const conSucursal = useSucursalUrl()
+  const { activa } = useSucursal()
+  const { datos: productos, error, cargando, conError } =
+    useDatos<Producto[]>(conSucursal('/api/consumibles?solo_activos=false'), [])
   const { datos: categorias } = useDatos<Categoria[]>('/api/consumibles-categorias', [])
   const [busqueda, setBusqueda] = useState('')
 
@@ -75,10 +82,16 @@ export function Productos() {
         {faltantes > 0 && (
           <Badge variant="destructive" className="gap-1">
             <AlertTriangle className="h-3 w-3" />
-            {faltantes} bajo el mínimo
+            {faltantes} bajo el mínimo{activa && ` en ${activa.nombre}`}
           </Badge>
         )}
       </div>
+      {activa && (
+        <p className="text-xs text-muted-foreground">
+          El stock es el de {activa.nombre}. El mínimo es uno solo por producto,
+          así que algo puede figurar bajo el mínimo acá y sobrar en la empresa.
+        </p>
+      )}
 
       <Tabla<Producto>
         vacio="Todavía no hay productos cargados."
