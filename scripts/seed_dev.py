@@ -97,6 +97,21 @@ CAMPOS_INCIDENCIA = (
 #: trata `resuelta` y `cerrado` como los dos estados terminales, ver
 #: `ESTADOS_CERRADOS` en `app/services/informes.py`— y porque era el único de
 #: los cuatro estados que el seed no producía.
+#: El numero del talonario de Comprobante de Servicios de cada ticket on-site.
+#:
+#: Va sobre los tres que quedan **cerrados** y del mismo cliente, que son
+#: justamente los que se pueden agrupar en un remito: sin esto, agruparlos daba
+#: tres renglones sin el numero y la feature parecia a medio hacer. El de
+#: "Cambio de disco" queda afuera a proposito —esta en `resuelta`, no se
+#: agrupa— y ademas hace falta que **algun** ticket no tenga papel, porque un
+#: reclamo resuelto en remoto no lo tiene y la linea del remito tiene que poder
+#: salir con el numero de ticket a secas.
+CDS_POR_TITULO = {
+    "Se corta el teléfono en recepción": "0001-00041996",
+    "La impresora no toma papel": "0001-00041997",
+    "Cambio de switch en el rack": "0001-00041998",
+}
+
 CIERRES = [
     ("Se corta el teléfono en recepción", "cerrado", 2.5,
      "Se reemplazó la fuente y se probó 24 h.", None),
@@ -259,25 +274,49 @@ def sembrar(api: Api) -> None:
     # formulario de comprobante no sugiere nada: la feature se ve como si no
     # existiera. Uno va SIN descripcion a proposito, para que se vea que en
     # ese caso el texto que va al comprobante es el nombre.
+    #
+    # 🔴 **El ultimo va marcado como valor hora.** Es el precio con el que se
+    # cotiza el trabajo de un reclamo al generarle el remito. Sin ninguno
+    # marcado, agrupar reclamos da un remito con la mano de obra en CERO: es el
+    # comportamiento correcto, pero se ve como si la funcion estuviera rota, y
+    # ademas la bandeja de facturacion se niega a mandar un remito en cero. La
+    # demo tiene que mostrar la feature andando, no su caso degradado.
     servicios_spec = [
         ("Mantenimiento preventivo",
          "Mantenimiento preventivo de equipo, incluye limpieza interna y cambio "
-         "de pasta térmica", 18000),
+         "de pasta térmica", 18000, False),
         ("Instalación de puesto de trabajo",
-         "Instalación y configuración de puesto de trabajo completo", 25000),
-        ("Visita técnica", "", 12000),
+         "Instalación y configuración de puesto de trabajo completo", 25000, False),
+        ("Visita técnica", "", 12000, False),
         ("Backup y migración de datos",
-         "Resguardo y migración de datos a equipo nuevo", 30000),
+         "Resguardo y migración de datos a equipo nuevo", 30000, False),
         ("Configuración de red",
-         "Configuración de router, switch y puntos de acceso", 40000),
+         "Configuración de router, switch y puntos de acceso", 40000, False),
+        ("Hora de servicio técnico",
+         "Hora de trabajo de servicio técnico", 15000, True),
     ]
     existentes_srv = api.get("/api/servicios?incluir_inactivos=true") or []
-    for nombre, descripcion, precio in servicios_spec:
-        if buscar(existentes_srv, "nombre", nombre):
-            contar("servicios", False)
+    for nombre, descripcion, precio, es_valor_hora in servicios_spec:
+        ya = buscar(existentes_srv, "nombre", nombre)
+        if ya:
+            # Mismo criterio que los tickets de mas abajo: no se duplica, pero
+            # SI se completa lo que falta. Una instancia sembrada antes de que
+            # existiera el valor hora tiene el servicio y no la marca; el seed
+            # diria "nada nuevo" —cierto— y el ejemplo quedaria incompleto.
+            if es_valor_hora and not ya.get("es_valor_hora"):
+                api.put(f"/api/servicios/{ya['id']}", {
+                    "nombre": ya["nombre"], "descripcion": ya["descripcion"],
+                    "precio": ya["precio"], "iva_rate": ya["iva_rate"],
+                    "activo": ya["activo"], "es_valor_hora": True,
+                })
+                contar("servicios_completados", True)
+            else:
+                contar("servicios", False)
             continue
-        api.post("/api/servicios",
-                 {"nombre": nombre, "descripcion": descripcion, "precio": precio})
+        api.post("/api/servicios", {
+            "nombre": nombre, "descripcion": descripcion, "precio": precio,
+            "es_valor_hora": es_valor_hora,
+        })
         contar("servicios", True)
 
     # ── Activos, con los estados que la pantalla distingue (fase 1) ────────
@@ -442,6 +481,7 @@ def sembrar(api: Api) -> None:
                     ("duracion_minutos", minutos),
                     ("equipo_trabajo_id", equipo),
                     ("modalidad", modalidad),
+                    ("nro_cds", CDS_POR_TITULO.get(titulo)),
                 )
                 if valor is not None and ya.get(campo) is None
             }
@@ -462,6 +502,9 @@ def sembrar(api: Api) -> None:
             "fecha_programada": desde,
             "duracion_minutos": minutos,
             "equipo_trabajo_id": equipo,
+            # El numero del comprobante en papel, para los que lo tienen. Es lo
+            # que encabeza la linea del reclamo cuando se lo agrupa en un remito.
+            "nro_cds": CDS_POR_TITULO.get(titulo),
             "descripcion": "Cargada como ejemplo para revisar la pantalla.",
         })
         contar("incidencias", True)
