@@ -12,7 +12,8 @@ import { EquipoDetalle } from './pages/EquipoDetalle'
 import { Depositos } from './pages/Depositos'
 import { DepositosClientes } from './pages/DepositosClientes'
 import { DepositoDetalle } from './pages/DepositoDetalle'
-import { AgendaDelDia, EquiposDeTrabajo, Flota } from './pages/EquiposYFlota'
+import { EquiposDeTrabajo, Flota } from './pages/EquiposYFlota'
+import { Agenda } from './pages/Agenda'
 import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
@@ -86,8 +87,15 @@ export default function App() {
       <Route path="/depositos/clientes" element={<ProtectedRoute><DepositosClientes /></ProtectedRoute>} />
       <Route path="/depositos/:id" element={<ProtectedRoute><DepositoDetalle /></ProtectedRoute>} />
       <Route path="/equipos-trabajo" element={<ProtectedRoute><EquiposDeTrabajo /></ProtectedRoute>} />
-      <Route path="/equipos-trabajo/agenda" element={<ProtectedRoute><AgendaDelDia /></ProtectedRoute>} />
+      {/* La agenda dejó de ser pestaña de acá y pasó a pantalla propia. La ruta
+          vieja redirige en vez de desaparecer, mismo criterio que
+          `/configuracion/proveedores`: es la pantalla que se abre todas las
+          mañanas, y estuvo linkeada así en el wiki y en favoritos. Sin el
+          redirect el `*` de abajo la mandaría al dashboard, que es peor que un
+          404 — la pantalla carga y no es la que se fue a buscar. */}
+      <Route path="/equipos-trabajo/agenda" element={<Navigate to="/agenda" replace />} />
       <Route path="/equipos-trabajo/flota" element={<ProtectedRoute><Flota /></ProtectedRoute>} />
+      <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />

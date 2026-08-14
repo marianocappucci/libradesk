@@ -22,6 +22,7 @@ import {
   Boxes as DepositosStock,
   Briefcase as Activos,
   Building2,
+  CalendarDays,
   Car as EquiposFlota,
   CircleAlert as AlertCircle,
   ClipboardCheck,
@@ -73,6 +74,13 @@ export const Layout = createLayout({
     {
       label: 'Mesa de ayuda',
       items: [
+        // **Primero de todo, apenas debajo del Dashboard** — pedido del humano
+        // (2026-08-14). Ítem propio desde ese día: era la pestaña del medio de
+        // "Equipos y flota", o sea que lo que se abre todas las mañanas para
+        // despachar vivía detrás del catálogo de vehículos. Que encabece el
+        // grupo es la otra mitad del mismo pedido: el orden del menú es el
+        // orden en que se usa, y esto es lo primero que se mira.
+        { to: '/agenda', label: 'Agenda', icon: CalendarDays },
         { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
         { to: '/clientes', label: 'Clientes', icon: Users },
         { to: '/equipos', label: 'Equipos', icon: Monitor },

@@ -1,24 +1,19 @@
-/** Equipos de trabajo, agenda del día y flota de vehículos (pedido 42).
+/** Equipos de trabajo y flota de vehículos (pedido 42, fase A).
  *
- *  La fase A dejó el armado (quién está en cada equipo, qué vehículo tiene) y
- *  la fase B la agenda: cuándo trabaja cada uno, con el motor de turnos
- *  impidiendo que dos trabajos del mismo equipo se pisen. La fecha se carga en
- *  el ticket (`IncidenciaDetalle`); acá se **lee** el resultado, que es lo que
- *  se mira a la mañana para despachar.
+ *  Quién está en cada equipo y en qué vehículo sale. La asignación es lo que
+ *  cruza las dos pestañas —"cuando un equipo tiene un trabajo, ¿en qué vehículo
+ *  sale?"— y por eso la patente aparece en la tarjeta del equipo y no sólo en la
+ *  flota.
  *
- *  **En tres pestañas desde el 2026-08-07**, a pedido del usuario y con el
- *  mismo conmutador que depósitos, configuración y recepción. Las tres venían
- *  apiladas en una pantalla larga porque *la asignación las cruza* — "cuando un
- *  equipo tiene un trabajo, ¿en qué vehículo sale?" —, pero ese cruce no
- *  necesitaba las tres listas a la vez: la patente aparece en la tarjeta del
- *  equipo **y** en su columna de la agenda, así que la pregunta se sigue
- *  contestando sin cambiar de pestaña. Lo que la pantalla larga sí obligaba era
- *  a pasar por la flota entera para llegar a la agenda, que es lo que se mira
- *  todos los días.
+ *  **Tuvo una tercera pestaña, la agenda del día, entre el 2026-08-07 y el
+ *  2026-08-14.** Se fue a pantalla propia (`/agenda`, ver `pages/Agenda.tsx`),
+ *  donde además del día muestra la semana y el mes. Acá quedaba enterrada: es lo
+ *  primero que se abre a la mañana y estaba detrás de un ítem de menú que se
+ *  llama por el catálogo de vehículos. La ruta vieja `/equipos-trabajo/agenda`
+ *  **redirige** a la pantalla nueva, no desaparece.
  *
  *  Cada pestaña es una ruta (ver `equipos-flota-piezas.tsx`), así que se puede
- *  linkear "mirá la agenda de hoy" y el botón "atrás" del navegador hace lo que
- *  se espera.
+ *  linkear una sección y el botón "atrás" del navegador hace lo que se espera.
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -40,7 +35,6 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
 import { Car as IconoFlota } from 'lucide-react'
@@ -49,8 +43,8 @@ import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const SIN = '__sin__'
 
-/** Cuál de las tres se está mirando. Coincide con `clave` en `PESTANIAS_EQUIPOS`. */
-type Seccion = 'equipos' | 'agenda' | 'flota'
+/** Cuál de las dos se está mirando. Coincide con `clave` en `PESTANIAS_EQUIPOS`. */
+type Seccion = 'equipos' | 'flota'
 
 function EquiposYFlota({ seccion }: { seccion: Seccion }) {
   const [equipos, setEquipos] = useState<EquipoTrabajo[]>([])
@@ -215,8 +209,8 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
           Equipos y flota
         </TituloPantalla>
         {/* El botón de alta es el de la pestaña que se está mirando: dejar los
-            dos siempre visibles haría que "Nuevo vehículo" apareciera parado en
-            la agenda, donde no es lo que se vino a hacer. */}
+            dos siempre visibles ofrecería dar de alta un vehículo desde la
+            pantalla de equipos, que no es lo que se vino a hacer. */}
         {seccion === 'equipos' && (
           <Button onClick={() => abrirEquipo(null)}><FilePlus />Nuevo equipo</Button>
         )}
@@ -309,9 +303,6 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
               )}
             </div>
           )}
-
-          {/* ── Agenda (fase B) ─────────────────────────────────────── */}
-          {seccion === 'agenda' && <AgendaEquipos equipos={equipos} />}
 
           {/* ── Flota ───────────────────────────────────────────────── */}
           {seccion === 'flota' && (
@@ -544,11 +535,6 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
 /** Pestaña de equipos de trabajo: quién está en cada uno y en qué sale. */
 export function EquiposDeTrabajo() {
   return <EquiposYFlota seccion="equipos" />
-}
-
-/** Pestaña de la agenda del día. */
-export function AgendaDelDia() {
-  return <EquiposYFlota seccion="agenda" />
 }
 
 /** Pestaña de la flota de vehículos. */

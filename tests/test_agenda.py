@@ -243,6 +243,12 @@ def test_la_agenda_valida_sus_parametros(client, escenario):
     assert client.get(
         f"/api/agenda/equipo/{escenario['norte']['id']}?desde=2026-08-11&dias=99"
     ).status_code == 422
+    # El tope es 42 y no 31: la vista de mes del calendario dibuja 6 semanas
+    # completas. Sin este caso, subirlo no lo verifica nada — el `dias=99` de
+    # arriba sigue en 422 con el tope viejo y con el nuevo.
+    assert client.get(
+        f"/api/agenda/equipo/{escenario['norte']['id']}?desde=2026-08-11&dias=42"
+    ).status_code == 200
 
 
 def test_borrar_el_equipo_desagenda_sin_borrar_los_tickets(client, escenario):
