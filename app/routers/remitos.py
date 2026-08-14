@@ -20,7 +20,9 @@ from ..dependencies import (
     get_cliente_repository, get_data_dir, get_remito_service,
 )
 from ..services.clientes import ClienteRepository
-from ..services.remitos_presupuestos import RemitoService
+from ..services.remitos_presupuestos import (
+    RemitoService, datos_cliente_para_comprobante,
+)
 
 router = APIRouter(prefix="/api/remitos", tags=["remitos"])
 
@@ -44,15 +46,11 @@ class RemitoIn(BaseModel):
 
 
 def _datos_cliente(client_id: int, clientes: ClienteRepository, override_address: str | None) -> dict:
+    """El 404 es lo unico propio del router; el mapeo vive en el servicio."""
     cliente = clientes.get(client_id)
     if cliente is None:
         raise HTTPException(404, "cliente not found")
-    return {
-        "client_name": cliente["empresa"] or cliente["nombre"],
-        "client_address": override_address if override_address is not None else (cliente["ciudad"] or ""),
-        "client_email": cliente["email"] or "",
-        "client_phone": cliente["telefono"] or "",
-    }
+    return datos_cliente_para_comprobante(cliente, override_address)
 
 
 @router.post("", status_code=201)
@@ -133,6 +131,25 @@ def delete_remito(remito_id: int, remitos: RemitoService = Depends(get_remito_se
         remitos.delete(remito_id)
     except KeyError:
         raise HTTPException(404, "remito not found")
+    except ValueError as e:
+        # `RemitoService.delete()` se niega si algo lo referencia. Sin este
+        # `except` el ValueError salia como **500**: la defensa funcionaba y la
+        # pantalla mostraba un error del servidor, que manda a mirar los logs
+        # en vez de decir por que no se puede borrar. Se descubrio al sumar el
+        # segundo origen (incidencias, 2026-08-13); valia igual para el
+        # primero.
+        colgando = e.args[0] if e.args and isinstance(e.args[0], dict) else {}
+        partes = []
+        if colgando.get("presupuestos_convertidos"):
+            partes.append(f"{colgando['presupuestos_convertidos']} presupuesto/s")
+        if colgando.get("incidencias_convertidas"):
+            partes.append(f"{colgando['incidencias_convertidas']} reclamo/s")
+        detalle = " y ".join(partes) or "otros comprobantes"
+        raise HTTPException(
+            409,
+            f"No se puede borrar este remito: lo generaron {detalle}. "
+            f"Borralo desde ahi o desvincula primero.",
+        )
     return Response(status_code=204)
 
 

@@ -186,3 +186,38 @@ def listar(incidencia_id: int, incluir_devueltos: bool = False) -> list[dict]:
          "fecha": f[7], "usuario_id": f[8]}
         for f in filas
     ]
+
+
+def valorizados(incidencia_id: int) -> list[dict]:
+    """Lo mismo que `listar()`, mas el `precio` de venta del catalogo.
+
+    Existe para armar el remito de un ticket cerrado
+    (`IncidenciaRepository.convertir_a_remito`) y **no** para la orden de
+    trabajo, que a proposito no lleva importes: es una orden de trabajo, no un
+    presupuesto. Por eso es una funcion aparte y no un campo mas en `listar()`
+    --que ademas pagaria una lectura de catalogo por fila en el camino del PDF,
+    que no la usa--.
+
+    El precio sale de `default_sale_price` del item, que es el mismo que sugiere
+    la pantalla de ventas. **Un item sin precio cargado da 0**, y un item
+    borrado del catalogo tambien: el remito se genera igual y el operador pone
+    el importe antes de mandarlo a facturar. Devolver 0 es lo unico honesto que
+    se puede hacer aca --inventar un precio seria peor-- y la bandeja de
+    facturacion se niega a mandar un remito con total 0, asi que un olvido no
+    llega a facturarse.
+
+    La descripcion **no** se refresca contra el catalogo: se usa la que quedo
+    guardada al consumir el material, por el mismo motivo que la guarda
+    `_descripcion()`.
+    """
+    filas = listar(incidencia_id)
+    if not filas:
+        return []
+    with libracore_core.get_connection() as conn:
+        repo = SqliteCommerceRepository(conn)
+        for fila in filas:
+            item = repo.get_catalog_item(fila["item_id"])
+            fila["precio"] = (
+                float(item.default_sale_price) if item is not None else 0.0
+            )
+    return filas

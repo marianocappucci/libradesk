@@ -32,6 +32,8 @@ from libracore.pdf_generator import (
     _TextoSeguroPDF, _wrap_text,
 )
 
+from .pdf_texto import ancho_util, recortar
+
 # La caja de la letra del membrete. `_draw_header_block` le aplica `.title()`
 # al título, así que va sin preposiciones.
 _LETRA = "OT"
@@ -54,6 +56,14 @@ class _IncidenciaPDF(_TextoSeguroPDF, FPDF):
         super().__init__()
         self.empresa = empresa
         self.datos = datos
+        # El mismo marco que dibujan la cabecera, las reglas de sección y el
+        # pie. Sin esto queda el margen de fpdf2 —10 mm— y **todo el cuerpo
+        # sale 8 mm a la izquierda del recuadro que este documento acaba de
+        # dibujar**: los títulos de sección y las etiquetas arrancan afuera de
+        # la línea que los subraya. `InformePDF` ya lo hacía; acá faltaba.
+        # Desde LibraCore v1.37.0 lo pone la base y esta línea es redundante —
+        # se deja explícita igual, como en el informe, para no depender del pin.
+        self.set_margins(_LX, _LX, _LX)
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self) -> None:  # noqa: D102 — la firma la impone fpdf2
@@ -104,7 +114,7 @@ def _campo(pdf: FPDF, etiqueta: str, valor: str | None, ancho: float = _CW / 2) 
     pdf.set_text_color(*_MUTED)
     pdf.cell(28, _LINEA, f"{etiqueta}:")
     pdf.set_text_color(*_INK)
-    pdf.cell(ancho - 28, _LINEA, valor or "—")
+    pdf.cell(ancho - 28, _LINEA, recortar(pdf, valor or "—", ancho - 28))
 
 
 def _materiales(pdf: FPDF, materiales: list[dict]) -> None:
@@ -133,12 +143,12 @@ def _materiales(pdf: FPDF, materiales: list[dict]) -> None:
         cantidad = f"{m['cantidad']:g}"
         pdf.cell(16, _LINEA, cantidad, align="R")
         pdf.cell(4, _LINEA, "")
-        lineas = _wrap_text(pdf, m.get("descripcion") or "—", _CW - 20)
-        pdf.cell(_CW - 20, _LINEA, lineas[0] if lineas else "—")
+        lineas = _wrap_text(pdf, m.get("descripcion") or "—", ancho_util(_CW - 20))
+        pdf.cell(_CW - 20, _LINEA, recortar(pdf, lineas[0] if lineas else "—", _CW - 20))
         pdf.ln(_LINEA)
         for extra in lineas[1:]:
             pdf.cell(20, _LINEA, "")
-            pdf.cell(_CW - 20, _LINEA, extra)
+            pdf.cell(_CW - 20, _LINEA, recortar(pdf, extra, _CW - 20))
             pdf.ln(_LINEA)
 
 
@@ -199,7 +209,7 @@ def _conformidad(pdf: FPDF, firma: dict | None) -> None:
     pdf.ln(1.5)
     pdf.set_font("Helvetica", "", 8)
     pdf.set_text_color(*_INK)
-    pdf.cell(70, _LINEA, firma.get("firmante") or "Firma del cliente")
+    pdf.cell(70, _LINEA, recortar(pdf, firma.get("firmante") or "Firma del cliente", 70))
     pdf.set_text_color(*_MUTED)
     pdf.cell(_CW - 70, _LINEA, firma.get("fecha") or "")
     pdf.ln(_LINEA)
@@ -213,8 +223,12 @@ def _parrafo(pdf: FPDF, texto: str | None) -> None:
         pdf.cell(_CW, _LINEA, "—")
         pdf.ln(_LINEA)
         return
-    for linea in _wrap_text(pdf, texto, _CW):
-        pdf.cell(_CW, _LINEA, linea)
+    for linea in _wrap_text(pdf, texto, ancho_util(_CW)):
+        # El renglón que devuelve `_wrap_text` se mide igual antes de dibujarlo:
+        # el corte por carácter para una palabra sola más ancha que el renglón
+        # lo hace LibraCore desde v1.37.0, y esto sostiene la invariante —nada
+        # se dibuja sin medirse— con el pin anterior también.
+        pdf.cell(_CW, _LINEA, recortar(pdf, linea, _CW))
         pdf.ln(_LINEA)
 
 
@@ -243,8 +257,14 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
 
     _titulo_seccion(pdf, "Ticket")
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(_CW, 5, datos["titulo"])
-    pdf.ln(6)
+    # El título lo escribe quien abre el ticket y no tiene tope de largo. Con
+    # `cell` a secas, uno que fuera una frase entera se dibujaba **fuera del
+    # papel**: medido, 295 mm de borde derecho en una hoja de 210. Va repartido
+    # en renglones, como la descripción.
+    for linea in _wrap_text(pdf, datos["titulo"] or "—", ancho_util(_CW)):
+        pdf.cell(_CW, 5, recortar(pdf, linea, _CW))
+        pdf.ln(5)
+    pdf.ln(1)
     _campo(pdf, "Prioridad", datos["prioridad_label"])
     _campo(pdf, "Modalidad", datos["modalidad_label"])
     pdf.ln(_LINEA)
@@ -292,14 +312,14 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
         pdf.set_font("Helvetica", "", 8)
         for a in datos["actividad"]:
             pdf.set_text_color(*_MUTED)
-            pdf.cell(32, _LINEA, a["fecha"])
+            pdf.cell(32, _LINEA, recortar(pdf, a["fecha"], 32))
             pdf.set_text_color(*_INK)
-            lineas = _wrap_text(pdf, a["descripcion"] or "—", _CW - 32)
-            pdf.cell(_CW - 32, _LINEA, lineas[0] if lineas else "—")
+            lineas = _wrap_text(pdf, a["descripcion"] or "—", ancho_util(_CW - 32))
+            pdf.cell(_CW - 32, _LINEA, recortar(pdf, lineas[0] if lineas else "—", _CW - 32))
             pdf.ln(_LINEA)
             for extra in lineas[1:]:
                 pdf.cell(32, _LINEA, "")
-                pdf.cell(_CW - 32, _LINEA, extra)
+                pdf.cell(_CW - 32, _LINEA, recortar(pdf, extra, _CW - 32))
                 pdf.ln(_LINEA)
 
     _conformidad(pdf, datos.get("firma"))

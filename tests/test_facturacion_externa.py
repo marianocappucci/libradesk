@@ -6,8 +6,10 @@ fijan estos tests, en orden de lo que duele si se rompe:
 1. 🔴 **Que sin configurar no mande nada.** Es la garantía de adopción: una
    instancia que actualiza y no toca su compose se comporta igual que antes.
 2. 🔴 **Que el token no salga nunca por la API**, ni siquiera enmascarado.
-3. 🔴 **Que un presupuesto no aceptado no se pueda mandar.** Del otro lado el
-   paso siguiente es emitir con CAE.
+3. 🔴 **Que lo único que se mande sea un remito.** Ni un presupuesto aceptado,
+   ni un remito con total 0. Del otro lado el paso siguiente es emitir con CAE,
+   y desde que el envío además debita en cuenta corriente, mandar de más le
+   carga deuda de más a un cliente real.
 4. Que un Contalibra caído no rompa la operación: se registra el error y se
    puede reintentar, porque el destino es idempotente.
 5. Que el estado de cada envío quede guardado y visible.
@@ -192,10 +194,20 @@ def test_el_iva_viaja_por_item(client, configurado):
     assert sorted(alicuotas) == [0.105, 0.21]
 
 
-# ── Presupuestos: sólo los aceptados ─────────────────────────────────────────
+# ── Ningún presupuesto se manda: el único origen es el remito ────────────────
+#
+# Antes del 2026-08-13 se mandaban los presupuestos `aceptado`. El problema no
+# era sólo contable: `convertir_a_remito()` deja el presupuesto EN `aceptado` y
+# linkeado al remito, así que el presupuesto y su propio remito eran dos filas
+# mandables por el mismo trabajo — y del otro lado el UNIQUE de desduplicación
+# incluye `origen_tipo`, o sea que entraban como dos borradores distintos y
+# debitaban dos veces en la cuenta corriente del cliente.
 
-@pytest.mark.parametrize("estado", ["borrador", "enviado", "rechazado", "vencido"])
-def test_un_presupuesto_no_aceptado_no_se_manda(client, configurado, estado):
+
+@pytest.mark.parametrize("estado", ["borrador", "enviado", "aceptado", "rechazado", "vencido"])
+def test_ningun_presupuesto_se_manda_ni_siquiera_el_aceptado(client, configurado, estado):
+    """`aceptado` está en la lista a propósito: es el que ANTES sí se mandaba,
+    y es el único caso donde una regresión pasaría desapercibida."""
     cliente_id = _cliente_final(client)
     presupuesto = _presupuesto(client, cliente_id, status=estado)
     falso = _con_puente_falso(client, ClienteFalso())
@@ -203,32 +215,62 @@ def test_un_presupuesto_no_aceptado_no_se_manda(client, configurado, estado):
     r = client.post("/api/facturacion/enviar",
                     json={"origen_tipo": "presupuesto", "ids": [presupuesto["id"]]})
 
-    assert r.status_code == 200
-    resultado = r.json()["resultados"][0]
-    assert resultado["estado"] == "no_facturable"
+    assert r.status_code == 422, r.text
     assert falso.llamadas == [], "no tendría que haber salido ningún request"
 
 
-def test_un_presupuesto_aceptado_si_se_manda(client, configurado):
+def test_los_pendientes_no_ofrecen_presupuestos(client, configurado):
+    cliente_id = _cliente_final(client)
+    _presupuesto(client, cliente_id, status="borrador")
+    _presupuesto(client, cliente_id, status="aceptado")
+    remito = _remito(client, cliente_id)
+
+    items = client.get("/api/facturacion/pendientes").json()["items"]
+
+    assert [i["origen_tipo"] for i in items] == ["remito"]
+    assert [i["id"] for i in items] == [remito["id"]]
+
+
+def test_un_presupuesto_llega_a_la_bandeja_convirtiendose_en_remito(client, configurado):
+    """El camino que reemplaza al que se sacó: convertir y mandar el remito.
+
+    Y **una sola fila**, aunque el presupuesto siga en `aceptado` después de
+    convertirse: eso es lo que antes duplicaba.
+    """
     cliente_id = _cliente_final(client)
     presupuesto = _presupuesto(client, cliente_id, status="aceptado")
+
+    r = client.post(f"/api/presupuestos/{presupuesto['id']}/convertir-en-remito")
+    assert r.status_code == 201, r.text
+    remito = r.json()
+
+    items = client.get("/api/facturacion/pendientes").json()["items"]
+    assert [(i["origen_tipo"], i["id"]) for i in items] == [("remito", remito["id"])]
+
+    falso = _con_puente_falso(client, ClienteFalso())
+    r = client.post("/api/facturacion/enviar",
+                    json={"origen_tipo": "remito", "ids": [remito["id"]]})
+    assert r.json()["resultados"][0]["estado"] == "enviado"
+    assert len(falso.llamadas) == 1
+
+
+def test_un_remito_en_cero_no_se_manda(client, configurado):
+    """Del otro lado el paso siguiente es emitir con CAE, y una factura en cero
+    no existe. Es lo que ataja un remito recién generado desde una incidencia,
+    cuyos importes todavía no cargó nadie."""
+    cliente_id = _cliente_final(client)
+    creado = client.post("/api/remitos", json={
+        "client_id": cliente_id,
+        "items": [{"description": "Mano de obra", "qty": 1, "unit_price": 0}],
+    })
+    assert creado.status_code == 201, creado.text
     falso = _con_puente_falso(client, ClienteFalso())
 
     r = client.post("/api/facturacion/enviar",
-                    json={"origen_tipo": "presupuesto", "ids": [presupuesto["id"]]})
+                    json={"origen_tipo": "remito", "ids": [creado.json()["id"]]})
 
-    assert r.json()["resultados"][0]["estado"] == "enviado"
-    assert falso.llamadas[0]["json"]["origen_tipo"] == "presupuesto"
-
-
-def test_los_pendientes_solo_ofrecen_presupuestos_aceptados(client, configurado):
-    cliente_id = _cliente_final(client)
-    _presupuesto(client, cliente_id, status="borrador")
-    aceptado = _presupuesto(client, cliente_id, status="aceptado")
-
-    items = client.get("/api/facturacion/pendientes").json()["items"]
-    presupuestos = [i for i in items if i["origen_tipo"] == "presupuesto"]
-    assert [p["id"] for p in presupuestos] == [aceptado["id"]]
+    assert r.json()["resultados"][0]["estado"] == "no_facturable"
+    assert falso.llamadas == [], "no tendría que haber salido ningún request"
 
 
 # ── Cuando el otro lado falla ────────────────────────────────────────────────

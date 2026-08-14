@@ -42,6 +42,8 @@ from libracore.pdf_generator import (
     _rrect, _TextoSeguroPDF, _wrap_text,
 )
 
+from .pdf_texto import recortar
+
 # La caja de la letra del membrete ("R" en un remito, "CC" en un resumen de
 # cuenta corriente). `_draw_header_block` le aplica `.title()` al titulo, asi
 # que va sin preposiciones: "Informe de servicio" saldria "Informe De
@@ -245,12 +247,21 @@ _RESERVA_CIERRE = _ALTO_AVISO + 6
 
 
 def _lineas_celda(pdf: FPDF, texto: str, ancho: float, maximo: int) -> list[str]:
-    """El texto repartido en hasta `maximo` lineas, con elipsis si sobra."""
+    """El texto repartido en hasta `maximo` lineas, con elipsis si sobra.
+
+    Cada renglon se mide **de nuevo** contra el ancho: `_wrap_text` corta por
+    palabra, y una "palabra" sola mas ancha que la columna —un serial pegado,
+    una URL— salia entera y `cell` la dibujaba fuera del papel. LibraCore la
+    parte por caracter desde v1.37.0; este recorte sostiene la invariante con
+    el pin anterior tambien.
+    """
     lineas = _wrap_text(pdf, texto, ancho)
-    if len(lineas) <= maximo:
-        return lineas
-    ultima = lineas[maximo - 1]
-    return lineas[: maximo - 1] + [ultima[: max(0, len(ultima) - 1)] + _ELIPSIS]
+    if len(lineas) > maximo:
+        ultima = lineas[maximo - 1]
+        lineas = lineas[: maximo - 1] + [ultima[: max(0, len(ultima) - 1)] + _ELIPSIS]
+    # `ancho` ya es el ancho util (el llamador le resto el aire de la celda), y
+    # `recortar` espera el ancho de la celda: se le devuelve el aire.
+    return [recortar(pdf, linea, ancho + 2) for linea in lineas]
 
 
 def _tabla(pdf: FPDF, headers: list[str], widths: list[float], aligns: list[str],
@@ -382,7 +393,10 @@ def _lista_conteos(pdf: FPDF, titulo: str, pares: list[tuple[str, int]],
         texto = str(etiqueta)
         if pdf.get_string_width(texto) > w - 12:
             texto = "".join(_wrap_text(pdf, texto, w - 14)[:1]) + _ELIPSIS
-        pdf.cell(w - 10, 5, texto, ln=False)
+        # Medido de nuevo: el corte de arriba es por palabra, y una etiqueta de
+        # una sola palabra larga volvia entera — con la elipsis pegada al final
+        # y el renglon igual de ancho que antes.
+        pdf.cell(w - 10, 5, recortar(pdf, texto, w - 10), ln=False)
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_xy(x + w - 10, y)
         pdf.cell(10, 5, str(n), align="R", ln=False)

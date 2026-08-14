@@ -5,16 +5,19 @@ from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..dependencies import (
-    get_firma_repository,
+    get_cliente_repository, get_firma_repository,
     get_equipo_repository, get_incidencia_repository, get_reemplazo_service,
+    get_remito_service,
 )
 from ..services import incidencia_pdf
+from ..services.clientes import ClienteRepository
 from ..services.equipos import EquipoRepository
 from ..services.firma import FirmaRepository
 from ..services.incidencias import IncidenciaRepository
 from ..services.reemplazo import (
     DESTINOS, CierreService, DatosService, ReemplazoService,
 )
+from ..services.remitos_presupuestos import RemitoService
 
 router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 
@@ -64,6 +67,14 @@ class IncidenciaOut(IncidenciaIn):
     id: int
     fecha_creacion: str | None = None
     fecha_cierre: str | None = None
+    #: El remito que se generó de este reclamo, si se generó.
+    #:
+    #: 🔴 Va en `IncidenciaOut` y **no** en `IncidenciaIn`, y eso es lo que lo
+    #: protege: el PUT manda el objeto entero, así que un campo editable que la
+    #: pantalla no reenvíe vuelve a `null` —es como este producto perdió el
+    #: `nro_cds` una vez—. Al no estar en el payload de entrada, `update()` ni
+    #: siquiera lo recibe. Lo escribe sólo `convertir_a_remito`.
+    remito_id: int | None = None
 
 
 class ActividadIn(BaseModel):
@@ -263,6 +274,42 @@ def reemplazar_equipo(
         raise HTTPException(404, f"{que} {cual} not found")
     except ValueError as err:
         raise HTTPException(422, str(err))
+
+
+# ── El camino a facturación ──────────────────────────────────────────────
+#
+# Un reclamo no se manda a facturar: se convierte en remito, y el remito es lo
+# único que la bandeja acepta (ver `app/routers/facturacion.py`). El endpoint
+# es el gemelo de `POST /api/presupuestos/{id}/convertir-en-remito`, con el
+# mismo nombre a propósito.
+
+
+@router.post("/{incidencia_id}/convertir-en-remito", status_code=201)
+def convertir_en_remito(
+    incidencia_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+    remitos: RemitoService = Depends(get_remito_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    user: dict = Depends(get_current_user),
+):
+    """El remito del trabajo hecho. Idempotente: devuelve el que ya existe.
+
+    `201` también cuando devuelve uno anterior, igual que el de presupuestos:
+    lo que el llamador pidió —"que exista el remito de esto"— se cumplió, y
+    distinguir los dos casos por el status invitaría a tratar un doble click
+    como un error.
+    """
+    try:
+        return incidencias.convertir_a_remito(
+            incidencia_id, remitos, clientes, int(user["id"]),
+        )
+    except KeyError:
+        raise HTTPException(404, "incidencia not found")
+    except ValueError as e:
+        # 409 y no 422: el pedido está bien formado, es el estado del ticket el
+        # que no lo permite todavía. Es el mismo código que usa la conversión
+        # de un presupuesto rechazado.
+        raise HTTPException(409, str(e))
 
 
 # ── La conformidad del cliente ───────────────────────────────────────────
