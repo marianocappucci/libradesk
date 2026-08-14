@@ -113,12 +113,17 @@ export function Proveedores() {
     }
   }
 
-  function Formulario({ datos, onChange, onCancel, titulo }: {
-    datos: FormProveedor
-    onChange: (d: FormProveedor) => void
-    onCancel: () => void
-    titulo: string
-  }) {
+  // Función que devuelve JSX, **no** un componente. Declarada acá adentro, cada
+  // render creaba un tipo nuevo y React remontaba el formulario entero: el
+  // campo perdía el foco después de cada tecla y había que volver a clickearlo
+  // para escribir la siguiente. Es el mismo defecto que reportó el usuario en
+  // el catálogo de servicios (2026-08-14); esta pantalla lo tenía igual.
+  function formulario(
+    datos: FormProveedor,
+    onChange: (d: FormProveedor) => void,
+    onCancel: () => void,
+    titulo: string,
+  ) {
     return (
       <form
         className="grid gap-2 rounded-md border p-3"
@@ -188,11 +193,8 @@ export function Proveedores() {
         <CardContent className="grid gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          {nuevo !== null && (
-            <Formulario
-              datos={nuevo} onChange={setNuevo} onCancel={() => setNuevo(null)}
-              titulo="Proveedor nuevo"
-            />
+          {nuevo !== null && formulario(
+            nuevo, setNuevo, () => setNuevo(null), 'Proveedor nuevo',
           )}
 
           {proveedores === null ? (
@@ -207,12 +209,12 @@ export function Proveedores() {
               {proveedores.map((p) => (
                 editando?.id === p.id ? (
                   <li key={p.id} className="p-2">
-                    <Formulario
-                      datos={editando}
-                      onChange={(d) => setEditando({ ...d, id: p.id })}
-                      onCancel={() => setEditando(null)}
-                      titulo={`Editando ${p.nombre}`}
-                    />
+                    {formulario(
+                      editando,
+                      (d) => setEditando({ ...d, id: p.id }),
+                      () => setEditando(null),
+                      `Editando ${p.nombre}`,
+                    )}
                   </li>
                 ) : (
                   <li key={p.id} className="flex items-center gap-2 px-3 py-2">

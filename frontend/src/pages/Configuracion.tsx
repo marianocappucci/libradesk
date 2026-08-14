@@ -159,10 +159,17 @@ function CategoriasCard() {
 
   const raices = (categorias ?? []).filter((c) => c.parent_id === null)
 
-  function Fila({ c, esHija }: { c: CategoriaIncidencia; esHija: boolean }) {
+  // Función que devuelve JSX, **no** un componente — mismo motivo que
+  // `formulario` en `ServiciosCard`: declarada acá adentro, cada render creaba
+  // un tipo nuevo y React remontaba la fila entera, así que el campo de
+  // renombrar perdía el foco después de cada tecla.
+  function fila(c: CategoriaIncidencia, esHija: boolean) {
     if (renombrando?.id === c.id) {
       return (
-        <li className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
+        // La `key` va acá adentro y ya no en el sitio de llamada: el elemento la
+        // lleva consigo, y así entrar y salir del modo renombrar reconcilia la
+        // MISMA fila en vez de reemplazarla.
+        <li key={c.id} className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
           <Input
             value={renombrando.nombre}
             onChange={(e) => setRenombrando({ id: c.id, nombre: e.target.value })}
@@ -180,7 +187,7 @@ function CategoriasCard() {
       )
     }
     return (
-      <li className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
+      <li key={c.id} className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
         {esHija && <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />}
         <span className={`flex-1 text-sm ${esHija ? '' : 'font-medium'}`}>{c.nombre}</span>
         {!esHija && (
@@ -245,10 +252,10 @@ function CategoriasCard() {
         ) : (
           <ul className="divide-y rounded-md border">
             {raices.flatMap((raiz) => [
-              <Fila key={raiz.id} c={raiz} esHija={false} />,
+              fila(raiz, false),
               ...categorias
                 .filter((c) => c.parent_id === raiz.id)
-                .map((hija) => <Fila key={hija.id} c={hija} esHija />),
+                .map((hija) => fila(hija, true)),
             ])}
           </ul>
         )}
@@ -640,10 +647,25 @@ function ServiciosCard() {
     }
   }
 
-  function Formulario({ datos, onCambiar }: {
-    datos: FormServicio
-    onCambiar: (d: FormServicio) => void
-  }) {
+  // 🔴 **Es una función que devuelve JSX, no un componente**, y se la llama
+  // `formulario(...)` en vez de renderizarla como `<Formulario />`.
+  //
+  // Declarada adentro de `ServiciosCard`, cada render creaba una función nueva.
+  // React compara los tipos por identidad, así que un tipo nuevo no se
+  // actualiza: se **desmonta y se vuelve a montar**. El `<input>` pasaba a ser
+  // otro nodo del DOM, el que tenía el foco quedaba desprendido, y sólo entraba
+  // una letra por click. Reportado por el usuario cargando el valor hora
+  // (2026-08-14): *"tenía que escribir una, volver a hacer foco con el mouse,
+  // escribir otra letra"*.
+  //
+  // Llamándola, sus elementos se inlinean en el árbol de esta pantalla y no hay
+  // componente intermedio que remontar. Se elige esto y no subirla al módulo
+  // porque conserva el closure —`alicuotas`, `guardando`, `guardar`— sin
+  // enhebrar cinco props que sólo existirían para eso.
+  function formulario(
+    datos: FormServicio,
+    onCambiar: (d: FormServicio) => void,
+  ) {
     return (
       <div className="grid gap-3 rounded border p-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
@@ -746,12 +768,10 @@ function ServiciosCard() {
             </Button>
           </div>
         )}
-        {nuevo && <Formulario datos={nuevo} onCambiar={setNuevo} />}
-        {editando && (
-          <Formulario
-            datos={editando}
-            onCambiar={(d) => setEditando({ ...d, id: editando.id })}
-          />
+        {nuevo && formulario(nuevo, setNuevo)}
+        {editando && formulario(
+          editando,
+          (d) => setEditando({ ...d, id: editando.id }),
         )}
 
         {servicios === null ? (
