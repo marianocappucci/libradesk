@@ -76,6 +76,49 @@ CAMPOS_INCIDENCIA = (
     "activo",
 )
 
+#: Los campos que viajan en el PUT de un cliente, por lo mismo que arriba:
+#: `ClienteIn` **reemplaza el objeto entero**.
+#:
+#: 🔴 **Y acá es peor que en la incidencia**, porque dos de los defaults no son
+#: `None`: `activo=True` y `tipo_facturacion="por_servicio"`. Un PUT parcial no
+#: dejaría un campo en blanco —lo que ya sería malo—, sino que **reactivaría un
+#: cliente dado de baja** y le cambiaría cómo se lo factura, sin que falle nada.
+#:
+#: `id`, `fecha_creacion` e `iva_discriminado` quedan afuera a propósito: son de
+#: `ClienteOut`. El último además lo **deriva** el producto de `condicion_iva`,
+#: así que mandarlo de vuelta sería escribir un valor calculado.
+CAMPOS_CLIENTE = (
+    "nombre", "empresa", "email", "telefono", "ciudad", "cuit",
+    "condicion_iva", "domicilio", "observaciones", "tipo_facturacion",
+    "activo",
+)
+
+#: Domicilios de ejemplo, para los clientes que no tengan uno cargado.
+#:
+#: 🔴 **Existen por la hoja de ruta.** Es el documento que la cuadrilla se lleva
+#: y cuya razón de ser es decir **dónde queda** cada parada; con los clientes de
+#: dev sin domicilio, la hoja salía con "sin domicilio cargado" en cada renglón
+#: y no se podía revisar lo único que el documento agrega.
+#:
+#: La ciudad va **aparte y sin repetirse adentro del domicilio**, que es la forma
+#: que el producto espera. Los datos reales de la demo venían al revés —la ciudad
+#: escrita dentro del domicilio *y* en su campo— y por eso la hoja imprimía
+#: `Av. Pueyrredón 1640, CABA, CABA`; lo cubre `direccion()` en
+#: `app/services/hoja_ruta_pdf.py`. El seed no reproduce ese caso a propósito:
+#: para eso está el test, y acá lo que hace falta es el ejemplo bien cargado.
+#:
+#: Direcciones de Chivilcoy y alrededores, que es donde opera el prospecto real.
+DOMICILIOS = (
+    ("Av. Villarino 245", "Chivilcoy"),
+    ("Calle 9 N° 1180", "Chivilcoy"),
+    ("San Martín 632", "Suipacha"),
+    ("Ruta 5 Km 152, Parque Industrial", "Chivilcoy"),
+    ("Belgrano 87", "Alberti"),
+    ("Rivadavia 1450", "Bragado"),
+    ("Sarmiento 210", "Mercedes"),
+    ("Av. Soárez 1990", "Chivilcoy"),
+)
+
 #: Los tickets que el seed deja **terminados**, por título.
 #:
 #: `(título, estado, horas, resolución, estado_facturacion)`.
@@ -195,6 +238,32 @@ def sembrar(api: Api) -> None:
     clientes = api.get("/api/clientes") or []
     if not clientes:
         raise RuntimeError("No hay clientes en esta instancia: nada que sembrar.")
+
+    # ── Domicilios, para que la hoja de ruta se pueda revisar ──────────────
+    #
+    # **Sólo completa lo que está en null**, igual que la agenda de los tickets
+    # más abajo: nunca pisa un domicilio cargado. Si alguien puso una dirección
+    # real para probar algo, el seed no se la deshace.
+    #
+    # Sin esto la hoja de ruta de dev sale con "sin domicilio cargado" en cada
+    # parada, que es exactamente el renglón que el documento existe para llenar.
+    for i, c in enumerate(clientes):
+        if (c.get("domicilio") or "").strip():
+            continue
+        domicilio, ciudad = DOMICILIOS[i % len(DOMICILIOS)]
+        previos = {campo: c.get(campo) for campo in CAMPOS_CLIENTE}
+        # El PUT lleva el objeto entero. La ciudad **también** se completa sólo
+        # si falta: un cliente puede tener la ciudad bien y el domicilio no.
+        api.put(f"/api/clientes/{c['id']}", {
+            **previos,
+            "domicilio": domicilio,
+            "ciudad": (c.get("ciudad") or "").strip() or ciudad,
+        })
+        contar("clientes_con_domicilio", True)
+
+    # Se relee: los `cliente`/`otro` de acá abajo se usan para depósitos y
+    # tickets, y con la copia vieja irían sin el domicilio recién puesto.
+    clientes = api.get("/api/clientes") or clientes
     cliente = clientes[0]
     otro = clientes[1] if len(clientes) > 1 else cliente
 
