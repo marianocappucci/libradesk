@@ -73,7 +73,51 @@ CAMPOS_INCIDENCIA = (
     "sector_id", "categoria_id", "titulo", "descripcion",
     "nro_cds", "reclamante", "estado", "prioridad",
     "horas_invertidas", "notas", "resolucion", "estado_facturacion",
+    "cobertura_abono", "abono_horas_cubiertas", "abono_materiales_incluidos",
     "activo",
+)
+
+#: Los campos que viajan en el PUT de un cliente, por lo mismo que arriba:
+#: `ClienteIn` **reemplaza el objeto entero**.
+#:
+#: 🔴 **Y acá es peor que en la incidencia**, porque dos de los defaults no son
+#: `None`: `activo=True` y `tipo_facturacion="por_servicio"`. Un PUT parcial no
+#: dejaría un campo en blanco —lo que ya sería malo—, sino que **reactivaría un
+#: cliente dado de baja** y le cambiaría cómo se lo factura, sin que falle nada.
+#:
+#: `id`, `fecha_creacion` e `iva_discriminado` quedan afuera a propósito: son de
+#: `ClienteOut`. El último además lo **deriva** el producto de `condicion_iva`,
+#: así que mandarlo de vuelta sería escribir un valor calculado.
+CAMPOS_CLIENTE = (
+    "nombre", "empresa", "email", "telefono", "ciudad", "cuit",
+    "condicion_iva", "domicilio", "observaciones", "tipo_facturacion",
+    "activo",
+)
+
+#: Domicilios de ejemplo, para los clientes que no tengan uno cargado.
+#:
+#: 🔴 **Existen por la hoja de ruta.** Es el documento que la cuadrilla se lleva
+#: y cuya razón de ser es decir **dónde queda** cada parada; con los clientes de
+#: dev sin domicilio, la hoja salía con "sin domicilio cargado" en cada renglón
+#: y no se podía revisar lo único que el documento agrega.
+#:
+#: La ciudad va **aparte y sin repetirse adentro del domicilio**, que es la forma
+#: que el producto espera. Los datos reales de la demo venían al revés —la ciudad
+#: escrita dentro del domicilio *y* en su campo— y por eso la hoja imprimía
+#: `Av. Pueyrredón 1640, CABA, CABA`; lo cubre `direccion()` en
+#: `app/services/hoja_ruta_pdf.py`. El seed no reproduce ese caso a propósito:
+#: para eso está el test, y acá lo que hace falta es el ejemplo bien cargado.
+#:
+#: Direcciones de Chivilcoy y alrededores, que es donde opera el prospecto real.
+DOMICILIOS = (
+    ("Av. Villarino 245", "Chivilcoy"),
+    ("Calle 9 N° 1180", "Chivilcoy"),
+    ("San Martín 632", "Suipacha"),
+    ("Ruta 5 Km 152, Parque Industrial", "Chivilcoy"),
+    ("Belgrano 87", "Alberti"),
+    ("Rivadavia 1450", "Bragado"),
+    ("Sarmiento 210", "Mercedes"),
+    ("Av. Soárez 1990", "Chivilcoy"),
 )
 
 #: Los tickets que el seed deja **terminados**, por título.
@@ -195,6 +239,32 @@ def sembrar(api: Api) -> None:
     clientes = api.get("/api/clientes") or []
     if not clientes:
         raise RuntimeError("No hay clientes en esta instancia: nada que sembrar.")
+
+    # ── Domicilios, para que la hoja de ruta se pueda revisar ──────────────
+    #
+    # **Sólo completa lo que está en null**, igual que la agenda de los tickets
+    # más abajo: nunca pisa un domicilio cargado. Si alguien puso una dirección
+    # real para probar algo, el seed no se la deshace.
+    #
+    # Sin esto la hoja de ruta de dev sale con "sin domicilio cargado" en cada
+    # parada, que es exactamente el renglón que el documento existe para llenar.
+    for i, c in enumerate(clientes):
+        if (c.get("domicilio") or "").strip():
+            continue
+        domicilio, ciudad = DOMICILIOS[i % len(DOMICILIOS)]
+        previos = {campo: c.get(campo) for campo in CAMPOS_CLIENTE}
+        # El PUT lleva el objeto entero. La ciudad **también** se completa sólo
+        # si falta: un cliente puede tener la ciudad bien y el domicilio no.
+        api.put(f"/api/clientes/{c['id']}", {
+            **previos,
+            "domicilio": domicilio,
+            "ciudad": (c.get("ciudad") or "").strip() or ciudad,
+        })
+        contar("clientes_con_domicilio", True)
+
+    # Se relee: los `cliente`/`otro` de acá abajo se usan para depósitos y
+    # tickets, y con la copia vieja irían sin el domicilio recién puesto.
+    clientes = api.get("/api/clientes") or clientes
     cliente = clientes[0]
     otro = clientes[1] if len(clientes) > 1 else cliente
 
@@ -217,7 +287,7 @@ def sembrar(api: Api) -> None:
     # Deja los tres estados que la pantalla distingue: un vehículo asignado
     # (que es la respuesta a "en qué sale el equipo"), uno libre y uno en
     # taller. Con los tres iguales, media pantalla quedaría sin mirarse.
-    equipos_spec = [
+    cuadrillas_spec = [
         ("Cuadrilla Norte", "Rubén Actis", ["Diego Ramos", "Sofía Núñez"],
          "Zona norte y centro"),
         ("Cuadrilla Sur", "Carla Vega", ["Diego Ramos"], "Zona sur"),
@@ -228,7 +298,7 @@ def sembrar(api: Api) -> None:
     # primera sin que se notara hasta necesitarla después.
     equipos_ya = api.get("/api/equipos-trabajo") or []
     cuadrillas: dict[str, dict] = {e["nombre"]: e for e in equipos_ya}
-    for nombre, jefe, integrantes, obs in equipos_spec:
+    for nombre, jefe, integrantes, obs in cuadrillas_spec:
         if nombre in cuadrillas:
             continue
         cuadrillas[nombre] = api.post("/api/equipos-trabajo", {
@@ -679,10 +749,22 @@ def sembrar(api: Api) -> None:
         ("Depósito central", otro["id"], "Monitor", "Samsung", "S24R650", "SM-31007", dentro_de(210), "operativo"),
         ("Depósito central", cliente["id"], "UPS", "APC", "BX1500M", "APC-6621", dentro_de(-120), "operativo"),
         # Los dos depositos que son del cliente: sus equipos son de ese cliente.
-        ("Pañol", 1, "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
-        ("Pañol", 1, "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
-        ("Sala de racks", 2, "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
-        ("Sala de racks", 2, "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
+        #
+        # 🔴 **Acá habia ids literales (`1` y `2`) y rompian el seed entero.**
+        # Los depositos «Pañol» y «Sala de racks» se crean mas arriba con
+        # `cliente["id"]` y `otro["id"]`, y esos salen de `clientes[0]` y
+        # `clientes[1]` — de una lista que el producto devuelve **ordenada por
+        # nombre**, no por id (`ClienteRepository.list()`). O sea que `otro` es
+        # el id 2 nada mas que si ese cliente cae segundo alfabeticamente.
+        #
+        # En dev no caia: `otro` era el id 4 («Clinica del Sol»), asi que el
+        # equipo salia con `cliente_id=2` hacia un deposito del 4 y el producto
+        # lo rechazaba con 422 — **con razon**. El seed moria ahi y todo lo que
+        # viene despues no se sembraba.
+        ("Pañol", cliente["id"], "Switch", "TP-Link", "TL-SG1024", "TPS-4410", dentro_de(9), "operativo"),
+        ("Pañol", cliente["id"], "Access Point", "Ubiquiti", "U6-Lite", "UBQ-8802", dentro_de(365), "operativo"),
+        ("Sala de racks", otro["id"], "Servidor", "HP", "ProLiant ML30", "HP-10233", dentro_de(30), "operativo"),
+        ("Sala de racks", otro["id"], "NAS", "Synology", "DS220+", "SYN-7741", None, "operativo"),
     ]
     ya_serie = {e.get("serial") for e in (api.get("/api/equipos") or [])}
     for dep, cli_id, tipo, marca, modelo, serial, garantia, estado in equipos_spec:
@@ -758,6 +840,53 @@ def sembrar(api: Api) -> None:
             "estado_facturacion": estado_fact,
         })
         contar("incidencias_cerradas", True)
+
+    # ── Un cliente con abono, y sus tres coberturas ────────────────────────
+    #
+    # Sin esto el bloque "Cobertura del abono" del reclamo **no aparece en
+    # ninguna pantalla de dev ni de la demo**: sólo se muestra a clientes
+    # `tipo_facturacion='mensual'`, y ninguno de los que siembra este script lo
+    # es. Una pantalla que no se puede abrir no se puede revisar.
+    #
+    # Los tres estados a propósito, que es el mismo criterio con el que la
+    # flota deja un vehículo asignado, uno libre y uno en taller: con los tres
+    # reclamos iguales, la mitad del comportamiento queda sin mirarse. El
+    # `fuera` además es el que hace que aparezca en el reporte de facturación,
+    # y el `total` el que NO tiene que aparecer.
+    con_abono = buscar(api.get("/api/clientes") or [], "nombre", "Abono Sur SRL")
+    if con_abono is None:
+        con_abono = api.post("/api/clientes", {
+            "nombre": "Abono Sur SRL", "empresa": "ABONO SUR SRL",
+            "cuit": "30-71234567-9", "ciudad": "Chivilcoy",
+            "tipo_facturacion": "mensual",
+        })
+        contar("clientes_con_abono", True)
+
+    del_abono = {i["titulo"]: i for i in (api.get("/api/incidencias") or [])}
+    for titulo, cobertura, horas, cubiertas, materiales in (
+        ("Revisión mensual de central", "total", 2, None, None),
+        ("Cableado de puesto nuevo", "fuera", 4, None, None),
+        ("Reparación de UPS", "parcial", 5, 2, False),
+    ):
+        if titulo in del_abono:
+            continue
+        creada = api.post("/api/incidencias", {
+            "cliente_id": con_abono["id"], "titulo": titulo,
+            "descripcion": "Ejemplo para revisar la cobertura del abono.",
+            "modalidad": "on_site",
+        })
+        # En dos pasos y no en el alta: la cobertura se decide al **cerrar** el
+        # reclamo, que es donde la pantalla la ofrece, y el backend valida las
+        # horas cubiertas contra las trabajadas — que recién existen acá.
+        api.put(f"/api/incidencias/{creada['id']}", {
+            **{k: creada.get(k) for k in CAMPOS_INCIDENCIA},
+            "estado": "cerrado", "horas_invertidas": horas,
+            "resolucion": "Trabajo terminado.",
+            "cobertura_abono": cobertura,
+            "abono_horas_cubiertas": cubiertas,
+            "abono_materiales_incluidos": materiales,
+        })
+        contar("incidencias_con_abono", True)
 
     # El logo del negocio, para que los comprobantes salgan como los de un
     # cliente y no con un hueco arriba.

@@ -39,6 +39,24 @@ function hoyLocal(): string {
     .toISOString().slice(0, 10)
 }
 
+/** El domicilio con su ciudad, sin repetirla si ya viene adentro.
+ *
+ * Los clientes reales cargan la ciudad **dentro** del domicilio
+ * (`Av. Pueyrredón 1640, CABA`) y además llenan el campo `ciudad` con lo mismo,
+ * así que concatenar a secas daba `…, CABA, CABA`. Se vio en la demo
+ * desplegada, no en un test: con datos inventados las dos mitades no se pisan.
+ *
+ * Gemela de `direccion()` en `app/services/hoja_ruta_pdf.py`, que es la que usa
+ * el PDF. Están duplicadas porque son dos lenguajes; si divergen, la pantalla y
+ * el papel dirían dos cosas distintas del mismo cliente. */
+export function direccion(domicilio: string | null, ciudad: string | null): string {
+  if (!domicilio) return ciudad ?? ''
+  if (ciudad && !domicilio.toLowerCase().includes(ciudad.trim().toLowerCase())) {
+    return `${domicilio}, ${ciudad}`
+  }
+  return domicilio
+}
+
 /** La hora en 24 h, siempre.
  *
  * `hour12: false` explícito y no el default del locale: los datos de ICU de
@@ -180,8 +198,7 @@ export function AgendaEquipos({ equipos }: { equipos: EquipoTrabajo[] }) {
                             una fila de ruido en cada trabajo remoto. */}
                         {t.cliente_domicilio && (
                           <span className="text-xs text-muted-foreground">
-                            {[t.cliente_domicilio, t.cliente_ciudad]
-                              .filter(Boolean).join(', ')}
+                            {direccion(t.cliente_domicilio, t.cliente_ciudad)}
                           </span>
                         )}
                       </div>

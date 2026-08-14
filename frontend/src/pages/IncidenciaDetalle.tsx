@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_COLOR, ESTADO_LABELS, MODALIDAD_LABELS,
+  api, ApiError, COBERTURA_ABONO_LABELS, DESTINO_REEMPLAZO_LABELS, ESTADO_COLOR,
+  ESTADO_LABELS, MODALIDAD_LABELS,
   MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
   opcionesProveedor,
-  type Actividad, type CategoriaIncidencia, type Cliente, type DestinoReemplazo,
+  type Actividad, type CategoriaIncidencia, type Cliente, type CoberturaAbono,
+  type DestinoReemplazo,
   type Equipo, type EquipoMovimiento, type EquipoTrabajo, type Incidencia,
   type IncidenciaEstadoLog,
   type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
@@ -220,6 +222,13 @@ export function IncidenciaDetalle() {
         notas: actualizado.notas,
         resolucion: actualizado.resolucion,
         estado_facturacion: null,
+        // Y por el mismo motivo, las tres de la cobertura del abono: sin estas
+        // líneas, tocarle cualquier campo a un reclamo de cliente con abono le
+        // borraba la decisión de qué se factura, y el remito volvía a quedar
+        // frenado pidiéndola de nuevo.
+        cobertura_abono: actualizado.cobertura_abono,
+        abono_horas_cubiertas: actualizado.abono_horas_cubiertas,
+        abono_materiales_incluidos: actualizado.abono_materiales_incluidos,
         activo: true,
       })
       setIncidencia(guardado)
@@ -324,6 +333,11 @@ export function IncidenciaDetalle() {
   )
 
   const equiposDelCliente = incidencia ? equipos.filter((e) => e.cliente_id === incidencia.cliente_id) : []
+  // Si al cliente se le factura un abono mensual en vez de cada trabajo. Es lo
+  // que decide si este ticket tiene que declarar qué parte cubre el abono.
+  const clienteConAbono = incidencia
+    ? clientes.find((c) => c.id === incidencia.cliente_id)?.tipo_facturacion === 'mensual'
+    : false
   // Sólo hojas: un ticket se clasifica en "Impresoras", no en "Hardware" a
   // secas. La única excepción son las raíces que todavía no tienen hijas.
   const categoriasElegibles = categoriasAsignables(categorias)
@@ -890,6 +904,108 @@ export function IncidenciaDetalle() {
                   }}
                 />
               </div>
+              {/* La cobertura del abono. **Sólo para clientes `mensual`**: al
+                  resto se les factura cada trabajo y ofrecerles esta decisión
+                  sería preguntar por algo que no existe. Va acá, pegado a las
+                  horas y al CDS, porque es el mismo momento de carga — quien
+                  graba el comprobante es quien sabe qué entraba en el abono. */}
+              {clienteConAbono && (
+                <div className="grid gap-1.5 rounded-md border border-dashed p-3">
+                  <Label htmlFor="cobertura-abono">Cobertura del abono</Label>
+                  <Select
+                    value={incidencia.cobertura_abono ?? NONE}
+                    onValueChange={(v) => {
+                      if (v === NONE) {
+                        actualizarCampo({
+                          cobertura_abono: null, abono_horas_cubiertas: null,
+                          abono_materiales_incluidos: null,
+                        })
+                        return
+                      }
+                      const cobertura = v as CoberturaAbono
+                      // Al elegir `parcial` los materiales arrancan **fuera**
+                      // del abono, que es el caso típico de un abono de
+                      // mantenimiento y además el default seguro: si el abono
+                      // sí los cubre, se destilda y no se cobra. Al revés, un
+                      // default en `true` no cobraría repuestos por omisión.
+                      //
+                      // Y las dos de detalle se limpian al salir de `parcial`:
+                      // el backend las normaliza igual, pero mandar la
+                      // combinación coherente evita que la pantalla muestre
+                      // "2 h al abono" en un ticket que ya es `total`.
+                      actualizarCampo(
+                        cobertura === 'parcial'
+                          ? {
+                              cobertura_abono: cobertura,
+                              abono_materiales_incluidos:
+                                incidencia.abono_materiales_incluidos ?? false,
+                            }
+                          : {
+                              cobertura_abono: cobertura,
+                              abono_horas_cubiertas: null,
+                              abono_materiales_incluidos: null,
+                            },
+                      )
+                    }}
+                  >
+                    <SelectTrigger id="cobertura-abono" aria-label="Cobertura del abono">
+                      <SelectValue placeholder="Sin decidir" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>Sin decidir</SelectItem>
+                      {(Object.keys(COBERTURA_ABONO_LABELS) as CoberturaAbono[]).map((c) => (
+                        <SelectItem key={c} value={c}>{COBERTURA_ABONO_LABELS[c]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {incidencia.cobertura_abono === null && (
+                    <p className="text-xs text-muted-foreground">
+                      Hay que elegir antes de generar el remito: sin esto no se
+                      sabe qué cobrarle además del abono.
+                    </p>
+                  )}
+                  {incidencia.cobertura_abono === 'parcial' && (
+                    <>
+                      <Label htmlFor="abono-horas" className="pt-1">
+                        Horas que cubre el abono
+                      </Label>
+                      <Input
+                        id="abono-horas"
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max={incidencia.horas_invertidas ?? undefined}
+                        defaultValue={incidencia.abono_horas_cubiertas ?? ''}
+                        onBlur={(e) => {
+                          const valor = e.target.value ? Number(e.target.value) : null
+                          if (valor !== incidencia.abono_horas_cubiertas) {
+                            actualizarCampo({ abono_horas_cubiertas: valor })
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {(() => {
+                          const trabajadas = incidencia.horas_invertidas ?? 0
+                          const cubiertas = incidencia.abono_horas_cubiertas ?? 0
+                          const facturables = Math.max(0, trabajadas - cubiertas)
+                          return `Se facturan ${facturables} de ${trabajadas} h.`
+                        })()}
+                      </p>
+                      <label className="flex items-center gap-2 pt-1 text-sm">
+                        <input
+                          type="checkbox"
+                          className="size-4"
+                          checked={incidencia.abono_materiales_incluidos ?? false}
+                          onChange={(e) => actualizarCampo({
+                            abono_materiales_incluidos: e.target.checked,
+                          })}
+                        />
+                        Los materiales también entran en el abono
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="grid gap-0.5 pt-1 text-xs text-muted-foreground">
                 <span>Creada: {formatFecha(incidencia.fecha_creacion)}</span>
                 {incidencia.fecha_cierre && <span>Cerrada: {formatFecha(incidencia.fecha_cierre)}</span>}

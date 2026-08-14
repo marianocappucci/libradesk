@@ -9,11 +9,18 @@ instancia de cliente llamada `demoliciones.libradesk.com.ar` habría pasado. Es
 un agujero improbable pero silencioso: nada avisa, el seed corre y los datos
 quedan mezclados.
 """
+import pathlib
+import re
+
 import pytest
 
+from app.routers.clientes import ClienteIn
 from app.routers.incidencias import IncidenciaIn
 from app.services.incidencias import ESTADOS_VALIDOS
-from scripts.seed_dev import CAMPOS_INCIDENCIA, CIERRES, url_no_productiva
+from scripts import seed_dev
+from scripts.seed_dev import (
+    CAMPOS_CLIENTE, CAMPOS_INCIDENCIA, CIERRES, DOMICILIOS, url_no_productiva,
+)
 
 
 @pytest.mark.parametrize("url", [
@@ -166,3 +173,106 @@ def test_no_se_reenvian_los_campos_que_pone_el_producto():
 
 def test_no_hay_campos_repetidos_en_la_lista():
     assert len(CAMPOS_INCIDENCIA) == len(set(CAMPOS_INCIDENCIA))
+
+
+# ── El PUT del cliente, que es más peligroso que el de la incidencia ────────
+
+def test_la_lista_de_campos_del_cliente_no_se_queda_atras_del_modelo():
+    """Misma guarda que la de la incidencia, y por un motivo peor.
+
+    Dos defaults de `ClienteIn` **no son `None`**: `activo=True` y
+    `tipo_facturacion="por_servicio"`. Un campo que le falte a esta lista no
+    deja un dato en blanco: **reactiva un cliente dado de baja** y le cambia
+    cómo se lo factura, sin que falle nada.
+    """
+    del_modelo = set(ClienteIn.model_fields)
+    de_la_lista = set(CAMPOS_CLIENTE)
+    assert de_la_lista == del_modelo, (
+        f"faltan en el seed: {sorted(del_modelo - de_la_lista)}; "
+        f"sobran: {sorted(de_la_lista - del_modelo)}"
+    )
+
+
+def test_el_cliente_no_reenvia_lo_que_pone_el_producto():
+    """`iva_discriminado` lo **deriva** el producto de `condicion_iva`.
+
+    Mandarlo de vuelta sería escribir un valor calculado, y el día que la regla
+    de quién discrimina cambie, el seed la estaría pisando con la anterior.
+    """
+    for campo in ("id", "fecha_creacion", "iva_discriminado"):
+        assert campo not in CAMPOS_CLIENTE
+
+
+def test_no_hay_campos_repetidos_en_la_lista_del_cliente():
+    assert len(CAMPOS_CLIENTE) == len(set(CAMPOS_CLIENTE))
+
+
+def test_ningun_equipo_de_ejemplo_lleva_un_id_de_cliente_literal():
+    """🔴 Lee el fuente, y es a propósito.
+
+    `equipos_spec` se arma **adentro** de `sembrar()`, así que no se puede
+    importar para mirarlo. Y el defecto que este test previene no se ve en
+    ninguna otra parte: las filas de arriba de la lista usaban `cliente["id"]`
+    y las de abajo un `1` y un `2` escritos a mano, asumiendo que `clientes[0]`
+    y `clientes[1]` son los ids 1 y 2.
+
+    **No lo son.** `ClienteRepository.list()` ordena **por nombre**, así que la
+    posición en la lista no tiene nada que ver con el id. En dev `otro` era el
+    id 4, el equipo salía con `cliente_id=2` hacia un depósito del 4, y el
+    producto lo rechazaba con 422 — **matando el seed entero** y dejando sin
+    sembrar todo lo que viene después.
+
+    El test lee el archivo porque el error es sintáctico: un número donde tenía
+    que haber una expresión.
+
+    ⚠️ **La primera versión de este test era vacua y pasaba con el defecto
+    puesto.** Buscaba `equipos_spec` y había **dos variables con ese nombre** en
+    el archivo —la de las cuadrillas y la de los equipos del cliente, a
+    cuatrocientas líneas de distancia—, así que medía la lista equivocada. El
+    archivo ya advertía de esa colisión en un comentario. Se resolvió
+    renombrando la de las cuadrillas a `cuadrillas_spec`; el `assert` de abajo
+    verifica que quedó **una sola**, para que el test no vuelva a medir otra
+    cosa en silencio.
+    """
+    fuente = pathlib.Path(seed_dev.__file__).read_text(encoding="utf-8")
+    assert fuente.count("equipos_spec = [") == 1, (
+        "hay más de una variable `equipos_spec`: este test mediría la que "
+        "encuentre primero, que es como la versión anterior pasaba en falso."
+    )
+    bloque = re.search(r"equipos_spec = \[(.*?)\n    \]", fuente, re.S)
+    assert bloque, "no se encontró `equipos_spec`: ¿se renombró?"
+    assert "Sala de racks" in bloque.group(1), (
+        "el bloque encontrado no es el de los equipos del cliente"
+    )
+
+    literales = re.findall(
+        r'^\s*\("[^"]+",\s*(\d+)\s*,', bloque.group(1), re.M,
+    )
+    assert not literales, (
+        f"hay ids de cliente escritos a mano en equipos_spec: {literales}. "
+        "Tienen que salir de cliente['id'] / otro['id'], que es de donde sale "
+        "el dueño del depósito."
+    )
+
+
+def test_los_domicilios_de_ejemplo_no_repiten_la_ciudad_adentro():
+    """La forma en que el producto espera el par domicilio/ciudad.
+
+    Si un domicilio de ejemplo trajera su ciudad adentro, el seed estaría
+    sembrando justo el caso que `direccion()` tiene que desarmar — y el ejemplo
+    de dev mostraría la excepción en vez de la forma normal.
+    """
+    for domicilio, ciudad in DOMICILIOS:
+        assert ciudad.lower() not in domicilio.lower(), (
+            f"'{domicilio}' ya contiene '{ciudad}'"
+        )
+
+
+def test_hay_domicilios_de_ejemplo_suficientes_para_no_repetir_de_a_dos():
+    """Se reparten por índice (`i % len`), así que con pocos se repiten pronto.
+
+    No es cosmético: dos paradas de la misma cuadrilla en el mismo domicilio se
+    leen como un error de carga cuando se mira la hoja de ruta.
+    """
+    assert len(DOMICILIOS) >= 8
+    assert len({d for d, _ in DOMICILIOS}) == len(DOMICILIOS)

@@ -27,6 +27,16 @@ PRIORIDADES_VALIDAS = ("alta", "media", "baja")
 # tickets viejos no lo saben.
 MODALIDADES_VALIDAS = ("on_site", "remoto")
 
+# Que parte del reclamo cubre el abono del cliente (2026-08-14). `None` es un
+# valor legitimo y NO equivale a `fuera`: significa que nadie lo decidio
+# todavia, y es lo unico que distingue "se decidio facturarlo" de "no se
+# miro". Ver la revision `0024` y `convertir_a_remito()`.
+COBERTURAS_ABONO = ("total", "parcial", "fuera")
+
+# El cliente que paga un abono mensual en vez de cada trabajo. Es un valor de
+# `clients.tipo_facturacion`, que existe desde la baseline.
+TIPO_FACTURACION_ABONO = "mensual"
+
 # Etiquetas legibles. Viven acá —en el dominio— y no en el generador de PDF,
 # porque son cómo se llama un estado, no cómo se lo dibuja: el día que haya un
 # segundo consumidor (un mail, un export) no tiene que copiarlas.
@@ -119,6 +129,20 @@ class Incidencia(Base):
     notas: Mapped[str | None] = mapped_column(Text)
     resolucion: Mapped[str | None] = mapped_column(Text)
     estado_facturacion: Mapped[str | None] = mapped_column(String(20))
+    # ── Qué parte de este reclamo cubre el abono del cliente ────────────
+    #
+    # Sólo tiene sentido si el cliente es `tipo_facturacion='mensual'`. Ver la
+    # revision `0024` para el por que de las tres columnas.
+    #
+    # `total` = no se factura nada; `parcial` = se factura lo que las dos de
+    # abajo dejan afuera; `fuera` = se factura entero. **NULL no es `fuera`**:
+    # es "nadie lo decidio", y es lo que le permite a `convertir_a_remito()`
+    # frenar un reclamo de cliente con abono antes de facturarlo por descuido.
+    cobertura_abono: Mapped[str | None] = mapped_column(String(20))
+    # Cuantas de las `horas_invertidas` entran al abono. Sólo con `parcial`.
+    abono_horas_cubiertas: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # Si los materiales entran al abono o se facturan. Sólo con `parcial`.
+    abono_materiales_incluidos: Mapped[bool | None] = mapped_column(Boolean)
     # El remito que se genero de este ticket, si se genero (`convertir_a_remito`).
     #
     # 🔴 **Integer pelado, SIN ForeignKey a `remitos`** — y no es un descuido.
@@ -187,6 +211,12 @@ def _to_dict(i: Incidencia) -> dict:
         "notas": i.notas,
         "resolucion": i.resolucion,
         "estado_facturacion": i.estado_facturacion,
+        "cobertura_abono": i.cobertura_abono,
+        "abono_horas_cubiertas": (
+            float(i.abono_horas_cubiertas)
+            if i.abono_horas_cubiertas is not None else None
+        ),
+        "abono_materiales_incluidos": i.abono_materiales_incluidos,
         "remito_id": i.remito_id,
         "activo": i.activo,
         "fecha_creacion": i.fecha_creacion.isoformat() if i.fecha_creacion else None,
@@ -236,6 +266,89 @@ def _validar_modalidad(data: dict) -> None:
         raise ValueError(f"Modalidad inválida: {modalidad}")
 
 
+def _cliente_tiene_abono(session, cliente_id: int) -> bool:
+    """Si el cliente paga un abono mensual en vez de cada trabajo.
+
+    Import local, como en el resto del modulo: `clientes` no importa a
+    `incidencias` y de este modo se mantiene asi.
+    """
+    from .clientes import Cliente
+
+    tipo = session.execute(
+        select(Cliente.tipo_facturacion).where(Cliente.id == cliente_id)
+    ).scalar_one_or_none()
+    return tipo == TIPO_FACTURACION_ABONO
+
+
+def _validar_cobertura_abono(session, i: Incidencia) -> None:
+    """Que la cobertura del abono sea coherente, y **la normaliza**.
+
+    Se valida sobre la incidencia ya armada —no sobre el `data` que llego— por
+    la misma razon que `_validar_agenda`: lo que importa es el estado que va a
+    quedar, no el parche.
+
+    ## Por que las columnas de detalle se LIMPIAN en vez de rechazarse
+
+    Cuando la cobertura no es `parcial`, `abono_horas_cubiertas` y
+    `abono_materiales_incluidos` no significan nada y se ponen en `None`.
+    Rechazar la combinacion seria mas explicito y estaria mal: la pantalla
+    guarda sola al salir de cada campo y manda **el objeto entero**, asi que
+    pasar de "parcial, 2 horas" a "todo dentro del abono" mandaria las 2 horas
+    junto con `total` sin que el usuario haya hecho nada raro. Una guarda que
+    salta en uso normal es la guarda equivocada. Normalizando, la regla vive en
+    un solo lugar y ningun llamador se la puede olvidar.
+
+    Lo que si se rechaza es lo que **no** se puede resolver solo: un `parcial`
+    que no dice que cubre, y horas cubiertas que no cierran contra las
+    trabajadas.
+    """
+    if i.cobertura_abono is None:
+        # Sin decision tomada tampoco hay detalle que guardar.
+        i.abono_horas_cubiertas = None
+        i.abono_materiales_incluidos = None
+        return
+
+    if i.cobertura_abono not in COBERTURAS_ABONO:
+        raise ValueError(f"Cobertura de abono inválida: {i.cobertura_abono}")
+
+    if not _cliente_tiene_abono(session, i.cliente_id):
+        raise ValueError(
+            "Este cliente no tiene abono mensual, así que un reclamo suyo no "
+            "puede estar cubierto por uno. Se factura por servicio."
+        )
+
+    if i.cobertura_abono != "parcial":
+        i.abono_horas_cubiertas = None
+        i.abono_materiales_incluidos = None
+        return
+
+    if i.abono_horas_cubiertas is None and i.abono_materiales_incluidos is None:
+        raise ValueError(
+            "Una cobertura parcial tiene que decir qué cubre el abono: cuántas "
+            "horas, si los materiales, o las dos cosas."
+        )
+
+    if i.abono_horas_cubiertas is None:
+        return
+
+    # `float()` en las dos: el PUT trae floats y una fila releida de la base
+    # trae `Decimal`, asi que sin normalizar la misma comparacion mezcla tipos
+    # segun de donde venga la incidencia.
+    cubiertas = float(i.abono_horas_cubiertas)
+    if cubiertas < 0:
+        raise ValueError("Las horas cubiertas por el abono no pueden ser negativas.")
+
+    # Contra las horas del ticket: cubrir 5 de 3 trabajadas no es un caso
+    # raro, es un numero mal tipeado, y sin esto el remito saldria con una
+    # cantidad negativa que nadie mira hasta que el cliente la reclama.
+    trabajadas = float(i.horas_invertidas or 0)
+    if cubiertas > trabajadas:
+        raise ValueError(
+            f"El abono no puede cubrir {cubiertas} horas si el reclamo tiene "
+            f"{trabajadas} trabajadas."
+        )
+
+
 def _descripcion_del_trabajo(incidencia_id: int, titulo: str,
                              nro_cds: str | None) -> str:
     """Cómo se llama un reclamo dentro de un remito.
@@ -254,6 +367,21 @@ def _descripcion_del_trabajo(incidencia_id: int, titulo: str,
     return f"CDS {nro_cds} — {etiqueta}" if nro_cds else etiqueta
 
 
+def _horas_facturables(trabajo: dict) -> float:
+    """Las horas del reclamo que NO cubre el abono.
+
+    Sin cobertura parcial son todas las trabajadas, que es como se comportaba
+    el producto antes de que esto existiera. Con `parcial`, la resta — y nunca
+    baja de cero porque `_validar_cobertura_abono` ya rechazo cubrir mas horas
+    de las trabajadas; el `max` es el cinturon por si una fila vieja o un
+    arreglo directo en la base burlaron esa validacion, donde una cantidad
+    negativa en el remito seria una **nota de credito silenciosa**.
+    """
+    if trabajo["cobertura"] != "parcial":
+        return trabajo["horas"]
+    return max(0.0, trabajo["horas"] - trabajo["horas_cubiertas"])
+
+
 def _observaciones_del_lote(trabajos: list[dict]) -> str:
     """De qué reclamos salió este remito, en una línea.
 
@@ -270,6 +398,13 @@ def _observaciones_del_lote(trabajos: list[dict]) -> str:
         # El numero del papel firmado es lo que ata el remito a la conformidad
         # del cliente. Quien concilia despues busca por el.
         texto += f" (CDS {', '.join(cds)})"
+    # Los que el abono cubre entero no aparecen en ninguna linea, asi que si no
+    # se nombraran aca el remito no diria que existieron — y el reclamo si
+    # apunta a el. Que este escrito es lo que hace verificable, contra el papel,
+    # que no se los cobro por error.
+    cubiertos = [f"#{t['id']}" for t in trabajos if t.get("cobertura") == "total"]
+    if cubiertos:
+        texto += f". Cubiertos por el abono, sin cargo: {', '.join(cubiertos)}"
     return texto
 
 
@@ -285,6 +420,7 @@ class IncidenciaRepository:
             # se crea. Mismo criterio que el service de los activos — lo barato
             # es no empezar.
             _validar_agenda(session, i)
+            _validar_cobertura_abono(session, i)
             session.add(i)
             session.flush()
             session.add(IncidenciaEstadoLog(
@@ -432,6 +568,7 @@ class IncidenciaRepository:
             # el horario que va a quedar, no el que había. La sesión no se
             # commiteó todavía, así que si esto se planta no queda nada escrito.
             _validar_agenda(session, i)
+            _validar_cobertura_abono(session, i)
             if "estado" in data and data["estado"] != estado_anterior:
                 session.add(IncidenciaEstadoLog(
                     incidencia_id=i.id, estado_anterior=estado_anterior,
@@ -682,6 +819,36 @@ class IncidenciaRepository:
                 )
 
             cliente_id = clientes_del_lote.pop()
+
+            # ── Lo que el abono cubre no se factura ──────────────────────
+            #
+            # Antes se emitia el remito sin mirar `tipo_facturacion`, mientras
+            # `reportes.facturacion()` ya excluia a estos clientes con la regla
+            # escrita: "a los `mensual` se les factura el abono, no la
+            # incidencia". Dos modulos del mismo producto con criterios
+            # opuestos sobre el mismo cliente.
+            #
+            # La guarda no es "no se puede remitar a un cliente con abono":
+            # eso dejaria sin facturar lo que **si** cae afuera del abono
+            # --materiales, horas de excedente-- que es justo lo que hay que
+            # poder cobrar. Es "hay que haber decidido que parte entra".
+            if _cliente_tiene_abono(session, cliente_id):
+                sin_decidir = [x for x in ids if filas[x].cobertura_abono is None]
+                if sin_decidir:
+                    detalle = ", ".join(f"#{x}" for x in sorted(sin_decidir))
+                    raise ValueError(
+                        f"Este cliente tiene abono mensual y estos reclamos no "
+                        f"dicen todavia que parte cubre: {detalle}. Abrilos y "
+                        f"elegi si van por dentro del abono, por fuera o "
+                        f"parcial."
+                    )
+                if all(filas[x].cobertura_abono == "total" for x in ids):
+                    detalle = ", ".join(f"#{x}" for x in sorted(ids))
+                    raise ValueError(
+                        f"El abono cubre por completo {detalle}, asi que no hay "
+                        f"nada para facturar en un remito."
+                    )
+
             cliente = clientes.get(cliente_id)
             if cliente is None:
                 raise ValueError(
@@ -696,6 +863,12 @@ class IncidenciaRepository:
                     "titulo": filas[x].titulo,
                     "nro_cds": filas[x].nro_cds,
                     "horas": float(filas[x].horas_invertidas) if filas[x].horas_invertidas else 0.0,
+                    "cobertura": filas[x].cobertura_abono,
+                    "horas_cubiertas": (
+                        float(filas[x].abono_horas_cubiertas)
+                        if filas[x].abono_horas_cubiertas else 0.0
+                    ),
+                    "materiales_al_abono": bool(filas[x].abono_materiales_incluidos),
                 }
                 for x in ids
             ]
@@ -707,19 +880,39 @@ class IncidenciaRepository:
 
         items: list[dict] = []
         for t in trabajos:
-            linea = {
-                "description": _descripcion_del_trabajo(t["id"], t["titulo"], t["nro_cds"]),
-                # Sin horas cargadas la linea vale 1: es una visita, no cero
-                # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
-                # trabajo aunque le pongan precio.
-                "qty": t["horas"] if t["horas"] > 0 else 1,
-                "unit_price": float(valor_hora["precio"]) if valor_hora else 0,
-            }
-            if valor_hora:
-                # La alicuota del servicio, no la del documento: el valor hora
-                # es una linea del catalogo y trae la suya.
-                linea["tax_rate"] = float(valor_hora["iva_rate"])
-            items.append(linea)
+            # Cubierto por completo: no aporta ninguna linea. **Igual se
+            # vincula al remito** mas abajo, y las observaciones lo nombran —
+            # ver `_observaciones_del_lote`. Dejarlo suelto seria peor: podria
+            # remitarse otra vez despues, ahora si cobrandolo.
+            if t["cobertura"] == "total":
+                continue
+
+            horas_facturables = _horas_facturables(t)
+            # Con `parcial`, cero horas facturables significa que la visita
+            # entera la cubre el abono y lo unico que se cobra son los
+            # materiales. **Sin este corte caeria en el `else 1` de abajo** y
+            # el remito cobraria una visita que el abono ya paga — que es
+            # exactamente el doble cobro que esta guarda viene a impedir.
+            visita_cubierta = t["cobertura"] == "parcial" and horas_facturables <= 0
+            if not visita_cubierta:
+                linea = {
+                    "description": _descripcion_del_trabajo(
+                        t["id"], t["titulo"], t["nro_cds"],
+                    ),
+                    # Sin horas cargadas la linea vale 1: es una visita, no cero
+                    # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
+                    # trabajo aunque le pongan precio.
+                    "qty": horas_facturables if horas_facturables > 0 else 1,
+                    "unit_price": float(valor_hora["precio"]) if valor_hora else 0,
+                }
+                if valor_hora:
+                    # La alicuota del servicio, no la del documento: el valor hora
+                    # es una linea del catalogo y trae la suya.
+                    linea["tax_rate"] = float(valor_hora["iva_rate"])
+                items.append(linea)
+            # Los materiales del reclamo, salvo que el abono los cubra.
+            if t["cobertura"] == "parcial" and t["materiales_al_abono"]:
+                continue
             # Los materiales de ESTE reclamo, debajo de su trabajo. Agrupado por
             # ticket y no todo el trabajo primero: el remito se lee como la
             # lista de visitas que es, y quien concilia contra los papeles va
@@ -735,6 +928,16 @@ class IncidenciaRepository:
                     "qty": m["cantidad"],
                     "unit_price": m["precio"],
                 })
+
+        # Puede pasar sin que ningun reclamo sea `total`: un `parcial` que cubre
+        # todas las horas y ademas los materiales es un `total` escrito de otra
+        # forma. Un remito sin lineas seria un comprobante en blanco que la
+        # bandeja despues rechaza por total 0, mucho mas lejos del error.
+        if not items:
+            raise ValueError(
+                "El abono cubre todo lo que traen estos reclamos, asi que el "
+                "remito saldria sin una sola linea."
+            )
 
         remito = remitos.create(
             # `fecha.hoy()` y no `fecha_cierre`: el cierre se guarda en UTC
