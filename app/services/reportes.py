@@ -167,6 +167,10 @@ class ReportesService:
                     "id": i.id,
                     "cliente": _nombre_cliente(c),
                     "tipo_facturacion": c.tipo_facturacion,
+                    # Sin esto la columna "Cobro" dice "Mensual" para todo
+                    # reclamo de un cliente con abono, incluidos los que el
+                    # abono NO cubre. Ver `reporte_vista.py`.
+                    "cobertura_abono": i.cobertura_abono,
                     "sector": s.nombre if s else None,
                     "categoria": _ruta_categoria(cat, padre),
                     "titulo": i.titulo,
@@ -186,15 +190,33 @@ class ReportesService:
     # ── Facturacion ─────────────────────────────────────────────────
     def facturacion(self, desde: str, hasta: str, cliente_id: int | None = None,
                     estado_facturacion: str | None = None) -> list[dict]:
-        """Solo incidencias cerradas de clientes `por_servicio`: a los
-        `mensual` se les factura el abono, no la incidencia."""
+        """Incidencias cerradas de clientes `por_servicio`, más lo que a un
+        cliente con abono se le cobra **aparte** del abono.
+
+        La regla original —"a los `mensual` se les factura el abono, no la
+        incidencia"— valía mientras el abono fuera todo o nada. Desde la
+        revisión `0024` es un espectro: un cliente con abono puede tener horas
+        de excedente o materiales que sí se facturan. Sin sumarlos acá, ese
+        trabajo no aparece en ningún listado y nadie se entera de que hay que
+        cobrarlo — el error simétrico al que cerró `convertir_a_remito()`.
+
+        🔑 **Sólo entra lo que alguien marcó explícitamente como facturable**
+        (`fuera` o `parcial`). El reclamo sin decisión tomada (`NULL`) sigue
+        fuera del reporte, igual que antes: la decisión se toma al cerrar el
+        ticket, y meterlo acá lo pondría en una planilla de cobro sin que nadie
+        haya dicho que se cobra. Este filtro suma filas, no las cambia de
+        criterio.
+        """
         with self.session_factory() as session:
             stmt = (
                 select(Incidencia, Cliente, Tecnico)
                 .join(Cliente, Incidencia.cliente_id == Cliente.id)
                 .outerjoin(Tecnico, Incidencia.tecnico_id == Tecnico.id)
                 .where(Incidencia.estado == "cerrado")
-                .where(Cliente.tipo_facturacion == "por_servicio")
+                .where(
+                    (Cliente.tipo_facturacion == "por_servicio")
+                    | (Incidencia.cobertura_abono.in_(("fuera", "parcial")))
+                )
                 .where(Incidencia.fecha_cierre >= _inicio_del_dia(desde))
                 .where(Incidencia.fecha_cierre <= _fin_del_dia(hasta))
             )

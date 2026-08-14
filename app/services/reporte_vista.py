@@ -38,6 +38,18 @@ ESTADO_LABEL = {
 }
 PRIO_LABEL = {"alta": "Alta", "media": "Media", "baja": "Baja"}
 FACT_LABEL = {"pendiente_cobro": "Pend. cobro", "facturada": "Facturada"}
+
+# Cómo se cobra un reclamo de un cliente **con abono**, según qué parte cubre
+# (revisión `0024`). Antes la columna decía "Mensual" para todos, y desde que el
+# abono es un espectro eso es informar lo contrario de lo que pasa en la mitad
+# de los casos. `None` —sin decidir— conserva la etiqueta vieja: no se sabe
+# todavía, y es el estado que el remito frena.
+COBERTURA_COBRO = {
+    None: ("Mensual", "info"),
+    "total": ("Cubierto", "info"),
+    "parcial": ("Parcial", "urgente"),
+    "fuera": ("Se factura", "urgente"),
+}
 MOV_LABEL = {
     "alta": "Alta", "baja": "Baja", "traslado": "Traslado",
     "en_reparacion": "Reparación", "almacenado": "Almacenado",
@@ -236,7 +248,9 @@ def incidencias_periodo(data: list[dict], filtros: list[str]) -> Vista:
     filas = []
     for r in data:
         if r["tipo_facturacion"] == "mensual":
-            cobro_text, cobro_marca = "Mensual", "info"
+            cobro_text, cobro_marca = COBERTURA_COBRO.get(
+                r.get("cobertura_abono"), ("Mensual", "info"),
+            )
         elif r["estado_facturacion"]:
             cobro_text = FACT_LABEL.get(r["estado_facturacion"], r["estado_facturacion"])
             cobro_marca = FACT_MARCA.get(r["estado_facturacion"])

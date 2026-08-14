@@ -310,6 +310,61 @@ def test_pasar_de_parcial_a_total_limpia_el_detalle(escenario):
     assert total["abono_materiales_incluidos"] is None
 
 
+def _reporte_facturacion(client):
+    r = client.get("/api/reportes/facturacion"
+                   "?desde=2020-01-01&hasta=2030-12-31")
+    assert r.status_code == 200, r.text
+    return str(r.json())
+
+
+def test_lo_que_se_cobra_aparte_del_abono_entra_al_reporte_de_facturacion(escenario):
+    """El error simétrico. `reportes.facturacion()` excluía a los clientes
+    `mensual` enteros, y desde que el abono es un espectro eso escondía trabajo
+    que sí hay que cobrar: nadie se entera de que existe."""
+    client, con_abono, _, _, _ = escenario
+    afuera = _reclamo(client, con_abono, titulo="Cableado nuevo")
+    cubierto = _reclamo(client, con_abono, titulo="Visita del abono")
+    _cerrar(client, afuera, cobertura_abono="fuera")
+    _cerrar(client, cubierto, cobertura_abono="total")
+
+    texto = _reporte_facturacion(client)
+
+    assert "Cableado nuevo" in texto
+    assert "Visita del abono" not in texto
+
+
+def test_el_reclamo_sin_decidir_sigue_afuera_del_reporte(escenario):
+    """El filtro suma filas, no cambia de criterio: la decisión se toma al
+    cerrar el ticket, y un reclamo sin decidir en una planilla de cobro es
+    invitar a cobrarlo sin que nadie lo haya dicho."""
+    client, con_abono, _, _, _ = escenario
+    reclamo = _reclamo(client, con_abono, titulo="Sin decidir todavia")
+    cerrado = _cerrar(client, reclamo)
+    assert cerrado["cobertura_abono"] is None
+
+    assert "Sin decidir todavia" not in _reporte_facturacion(client)
+
+
+def test_la_columna_cobro_deja_de_decir_mensual_para_lo_que_se_factura(escenario):
+    """El reporte de incidencias marcaba "Mensual" en la columna **Cobro** para
+    todo reclamo de un cliente con abono. Con el abono hecho un espectro, eso
+    informa lo contrario de lo que pasa justo en los que hay que cobrar."""
+    client, con_abono, _, _, _ = escenario
+    afuera = _reclamo(client, con_abono, titulo="Cableado nuevo")
+    _cerrar(client, afuera, cobertura_abono="fuera")
+
+    r = client.get("/api/reportes/incidencias-periodo"
+                   "?desde=2020-01-01&hasta=2030-12-31")
+    assert r.status_code == 200, r.text
+    filas = [f for g in r.json()["grupos"] for f in g["filas"]]
+    fila = next(
+        f for f in filas if any(c["texto"] == "Cableado nuevo" for c in f)
+    )
+    textos = [c["texto"] for c in fila]
+    assert "Se factura" in textos, textos
+    assert "Mensual" not in textos, textos
+
+
 def test_editar_otro_campo_no_borra_la_cobertura(escenario):
     """El PUT manda el objeto entero: si la pantalla no reenvía estos campos,
     tocarle la prioridad a un ticket le borra la decisión y el remito vuelve a
