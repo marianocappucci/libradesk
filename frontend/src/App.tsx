@@ -40,7 +40,7 @@ import { Logs } from './pages/Logs'
 import { Productos } from './pages/Productos'
 import { DepositosStock, ListasPrecio } from './pages/Inventario'
 import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
-import { CuentaCorriente, Recibos, Ventas } from './pages/VentasComercial'
+import { CuentaCorriente, Recibos, Ventas, VentaDetalle } from './pages/VentasComercial'
 import { Sucursales } from './pages/Sucursales'
 import { SucursalBar, SucursalProvider } from './components/sucursal'
 
@@ -112,6 +112,7 @@ export default function App() {
       <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
       <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
       <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
+      <Route path="/ventas/:id" element={<ProtectedRoute><VentaDetalle /></ProtectedRoute>} />
       <Route path="/recibos" element={<ProtectedRoute><Recibos /></ProtectedRoute>} />
       <Route path="/cuenta-corriente" element={<ProtectedRoute><CuentaCorriente /></ProtectedRoute>} />
       <Route path="/sucursales" element={<ProtectedRoute><Sucursales /></ProtectedRoute>} />

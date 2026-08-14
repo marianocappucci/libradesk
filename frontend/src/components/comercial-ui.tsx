@@ -78,6 +78,15 @@ export function Pagina({ titulo, icono: Icono, acciones, error, children }: {
  *
  * Los importes van a la derecha y con ancho fijo: es la única forma de que una
  * columna de plata se pueda comparar de un vistazo, que es para lo que se mira.
+ *
+ * ## Por qué las celdas tienen `pr-4`
+ *
+ * Antes no tenían **ningún** padding horizontal, así que una celda alineada a
+ * la izquierda quedaba pegada al número de la columna anterior y las dos se
+ * leían como una sola cosa. Cada pantalla se lo arreglaba a mano con un
+ * `<div className="pl-4">` alrededor del contenido — que además rompía el
+ * `text-right` de la columna, porque un `div` es un bloque. El gutter va acá,
+ * una vez, y las pantallas no lo repiten.
  */
 export function Tabla<T>({ columnas, filas, vacio, onFila }: {
   columnas: { clave: string; titulo: string; ancho?: string; alinear?: 'derecha'; render: (f: T) => ReactNode }[]
@@ -101,7 +110,7 @@ export function Tabla<T>({ columnas, filas, vacio, onFila }: {
               <tr className="border-b text-muted-foreground">
                 {columnas.map((c) => (
                   <th key={c.clave}
-                      className={`py-2 font-medium ${c.alinear === 'derecha' ? 'text-right' : 'text-left'}`}
+                      className={`py-2 pr-4 last:pr-0 font-medium ${c.alinear === 'derecha' ? 'text-right' : 'text-left'}`}
                       style={c.ancho ? { width: c.ancho } : undefined}>
                     {c.titulo}
                   </th>
@@ -112,10 +121,18 @@ export function Tabla<T>({ columnas, filas, vacio, onFila }: {
               {filas.map((f, i) => (
                 <tr key={i}
                     className={`border-b last:border-0 ${onFila ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                    onClick={onFila ? () => onFila(f) : undefined}>
+                    onClick={onFila ? (e) => {
+                      // Un clic sobre un botón o un enlace de la fila es **ese
+                      // control**, no la fila. Sin esta guarda, tocar «Emitir
+                      // recibo» en Ventas emitiría el comprobante y encima
+                      // navegaría a otra pantalla, dejando a la persona sin ver
+                      // lo que acababa de crear.
+                      if ((e.target as Element).closest?.('a,button,input,select,textarea,[role="button"]')) return
+                      onFila(f)
+                    } : undefined}>
                   {columnas.map((c) => (
                     <td key={c.clave}
-                        className={`py-2 ${c.alinear === 'derecha' ? 'text-right tabular-nums' : ''}`}>
+                        className={`py-2 pr-4 last:pr-0 ${c.alinear === 'derecha' ? 'text-right tabular-nums' : ''}`}>
                       {c.render(f)}
                     </td>
                   ))}
