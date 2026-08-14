@@ -305,6 +305,45 @@ def test_la_venta_dice_si_ya_tiene_recibo(comercial):
     assert c.get("/api/ventas").json()[0]["recibo_id"] == recibo_id
 
 
+def test_el_detalle_de_la_venta_dice_lo_mismo_que_la_lista_sobre_el_recibo(comercial):
+    """La ficha y la lista no pueden discrepar sobre si el recibo existe.
+
+    El dato estaba sólo en `listar()`, así que la ficha de la venta no podía
+    ofrecer el recibo ni decir que faltaba. Se afirma contra la lista, y no
+    contra un valor escrito a mano, porque el defecto que importa es que las
+    dos pantallas se contradigan — un `None` esperado a mano las deja pasar a
+    las dos aunque ninguna vea el recibo.
+    """
+    c = comercial
+    ids = _crear_base(c)
+    c.post("/api/recepciones-compra", json={
+        "proveedor_id": ids["proveedor"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "cantidad": 50, "costo": 95}],
+    })
+    venta_id = c.post("/api/ventas", json={
+        "cliente_id": ids["cliente"], "deposito_id": ids["deposito"],
+        "items": [{"item_id": ids["producto"], "descripcion": "PLUG",
+                   "cantidad": 2, "precio": 160}],
+        "pagos": [{"medio": "efectivo", "monto": 320}],
+    }).json()["id"]
+
+    def de_la_lista():
+        return next(v for v in c.get("/api/ventas").json() if v["id"] == venta_id)["recibo_id"]
+
+    def del_detalle():
+        return c.get(f"/api/ventas/{venta_id}").json()["recibo_id"]
+
+    assert del_detalle() is None and de_la_lista() is None
+
+    recibo_id = c.post(f"/api/ventas/{venta_id}/recibo").json()["id"]
+    assert del_detalle() == recibo_id == de_la_lista()
+
+    # Y el anulado también: es la rama que se pierde cuando la consulta se copia.
+    assert c.post(f"/api/recibos/{recibo_id}/anular",
+                  json={"motivo": "mal emitido"}).status_code == 200
+    assert del_detalle() is None and de_la_lista() is None
+
+
 def test_un_recibo_anulado_deja_la_venta_pendiente_otra_vez(comercial):
     """Un recibo anulado no es el comprobante de nada.
 

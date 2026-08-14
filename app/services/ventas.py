@@ -72,26 +72,43 @@ def _repo(conn) -> SqliteCommerceRepository:
     return SqliteCommerceRepository(conn)
 
 
+def _sql_recibo_vigente(origen_id: str) -> str:
+    """El recibo VIGENTE de una venta, si ya se emitio. `None` = todavia no.
+
+    Sin este dato la pantalla no puede distinguir "emitir" de "ver", y el boton
+    termina emitiendo en silencio un comprobante que a veces ya existia.
+
+    Los anulados se excluyen a proposito: un recibo anulado no es el comprobante
+    de nada, y la venta vuelve a estar pendiente de recibo.
+
+    `origen_id` es la expresion SQL que identifica la venta -- `s.id` en
+    `listar()`, donde esto va como subconsulta correlacionada, y `?` en
+    `obtener()`, donde va como parametro. Es un literal de este modulo, nunca
+    entrada del usuario.
+
+    Vive en una sola funcion porque la regla es una sola. Con la consulta
+    copiada, la lista puede decir "ver recibo" de una venta que el detalle
+    muestra como pendiente, y las dos pantallas tienen razon.
+    """
+    return f"""
+        SELECT r.id FROM recibos r
+         WHERE r.origen_tipo = 'venta' AND r.origen_id = {origen_id}
+           AND r.anulado = 0
+         ORDER BY r.id DESC LIMIT 1
+    """
+
+
 def listar(limit: int = 200) -> list[dict]:
     with libracore_core.get_connection() as conn:
         filas = conn.execute(
-            """
+            f"""
             SELECT s.id, s.number, s.status, s.occurred_on, s.total,
                    s.customer_party_id, s.customer_name_snapshot,
                    c.name AS cliente_nombre,
                    (SELECT COALESCE(SUM(vp.monto), 0) FROM ventas_pagos vp
                      WHERE vp.venta_id = s.id AND vp.medio = 'cuenta_corriente')
                    AS en_cuenta_corriente,
-                   -- El recibo VIGENTE de esta venta, si ya se emitió. Sin
-                   -- esto la pantalla no puede distinguir "emitir" de "ver", y
-                   -- el botón termina emitiendo en silencio algo que ya
-                   -- existía. Se excluyen los anulados a propósito: un recibo
-                   -- anulado no es el comprobante de nada, y la venta vuelve a
-                   -- estar pendiente de recibo.
-                   (SELECT r.id FROM recibos r
-                     WHERE r.origen_tipo = 'venta' AND r.origen_id = s.id
-                       AND r.anulado = 0
-                     ORDER BY r.id DESC LIMIT 1) AS recibo_id
+                   ({_sql_recibo_vigente("s.id")}) AS recibo_id
             FROM sales s
             LEFT JOIN clients c ON c.id = s.customer_party_id
             ORDER BY s.occurred_on DESC, s.id DESC
@@ -122,6 +139,7 @@ def obtener(venta_id: int) -> dict | None:
             "SELECT medio, monto, referencia FROM ventas_pagos WHERE venta_id=? ORDER BY id",
             (venta_id,),
         ).fetchall()
+        recibo = conn.execute(_sql_recibo_vigente("?"), (venta_id,)).fetchone()
         cliente = None
         if venta.customer_party_id:
             fila = conn.execute(
@@ -142,6 +160,7 @@ def obtener(venta_id: int) -> dict | None:
             cliente["nombre"] if cliente else "Consumidor final"
         ),
         "notas": venta.notes,
+        "recibo_id": recibo["id"] if recibo else None,
         "items": [
             {"descripcion": i.description_snapshot, "cantidad": float(i.quantity),
              "precio": float(i.unit_price), "item_id": i.item_id,
