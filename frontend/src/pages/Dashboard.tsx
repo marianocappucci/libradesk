@@ -29,7 +29,7 @@ import {
   type DashboardOperativo, type DashboardSummary, type EquipoTrabajo,
 } from '../api'
 import { useAgendaRango } from '@/components/agenda/datos'
-import { Chip } from '@/components/agenda/vista-semana'
+import { Chip } from '@/components/agenda/chip'
 import { diaCorto, hoyLocal, lunesDe, sumarDias } from '@/components/agenda/fechas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

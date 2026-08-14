@@ -223,11 +223,11 @@ export function Agenda() {
           dia={dia}
           equipos={equiposVisibles}
           trabajos={visibles[dia] ?? []}
-          cargando={cargando}
+          esHoy={dia === hoy}
         />
       ) : vista === 'semana' ? (
         <VistaSemana
-          desde={desde} porDia={visibles} hoy={hoy} cargando={cargando}
+          desde={desde} porDia={visibles} hoy={hoy}
           hrefDia={(d) => href({ vista: 'dia', dia: d })}
         />
       ) : (

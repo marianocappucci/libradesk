@@ -114,6 +114,17 @@ function stub(
 const pedidosDeAgenda = () =>
   pedidos.filter((p) => p.url.includes('/api/agenda/equipo/')).map((p) => p.url)
 
+/** El cuerpo de una columna de la rejilla: el día en la vista de semana, el id
+ *  de la cuadrilla en la de día. Es donde viven los bloques — el encabezado es
+ *  otro nodo, en otra fila. */
+const columna = (clave: string) =>
+  document.querySelector(`[data-columna="${clave}"]`) as HTMLElement
+
+/** El alto en píxeles de un bloque, que es lo que dice cuánto dura. Sale del
+ *  `style` inline porque en jsdom no hay layout: `getBoundingClientRect()`
+ *  devuelve 0 para todo y el test pasaría con el alto roto. */
+const altoDe = (el: HTMLElement) => Number.parseFloat(el.style.height)
+
 beforeEach(() => {
   pedidos = []
   stub()
@@ -129,32 +140,47 @@ beforeEach(() => {
 const DIA = `?vista=dia&dia=${MARTES}`
 
 describe('Agenda — la vista de día', () => {
-  it('muestra el horario, el trabajo y en qué sale el equipo', async () => {
+  it('cada cuadrilla tiene su columna, con su vehículo y su trabajo adentro', async () => {
+    // Una columna por cuadrilla es la decisión de la vista: al entrar a un día
+    // ya se sabe *cuándo*, y lo que falta es quién sale y a dónde. Si los
+    // trabajos de las dos cayeran mezclados en una sola columna, armar el
+    // recorrido de la Norte obligaría a pescar sus paradas entre las de la Sur.
     renderAgenda(DIA)
-
-    // Se espera por el TRABAJO y no por el nombre del equipo. La pantalla carga
-    // en dos tiempos —primero el catálogo de cuadrillas, después su agenda—, así
-    // que la tarjeta existe un instante antes que su contenido: esperar por el
-    // nombre daba una tarjeta que todavía decía "Cargando…".
     await screen.findByText('Cambio de switch')
-    const norte = screen.getByText('Cuadrilla Norte')
-      .closest('[data-slot="card"]') as HTMLElement
-    expect(within(norte).getByText('AB123CD')).toBeInTheDocument()
-    expect(within(norte).getByText('09:00–11:00')).toBeInTheDocument()
+
+    const norte = columna('1')
     expect(within(norte).getByText('Cambio de switch')).toBeInTheDocument()
-    expect(within(norte).getByText('Estudio Sur')).toBeInTheDocument()
-    expect(within(norte).getByText('On-site')).toBeInTheDocument()
+    // El horario, el cliente y la modalidad, en el bloque; la patente, en el
+    // encabezado. La modalidad no es decorativa: un remoto no es una parada y la
+    // hoja de ruta lo deja afuera, así que la grilla tiene que distinguirlo.
+    expect(within(norte).getByText(/09:00 · Estudio Sur · On-site/)).toBeInTheDocument()
+    expect(screen.getByText('AB123CD')).toBeInTheDocument()
+    // Y NO en la de la Sur, que ese día no tiene nada.
+    expect(within(columna('2')).queryByText('Cambio de switch')).not.toBeInTheDocument()
   })
 
   it('el trabajo linkea al ticket', async () => {
     renderAgenda(DIA)
-    const link = await screen.findByRole('link', { name: 'Cambio de switch' })
-    expect(link).toHaveAttribute('href', '/incidencias/77')
+    await screen.findByText('Cambio de switch')
+    // Por el bloque y no por el nombre accesible: el bloque acumula título,
+    // hora, cliente y domicilio, así que `name: 'Cambio de switch'` ya no
+    // matchea. Lo que importa es a dónde lleva.
+    const bloque = screen.getByText('Cambio de switch').closest('a') as HTMLElement
+    expect(bloque).toHaveAttribute('href', '/incidencias/77')
   })
 
-  it('un equipo sin nada ese día lo dice, no queda en blanco', async () => {
+  it('una cuadrilla sin trabajos conserva su columna y su hoja de ruta', async () => {
+    // En una rejilla, el día vacío **es** la columna vacía — no hace falta un
+    // cartel. Lo que no puede pasar es que la cuadrilla desaparezca: su hoja de
+    // ruta se imprime igual, y el PDF dice "sin trabajos agendados".
     renderAgenda(DIA)
-    expect(await screen.findByText('Sin trabajos ese día.')).toBeInTheDocument()
+    await screen.findByText('Cambio de switch')
+
+    expect(columna('2')).toBeInTheDocument()
+    expect(screen.getByText('Cuadrilla Sur')).toBeInTheDocument()
+    const hojas = screen.getAllByRole('link', { name: /hoja de ruta/i })
+      .map((a) => a.getAttribute('href'))
+    expect(hojas.some((h) => h?.includes('/equipo/2/'))).toBe(true)
   })
 
   it('no pide la agenda de un equipo dado de baja', async () => {
@@ -188,10 +214,11 @@ describe('Agenda — la vista de día', () => {
     stub([{ ...TRABAJO, cliente_domicilio: null, cliente_ciudad: null }])
     renderAgenda(DIA)
     await screen.findByText('Cambio de switch')
-    // El nombre del cliente sigue estando; lo que no tiene que aparecer es la
-    // segunda línea con una coma suelta o un guión.
-    expect(screen.getByText('Estudio Sur')).toBeInTheDocument()
+    // El cliente sigue estando en su renglón; lo que no tiene que aparecer es
+    // la tercera línea con una coma suelta o un guión.
+    expect(screen.getByText(/09:00 · Estudio Sur/)).toBeInTheDocument()
     expect(screen.queryByText(', ')).not.toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
   })
 
   it('el botón de hoja de ruta apunta al equipo y al día que se está mirando', async () => {
@@ -265,10 +292,12 @@ describe('Agenda — la vista de semana', () => {
     // vacías, así que esperar por "Jue 13" devuelve una grilla sin datos y el
     // `getByText` de abajo —que es sincrónico— corre antes que la agenda.
     await screen.findByText('Tendido de fibra')
-    const columna = screen.getByRole('link', { name: /Jue 13/ })
-      .parentElement as HTMLElement
-    expect(within(columna).getByText('Tendido de fibra')).toBeInTheDocument()
-    expect(within(columna).queryByText('Cambio de switch')).not.toBeInTheDocument()
+    // Por el cuerpo de la columna y no por el encabezado: en la rejilla los
+    // bloques cuelgan de otra fila, así que el `parentElement` del link del día
+    // es la celda del título y no contiene ningún trabajo.
+    expect(within(columna(JUEVES)).getByText('Tendido de fibra')).toBeInTheDocument()
+    expect(within(columna(JUEVES)).queryByText('Cambio de switch')).not.toBeInTheDocument()
+    expect(within(columna(MARTES)).getByText('Cambio de switch')).toBeInTheDocument()
   })
 
   it('el encabezado del día entra a la vista de día de ESE día', async () => {
@@ -303,6 +332,95 @@ describe('Agenda — la vista de semana', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// --- la rejilla horaria ----------------------------------------------------
+//
+// Lo que la rejilla agrega sobre la lista de chips es que el bloque **mide lo
+// que dura** y que dos trabajos pisados se reparten el ancho. Las dos cosas son
+// invisibles en el DOM si no se las mide: un bloque de alto cero y uno tapando
+// a otro se ven igual de bien en un `getByText`.
+
+const bloqueDe = (titulo: string) =>
+  screen.getByText(titulo).closest('a') as HTMLElement
+
+describe('Agenda — la rejilla horaria', () => {
+  it('el bloque mide lo que dura el trabajo', async () => {
+    // Es el punto entero del cambio: la lista decía que había dos trabajos, la
+    // rejilla dice que uno ocupa el doble. Sin esta afirmación, un alto fijo
+    // —o cero— pasaría con todos los textos en pantalla.
+    stub([
+      TRABAJO, // 09:00–11:00, dos horas
+      { ...TRABAJO, incidencia_id: 78, titulo: 'Visita corta',
+        desde: `${MARTES}T14:00:00`, hasta: `${MARTES}T15:00:00` },
+    ])
+    renderAgenda(DIA)
+    await screen.findByText('Cambio de switch')
+
+    const largo = altoDe(bloqueDe('Cambio de switch'))
+    const corto = altoDe(bloqueDe('Visita corta'))
+    expect(largo).toBeGreaterThan(0)
+    expect(largo).toBeCloseTo(corto * 2, 0)
+  })
+
+  it('dos trabajos pisados se reparten el ancho, no se tapan', async () => {
+    // El caso vivo: los datos de ejemplo tienen dos cuadrillas a las 09:00. En
+    // la vista de semana caen en la misma columna del día, y sin reparto el de
+    // abajo desaparece sin que nada avise.
+    stub(
+      [TRABAJO],
+      [NORTE, SUR],
+      [{ ...TRABAJO, incidencia_id: 91, titulo: 'Ronda del Sur' }],
+    )
+    renderAgenda(SEMANA)
+    await screen.findByText('Ronda del Sur')
+
+    const a = bloqueDe('Cambio de switch')
+    const b = bloqueDe('Ronda del Sur')
+    // Media columna cada uno (49 %, con 1 % de aire), y arrancando en lugares
+    // distintos: si los dos salieran de 0 % con 100 % de ancho, uno taparía al
+    // otro y los dos textos seguirían en el DOM igual.
+    for (const el of [a, b]) {
+      expect(Number.parseFloat(el.style.width)).toBeCloseTo(49, 0)
+    }
+    expect(a.style.left).not.toBe(b.style.left)
+    expect([a.style.left, b.style.left].sort()).toEqual(['0%', '50%'])
+  })
+
+  it('🔴 uno que empieza cuando el otro termina NO se pisa', async () => {
+    // Los datos de ejemplo tienen ese caso a propósito (uno termina 11:00 y el
+    // siguiente empieza 11:00). Con un `>` en vez de `>=` los dos saldrían a
+    // media columna por un choque que no existe, y la agenda mentiría diciendo
+    // que la cuadrilla está doblemente ocupada.
+    stub([
+      TRABAJO, // 09:00–11:00
+      { ...TRABAJO, incidencia_id: 79, titulo: 'Pegado al anterior',
+        desde: `${MARTES}T11:00:00`, hasta: `${MARTES}T12:00:00` },
+    ])
+    renderAgenda(DIA)
+    await screen.findByText('Pegado al anterior')
+
+    for (const t of ['Cambio de switch', 'Pegado al anterior']) {
+      expect(Number.parseFloat(bloqueDe(t).style.width)).toBeGreaterThan(90)
+      expect(bloqueDe(t).style.left).toBe('0%')
+    }
+  })
+
+  it('un trabajo fuera del horario laboral estira la ventana, no se recorta', async () => {
+    // La rejilla arranca a las 07:00. Una salida a las 05:00 tiene que bajar el
+    // piso: si la ventana recortara, el trabajo desaparecería de la grilla sin
+    // que nada lo dijera, que es la peor forma de fallar de un calendario.
+    stub([{ ...TRABAJO, titulo: 'Salida de madrugada',
+      desde: `${MARTES}T05:00:00`, hasta: `${MARTES}T06:00:00` }])
+    renderAgenda(DIA)
+    await screen.findByText('Salida de madrugada')
+
+    // `getAllByText`: "05:00" está en la canaleta de horas Y adentro del bloque.
+    expect(screen.getAllByText('05:00').length).toBeGreaterThan(0)
+    // Y arriba del bloque no puede quedar espacio negativo.
+    expect(Number.parseFloat(bloqueDe('Salida de madrugada').style.top))
+      .toBeGreaterThanOrEqual(0)
   })
 })
 
