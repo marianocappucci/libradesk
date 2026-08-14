@@ -54,6 +54,8 @@ from libracommerce.usecases.inventory import (
 )
 from libracore.db import core as libracore_core
 
+from . import comercial
+
 #: Se re-exporta para que los routers atrapen el error sin importar del motor.
 __all__ = [
     "StockInsuficienteError",
@@ -116,8 +118,8 @@ def _repo(conn) -> SqliteCommerceRepository:
 # ── Depositos ────────────────────────────────────────────────────────────
 
 
-def listar_depositos() -> list[dict]:
-    """Los depositos de consumibles.
+def listar_depositos(sucursal_id: int | None = None) -> list[dict]:
+    """Los depositos de consumibles. `sucursal_id=None` los trae todos.
 
     ⚠️ **No son los `depositos` de LibraDesk.** Aquella tabla guarda donde esta
     un equipo serializado; esta guarda existencias por cantidad. Conviven a
@@ -136,6 +138,7 @@ def listar_depositos() -> list[dict]:
              "sucursal_id": loc.branch_id,
              "sucursal": sucursales.get(loc.branch_id, "")}
             for loc in _repo(conn).list_locations()
+            if sucursal_id is None or loc.branch_id == sucursal_id
         ]
 
 
@@ -144,6 +147,7 @@ def crear_deposito(nombre: str, descripcion: str = "", es_default: bool = False,
     if not (nombre or "").strip():
         raise ValueError("El deposito necesita un nombre.")
     with libracore_core.get_connection() as conn:
+        comercial.verificar_sucursal(conn, sucursal_id)
         loc = _repo(conn).save_location(
             Location(None, nombre.strip(), description=descripcion,
                      is_default=es_default, branch_id=sucursal_id)
@@ -154,21 +158,35 @@ def crear_deposito(nombre: str, descripcion: str = "", es_default: bool = False,
 # ── Catalogo de consumibles ──────────────────────────────────────────────
 
 
-def listar_items(solo_activos: bool = True) -> list[dict]:
+def listar_items(solo_activos: bool = True,
+                 sucursal_id: int | None = None) -> list[dict]:
     """El catalogo, con el stock total ya sumado.
 
     El total viene de una sola consulta agregada sobre `stock_movements` y no de
     N llamadas a `current_stock()`. Con 300 consumibles y 6 depositos la
     diferencia entre las dos formas es la que hace que la pantalla abra o no.
+
+    Con `sucursal_id` el total es **el de esa sucursal**, y `bajo_minimo` se
+    calcula contra ese total: mirando Chivilcoy, lo que importa es si falta
+    material en Chivilcoy, no si sobra en la otra punta.
     """
     with libracore_core.get_connection() as conn:
-        totales = {
-            r["item_id"]: float(r["total"] or 0)
-            for r in conn.execute(
+        # El JOIN contra `locations` sale solo cuando hay filtro. Sin sucursal
+        # es la misma consulta agregada de siempre, sin costo agregado.
+        if sucursal_id is None:
+            filas = conn.execute(
                 "SELECT item_id, SUM(quantity_delta) AS total "
                 "FROM stock_movements GROUP BY item_id"
             ).fetchall()
-        }
+        else:
+            filas = conn.execute(
+                "SELECT sm.item_id, SUM(sm.quantity_delta) AS total "
+                "FROM stock_movements sm "
+                "JOIN locations l ON l.id = sm.location_id "
+                "WHERE l.branch_id = ? GROUP BY sm.item_id",
+                (sucursal_id,),
+            ).fetchall()
+        totales = {r["item_id"]: float(r["total"] or 0) for r in filas}
         categorias = {c["id"]: c["nombre"] for c in listar_categorias(conn)}
         items = _repo(conn).list_catalog_items(
             active_only=solo_activos, item_type=CatalogItemType.PRODUCT
@@ -292,7 +310,7 @@ def ajustar(item_id: int, deposito_id: int, cantidad: float, *,
 
 def transferir(item_id: int, origen_id: int, destino_id: int, cantidad: float, *,
                nota: str = "", usuario_id: int | None = None,
-               fecha: datetime | None = None) -> None:
+               fecha: datetime | None = None) -> dict:
     """Mueve consumibles entre depositos, en una sola transaccion.
 
     Es el caso de uso central del producto que motivo todo esto: el deposito
@@ -300,11 +318,40 @@ def transferir(item_id: int, origen_id: int, destino_id: int, cantidad: float, *
     hace las dos escrituras y la lectura que las autoriza en la misma
     transaccion-- en vez de escribir los dos movimientos a mano, que es como
     Contalibra lo tenia y perdia mercaderia si el segundo fallaba.
+
+    ## Entre sucursales es el MISMO movimiento, con otro nombre
+
+    Cuando origen y destino son de sucursales distintas, lo unico que cambia es
+    el `reason_code`: `transferencia_sucursal_salida`/`_entrada` en vez de
+    `transferencia_salida`/`_entrada`. **No hay estado "en transito" ni
+    confirmacion del lado que recibe** --decidido el 2026-08-14--: sale y entra
+    en la misma transaccion, igual que entre dos depositos de la misma
+    sucursal.
+
+    > ⚠️ **Lo que eso implica, dicho de frente**: entre el momento en que la
+    > mercaderia sale fisicamente y el momento en que llega, el sistema ya la
+    > cuenta en el destino. Si hace falta que alguien confirme la recepcion,
+    > este no es el mecanismo y no alcanza con leer el `reason_code`: hay que
+    > agregar el tercer estado.
+
+    El `reason_code` distinto no es cosmetico: es lo que hace que
+    `transferencias(solo_entre_sucursales=True)` pueda existir sin releer las
+    dos `locations` de cada par de movimientos.
     """
-    try:
-        with libracore_core.get_connection() as conn:
-            transfer_stock(
-                _repo(conn),
+    with libracore_core.get_connection() as conn:
+        repo = _repo(conn)
+        origen = repo.get_location(origen_id)
+        destino = repo.get_location(destino_id)
+        if origen is None or destino is None:
+            raise ValueError("El deposito de origen o el de destino no existe.")
+        # `is not` sobre dos `int | None`: dos depositos sin sucursal NO cruzan
+        # nada, y uno con sucursal contra uno sin sucursal SI --es sacar
+        # mercaderia del circuito de una sucursal, y merece el nombre--.
+        entre_sucursales = origen.branch_id != destino.branch_id
+        sufijo = "_sucursal" if entre_sucursales else ""
+        try:
+            salida, entrada = transfer_stock(
+                repo,
                 item_id=item_id,
                 from_location_id=origen_id,
                 to_location_id=destino_id,
@@ -312,13 +359,92 @@ def transferir(item_id: int, origen_id: int, destino_id: int, cantidad: float, *
                 occurred_at=fecha or datetime.now(),
                 note=nota,
                 created_by=usuario_id,
-                reason_code_salida="transferencia_salida",
-                reason_code_entrada="transferencia_entrada",
+                reason_code_salida=f"transferencia{sufijo}_salida",
+                reason_code_entrada=f"transferencia{sufijo}_entrada",
             )
-    except StockInsuficienteError as e:
-        raise ValueError(
-            f"Stock insuficiente en el deposito de origen (disponible: {float(e.disponible)})."
-        ) from e
+        except StockInsuficienteError as e:
+            raise ValueError(
+                f"Stock insuficiente en el deposito de origen "
+                f"(disponible: {float(e.disponible)})."
+            ) from e
+    return {"salida_id": salida.id, "entrada_id": entrada.id,
+            "entre_sucursales": entre_sucursales,
+            "origen_sucursal_id": origen.branch_id,
+            "destino_sucursal_id": destino.branch_id}
+
+
+def transferencias(sucursal_id: int | None = None, *,
+                   solo_entre_sucursales: bool = False,
+                   limit: int = 200) -> list[dict]:
+    """El historial de transferencias, reconstruido desde el ledger.
+
+    **No hay tabla de transferencias** y no hace falta una: el motor deja la
+    entrada apuntando a la salida con `source_type='transfer'` y `source_id` =
+    id de la salida (ver `transfer_stock`), asi que un `JOIN` de
+    `stock_movements` contra si misma devuelve el par completo. Inventar una
+    tabla aparte seria una segunda version de la verdad que puede desincronizarse
+    del ledger, que es lo unico que `current_stock()` mira.
+
+    `sucursal_id` trae las que **tocan** esa sucursal, de los dos lados: lo que
+    salio y lo que entro. Filtrar solo por destino contestaria "que me llego" y
+    dejaria fuera la mitad de la pregunta.
+    """
+    sql = """
+        SELECT e.id AS entrada_id, s.id AS salida_id,
+               e.item_id, ci.name AS item, ci.unit_code AS unidad,
+               e.quantity_delta AS cantidad, e.occurred_at, e.note,
+               e.reason_code,
+               s.location_id AS origen_id, lo.name AS origen,
+               lo.branch_id AS origen_sucursal_id, so.nombre AS origen_sucursal,
+               e.location_id AS destino_id, ld.name AS destino,
+               ld.branch_id AS destino_sucursal_id, sd.nombre AS destino_sucursal,
+               e.created_by, u.nombre AS usuario
+        FROM stock_movements e
+        JOIN stock_movements s ON s.id = e.source_id
+        JOIN catalog_items ci ON ci.id = e.item_id
+        JOIN locations lo ON lo.id = s.location_id
+        JOIN locations ld ON ld.id = e.location_id
+        LEFT JOIN sucursales so ON so.id = lo.branch_id
+        LEFT JOIN sucursales sd ON sd.id = ld.branch_id
+        LEFT JOIN usuarios u ON u.id = e.created_by
+        WHERE e.source_type = 'transfer'
+    """
+    params: list = []
+    if solo_entre_sucursales:
+        # 🔴 Comparacion **null-safe escrita a mano**, y no `IS NOT` ni
+        # `IS DISTINCT FROM`. `a IS NOT b` es sintaxis de SQLite y PostgreSQL la
+        # rechaza (ahi `IS NOT` solo acepta NULL/TRUE/FALSE), y LibraDesk corre
+        # sobre PostgreSQL en las tres instancias. `IS DISTINCT FROM` si es
+        # estandar, pero en SQLite depende de la version del binario.
+        #
+        # Un `<>` pelado tampoco sirve: con un deposito sin sucursal daria NULL
+        # --ni verdadero ni falso-- y esa transferencia quedaria afuera, que es
+        # justo el caso de sacar mercaderia del circuito de una sucursal.
+        sql += (" AND ((lo.branch_id IS NULL) <> (ld.branch_id IS NULL)"
+                "      OR lo.branch_id <> ld.branch_id)")
+    if sucursal_id is not None:
+        sql += " AND (lo.branch_id = ? OR ld.branch_id = ?)"
+        params += [sucursal_id, sucursal_id]
+    sql += " ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?"
+    params.append(limit)
+
+    with libracore_core.get_connection() as conn:
+        filas = conn.execute(sql, tuple(params)).fetchall()
+    return [
+        {"salida_id": r["salida_id"], "entrada_id": r["entrada_id"],
+         "item_id": r["item_id"], "item": r["item"], "unidad": r["unidad"],
+         "cantidad": float(r["cantidad"]), "fecha": r["occurred_at"],
+         "nota": r["note"] or "",
+         "origen_id": r["origen_id"], "origen": r["origen"],
+         "origen_sucursal_id": r["origen_sucursal_id"],
+         "origen_sucursal": r["origen_sucursal"] or "",
+         "destino_id": r["destino_id"], "destino": r["destino"],
+         "destino_sucursal_id": r["destino_sucursal_id"],
+         "destino_sucursal": r["destino_sucursal"] or "",
+         "entre_sucursales": r["origen_sucursal_id"] != r["destino_sucursal_id"],
+         "usuario_id": r["created_by"], "usuario": r["usuario"] or ""}
+        for r in filas
+    ]
 
 
 # ── Categorias ───────────────────────────────────────────────────────────
@@ -416,7 +542,7 @@ def buscar_por_codigo(codigo: str) -> dict | None:
 # ── Existencias, la vista de conjunto ────────────────────────────────────
 
 
-def grilla_stock() -> dict:
+def grilla_stock(sucursal_id: int | None = None) -> dict:
     """Todos los consumibles contra todos los depositos, en una sola consulta.
 
     Es lo que faltaba para que el modulo fuera usable: hasta ahora el stock se
@@ -426,11 +552,17 @@ def grilla_stock() -> dict:
     Devuelve `{depositos, items, celdas}` en vez de una matriz armada: la
     matriz la arma la pantalla, y asi el mismo endpoint sirve para la grilla y
     para el detalle de un deposito.
+
+    Con `sucursal_id` se recortan **los depositos y las celdas**, no los items:
+    el catalogo es de la empresa y una fila en cero es informacion ("aca no hay
+    de eso"), mientras que una columna de otra sucursal es ruido.
     """
     with libracore_core.get_connection() as conn:
         depositos = [
-            {"id": loc.id, "nombre": loc.name, "es_default": loc.is_default}
+            {"id": loc.id, "nombre": loc.name, "es_default": loc.is_default,
+             "sucursal_id": loc.branch_id}
             for loc in _repo(conn).list_locations(active_only=True)
+            if sucursal_id is None or loc.branch_id == sucursal_id
         ]
         items = [
             {"id": it.id, "nombre": it.name, "unidad": it.unit.code,
@@ -439,22 +571,27 @@ def grilla_stock() -> dict:
                 active_only=True, item_type=CatalogItemType.PRODUCT
             )
         ]
+        filas = conn.execute(
+            """
+            SELECT item_id, location_id, SUM(quantity_delta) AS total
+            FROM stock_movements
+            GROUP BY item_id, location_id
+            HAVING SUM(quantity_delta) <> 0
+            """
+        ).fetchall()
+        # Las celdas se filtran contra los depositos que ya quedaron, y no con
+        # un segundo WHERE sobre `branch_id`: asi no hay forma de que la grilla
+        # traiga una celda de una columna que no esta.
+        visibles = {d["id"] for d in depositos}
         celdas = [
             {"item_id": r["item_id"], "deposito_id": r["location_id"],
              "stock": float(r["total"] or 0)}
-            for r in conn.execute(
-                """
-                SELECT item_id, location_id, SUM(quantity_delta) AS total
-                FROM stock_movements
-                GROUP BY item_id, location_id
-                HAVING SUM(quantity_delta) <> 0
-                """
-            ).fetchall()
+            for r in filas if r["location_id"] in visibles
         ]
     return {"depositos": depositos, "items": items, "celdas": celdas}
 
 
-def bajo_minimo() -> list[dict]:
+def bajo_minimo(sucursal_id: int | None = None) -> list[dict]:
     """Los consumibles cuyo stock TOTAL quedo por debajo de su minimo.
 
     ⚠️ **El minimo se compara contra el total de todos los depositos**, no
@@ -462,8 +599,18 @@ def bajo_minimo() -> list[dict]:
     tecnico dispara reposicion cada vez que sale a trabajar, que es ruido y no
     informacion. Si algun dia hace falta el minimo por deposito, es una columna
     nueva y no una relectura de esta.
+
+    ⚠️ **Con `sucursal_id` el minimo se compara contra el stock de esa
+    sucursal**, y eso es una decision, no una consecuencia: el minimo es uno
+    solo por consumible (`catalog_items.min_stock`, de la empresa). Mirando una
+    sucursal, un consumible puede figurar bajo minimo aunque la empresa entera
+    tenga de sobra. Es lo que hace util la vista --dice donde reponer-- pero no
+    hay que leer la suma de las dos sucursales como el faltante de la empresa.
     """
-    return [i for i in listar_items(solo_activos=True) if i["bajo_minimo"]]
+    return [
+        i for i in listar_items(solo_activos=True, sucursal_id=sucursal_id)
+        if i["bajo_minimo"]
+    ]
 
 
 def editar_deposito(deposito_id: int, nombre: str, descripcion: str = "",
@@ -473,6 +620,11 @@ def editar_deposito(deposito_id: int, nombre: str, descripcion: str = "",
         actual = repo.get_location(deposito_id)
         if actual is None:
             raise ValueError("El deposito no existe.")
+        # Mover un deposito de sucursal mueve con el todo su stock, porque las
+        # existencias cuelgan del deposito y no de la sucursal. Se permite --es
+        # como se corrige un deposito mal asignado-- pero la sucursal destino
+        # tiene que existir y estar activa.
+        comercial.verificar_sucursal(conn, sucursal_id)
         repo.save_location(
             Location(deposito_id, nombre.strip(), description=descripcion,
                      active=activo, is_default=actual.is_default,

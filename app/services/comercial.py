@@ -432,28 +432,45 @@ def proveedor_de_party(party_id: int) -> int:
 def listar_sucursales(solo_activas: bool = True) -> list[dict]:
     """Las sucursales de la empresa.
 
-    🟡 **Alcance deliberadamente corto (2026-08-12).** Hoy esto es una tabla y
-    un selector en el encabezado: **ninguna pantalla filtra por sucursal
-    todavia**. Se construyo asi porque la decision de fondo --si una sucursal
-    es una instancia aparte o un eje transversal-- **la contesta el cliente y
-    no el codigo**: depende de si la cuenta corriente de un cliente es una sola
-    entre sucursales. Ver la fase 6 de
-    `wiki/analyses/libradesk-modulo-comercial-plan.md`.
+    **Sucursal es un eje transversal, no una instancia aparte** (decidido el
+    2026-08-14, cerrando la pregunta que la fase 6 de
+    `wiki/analyses/libradesk-modulo-comercial-plan.md` dejo abierta). Lo que
+    fija el alcance son estas tres respuestas:
 
-    **No hace falta una tabla puente**: `locations.branch_id`, `sales.branch_id`
-    e `item_prices.branch_id` ya existen en LibraCommerce --sueltos, sin FK,
-    porque el motor no trae tabla de sucursales--. Esta tabla es a lo que esos
-    tres apuntan. Contalibra deja los tres en NULL siempre; LibraDesk es el
-    primero de la familia que los usa.
+    - **La cuenta corriente de un cliente es UNA SOLA entre sucursales.** Es lo
+      que descarta el camino de "una instancia por sucursal", y por eso ningun
+      modulo de dinero filtra por sucursal: el saldo de un cliente es el mismo
+      lo haya generado donde lo haya generado.
+    - **Filtran los modulos comerciales y nada mas**: stock, depositos, ventas,
+      compras y listas de precio. La mesa de ayuda --incidencias, agenda,
+      tecnicos-- **no filtra**, y no es un pendiente: un tecnico atiende donde
+      haga falta.
+    - **La caja no entra** porque LibraDesk no lleva caja (ver el encabezado de
+      este modulo). Si algun dia la lleva, la caja es por sucursal.
+
+    **No hace falta una tabla puente**: `locations.branch_id`, `sales.branch_id`,
+    `purchase_orders.branch_id` e `item_prices.branch_id` ya existen en
+    LibraCommerce --sueltos, sin FK, porque el motor no trae tabla de
+    sucursales--. Esta tabla es a lo que esos cuatro apuntan. Contalibra los
+    deja en NULL siempre; LibraDesk es el primero de la familia que los usa.
+
+    ⚠️ **Que no haya FK es exactamente por que no hay borrado.** Ver
+    `cambiar_estado_sucursal()`.
     """
-    sql = "SELECT id, nombre, codigo, direccion, activa FROM sucursales"
+    sql = """
+        SELECT s.id, s.nombre, s.codigo, s.direccion, s.activa,
+               (SELECT COUNT(*) FROM locations l
+                 WHERE l.branch_id = s.id AND l.active = 1) AS depositos
+        FROM sucursales s
+    """
     if solo_activas:
-        sql += " WHERE activa = 1"
-    sql += " ORDER BY nombre"
+        sql += " WHERE s.activa = 1"
+    sql += " ORDER BY s.nombre"
     with libracore_core.get_connection() as conn:
         return [
             {"id": r["id"], "nombre": r["nombre"], "codigo": r["codigo"],
-             "direccion": r["direccion"], "activa": bool(r["activa"])}
+             "direccion": r["direccion"], "activa": bool(r["activa"]),
+             "depositos": r["depositos"]}
             for r in conn.execute(sql).fetchall()
         ]
 
@@ -467,3 +484,71 @@ def crear_sucursal(nombre: str, codigo: str = "", direccion: str = "") -> dict:
             (nombre.strip(), codigo, direccion),
         )
         return {"id": cur.lastrowid, "nombre": nombre.strip()}
+
+
+def editar_sucursal(sucursal_id: int, nombre: str, codigo: str = "",
+                    direccion: str = "") -> None:
+    if not (nombre or "").strip():
+        raise ValueError("La sucursal necesita un nombre.")
+    with libracore_core.get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE sucursales SET nombre=?, codigo=?, direccion=? WHERE id=?",
+            (nombre.strip(), codigo, direccion, sucursal_id),
+        )
+        if not cur.rowcount:
+            raise ValueError("La sucursal no existe.")
+
+
+def cambiar_estado_sucursal(sucursal_id: int, activa: bool) -> None:
+    """Baja y alta **logicas**. No existe el borrado, y no por conservadurismo.
+
+    `locations.branch_id`, `sales.branch_id`, `purchase_orders.branch_id` e
+    `item_prices.branch_id` son columnas del motor **sin FK contra esta tabla**
+    --el motor no la conoce--. Un `DELETE` no rebota ni cascadea: deja cuatro
+    tablas apuntando a un id que ya no existe, y el sintoma aparece meses
+    despues como una venta cuya sucursal figura en blanco. La baja logica la
+    saca de los selects y conserva la historia.
+
+    La guarda de depositos activos es lo mismo mirado desde el otro lado:
+    desactivar una sucursal que todavia tiene stock parado ahi lo vuelve
+    invisible en la pantalla filtrada sin que nadie lo haya movido.
+    """
+    with libracore_core.get_connection() as conn:
+        fila = conn.execute(
+            "SELECT nombre FROM sucursales WHERE id=?", (sucursal_id,)
+        ).fetchone()
+        if fila is None:
+            raise ValueError("La sucursal no existe.")
+        if not activa:
+            depositos = conn.execute(
+                "SELECT COUNT(*) AS n FROM locations "
+                "WHERE branch_id=? AND active=1",
+                (sucursal_id,),
+            ).fetchone()["n"]
+            if depositos:
+                raise ValueError(
+                    f"La sucursal tiene {depositos} deposito(s) de stock activo(s). "
+                    "Movelos o desactivalos antes de dar de baja la sucursal."
+                )
+        conn.execute(
+            "UPDATE sucursales SET activa=? WHERE id=?", (int(activa), sucursal_id)
+        )
+
+
+def verificar_sucursal(conn, sucursal_id: int | None) -> None:
+    """Rebota un `sucursal_id` que no existe o que esta dada de baja.
+
+    Sin esto la falta de FK se paga en el alta: `locations.branch_id = 99`
+    entra sin chistar y el deposito desaparece de toda pantalla filtrada.
+    `None` es valido y significa "sin sucursal" --el caso de la empresa de un
+    solo local, que es la mayoria--.
+    """
+    if sucursal_id is None:
+        return
+    fila = conn.execute(
+        "SELECT activa FROM sucursales WHERE id=?", (sucursal_id,)
+    ).fetchone()
+    if fila is None:
+        raise ValueError("La sucursal indicada no existe.")
+    if not fila["activa"]:
+        raise ValueError("La sucursal indicada esta dada de baja.")
