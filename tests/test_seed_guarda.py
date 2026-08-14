@@ -11,9 +11,12 @@ quedan mezclados.
 """
 import pytest
 
+from app.routers.clientes import ClienteIn
 from app.routers.incidencias import IncidenciaIn
 from app.services.incidencias import ESTADOS_VALIDOS
-from scripts.seed_dev import CAMPOS_INCIDENCIA, CIERRES, url_no_productiva
+from scripts.seed_dev import (
+    CAMPOS_CLIENTE, CAMPOS_INCIDENCIA, CIERRES, DOMICILIOS, url_no_productiva,
+)
 
 
 @pytest.mark.parametrize("url", [
@@ -166,3 +169,58 @@ def test_no_se_reenvian_los_campos_que_pone_el_producto():
 
 def test_no_hay_campos_repetidos_en_la_lista():
     assert len(CAMPOS_INCIDENCIA) == len(set(CAMPOS_INCIDENCIA))
+
+
+# ── El PUT del cliente, que es más peligroso que el de la incidencia ────────
+
+def test_la_lista_de_campos_del_cliente_no_se_queda_atras_del_modelo():
+    """Misma guarda que la de la incidencia, y por un motivo peor.
+
+    Dos defaults de `ClienteIn` **no son `None`**: `activo=True` y
+    `tipo_facturacion="por_servicio"`. Un campo que le falte a esta lista no
+    deja un dato en blanco: **reactiva un cliente dado de baja** y le cambia
+    cómo se lo factura, sin que falle nada.
+    """
+    del_modelo = set(ClienteIn.model_fields)
+    de_la_lista = set(CAMPOS_CLIENTE)
+    assert de_la_lista == del_modelo, (
+        f"faltan en el seed: {sorted(del_modelo - de_la_lista)}; "
+        f"sobran: {sorted(de_la_lista - del_modelo)}"
+    )
+
+
+def test_el_cliente_no_reenvia_lo_que_pone_el_producto():
+    """`iva_discriminado` lo **deriva** el producto de `condicion_iva`.
+
+    Mandarlo de vuelta sería escribir un valor calculado, y el día que la regla
+    de quién discrimina cambie, el seed la estaría pisando con la anterior.
+    """
+    for campo in ("id", "fecha_creacion", "iva_discriminado"):
+        assert campo not in CAMPOS_CLIENTE
+
+
+def test_no_hay_campos_repetidos_en_la_lista_del_cliente():
+    assert len(CAMPOS_CLIENTE) == len(set(CAMPOS_CLIENTE))
+
+
+def test_los_domicilios_de_ejemplo_no_repiten_la_ciudad_adentro():
+    """La forma en que el producto espera el par domicilio/ciudad.
+
+    Si un domicilio de ejemplo trajera su ciudad adentro, el seed estaría
+    sembrando justo el caso que `direccion()` tiene que desarmar — y el ejemplo
+    de dev mostraría la excepción en vez de la forma normal.
+    """
+    for domicilio, ciudad in DOMICILIOS:
+        assert ciudad.lower() not in domicilio.lower(), (
+            f"'{domicilio}' ya contiene '{ciudad}'"
+        )
+
+
+def test_hay_domicilios_de_ejemplo_suficientes_para_no_repetir_de_a_dos():
+    """Se reparten por índice (`i % len`), así que con pocos se repiten pronto.
+
+    No es cosmético: dos paradas de la misma cuadrilla en el mismo domicilio se
+    leen como un error de carga cuando se mira la hoja de ruta.
+    """
+    assert len(DOMICILIOS) >= 8
+    assert len({d for d, _ in DOMICILIOS}) == len(DOMICILIOS)
