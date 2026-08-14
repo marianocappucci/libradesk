@@ -901,11 +901,145 @@ def sembrar(api: Api) -> None:
         })
         contar("incidencias_con_abono", True)
 
+    _sembrar_sucursales_y_stock(api, contar)
+
     # El logo del negocio, para que los comprobantes salgan como los de un
     # cliente y no con un hueco arriba.
     _cargar_logo(api, "Compulibra Servicios IT", "C", (79, 70, 229), contar)
 
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
+
+
+def _sembrar_sucursales_y_stock(api: Api, contar) -> None:
+    """Dos sucursales con stock **desbalanceado**, y una transferencia entre ellas.
+
+    Sin esto el módulo comercial de dev es invisible: al desplegar sucursales el
+    2026-08-14, dev tenía 0 sucursales, 0 depósitos de stock y 0 consumibles, así
+    que ninguna de las pantallas que filtran por sucursal se podía mirar.
+
+    ## Por qué el stock arranca desbalanceado
+
+    **Con la misma cantidad de los dos lados no se puede revisar el filtro**: una
+    pantalla que ignora la sucursal muestra exactamente el mismo número que una
+    que la respeta. Chivilcoy arranca sobrada y Mercedes corta, así que cambiar
+    el selector del encabezado tiene que cambiar lo que se ve — y si no cambia,
+    se ve que no cambia.
+
+    Por lo mismo hay **un consumible bajo mínimo sólo en Mercedes** (mínimo 50,
+    30 allá y 400 en Chivilcoy): es el caso que hace visible la decisión de que
+    el mínimo se compara contra el stock de la sucursal mirada, no contra el de
+    la empresa.
+
+    ## Qué estados deja a la vista
+
+    - un depósito **sin sucursal** (el taller), que es el caso de la empresa de
+      un solo local y el que rompe si algún filtro asume que todo tiene sucursal;
+    - un **precio propio de sucursal** conviviendo con el general, para que la
+      lista de precios muestre las píldoras «Propio» y «General»;
+    - una **transferencia entre sucursales** ya hecha, así el historial no
+      arranca vacío.
+
+    Idempotente por nombre, como el resto del seed. Los ajustes de stock **no**
+    lo son —el ledger es aditivo— así que sólo se cargan la primera vez, cuando
+    el depósito se acaba de crear.
+    """
+    sucursales = {}
+    for nombre, codigo, direccion in (
+        ("Chivilcoy", "CHI", "Av. Villarino 250"),
+        ("Mercedes", "MER", "Calle 29 y 18"),
+    ):
+        s, nuevo = obtener_o_crear(
+            api, "/api/sucursales?solo_activas=false", "nombre", nombre,
+            {"nombre": nombre, "codigo": codigo, "direccion": direccion},
+        )
+        sucursales[nombre] = s
+        contar("sucursales", nuevo)
+
+    consumibles = {}
+    for nombre, minimo, costo, precio in (
+        ("Plug RJ45", 50, 120, 260),
+        ("Cable UTP Cat 6 (m)", 100, 900, 1650),
+        ("Patchcord 2 m", 20, 2400, 4300),
+    ):
+        c, nuevo = obtener_o_crear(
+            api, "/api/consumibles?solo_activos=false", "nombre", nombre,
+            {"nombre": nombre, "stock_minimo": minimo, "costo": costo,
+             "precio": precio},
+        )
+        consumibles[nombre] = c
+        contar("consumibles", nuevo)
+
+    depositos = {}
+    for nombre, sucursal in (
+        ("Depósito central Chivilcoy", "Chivilcoy"),
+        ("Kangoo Norte", "Chivilcoy"),
+        ("Depósito Mercedes", "Mercedes"),
+        # A propósito sin sucursal: es el caso de la empresa de un solo local, y
+        # el que destapa cualquier filtro que asuma que todo tiene sucursal.
+        ("Taller", None),
+    ):
+        d, nuevo = obtener_o_crear(
+            api, "/api/depositos-stock", "nombre", nombre,
+            {"nombre": nombre,
+             "sucursal_id": sucursales[sucursal]["id"] if sucursal else None},
+        )
+        depositos[nombre] = (d, nuevo)
+        contar("depositos_stock", nuevo)
+
+    # (consumible, depósito, cantidad). El desbalance es el punto: ver el
+    # docstring.
+    for item, deposito, cantidad in (
+        ("Plug RJ45", "Depósito central Chivilcoy", 400),
+        ("Plug RJ45", "Kangoo Norte", 60),
+        ("Plug RJ45", "Depósito Mercedes", 30),      # bajo el mínimo de 50
+        ("Cable UTP Cat 6 (m)", "Depósito central Chivilcoy", 850),
+        ("Cable UTP Cat 6 (m)", "Depósito Mercedes", 120),
+        ("Patchcord 2 m", "Depósito central Chivilcoy", 45),
+        ("Patchcord 2 m", "Taller", 12),
+    ):
+        # Sólo si el depósito se acaba de crear: un ajuste de stock NO es
+        # idempotente —el ledger es aditivo— y correr el seed dos veces
+        # duplicaría las existencias sin que nada avise.
+        if not depositos[deposito][1]:
+            continue
+        api.post(f"/api/consumibles/{consumibles[item]['id']}/ajuste", {
+            "deposito_id": depositos[deposito][0]["id"],
+            "cantidad": cantidad, "nota": "Carga inicial (seed)",
+        })
+        contar("ajustes_de_stock", True)
+
+    # Una transferencia entre sucursales ya hecha, para que el historial de
+    # `/api/stock/transferencias` no arranque vacío.
+    if depositos["Depósito Mercedes"][1]:
+        api.post("/api/consumibles/transferir", {
+            "item_id": consumibles["Cable UTP Cat 6 (m)"]["id"],
+            "origen_id": depositos["Depósito central Chivilcoy"][0]["id"],
+            "destino_id": depositos["Depósito Mercedes"][0]["id"],
+            "cantidad": 50,
+            "nota": "Reposición Mercedes (seed)",
+        })
+        contar("transferencias_entre_sucursales", True)
+
+    # Una lista de precios con un precio propio de sucursal conviviendo con el
+    # general: es lo que hace visibles las píldoras «Propio» y «General».
+    lista, nueva = obtener_o_crear(
+        api, "/api/listas-precio", "nombre", "Mostrador",
+        {"nombre": "Mostrador", "descripcion": "Precio de lista al público"},
+    )
+    contar("listas_precio", nueva)
+    if nueva:
+        for item, precio in (("Plug RJ45", 260), ("Cable UTP Cat 6 (m)", 1650),
+                             ("Patchcord 2 m", 4300)):
+            api.put(f"/api/listas-precio/{lista['id']}/precios", {
+                "item_id": consumibles[item]["id"], "precio": precio,
+            })
+            contar("precios", True)
+        # Mercedes cobra el plug más caro: mismo producto, precio propio.
+        api.put(f"/api/listas-precio/{lista['id']}/precios", {
+            "item_id": consumibles["Plug RJ45"]["id"], "precio": 310,
+            "sucursal_id": sucursales["Mercedes"]["id"],
+        })
+        contar("precios_de_sucursal", True)
 
 
 #: Los subdominios que NO son de un cliente. Se compara contra la **primera
