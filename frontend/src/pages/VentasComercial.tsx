@@ -42,15 +42,16 @@ type Venta = {
    *  Un recibo anulado no cuenta: la venta vuelve a estar pendiente. */
   recibo_id: number | null
 }
-/** Lo que devuelve `GET /api/ventas/{id}`: la venta con sus líneas y cobros.
- *
- * No trae `recibo_id` — el recibo se maneja desde la lista. Si algún día el
- * detalle tiene que ofrecerlo, se agrega al servicio, no se deriva acá. */
+/** Lo que devuelve `GET /api/ventas/{id}`: la venta con sus líneas y cobros. */
 type VentaDetalleData = {
   id: number; numero: string; estado: string; fecha: string
   cliente: { id: number; nombre: string; cuit: string; domicilio: string } | null
   cliente_nombre: string
   notas: string | null
+  /** Mismo dato y misma regla que el de la lista: lo calcula el servicio, en un
+   *  solo lugar. Derivarlo en la pantalla es cómo la ficha y la lista terminan
+   *  diciendo cosas distintas de la misma venta. */
+  recibo_id: number | null
   items: { descripcion: string; cantidad: number; precio: number; subtotal: number }[]
   pagos: { medio: string; monto: number; referencia: string }[]
   subtotal: number; total: number
@@ -183,9 +184,14 @@ export function Ventas() {
  * conteste, porque recién ahí se conoce el id. Eso puede activar el bloqueo de
  * popups —la apertura ya no cuelga del click—, así que si falla se muestra el
  * recibo emitido como enlace en vez de dejar a la persona sin nada.
+ *
+ * Lo usan la lista y la ficha de la venta. Pide **los tres campos que mira**, no
+ * una `Venta` entera: es lo que deja que las dos pantallas ofrezcan el recibo
+ * con el mismo botón en vez de tener cada una el suyo, que es como una termina
+ * diciendo «ver» y la otra «emitir» sobre la misma venta.
  */
 function AccionRecibo({ venta, onEmitido }: {
-  venta: Venta
+  venta: { id: number; numero: string; recibo_id: number | null }
   onEmitido: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
   const [emitiendo, setEmitiendo] = useState(false)
@@ -398,7 +404,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
  */
 export function VentaDetalle() {
   const { id } = useParams<{ id: string }>()
-  const { datos, error, cargando } = useDatos<VentaDetalleData | null>(
+  const { datos, error, cargando, conError } = useDatos<VentaDetalleData | null>(
     `/api/ventas/${Number(id)}`, null,
   )
 
@@ -414,6 +420,10 @@ export function VentaDetalle() {
       acciones={
         <>
           <Badge variant={estado.variant}>{estado.label}</Badge>
+          {/* El mismo botón que la lista, no una copia: emite si falta y muestra
+              el PDF si ya está. Quien abre la venta para mandar el comprobante
+              no tiene que volver a la lista a buscarlo. */}
+          <AccionRecibo venta={datos} onEmitido={conError} />
           <Button asChild size="sm" variant="outline">
             <Link to="/ventas"><ArrowLeft />Volver</Link>
           </Button>
