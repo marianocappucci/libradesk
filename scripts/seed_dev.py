@@ -853,12 +853,25 @@ def sembrar(api: Api) -> None:
     # reclamos iguales, la mitad del comportamiento queda sin mirarse. El
     # `fuera` además es el que hace que aparezca en el reporte de facturación,
     # y el `total` el que NO tiene que aparecer.
-    con_abono = buscar(api.get("/api/clientes") or [], "nombre", "Abono Sur SRL")
+    # 🔴 **Se REUSA cualquier cliente `mensual` que ya exista, y sólo se crea uno
+    # si no hay ninguno.** La primera versión de esto buscaba por nombre
+    # ("Abono Sur SRL") y creaba con un CUIT inventado. Reventó en dev al primer
+    # intento: `POST /api/clientes → 409`, porque ese CUIT ya era de "Estudio
+    # Pereyra & Asociados". El error de fondo no es el número elegido — es que
+    # **la idempotencia se chequeaba por un campo distinto del que el producto
+    # usa para deduplicar**, así que el "si no está, créalo" nunca lo iba a
+    # encontrar y siempre iba a chocar.
+    #
+    # Y reusar es además lo correcto: lo que hace falta para revisar la pantalla
+    # es *un* cliente con abono, no uno con este nombre. dev ya tenía cuatro.
+    con_abono = buscar(api.get("/api/clientes") or [], "tipo_facturacion", "mensual")
     if con_abono is None:
+        # Sin CUIT: es dato inventado, y el único que este script necesita de
+        # verdad es `tipo_facturacion`. Un identificador de fantasía es
+        # exactamente lo que chocó antes.
         con_abono = api.post("/api/clientes", {
             "nombre": "Abono Sur SRL", "empresa": "ABONO SUR SRL",
-            "cuit": "30-71234567-9", "ciudad": "Chivilcoy",
-            "tipo_facturacion": "mensual",
+            "ciudad": "Chivilcoy", "tipo_facturacion": "mensual",
         })
         contar("clientes_con_abono", True)
 
