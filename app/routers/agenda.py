@@ -23,7 +23,11 @@ router = APIRouter(prefix="/api/agenda", tags=["agenda"])
 def agenda_de_equipo(
     equipo_id: int,
     desde: str = Query(..., description="Primer día, ISO (YYYY-MM-DD)"),
-    dias: int = Query(1, ge=1, le=31, description="Cuántos días mostrar"),
+    # 42 y no 31 porque el tope lo fija la **grilla de mes**, no el mes: una
+    # vista de mes dibuja hasta 6 semanas completas (el mes de 31 días que
+    # arranca un domingo ocupa 42 celdas) y empieza en el lunes anterior al día
+    # 1. Con el tope en 31 esa vista pedía un rango que la propia API rechazaba.
+    dias: int = Query(1, ge=1, le=42, description="Cuántos días mostrar"),
     equipos: EquipoTrabajoRepository = Depends(get_equipo_trabajo_repository),
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
 ):

@@ -22,6 +22,7 @@ import {
   Boxes as DepositosStock,
   Briefcase as Activos,
   Building2,
+  CalendarDays,
   Car as EquiposFlota,
   CircleAlert as AlertCircle,
   ClipboardCheck,
@@ -88,6 +89,12 @@ export const Layout = createLayout({
         // hacia un proveedor.
         { to: '/recepciones', label: 'Recepción de equipos', icon: ClipboardCheck },
         { to: '/reparaciones', label: 'Reparaciones', icon: Wrench },
+        // Ítem propio desde el 2026-08-14. Era la pestaña del medio de "Equipos
+        // y flota", o sea que lo que se abre todas las mañanas para despachar
+        // vivía detrás de un ítem que se llama por el catálogo de vehículos.
+        // Va justo antes, que es el orden real: primero a dónde hay que ir,
+        // después con quién y en qué.
+        { to: '/agenda', label: 'Agenda', icon: CalendarDays },
         { to: '/equipos-trabajo', label: 'Equipos y flota', icon: EquiposFlota },
       ],
     },

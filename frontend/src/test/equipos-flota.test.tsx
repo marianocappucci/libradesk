@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AgendaDelDia, EquiposDeTrabajo, Flota } from '../pages/EquiposYFlota'
+import { EquiposDeTrabajo, Flota } from '../pages/EquiposYFlota'
 
 const render = (ui: ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -86,34 +86,45 @@ beforeEach(() => {
   }))
 })
 
-// Las tres secciones separadas en pestañas (2026-08-07, a pedido del usuario).
+// Las secciones separadas en pestañas (2026-08-07, a pedido del usuario).
 //
-// Lo que hay que sostener: que el conmutador **no sea decorativo**. Si las tres
+// Lo que hay que sostener: que el conmutador **no sea decorativo**. Si las dos
 // siguieran renderizándose juntas, la pantalla seguiría siendo la misma tira
 // larga y el pedido no estaría hecho.
+//
+// **Eran tres.** La agenda se fue a pantalla propia el 2026-08-14 (`/agenda`),
+// y lo que hay que sostener acá es que **no quedó ningún rastro**: ni pestaña,
+// ni tarjetas de agenda dibujándose de nuevo al lado del armado.
 const pestania = (nombre: string | RegExp) => screen.getByRole('link', { name: nombre })
 
 describe('Equipos y flota en pestañas', () => {
-  it('las tres pestañas están, y apuntan a rutas propias', async () => {
+  it('las dos pestañas están, y apuntan a rutas propias', async () => {
     render(<EquiposDeTrabajo />)
     await screen.findByText('Cuadrilla Norte')
 
     expect(pestania('Equipos de trabajo')).toHaveAttribute('href', '/equipos-trabajo')
-    expect(pestania('Agenda del día')).toHaveAttribute('href', '/equipos-trabajo/agenda')
     expect(pestania('Flota')).toHaveAttribute('href', '/equipos-trabajo/flota')
   })
 
-  it('🔴 la pestaña de equipos no dibuja ni la agenda ni la flota', async () => {
+  it('🔴 la agenda ya no es una pestaña de acá', async () => {
+    // Se afirma sobre el conmutador y no sobre la pantalla entera: mientras la
+    // agenda fue pestaña, este archivo probaba su `href`. Si vuelve a colarse
+    // —por un merge, o por alguien que "restaura" PESTANIAS_EQUIPOS— la pantalla
+    // se llenaría de tarjetas por equipo al lado del armado, que es lo que la
+    // separación en pestañas vino a sacar.
     render(<EquiposDeTrabajo />)
-    await screen.findByText('Sin vehículo asignado.')
+    await screen.findByText('Cuadrilla Norte')
+
+    expect(screen.queryByRole('link', { name: /Agenda/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /agenda/ })).not.toBeInTheDocument()
+    // El selector de día era el control propio de la agenda vieja: si aparece,
+    // la agenda se está volviendo a dibujar acá aunque no tenga pestaña.
     expect(screen.queryByLabelText('Día')).not.toBeInTheDocument()
-    expect(screen.queryByText('Renault Kangoo')).not.toBeInTheDocument()
   })
 
-  it('🔴 la pestaña de agenda muestra sólo la agenda', async () => {
-    render(<AgendaDelDia />)
-    expect(await screen.findByLabelText('Día')).toBeInTheDocument()
-    expect(screen.queryByText('Sin vehículo asignado.')).not.toBeInTheDocument()
+  it('🔴 la pestaña de equipos no dibuja la flota', async () => {
+    render(<EquiposDeTrabajo />)
+    await screen.findByText('Sin vehículo asignado.')
     expect(screen.queryByText('Renault Kangoo')).not.toBeInTheDocument()
   })
 
@@ -121,20 +132,19 @@ describe('Equipos y flota en pestañas', () => {
     render(<Flota />)
     await screen.findByText('Renault Kangoo')
     expect(screen.queryByText('Sin vehículo asignado.')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Día')).not.toBeInTheDocument()
   })
 
   it('la pestaña activa se marca con aria-current, no sólo con color', async () => {
-    render(<AgendaDelDia />)
-    await screen.findByLabelText('Día')
+    render(<Flota />)
+    await screen.findByText('Renault Kangoo')
 
-    expect(pestania('Agenda del día')).toHaveAttribute('aria-current', 'page')
-    expect(pestania('Flota')).not.toHaveAttribute('aria-current')
+    expect(pestania('Flota')).toHaveAttribute('aria-current', 'page')
+    expect(pestania('Equipos de trabajo')).not.toHaveAttribute('aria-current')
   })
 
   it('el botón de alta es el de la pestaña que se está mirando', async () => {
-    // Los dos botones siempre visibles ofrecerían "Nuevo vehículo" parado en la
-    // agenda, que no es lo que se vino a hacer ahí.
+    // Los dos botones siempre visibles ofrecerían dar de alta un vehículo desde
+    // la pantalla de equipos, que no es lo que se vino a hacer ahí.
     render(<EquiposDeTrabajo />)
     await screen.findByText('Cuadrilla Norte')
     expect(screen.getByRole('button', { name: /Nuevo equipo/ })).toBeInTheDocument()
