@@ -128,6 +128,19 @@ describe('Agenda del día', () => {
     expect(await screen.findByText('Av. San Martín 1240, Suipacha')).toBeInTheDocument()
   })
 
+  it('no repite la ciudad si ya viene adentro del domicilio', async () => {
+    // Se vio en la demo desplegada: los clientes reales cargan la ciudad
+    // adentro del domicilio Y en su propio campo, y la pantalla decía
+    // "Av. Pueyrredón 1640, CABA, CABA".
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json([{
+      ...TRABAJO,
+      cliente_domicilio: 'Av. Pueyrredón 1640, CABA', cliente_ciudad: 'CABA',
+    }]))))
+    render(<AgendaEquipos equipos={[NORTE]} />)
+    expect(await screen.findByText('Av. Pueyrredón 1640, CABA')).toBeInTheDocument()
+    expect(screen.queryByText(/CABA, CABA/)).not.toBeInTheDocument()
+  })
+
   it('un trabajo sin domicilio no deja un renglón vacío', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(json([{
       ...TRABAJO, cliente_domicilio: null, cliente_ciudad: null,
