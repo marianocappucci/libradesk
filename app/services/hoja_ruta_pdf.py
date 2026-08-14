@@ -195,6 +195,30 @@ def _parada(pdf: FPDF, orden: int, p: dict) -> None:
     pdf.line(_LX, pdf.get_y() - 1, _RX, pdf.get_y() - 1)
 
 
+def direccion(domicilio: str | None, ciudad: str | None) -> str:
+    """`domicilio` + `ciudad`, sin repetir la ciudad si ya viene adentro.
+
+    🔴 **Salió de mirar la demo desplegada, no de un test.** Los clientes reales
+    cargan la ciudad **dentro** del domicilio —`Av. Pueyrredón 1640, CABA`— y
+    además tienen el campo `ciudad` con lo mismo, así que pegar los dos daba
+    `Av. Pueyrredón 1640, CABA, CABA` en las tres paradas de la hoja. Con los
+    datos inventados de los tests (`Av. San Martín 1240` + `Suipacha`) no
+    aparecía: el defecto necesitaba **la forma de los datos de producción**.
+
+    La comparación es por contención y sin distinguir mayúsculas. No intenta
+    normalizar direcciones —eso es otro problema y más grande—: sólo evita el
+    caso en que la ciudad ya está escrita.
+
+    Pública y no `_privada` porque la usa el test, y porque es la clase de regla
+    que va a querer reusar el próximo documento que imprima un domicilio.
+    """
+    if not domicilio:
+        return ciudad or ""
+    if ciudad and ciudad.strip().lower() not in domicilio.lower():
+        return f"{domicilio}, {ciudad}"
+    return domicilio
+
+
 def _detalle(pdf: FPDF, domicilio: str | None, ciudad: str | None) -> None:
     """El domicilio, que es lo que convierte la agenda en una hoja de ruta.
 
@@ -202,7 +226,7 @@ def _detalle(pdf: FPDF, domicilio: str | None, ciudad: str | None) -> None:
     hace falta arriba de la camioneta. Se envuelve en vez de recortarse: una
     dirección cortada con elipsis es una dirección a la que no se llega.
     """
-    texto = ", ".join(x for x in (domicilio, ciudad) if x) or "sin domicilio cargado"
+    texto = direccion(domicilio, ciudad) or "sin domicilio cargado"
     pdf.set_font("Helvetica", "", 8)
     # En gris si no hay domicilio: la hoja igual sale —el trabajo existe— pero
     # el renglón se lee como "falta un dato" y no como una dirección.

@@ -121,6 +121,37 @@ def test_la_hoja_lleva_el_domicilio_de_cada_parada(client, escenario):
     assert "Suipacha" in texto
 
 
+def test_la_ciudad_no_se_repite_si_ya_esta_en_el_domicilio(client, escenario):
+    """🔴 Salió de mirar la demo desplegada, no de un test.
+
+    Los clientes reales cargan la ciudad **adentro** del domicilio y además
+    llenan el campo `ciudad` con lo mismo, así que las tres paradas de la hoja
+    decían `Av. Pueyrredón 1640, CABA, CABA`. Con los datos inventados del resto
+    de este archivo —`Av. San Martín 1240` + `Suipacha`— no aparecía: el defecto
+    necesitaba la forma de los datos de producción.
+    """
+    porteño = client.post("/api/clientes", json={
+        "nombre": "Clínica del Sol",
+        "domicilio": "Av. Pueyrredón 1640, CABA",
+        "ciudad": "CABA",
+    }).json()
+    agendar(client, escenario, cliente=porteño,
+            hora=f"{MARTES}T10:00", titulo="La impresora no toma papel")
+
+    texto = texto_pdf(pedir_hoja(client, escenario).content)
+    assert "Av. Pueyrredón 1640, CABA" in texto
+    assert "CABA, CABA" not in texto
+
+
+def test_la_ciudad_si_se_agrega_cuando_no_esta(client, escenario):
+    """El control del test de arriba: sin él, "nunca agregar la ciudad" pasaría."""
+    agendar(client, escenario, cliente=escenario["metalmax"],
+            hora=f"{MARTES}T08:30", titulo="Central sin tono")
+
+    texto = texto_pdf(pedir_hoja(client, escenario).content)
+    assert "Av. San Martín 1240, Suipacha" in texto
+
+
 def test_un_cliente_sin_domicilio_lo_dice_en_la_hoja(client, escenario):
     """Un renglón en blanco se lee como un error de impresión."""
     agendar(client, escenario, cliente=escenario["sin_domicilio"],
