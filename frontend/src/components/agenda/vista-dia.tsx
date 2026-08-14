@@ -1,28 +1,34 @@
-/** La vista de un día: una tarjeta por cuadrilla, con lo que tiene y en qué sale.
+/** El día: la rejilla horaria con **una columna por cuadrilla**.
  *
- *  **Es la pantalla de despacho de la mañana**, y la que contesta entero el
- *  pedido 42: *"cuando un equipo tiene asignado un trabajo ya sabe en qué
- *  vehículo sale de acuerdo a la disponibilidad"*. Viene de
- *  `components/agenda-equipos.tsx`, donde era la agenda entera; desde que la
- *  agenda es un calendario (2026-08-14) es **una de sus tres vistas**, y la que
- *  se abre al entrar a un día desde la semana o el mes.
+ *  Es la pantalla de despacho de la mañana, y la que contesta entero el pedido
+ *  42: *"cuando un equipo tiene asignado un trabajo ya sabe en qué vehículo sale
+ *  de acuerdo a la disponibilidad"*.
  *
- *  Por eso sigue siendo por cuadrilla y no por hora: la semana y el mes ya
- *  contestan "cuándo", y lo que falta al entrar a un día es "quién sale, con
- *  quién, en qué, y a qué direcciones". Agrupado por hora, armar el recorrido de
- *  la Cuadrilla Norte obligaría a pescar sus paradas entre las de las demás.
+ *  **Una columna por cuadrilla y no una sola con todo mezclado.** Es el patrón
+ *  de Google Calendar cuando se miran varios calendarios a la vez, y acá es
+ *  además lo que la pantalla tiene que contestar: al entrar a un día ya se sabe
+ *  *cuándo* —lo dijeron la semana y el mes—, y lo que falta es **quién sale, con
+ *  quién, en qué, y a qué direcciones**. Mezcladas en una columna, armar el
+ *  recorrido de la Cuadrilla Norte obligaría a pescar sus paradas entre las de
+ *  las demás.
  *
- *  Al mudarse perdió dos cosas: su propio selector de fecha (ahora el día lo
- *  manda la pantalla, y vive en la URL) y su fetch (ahora es `useAgendaRango`,
- *  compartido con las otras dos vistas).
+ *  Por eso el botón de **hoja de ruta va en el encabezado de su columna**: la
+ *  hoja es por equipo y por día, que es exactamente lo que la columna delimita.
+ *
+ *  Historia: era una lista de tarjetas por cuadrilla
+ *  (`components/agenda-equipos.tsx`, después `vista-dia` a secas). Pasó a
+ *  rejilla el 2026-08-14 junto con la semana, a pedido del humano. Lo que gana
+ *  es el **cuánto ocupa**: la lista decía que había tres trabajos, la rejilla
+ *  muestra que dos son de dos horas y que entre las 12:30 y las 16:00 la
+ *  cuadrilla está libre.
  */
-import { Link } from 'react-router-dom'
-import { ESTADO_LABELS, MODALIDAD_LABELS, type EquipoTrabajo } from '../../api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Car, Printer } from '@/components/iconos-accion'
-import { hora } from './fechas'
+import { RejillaHoraria, type ColumnaRejilla } from './rejilla-horaria'
+import { claseChip } from './colores'
+import { MODALIDAD_LABELS, type EquipoTrabajo } from '../../api'
 import type { TrabajoConEquipo } from './datos'
 
 /** El domicilio con su ciudad, sin repetirla si ya viene adentro.
@@ -43,11 +49,13 @@ export function direccion(domicilio: string | null, ciudad: string | null): stri
   return domicilio
 }
 
-export function VistaDia({ dia, equipos, trabajos, cargando }: {
+export function VistaDia({ dia, equipos, trabajos, esHoy }: {
   dia: string
   equipos: EquipoTrabajo[]
   trabajos: TrabajoConEquipo[]
-  cargando: boolean
+  /** Si el día que se muestra es hoy: la rejilla dibuja la línea de la hora
+   *  actual sólo entonces. */
+  esHoy: boolean
 }) {
   if (equipos.length === 0) {
     return (
@@ -57,86 +65,62 @@ export function VistaDia({ dia, equipos, trabajos, cargando }: {
     )
   }
 
-  return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      {equipos.map((e) => {
-        const suyos = trabajos.filter((t) => t.equipo_id === e.id)
-        const patentes = e.vehiculos.map((v) => v.patente).join(', ')
-        return (
-          <Card key={e.id}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                {e.nombre}
-                {patentes && (
-                  <Badge variant="outline" className="gap-1 font-normal">
-                    <Car className="size-3" />{patentes}
-                  </Badge>
-                )}
-                {/* El día del botón es el que se está mirando, no "hoy": la hoja
-                    se imprime la noche anterior tanto como a la mañana, y una
-                    que dijera otra fecha que la grilla de al lado es peor que no
-                    tenerla. */}
-                <Button size="sm" variant="outline" className="ml-auto" asChild>
-                  <a
-                    href={`/api/agenda/equipo/${e.id}/hoja-de-ruta?dia=${dia}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Printer />Hoja de ruta
-                  </a>
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-2">
-              {cargando && suyos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Cargando…</p>
-              ) : suyos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sin trabajos ese día.</p>
-              ) : (
-                suyos.map((t) => (
-                  <div
-                    key={t.incidencia_id}
-                    className="grid gap-y-0.5 border-l-2 pl-3"
-                  >
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="font-mono text-sm tabular-nums">
-                        {hora(t.desde)}–{hora(t.hasta)}
-                      </span>
-                      <Link
-                        to={`/incidencias/${t.incidencia_id}`}
-                        className="text-sm font-medium hover:underline"
-                      >
-                        {t.titulo}
-                      </Link>
-                      <span className="text-sm text-muted-foreground">
-                        {t.cliente_nombre ?? 'Sin cliente'}
-                      </span>
-                      <Badge variant="secondary" className="font-normal">
-                        {ESTADO_LABELS[t.estado]}
-                      </Badge>
-                      {t.modalidad && (
-                        <Badge variant="outline" className="font-normal">
-                          {MODALIDAD_LABELS[t.modalidad]}
-                        </Badge>
-                      )}
-                    </div>
-                    {/* En renglón propio y no como una etiqueta más: es lo que
-                        se lee para ordenar el recorrido, y apretado entre los
-                        badges se pierde. No se muestra nada si el cliente no
-                        tiene domicilio cargado — un "—" acá sería una fila de
-                        ruido en cada trabajo remoto. */}
-                    {t.cliente_domicilio && (
-                      <span className="text-xs text-muted-foreground">
-                        {direccion(t.cliente_domicilio, t.cliente_ciudad)}
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
-  )
+  const columnas: ColumnaRejilla[] = equipos.map((e) => {
+    const suyos = trabajos.filter((t) => t.equipo_id === e.id)
+    const patentes = e.vehiculos.map((v) => v.patente).join(', ')
+    return {
+      clave: String(e.id),
+      // Todas las columnas llevan la línea de "ahora" cuando el día es hoy: son
+      // cuadrillas del mismo día, no días distintos.
+      esHoy,
+      encabezado: (
+        <div className="grid gap-1">
+          <span className="truncate text-sm font-medium">{e.nombre}</span>
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            {patentes && (
+              <Badge variant="outline" className="gap-1 font-normal">
+                <Car className="size-3" />{patentes}
+              </Badge>
+            )}
+            {/* El día del botón es el que se está mirando, no "hoy": la hoja se
+                imprime la noche anterior tanto como a la mañana, y una que
+                dijera otra fecha que la grilla de al lado es peor que no
+                tenerla. */}
+            <Button size="sm" variant="outline" className="h-6 px-2 text-xs" asChild>
+              <a
+                href={`/api/agenda/equipo/${e.id}/hoja-de-ruta?dia=${dia}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Printer />Hoja de ruta
+              </a>
+            </Button>
+          </div>
+        </div>
+      ),
+      eventos: suyos.map((t) => ({
+        clave: `${t.equipo_id}-${t.incidencia_id}`,
+        desde: t.desde,
+        hasta: t.hasta,
+        titulo: t.titulo,
+        // La columna ya dice la cuadrilla, así que el subtítulo es el cliente —
+        // y la modalidad pegada, que en la vista de tarjetas era un badge y en
+        // un bloque no entra como tal. **No es decorativa**: un trabajo remoto
+        // ocupa la agenda pero NO es una parada, y por eso la hoja de ruta lo
+        // deja afuera (`_MODALIDADES_SIN_VISITA` en `app/services/agenda.py`).
+        // Sin esto, un remoto y una visita se ven idénticos en la grilla y el
+        // PDF sale con una parada menos de las que se contaron en pantalla.
+        subtitulo: [t.cliente_nombre, t.modalidad ? MODALIDAD_LABELS[t.modalidad] : null]
+          .filter(Boolean).join(' · ') || undefined,
+        // El domicilio en el bloque y no sólo en el PDF: el recorrido del día se
+        // arma mirando esta pantalla, y armarlo sin ver dónde queda cada trabajo
+        // es la misma carencia con otra ropa.
+        detalle: direccion(t.cliente_domicilio, t.cliente_ciudad) || undefined,
+        clase: claseChip(t.equipo_indice),
+        to: `/incidencias/${t.incidencia_id}`,
+      })),
+    }
+  })
+
+  return <RejillaHoraria columnas={columnas} />
 }
