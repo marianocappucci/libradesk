@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
 // `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
 // remito se manda a facturar" borró la rama de presupuestos, que era la única
@@ -173,7 +174,31 @@ export function Facturacion() {
     },
     // Sin columna "Tipo": todas las filas son remitos, y una columna con el
     // mismo valor en todas ocupa lugar y no informa nada.
-    { accessorKey: 'numero', header: sortableHeader('Número'), size: 140 },
+    {
+      accessorKey: 'numero',
+      header: sortableHeader('Número'),
+      size: 140,
+      // 🔴 **El número es un link al remito.** Esta pantalla decide si se manda
+      // algo a facturar, y hasta acá era la única lista del producto desde la
+      // que no se podía abrir el comprobante que se estaba por mandar: había
+      // que anotarse el número, ir a Remitos y buscarlo. Reportado probando en
+      // la demo (2026-08-14).
+      //
+      // Es un `Link` y no un `onRowClick` en la tabla a propósito: la fila
+      // tiene un checkbox, y el `onRowClick` de libra-ui **no** ignora los
+      // clicks sobre un `input` —sólo sobre `button` y `a`—, así que tildar
+      // navegaría. Un ancla en la celda deja las dos cosas convivir, y además
+      // se puede abrir en una pestaña nueva, que es lo natural cuando estás
+      // revisando una lista para decidir.
+      cell: ({ row }) => (
+        <Link
+          to={`/remitos/${row.original.id}`}
+          className="font-medium underline-offset-4 hover:underline"
+        >
+          {row.original.numero}
+        </Link>
+      ),
+    },
     {
       accessorKey: 'fecha', header: sortableHeader('Fecha'), size: 110,
       // Es la fecha del remito: la misma que muestra su propia grilla, así que

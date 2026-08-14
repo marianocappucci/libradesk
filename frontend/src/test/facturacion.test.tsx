@@ -122,6 +122,35 @@ describe('enviar a facturar', () => {
     expect(posts[0].body).toEqual({ origen_tipo: 'remito', ids: [1] })
   })
 
+  it('el número abre el remito, sin salir a buscarlo a otra pantalla', async () => {
+    // Reportado probando en la demo (2026-08-14): "tampoco puedo ver el remito
+    // desde ese listado, no puedo entrar al remito". Es la pantalla donde se
+    // decide si algo se manda a facturar, y era la única lista del producto
+    // desde la que no se podía abrir el comprobante que se estaba por mandar.
+    montar([REMITO, OTRO_REMITO])
+    render(<Facturacion />)
+
+    const link = await screen.findByRole('link', { name: 'REM-00000001' })
+
+    expect(link).toHaveAttribute('href', '/remitos/1')
+    expect(await screen.findByRole('link', { name: 'REM-00000002' }))
+      .toHaveAttribute('href', '/remitos/2')
+  })
+
+  it('abrir el remito no lo tilda para enviar', async () => {
+    // El link vive en una fila que además tiene checkbox. Si navegar arrastrara
+    // la selección, mirar un comprobante lo dejaría elegido para mandar a
+    // facturar sin que nadie lo pidiera.
+    montar([REMITO])
+    render(<Facturacion />)
+
+    await userEvent.click(await screen.findByRole('link', { name: 'REM-00000001' }))
+
+    expect(screen.queryByText(/comprobante elegido/)).toBeNull()
+    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked)
+      .toBe(false)
+  })
+
   it('tildar uno no arrastra al otro', async () => {
     montar([REMITO, OTRO_REMITO])
     render(<Facturacion />)
