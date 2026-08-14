@@ -26,7 +26,9 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import { ArrowLeft, ArrowLeftRight, Building2, Monitor } from 'lucide-react'
+import { ArrowLeftRight, Building2 } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Monitor } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 // Destino "ninguno": el equipo sale del depósito y vuelve al sector del
 // cliente. Radix no admite un <SelectItem value="">.
@@ -162,11 +164,11 @@ export function DepositoDetalle() {
         <div className="flex items-center gap-3">
           {volver}
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Building2 className="size-5 text-primary" />{deposito.nombre}
+            <TituloPantalla icono={Building2}>
+              {deposito.nombre}
               {deposito.es_default && <Badge>Predeterminado</Badge>}
               {!deposito.activo && <Badge variant="secondary">Inactivo</Badge>}
-            </h2>
+            </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[
                 deposito.cliente_nombre ? `De ${deposito.cliente_nombre}` : 'De la empresa',
@@ -181,7 +183,7 @@ export function DepositoDetalle() {
             disabled={seleccion.size === 0}
             onClick={() => { setMoverError(null); setMoverOpen(true) }}
           >
-            <ArrowLeftRight />
+            <ArrowLeftRightAccion />
             Mover {seleccion.size > 0 ? `(${seleccion.size})` : ''}
           </Button>
         </div>

@@ -186,6 +186,32 @@ def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
     return salida
 
 
+def datos_cliente_para_comprobante(cliente: dict, override_address: str | None = None) -> dict:
+    """Del cliente de LibraDesk a los campos que copia un comprobante.
+
+    Vive aca y no en los routers porque desde el 2026-08-13 hay **tres**
+    lugares que arman un comprobante a partir de un cliente —remitos,
+    presupuestos y la conversion de una incidencia— y con una copia por lugar
+    alcanzaba con tocar dos para que el tercero empezara a emitir con otros
+    datos.
+
+    `empresa or nombre` no es cosmetico: el comprobante va a nombre de la razon
+    social cuando existe, y al nombre de la persona cuando el cliente es una
+    persona. `override_address` deja pisar el domicilio en el comprobante sin
+    tocar la ficha del cliente; `None` significa "usar el del cliente", que no
+    es lo mismo que `""`.
+    """
+    return {
+        "client_name": cliente["empresa"] or cliente["nombre"],
+        "client_address": (
+            override_address if override_address is not None
+            else (cliente["ciudad"] or "")
+        ),
+        "client_email": cliente["email"] or "",
+        "client_phone": cliente["telefono"] or "",
+    }
+
+
 class RemitoService:
     """Envoltorio sobre `libracore.db.remitos_presupuestos` (remitos)."""
 
@@ -239,13 +265,18 @@ class RemitoService:
         return rp.get_remito(remito_id)
 
     def delete(self, remito_id: int) -> None:
-        """Borra el remito **si ningun presupuesto lo referencia**.
+        """Borra el remito **si nada lo referencia**.
 
         `presupuestos.remito_id` guarda de que presupuesto salio el remito
         (`convertir_a_remito`). Borrar el remito dejaba esa columna apuntando a
         un id inexistente y el presupuesto seguia diciendo "ya se convirtio",
         sin nada al otro lado. Contra PostgreSQL esa FK rechaza el borrado
         sola; aca se hace explicito para que SQLite haga lo mismo (2026-08-09).
+
+        Desde el 2026-08-13 vale igual para `incidencias.remito_id`, que es el
+        mismo vinculo con el otro origen. **Ahi la FK no existe en ningun
+        motor** —`incidencias` es SQLAlchemy y `remitos` no, ver el comentario
+        de la columna—, asi que este chequeo es la unica defensa que hay.
         """
         if rp.get_remito(remito_id) is None:
             raise KeyError(remito_id)
@@ -257,13 +288,25 @@ class RemitoService:
         rp.delete_remito(remito_id)
 
     def dependencias(self, remito_id: int) -> dict[str, int]:
+        """Que sigue apuntando a este remito. Todo en cero = se puede borrar."""
         from libracore.db import core as libracore_core
 
         with libracore_core.get_connection() as conn:
-            fila = conn.execute(
+            presupuestos = conn.execute(
                 "SELECT COUNT(*) FROM presupuestos WHERE remito_id=?", (remito_id,)
-            ).fetchone()
-        return {"presupuestos_convertidos": fila[0]}
+            ).fetchone()[0]
+            # `incidencias` la escribe SQLAlchemy, pero vive en la MISMA base
+            # (`configure()` apunta LibraCore al mismo destino), asi que se lee
+            # por esta conexion como cualquier otra tabla. Leerla por el ORM
+            # obligaria a inyectar la session factory en este servicio, que hoy
+            # no depende de SQLAlchemy para nada.
+            incidencias = conn.execute(
+                "SELECT COUNT(*) FROM incidencias WHERE remito_id=?", (remito_id,)
+            ).fetchone()[0]
+        return {
+            "presupuestos_convertidos": presupuestos,
+            "incidencias_convertidas": incidencias,
+        }
 
     def set_pdf_path(self, remito_id: int, pdf_path: str) -> None:
         rp.update_remito_pdf_path(remito_id, pdf_path)

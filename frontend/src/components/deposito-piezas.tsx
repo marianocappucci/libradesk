@@ -16,7 +16,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Link } from 'react-router-dom'
-import { Building2, Eye, Monitor, Pencil, Star, Trash2, Users } from 'lucide-react'
+import { Building2, Monitor, Users } from 'lucide-react'
+import { Eye, Pencil, Star, Trash2 } from '@/components/iconos-accion'
 
 const PESTANIAS_DEPOSITOS: readonly Pestania[] = [
   { clave: 'propios', to: '/depositos', label: 'De la empresa', icono: Building2 },

@@ -10,7 +10,8 @@
  *  garantiza que la tabla en pantalla y el .xlsx sean el mismo reporte.
  */
 import { ESTADO_LABELS, PRIORIDAD_LABELS } from '../api'
-import { Monitor, Ticket, Wallet } from 'lucide-react'
+import { Monitor, Wallet } from 'lucide-react'
+import { Ticket } from '@/components/iconos-accion'
 
 export const TODOS = '__todos__'
 

@@ -478,6 +478,79 @@ export const ESTADO_LABELS: Record<EstadoIncidencia, string> = {
   cerrado: 'Cerrado',
 }
 
+/** El semáforo de estado: un color por estado, en la grilla y en la ficha.
+ *
+ * **Semáforo estándar, no el código de colores de Integridad.** La primera
+ * versión copiaba el de ellos —rosa = asignado, naranja = pendiente—, y eso es
+ * una convención arbitraria que hay que aprender: rosa no significa nada por sí
+ * solo. El estándar de service desk se lee sin leyenda y en cualquier producto:
+ *
+ * | Estado | Color | Qué comunica |
+ * |---|---|---|
+ * | `abierto` | rojo | nadie lo tomó todavía — **requiere acción** |
+ * | `en_progreso` | ámbar | alguien está trabajando en eso |
+ * | `resuelta` | verde | listo, a la espera de cierre |
+ * | `cerrado` | gris | archivado, sin acción pendiente |
+ *
+ * Rojo-ámbar-verde es el semáforo de la calle y gris es "apagado": la fila se
+ * interpreta antes de leer la palabra, que es exactamente para lo que sirve.
+ *
+ * ⚠️ **Que un ticket nuevo salga rojo no es una alarma exagerada**: en la
+ * grilla de ellos, un reclamo sin técnico asignado ES lo que hay que mirar
+ * primero. El día que la mayoría esté en rojo, el color está diciendo algo
+ * cierto sobre la operación.
+ *
+ * 🔴 **Clases completas y literales, no interpoladas.** Tailwind hace purge
+ * escaneando el fuente: un `bg-${color}-500` armado en runtime no existe en el
+ * CSS final y el punto sale **transparente**, sin que nada falle. Por eso el
+ * mapa tiene la clase entera escrita.
+ *
+ * Vive acá y no en la página porque la grilla y la ficha usan el mismo color:
+ * dos definiciones es cómo terminan siendo dos semáforos distintos.
+ */
+export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
+  abierto: 'bg-red-500',
+  en_progreso: 'bg-amber-500',
+  resuelta: 'bg-emerald-500',
+  cerrado: 'bg-slate-400',
+}
+
+/** El mismo semáforo, pero para pintar la píldora de Estado (pedido del
+ *  usuario, 2026-08-13): fondo del color en versión suave y **borde un escalón
+ *  más intenso**, que es lo que hace que se lea como una píldora y no como un
+ *  bloque de color.
+ *
+ *  Por qué la píldora y no sólo el punto: el punto del semáforo vive en la
+ *  primera columna, a varios centímetros de la palabra "Abierto". El color y el
+ *  texto que significan lo mismo estaban separados por toda la fila, así que
+ *  para leer el estado había que mirar dos lugares.
+ *
+ *  🔴 **Clases completas y literales, igual que arriba** — un
+ *  `bg-${color}-50` armado en runtime no sobrevive al purge de Tailwind y la
+ *  píldora sale transparente sin que nada falle.
+ *
+ *  El texto va en el tono fuerte (`-700`) y no en `foreground`: sobre un fondo
+ *  teñido, el gris del tema pierde contraste justo en los estados que más se
+ *  miran.
+ *
+ *  ⚠️ **Sin variantes `dark:`, y no por olvido.** La primera versión las traía.
+ *  `index.css` declara `@custom-variant dark (&:is(.dark *))`, o sea que el
+ *  modo oscuro es **por clase**, y en este producto nadie agrega `.dark` a
+ *  ningún lado: el bloque `.dark` del CSS es boilerplate de shadcn que no se
+ *  activa nunca. Medido en el navegador con `prefers-color-scheme: dark`
+ *  puesto — las píldoras seguían con los colores claros. Eran clases muertas
+ *  que además hacían creer que el tema oscuro estaba contemplado. El día que se
+ *  encienda de verdad, esto y `ESTADO_COLOR` se revisan juntos.
+ */
+export const ESTADO_PILDORA: Record<EstadoIncidencia, string> = {
+  abierto: 'bg-red-50 text-red-700 border-red-300',
+  en_progreso: 'bg-amber-50 text-amber-700 border-amber-300',
+  resuelta: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+  // Slate y no un color: un ticket cerrado no pide atención, y pintarlo igual
+  // de fuerte que los abiertos vacía el semáforo de significado.
+  cerrado: 'bg-slate-100 text-slate-600 border-slate-300',
+}
+
 export const PRIORIDAD_LABELS: Record<PrioridadIncidencia, string> = {
   alta: 'Alta',
   media: 'Media',
@@ -519,12 +592,25 @@ export type Incidencia = {
   equipo_trabajo_id: number | null
   titulo: string
   descripcion: string | null
+  /** El número del talonario de Comprobante de Servicios (`0001-00041996`):
+   *  la llave entre el papel que firma el cliente y este ticket. Null en los
+   *  reclamos resueltos en remoto, que no tienen comprobante. */
+  nro_cds: string | null
+  /** Quién llamó, cuando no es el contacto habitual del cliente. */
+  reclamante: string | null
   estado: EstadoIncidencia
   prioridad: PrioridadIncidencia
   horas_invertidas: number | null
   notas: string | null
   resolucion: string | null
   estado_facturacion: string | null
+  /** El remito que se generó de este reclamo, o `null` si todavía no se
+   *  convirtió. Es el camino a facturación de un trabajo por servicio: la
+   *  bandeja de "Enviar a facturar" sólo acepta remitos.
+   *
+   *  Sólo de lectura — el PUT no lo recibe, así que editar el ticket no puede
+   *  borrarlo. */
+  remito_id: number | null
   activo: boolean
   fecha_creacion: string | null
   fecha_cierre: string | null
@@ -684,6 +770,11 @@ export type TrabajoAgendado = {
   titulo: string
   cliente_id: number | null
   cliente_nombre: string | null
+  /** Dónde queda. Va en la agenda y no sólo en la hoja de ruta: el recorrido
+   *  del día se arma mirando esta pantalla, y armarlo sin ver las direcciones
+   *  es la misma carencia con otra ropa. */
+  cliente_domicilio: string | null
+  cliente_ciudad: string | null
   estado: EstadoIncidencia
   modalidad: ModalidadIncidencia | null
   desde: string
@@ -811,6 +902,12 @@ export type Servicio = {
    *  el comprobante discrimina el IVA o muestra el precio final. */
   iva_rate: number
   activo: boolean
+  /** Si éste es el servicio con el que se cotiza **la hora de trabajo** al
+   *  generarle el remito a un reclamo.
+   *
+   *  Uno solo puede estarlo: marcarlo desmarca al que lo estuviera, y la regla
+   *  la aplica el backend. */
+  es_valor_hora: boolean
 }
 
 /** Un backup guardado en el servidor. Lo devuelve `GET /api/config/backups`

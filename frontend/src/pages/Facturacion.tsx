@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import {
-  CheckCircle2, FileText, Info, Receipt, Send, TriangleAlert, XCircle,
-} from 'lucide-react'
+// `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
+// remito se manda a facturar" borró la rama de presupuestos, que era la única
+// que los dibujaba.
+import { Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
+import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 type Envio = {
   id: number
@@ -21,8 +26,15 @@ type Envio = {
   actualizado_at: string
 }
 
+/** Una fila de la bandeja. **Siempre un remito**: desde el 2026-08-13 es lo
+ *  único que se manda a facturar, porque lo que habilita a facturar es la
+ *  entrega hecha. Un presupuesto aceptado y un reclamo cerrado llegan acá
+ *  convirtiéndose en remito, no por un camino propio.
+ *
+ *  `origen_tipo` sigue viajando en el payload de `/enviar` porque el backend lo
+ *  recibe, pero ya no hay dos valores que distinguir en pantalla. */
 type Pendiente = {
-  origen_tipo: 'remito' | 'presupuesto'
+  origen_tipo: 'remito'
   id: number
   numero: string
   fecha: string
@@ -89,9 +101,10 @@ export function Facturacion() {
     return 'Error de conexión.'
   }
 
-  // La clave de selección lleva el tipo: los ids de remito y de presupuesto se
-  // superponen (los dos arrancan en 1), así que un `id` pelado mezclaría dos
-  // comprobantes distintos en la misma tilde.
+  // La clave de selección conserva el prefijo del tipo aunque hoy haya uno
+  // solo: si mañana entra un segundo origen (las cuotas de contrato son la
+  // fase C), un `id` pelado mezclaría dos comprobantes distintos en la misma
+  // tilde, porque las dos numeraciones arrancan en 1.
   const clave = (p: Pendiente) => `${p.origen_tipo}:${p.id}`
 
   async function cargar() {
@@ -119,27 +132,17 @@ export function Facturacion() {
   )
   const totalElegido = seleccionados.reduce((acc, p) => acc + p.total, 0)
 
-  // Se mandan de a un tipo: el endpoint recibe `origen_tipo` + ids, que es lo
-  // que le permite al backend buscar en la tabla correcta sin adivinar.
-  const tiposElegidos = useMemo(
-    () => Array.from(new Set(seleccionados.map((p) => p.origen_tipo))),
-    [seleccionados],
-  )
-
   async function enviar() {
     setEnviando(true)
     setError(null)
     setResultados(null)
     try {
-      const salida: Resultado[] = []
-      for (const tipo of tiposElegidos) {
-        const ids = seleccionados.filter((p) => p.origen_tipo === tipo).map((p) => p.id)
-        const r = await api.post<{ resultados: Resultado[] }>('/api/facturacion/enviar', {
-          origen_tipo: tipo, ids,
-        })
-        salida.push(...r.resultados)
-      }
-      setResultados(salida)
+      // Un solo request: todo lo que hay para mandar es de un tipo. Antes esto
+      // era un loop por tipo, cuando la bandeja también ofrecía presupuestos.
+      const r = await api.post<{ resultados: Resultado[] }>('/api/facturacion/enviar', {
+        origen_tipo: 'remito', ids: seleccionados.map((p) => p.id),
+      })
+      setResultados(r.resultados)
       setElegidos([])
       await cargar()
     } catch (err) {
@@ -169,21 +172,39 @@ export function Facturacion() {
         )
       },
     },
+    // Sin columna "Tipo": todas las filas son remitos, y una columna con el
+    // mismo valor en todas ocupa lugar y no informa nada.
     {
-      id: 'tipo',
-      header: 'Tipo',
-      size: 120,
+      accessorKey: 'numero',
+      header: sortableHeader('Número'),
+      size: 140,
+      // 🔴 **El número es un link al remito.** Esta pantalla decide si se manda
+      // algo a facturar, y hasta acá era la única lista del producto desde la
+      // que no se podía abrir el comprobante que se estaba por mandar: había
+      // que anotarse el número, ir a Remitos y buscarlo. Reportado probando en
+      // la demo (2026-08-14).
+      //
+      // Es un `Link` y no un `onRowClick` en la tabla a propósito: la fila
+      // tiene un checkbox, y el `onRowClick` de libra-ui **no** ignora los
+      // clicks sobre un `input` —sólo sobre `button` y `a`—, así que tildar
+      // navegaría. Un ancla en la celda deja las dos cosas convivir, y además
+      // se puede abrir en una pestaña nueva, que es lo natural cuando estás
+      // revisando una lista para decidir.
       cell: ({ row }) => (
-        <span className="inline-flex items-center gap-1.5">
-          {row.original.origen_tipo === 'remito'
-            ? <Receipt className="size-3.5 shrink-0 text-muted-foreground" />
-            : <FileText className="size-3.5 shrink-0 text-muted-foreground" />}
-          {row.original.origen_tipo === 'remito' ? 'Remito' : 'Presupuesto'}
-        </span>
+        <Link
+          to={`/remitos/${row.original.id}`}
+          className="font-medium underline-offset-4 hover:underline"
+        >
+          {row.original.numero}
+        </Link>
       ),
     },
-    { accessorKey: 'numero', header: sortableHeader('Número'), size: 140 },
-    { accessorKey: 'fecha', header: sortableHeader('Fecha'), size: 110 },
+    {
+      accessorKey: 'fecha', header: sortableHeader('Fecha'), size: 110,
+      // Es la fecha del remito: la misma que muestra su propia grilla, así que
+      // se formatea igual.
+      cell: ({ row }) => fecha(row.original.fecha),
+    },
     {
       accessorKey: 'cliente',
       header: sortableHeader('Cliente'),
@@ -226,9 +247,9 @@ export function Facturacion() {
 
   return (
     <div className="grid gap-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Send className="size-5 text-primary" />Enviar a facturar
-      </h2>
+      <TituloPantalla icono={Send}>
+        Enviar a facturar
+      </TituloPantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -251,9 +272,18 @@ export function Facturacion() {
       {configurado && (
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0" />
-          Lo que se manda queda en la bandeja de {destinoNombre} esperando que
-          alguien lo facture ahí. <strong className="text-foreground">Desde acá no se
-          emite ninguna factura</strong>, y reenviar algo no lo duplica.
+          <span>
+            Lo que se manda queda en la bandeja de {destinoNombre} esperando que
+            alguien lo facture ahí. <strong className="text-foreground">Desde acá no se
+            emite ninguna factura</strong>, y reenviar algo no lo duplica.
+            {' '}
+            {/* Sin esto, el que buscaba su presupuesto acá no tiene cómo saber
+                a dónde se fue: la fila desapareció y la pantalla no dice por
+                qué ni qué hacer en su lugar. */}
+            Sólo se manda el <strong className="text-foreground">remito</strong>,
+            que es el que prueba la entrega: un presupuesto aceptado o un reclamo
+            cerrado llegan acá convirtiéndose en remito desde su propia pantalla.
+          </span>
         </p>
       )}
 
@@ -282,7 +312,8 @@ export function Facturacion() {
             : items.length === 0
               ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  No hay remitos ni presupuestos aceptados para mandar.
+                  No hay remitos para mandar. Convertí un presupuesto aceptado o
+                  un reclamo cerrado en remito y va a aparecer acá.
                 </p>
               )
               : <DataTable columns={columns} data={items} />}
@@ -301,7 +332,7 @@ export function Facturacion() {
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setElegidos([])}>Limpiar</Button>
                 <Button disabled={enviando || !configurado} onClick={enviar}>
-                  <Send className="mr-1 size-4" />
+                  <SendAccion className="mr-1 size-4" />
                   {enviando ? 'Enviando…' : 'Enviar a ' + destinoNombre}
                 </Button>
               </div>

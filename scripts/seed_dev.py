@@ -20,6 +20,11 @@ mirarse. La agenda (fase B del pedido 42) sigue el mismo criterio: dos trabajos
 **pegados** en el mismo equipo —uno termina 11:00, el otro empieza 11:00—, dos
 **equipos distintos a la misma hora**, y un ticket **sin agendar**.
 
+> El 2026-08-13 se agregó un ticket en **`resuelta`**: era el único de los
+> cuatro estados de incidencia que el seed no producía, así que el verde del
+> semáforo —el punto de la grilla y, desde ese día, la píldora de Estado— no
+> se veía nunca en la demo. Falta todavía uno en **`en_progreso`**.
+
 **Es idempotente por nombre**: si el registro ya existe no lo duplica, así que
 se puede correr después de cada deploy sin ensuciar.
 
@@ -40,6 +45,84 @@ from datetime import date, datetime, time, timedelta
 from http.cookiejar import CookieJar
 
 HOY = date.today()
+
+#: Todos los campos de `IncidenciaIn`, para reenviarlos en un PUT.
+#:
+#: `PUT /api/incidencias/{id}` **reemplaza**, no parchea: lo que no viaja se
+#: pierde contra el default del modelo. Este script hace dos PUT parciales —el
+#: que completa la agenda de un ticket viejo y el que lo da por terminado— y
+#: los dos tienen que reenviar el resto.
+#:
+#: 🔴 **Esta lista estaba escrita a mano y le faltaban cuatro campos**
+#: (`estado_facturacion`, `nro_cds`, `reclamante`, `activo`), justo debajo de un
+#: comentario que advertía *"hay que reenviar todo lo demás o se borra"*. El
+#: 2026-08-13, al correr el seed sobre la demo, el PUT de la agenda le borró el
+#: `estado_facturacion` a "Cambio de switch en el rack" y la pantalla de
+#: facturación se quedó sin ejemplo de `no_facturable`. **No falló nada.**
+#:
+#: Los tres que faltan a propósito —`id`, `fecha_creacion`, `fecha_cierre`— son
+#: de `IncidenciaOut`: los pone el producto y no se mandan de vuelta.
+#:
+#: `test_la_lista_de_campos_no_se_queda_atras_del_modelo` la compara contra
+#: `IncidenciaIn`, así que agregar un campo nuevo al modelo pone el test en rojo
+#: en vez de dejar que el seed lo borre en silencio.
+CAMPOS_INCIDENCIA = (
+    "cliente_id", "equipo_id", "activo_id", "tecnico_id",
+    "recepcionista_id", "vendedor_id", "modalidad",
+    "fecha_programada", "duracion_minutos", "equipo_trabajo_id",
+    "sector_id", "categoria_id", "titulo", "descripcion",
+    "nro_cds", "reclamante", "estado", "prioridad",
+    "horas_invertidas", "notas", "resolucion", "estado_facturacion",
+    "activo",
+)
+
+#: Los tickets que el seed deja **terminados**, por título.
+#:
+#: `(título, estado, horas, resolución, estado_facturacion)`.
+#:
+#: A nivel de módulo y no adentro de `sembrar()` para que se pueda mirar sin
+#: correr el seed contra una instancia — ver `tests/test_seed_guarda.py`.
+#:
+#: 🔴 **Por título y no por índice de la lista.** Hasta el 2026-08-13 esto era
+#: `(0, ...)`, `(1, ...)`, `(2, ...)` sobre lo que devolviera
+#: `GET /api/incidencias`, que **no promete orden y no contiene sólo lo que
+#: siembra este script**. En la demo, cargada además con tickets para la
+#: presentación, los índices 0-2 cayeron en otros tres: quedó "Revisión de
+#: cableado" con la resolución *"Se reemplazó la fuente y se probó 24 h."* y
+#: "Instalación de access point" con *"Actualización de firmware y prueba de
+#: impresión"*. Nada fallaba; la demo mostraba resoluciones que no tenían nada
+#: que ver con su ticket.
+#:
+#: `resuelta` entra en la misma tanda porque es el mismo movimiento —el producto
+#: trata `resuelta` y `cerrado` como los dos estados terminales, ver
+#: `ESTADOS_CERRADOS` en `app/services/informes.py`— y porque era el único de
+#: los cuatro estados que el seed no producía.
+#: El numero del talonario de Comprobante de Servicios de cada ticket on-site.
+#:
+#: Va sobre los tres que quedan **cerrados** y del mismo cliente, que son
+#: justamente los que se pueden agrupar en un remito: sin esto, agruparlos daba
+#: tres renglones sin el numero y la feature parecia a medio hacer. El de
+#: "Cambio de disco" queda afuera a proposito —esta en `resuelta`, no se
+#: agrupa— y ademas hace falta que **algun** ticket no tenga papel, porque un
+#: reclamo resuelto en remoto no lo tiene y la linea del remito tiene que poder
+#: salir con el numero de ticket a secas.
+CDS_POR_TITULO = {
+    "Se corta el teléfono en recepción": "0001-00041996",
+    "La impresora no toma papel": "0001-00041997",
+    "Cambio de switch en el rack": "0001-00041998",
+}
+
+CIERRES = [
+    ("Se corta el teléfono en recepción", "cerrado", 2.5,
+     "Se reemplazó la fuente y se probó 24 h.", None),
+    ("La impresora no toma papel", "cerrado", 1.0,
+     "Actualización de firmware y prueba de impresión.", "facturado"),
+    ("Cambio de switch en el rack", "cerrado", 4.0,
+     "Recableado del rack y etiquetado.", "no_facturable"),
+    ("Cambio de disco en el servidor de archivos", "resuelta", 3.0,
+     "Disco reemplazado y RAID reconstruido. A la espera de que el cliente "
+     "confirme para cerrar.", None),
+]
 
 
 class Api:
@@ -191,25 +274,49 @@ def sembrar(api: Api) -> None:
     # formulario de comprobante no sugiere nada: la feature se ve como si no
     # existiera. Uno va SIN descripcion a proposito, para que se vea que en
     # ese caso el texto que va al comprobante es el nombre.
+    #
+    # 🔴 **El ultimo va marcado como valor hora.** Es el precio con el que se
+    # cotiza el trabajo de un reclamo al generarle el remito. Sin ninguno
+    # marcado, agrupar reclamos da un remito con la mano de obra en CERO: es el
+    # comportamiento correcto, pero se ve como si la funcion estuviera rota, y
+    # ademas la bandeja de facturacion se niega a mandar un remito en cero. La
+    # demo tiene que mostrar la feature andando, no su caso degradado.
     servicios_spec = [
         ("Mantenimiento preventivo",
          "Mantenimiento preventivo de equipo, incluye limpieza interna y cambio "
-         "de pasta térmica", 18000),
+         "de pasta térmica", 18000, False),
         ("Instalación de puesto de trabajo",
-         "Instalación y configuración de puesto de trabajo completo", 25000),
-        ("Visita técnica", "", 12000),
+         "Instalación y configuración de puesto de trabajo completo", 25000, False),
+        ("Visita técnica", "", 12000, False),
         ("Backup y migración de datos",
-         "Resguardo y migración de datos a equipo nuevo", 30000),
+         "Resguardo y migración de datos a equipo nuevo", 30000, False),
         ("Configuración de red",
-         "Configuración de router, switch y puntos de acceso", 40000),
+         "Configuración de router, switch y puntos de acceso", 40000, False),
+        ("Hora de servicio técnico",
+         "Hora de trabajo de servicio técnico", 15000, True),
     ]
     existentes_srv = api.get("/api/servicios?incluir_inactivos=true") or []
-    for nombre, descripcion, precio in servicios_spec:
-        if buscar(existentes_srv, "nombre", nombre):
-            contar("servicios", False)
+    for nombre, descripcion, precio, es_valor_hora in servicios_spec:
+        ya = buscar(existentes_srv, "nombre", nombre)
+        if ya:
+            # Mismo criterio que los tickets de mas abajo: no se duplica, pero
+            # SI se completa lo que falta. Una instancia sembrada antes de que
+            # existiera el valor hora tiene el servicio y no la marca; el seed
+            # diria "nada nuevo" —cierto— y el ejemplo quedaria incompleto.
+            if es_valor_hora and not ya.get("es_valor_hora"):
+                api.put(f"/api/servicios/{ya['id']}", {
+                    "nombre": ya["nombre"], "descripcion": ya["descripcion"],
+                    "precio": ya["precio"], "iva_rate": ya["iva_rate"],
+                    "activo": ya["activo"], "es_valor_hora": True,
+                })
+                contar("servicios_completados", True)
+            else:
+                contar("servicios", False)
             continue
-        api.post("/api/servicios",
-                 {"nombre": nombre, "descripcion": descripcion, "precio": precio})
+        api.post("/api/servicios", {
+            "nombre": nombre, "descripcion": descripcion, "precio": precio,
+            "es_valor_hora": es_valor_hora,
+        })
         contar("servicios", True)
 
     # ── Activos, con los estados que la pantalla distingue (fase 1) ────────
@@ -345,6 +452,12 @@ def sembrar(api: Api) -> None:
          "Sofía Núñez", "Sofía Núñez", turno(9), 60, sur),
         ("Revisión de cableado", "on_site", "Lucía Fernández",
          "Diego Ramos", None, turno(14, 30), 180, sur),
+        # Éste queda en `resuelta` (ver `cierres`), que es el único de los
+        # cuatro estados que el seed no producía: había abiertas y cerradas y
+        # nada en el medio, así que el verde del semáforo no se veía nunca —
+        # ni el punto de la grilla ni la píldora de Estado.
+        ("Cambio de disco en el servidor de archivos", "on_site",
+         "Lucía Fernández", "Diego Ramos", None, turno(16), 120, norte),
     ]
     # 🔴 La idempotencia por título tiene un costo que se pagó de verdad: un
     # ticket de ejemplo cargado por un seed VIEJO no se entera de los campos que
@@ -368,26 +481,15 @@ def sembrar(api: Api) -> None:
                     ("duracion_minutos", minutos),
                     ("equipo_trabajo_id", equipo),
                     ("modalidad", modalidad),
+                    ("nro_cds", CDS_POR_TITULO.get(titulo)),
                 )
                 if valor is not None and ya.get(campo) is None
             }
             if faltantes:
                 # El PUT lleva el objeto entero, así que hay que reenviar todo
-                # lo demás o se borra. Los campos se listan explícitamente y no
-                # se manda `ya` crudo: trae `id`, `fecha_creacion` y
-                # `fecha_cierre`, que no son de `IncidenciaIn` — hoy Pydantic
-                # los ignora, pero apoyarse en eso es apoyarse en un default
-                # que se puede cambiar.
-                previos = {
-                    campo: ya.get(campo) for campo in (
-                        "cliente_id", "equipo_id", "activo_id", "tecnico_id",
-                        "recepcionista_id", "vendedor_id", "modalidad",
-                        "fecha_programada", "duracion_minutos",
-                        "equipo_trabajo_id", "sector_id", "categoria_id",
-                        "titulo", "descripcion", "estado", "prioridad",
-                        "horas_invertidas", "notas", "resolucion",
-                    )
-                }
+                # lo demás o se borra. La lista está en `CAMPOS_INCIDENCIA`,
+                # con un test que la compara contra el modelo.
+                previos = {campo: ya.get(campo) for campo in CAMPOS_INCIDENCIA}
                 api.put(f"/api/incidencias/{ya['id']}", {**previos, **faltantes})
                 contar("incidencias_completadas", True)
             continue
@@ -400,6 +502,9 @@ def sembrar(api: Api) -> None:
             "fecha_programada": desde,
             "duracion_minutos": minutos,
             "equipo_trabajo_id": equipo,
+            # El numero del comprobante en papel, para los que lo tienen. Es lo
+            # que encabeza la linea del reclamo cuando se lo agrupa en un remito.
+            "nro_cds": CDS_POR_TITULO.get(titulo),
             "descripcion": "Cargada como ejemplo para revisar la pantalla.",
         })
         contar("incidencias", True)
@@ -617,7 +722,7 @@ def sembrar(api: Api) -> None:
         })
         contar("traslados", True)
 
-    # ── Incidencias cerradas: es lo que alimenta el reporte de facturacion ──
+    # ── Incidencias terminadas: alimentan el reporte de facturacion ─────────
     # El reporte pide `estado == "cerrado"` sobre clientes `por_servicio`, y el
     # seed no cerraba ninguna: daba 0 filas. `fecha_cierre` no se puede mandar
     # en el alta — la pone el producto al pasar a cerrado, asi que se cierra
@@ -626,23 +731,28 @@ def sembrar(api: Api) -> None:
     # Con los tres estados de facturacion a la vez (sin facturar, facturado y
     # no facturable) el filtro de la pantalla tiene las tres opciones con
     # resultados; con una sola no se ve que el filtro haga algo.
-    cierres = [
-        (0, 2.5, "Se reemplazó la fuente y se probó 24 h.", None),
-        (1, 1.0, "Actualización de firmware y prueba de impresión.", "facturado"),
-        (2, 4.0, "Recableado del rack y etiquetado.", "no_facturable"),
-    ]
-    incidencias = api.get("/api/incidencias") or []
-    for indice, horas, resolucion, estado_fact in cierres:
-        if indice >= len(incidencias):
+    #
+    # La tabla vive en `CIERRES`, a nivel de modulo, con el porque de que sea
+    # **por titulo y no por indice**. El titulo es la misma clave que usa la
+    # idempotencia de mas arriba.
+    por_titulo = {i["titulo"]: i for i in (api.get("/api/incidencias") or [])}
+    for titulo, estado, horas, resolucion, estado_fact in CIERRES:
+        inc = por_titulo.get(titulo)
+        # Si no esta, es que la lista de `tickets` y esta lista se
+        # desincronizaron: se avisa en vez de seguir en silencio, que es como
+        # se llega a una demo con un estado sin ejemplos.
+        if inc is None:
+            print(f"  ⚠️  no se encontró el ticket «{titulo}» para dejarlo {estado}")
             continue
-        inc = incidencias[indice]
-        if inc.get("estado") == "cerrado":
+        if inc.get("estado") in ("cerrado", "resuelta"):
             continue
+        # Mismo criterio que el PUT de la agenda: se reenvía el objeto entero.
+        # Esta lista era todavía más corta —nueve campos— así que cerrar un
+        # ticket le borraba de paso el `recepcionista_id`, el `vendedor_id` y
+        # los tres campos de la agenda, que este mismo seed acababa de poner.
         api.put(f"/api/incidencias/{inc['id']}", {
-            **{k: inc.get(k) for k in (
-                "cliente_id", "equipo_id", "tecnico_id", "titulo", "descripcion",
-                "prioridad", "categoria_id", "sector_id", "modalidad")},
-            "estado": "cerrado",
+            **{k: inc.get(k) for k in CAMPOS_INCIDENCIA},
+            "estado": estado,
             "horas_invertidas": horas,
             "resolucion": resolucion,
             "estado_facturacion": estado_fact,

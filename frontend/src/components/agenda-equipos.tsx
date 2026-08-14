@@ -22,11 +22,12 @@ import {
   api, ApiError, ESTADO_LABELS, MODALIDAD_LABELS,
   type EquipoTrabajo, type TrabajoAgendado,
 } from '../api'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Car } from 'lucide-react'
+import { Car, Printer } from '@/components/iconos-accion'
 
 /** Hoy en `YYYY-MM-DD`, hora local.
  *
@@ -124,6 +125,19 @@ export function AgendaEquipos({ equipos }: { equipos: EquipoTrabajo[] }) {
                         <Car className="size-3" />{patentes}
                       </Badge>
                     )}
+                    {/* El día del botón es el del selector de arriba, no "hoy":
+                        la hoja se imprime la noche anterior tanto como a la
+                        mañana, y una que dijera otra fecha que la grilla que se
+                        está mirando es peor que no tenerla. */}
+                    <Button size="sm" variant="outline" className="ml-auto" asChild>
+                      <a
+                        href={`/api/agenda/equipo/${e.id}/hoja-de-ruta?dia=${dia}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Printer />Hoja de ruta
+                      </a>
+                    </Button>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-2">
@@ -135,27 +149,40 @@ export function AgendaEquipos({ equipos }: { equipos: EquipoTrabajo[] }) {
                     trabajos.map((t) => (
                       <div
                         key={t.incidencia_id}
-                        className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-l-2 pl-3"
+                        className="grid gap-y-0.5 border-l-2 pl-3"
                       >
-                        <span className="font-mono text-sm tabular-nums">
-                          {hora(t.desde)}–{hora(t.hasta)}
-                        </span>
-                        <Link
-                          to={`/incidencias/${t.incidencia_id}`}
-                          className="text-sm font-medium hover:underline"
-                        >
-                          {t.titulo}
-                        </Link>
-                        <span className="text-sm text-muted-foreground">
-                          {t.cliente_nombre ?? 'Sin cliente'}
-                        </span>
-                        <Badge variant="secondary" className="font-normal">
-                          {ESTADO_LABELS[t.estado]}
-                        </Badge>
-                        {t.modalidad && (
-                          <Badge variant="outline" className="font-normal">
-                            {MODALIDAD_LABELS[t.modalidad]}
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <span className="font-mono text-sm tabular-nums">
+                            {hora(t.desde)}–{hora(t.hasta)}
+                          </span>
+                          <Link
+                            to={`/incidencias/${t.incidencia_id}`}
+                            className="text-sm font-medium hover:underline"
+                          >
+                            {t.titulo}
+                          </Link>
+                          <span className="text-sm text-muted-foreground">
+                            {t.cliente_nombre ?? 'Sin cliente'}
+                          </span>
+                          <Badge variant="secondary" className="font-normal">
+                            {ESTADO_LABELS[t.estado]}
                           </Badge>
+                          {t.modalidad && (
+                            <Badge variant="outline" className="font-normal">
+                              {MODALIDAD_LABELS[t.modalidad]}
+                            </Badge>
+                          )}
+                        </div>
+                        {/* En renglón propio y no como una etiqueta más: es lo
+                            que se lee para ordenar el recorrido, y apretado
+                            entre los badges se pierde. No se muestra nada si el
+                            cliente no tiene domicilio cargado — un "—" acá sería
+                            una fila de ruido en cada trabajo remoto. */}
+                        {t.cliente_domicilio && (
+                          <span className="text-xs text-muted-foreground">
+                            {[t.cliente_domicilio, t.cliente_ciudad]
+                              .filter(Boolean).join(', ')}
+                          </span>
                         )}
                       </div>
                     ))

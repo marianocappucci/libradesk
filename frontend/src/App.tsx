@@ -30,11 +30,19 @@ import { Facturacion } from './pages/Facturacion'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
 import {
-  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion, ConfiguracionProveedores,
+  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion,
   ConfiguracionServicios,
 } from './pages/Configuracion'
+import { Proveedores } from './pages/Proveedores'
 import { Usuarios } from './pages/Usuarios'
 import { Logs } from './pages/Logs'
+// El módulo comercial (2026-08-12).
+import { Productos } from './pages/Productos'
+import { DepositosStock, ListasPrecio } from './pages/Inventario'
+import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
+import { CuentaCorriente, Recibos, Ventas } from './pages/VentasComercial'
+import { Sucursales } from './pages/Sucursales'
+import { SucursalBar, SucursalProvider } from './components/sucursal'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -46,7 +54,17 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
     )
   }
   if (!user) return <Navigate to="/login" replace />
-  return <Layout>{children}</Layout>
+  // El provider envuelve al Layout y no a la app entera: sólo tiene sentido con
+  // sesión iniciada, y `/api/sucursales` requiere autenticación — montarlo
+  // afuera dispararía un 401 en la pantalla de login.
+  return (
+    <SucursalProvider>
+      <Layout>
+        <SucursalBar />
+        {children}
+      </Layout>
+    </SucursalProvider>
+  )
 }
 
 export default function App() {
@@ -85,6 +103,18 @@ export default function App() {
       <Route path="/contratos/:id" element={<ProtectedRoute><ContratoDetalle /></ProtectedRoute>} />
       <Route path="/activos" element={<ProtectedRoute><Activos /></ProtectedRoute>} />
       <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
+      {/* Módulo comercial. Las rutas van agrupadas igual que el sidebar. */}
+      <Route path="/productos" element={<ProtectedRoute><Productos /></ProtectedRoute>} />
+      <Route path="/depositos-stock" element={<ProtectedRoute><DepositosStock /></ProtectedRoute>} />
+      <Route path="/listas-precio" element={<ProtectedRoute><ListasPrecio /></ProtectedRoute>} />
+      <Route path="/ordenes-compra" element={<ProtectedRoute><OrdenesCompra /></ProtectedRoute>} />
+      <Route path="/recepciones-compra" element={<ProtectedRoute><RecepcionesCompra /></ProtectedRoute>} />
+      <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
+      <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
+      <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
+      <Route path="/recibos" element={<ProtectedRoute><Recibos /></ProtectedRoute>} />
+      <Route path="/cuenta-corriente" element={<ProtectedRoute><CuentaCorriente /></ProtectedRoute>} />
+      <Route path="/sucursales" element={<ProtectedRoute><Sucursales /></ProtectedRoute>} />
       <Route path="/tecnicos" element={<ProtectedRoute><Tecnicos /></ProtectedRoute>} />
       <Route path="/presupuestos" element={<ProtectedRoute><Presupuestos /></ProtectedRoute>} />
       <Route path="/presupuestos/:id" element={<ProtectedRoute><PresupuestoDetalle /></ProtectedRoute>} />
@@ -97,7 +127,10 @@ export default function App() {
       {/* Una ruta por pestaña, no un `useState`: así se puede linkear una
           sección y el botón "atrás" del navegador hace lo que se espera. */}
       <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
-      <Route path="/configuracion/proveedores" element={<ProtectedRoute><ConfiguracionProveedores /></ProtectedRoute>} />
+      {/* Proveedores dejó de ser pestaña y pasó a `/proveedores`. La ruta vieja
+          redirige en vez de desaparecer: quedó linkeada en documentación y en
+          favoritos del navegador desde que era pestaña. */}
+      <Route path="/configuracion/proveedores" element={<Navigate to="/proveedores" replace />} />
       <Route path="/configuracion/servicios" element={<ProtectedRoute><ConfiguracionServicios /></ProtectedRoute>} />
       <Route path="/configuracion/facturacion" element={<ProtectedRoute><ConfiguracionFacturacion /></ProtectedRoute>} />
       <Route path="/configuracion/datos" element={<ProtectedRoute><ConfiguracionDatos /></ProtectedRoute>} />

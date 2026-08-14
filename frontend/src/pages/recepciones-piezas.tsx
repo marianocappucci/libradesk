@@ -8,7 +8,8 @@
  *  taller" y el botón "atrás" del navegador hace lo que se espera.
  */
 import type { Pestania } from '@/components/conmutador'
-import { PackageCheck, Warehouse } from 'lucide-react'
+import { Warehouse } from 'lucide-react'
+import { PackageCheck } from '@/components/iconos-accion'
 
 export const PESTANIAS_RECEPCION: readonly Pestania[] = [
   { clave: 'taller', to: '/recepciones', label: 'En el taller', icono: Warehouse },

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_LABELS, MODALIDAD_LABELS,
+  api, ApiError, DESTINO_REEMPLAZO_LABELS, ESTADO_COLOR, ESTADO_LABELS, MODALIDAD_LABELS,
   MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
@@ -27,10 +27,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  ArrowLeft, ArrowLeftRight, Check, History, MessageSquare, PackageCheck,
-  Printer, ShieldCheck, Trash2, Wrench,
-} from 'lucide-react'
+import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
 
@@ -76,6 +75,7 @@ export function IncidenciaDetalle() {
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
+  const [generandoRemito, setGenerandoRemito] = useState(false)
   // Estado del guardado automático, para que deje de ser invisible (pedido 40).
   // `enVuelo` es un ref y no estado porque `guardarYVolver` lo lee dentro de un
   // bucle: con `useState` leería siempre el valor del render en que se creó.
@@ -209,6 +209,11 @@ export function IncidenciaDetalle() {
         categoria_id: actualizado.categoria_id,
         titulo: actualizado.titulo,
         descripcion: actualizado.descripcion,
+        // Por el mismo motivo que los tres de la agenda, unas líneas más
+        // arriba: sin estas dos, cambiarle la prioridad a un ticket le borraba
+        // el N° del comprobante firmado y quién había llamado.
+        nro_cds: actualizado.nro_cds,
+        reclamante: actualizado.reclamante,
         estado: actualizado.estado,
         prioridad: actualizado.prioridad,
         horas_invertidas: actualizado.horas_invertidas,
@@ -271,6 +276,32 @@ export function IncidenciaDetalle() {
       navigate('/incidencias')
     } catch (err) {
       setError(describeError(err))
+    }
+  }
+
+  /** Genera el remito del trabajo y lleva a su ficha para ponerle los importes.
+   *
+   * 🔴 **Aterriza en el remito y no vuelve acá.** El remito nace con las horas
+   * y los materiales pero **con los precios en cero** —este producto no tiene
+   * valor hora, y un material sin precio de venta tampoco aporta uno—, así que
+   * lo que sigue es cargarlos. Dejar al usuario en el ticket con un "listo"
+   * sería darle por terminado algo que todavía no se puede facturar: la
+   * bandeja rechaza un remito con total 0.
+   *
+   * Es idempotente del lado del servidor, así que un doble click no emite dos.
+   */
+  async function generarRemito() {
+    setGenerandoRemito(true)
+    setError(null)
+    try {
+      const remito = await api.post<{ id: number }>(
+        `/api/incidencias/${incidenciaId}/convertir-en-remito`, {},
+      )
+      navigate(`/remitos/${remito.id}`)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setGenerandoRemito(false)
     }
   }
 
@@ -364,15 +395,22 @@ export function IncidenciaDetalle() {
         <div className="flex items-center gap-2">
           <Button asChild size="sm" variant="outline"><Link to="/incidencias"><ArrowLeft />Volver</Link></Button>
           {incidencia && (
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <TituloPantalla icono={AlertCircle}>
               {incidencia.titulo}
-              <Badge variant={incidencia.estado === 'cerrado' || incidencia.estado === 'resuelta' ? 'default' : 'outline'}>
+              {/* El mismo semáforo que la grilla, adentro del badge de estado:
+                  quien viene de la lista reconoce el color y no tiene que
+                  releer la palabra para saber dónde está parado el ticket.
+                  El color va DENTRO del badge y no al lado del título para que
+                  se lea como un atributo del estado y no como otra marca. */}
+              <Badge variant={incidencia.estado === 'cerrado' || incidencia.estado === 'resuelta' ? 'default' : 'outline'}
+                     className="gap-1.5">
+                <span className={`inline-block h-2 w-2 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
                 {ESTADO_LABELS[incidencia.estado]}
               </Badge>
               <Badge variant={incidencia.prioridad === 'alta' ? 'destructive' : 'outline'}>
                 {PRIORIDAD_LABELS[incidencia.prioridad]}
               </Badge>
-            </h2>
+            </TituloPantalla>
           )}
         </div>
         {incidencia && (
@@ -392,8 +430,30 @@ export function IncidenciaDetalle() {
               </a>
             </Button>
             <Button size="sm" variant="outline" onClick={abrirReemplazo}>
-              <ArrowLeftRight />Reemplazar equipo
+              <ArrowLeftRightAccion />Reemplazar equipo
             </Button>
+            {/* El camino a facturación de un trabajo por servicio. Sólo con el
+                ticket cerrado: es donde el circuito real decide si va a
+                facturación, después de controlar el comprobante en papel
+                contra la hoja de ruta.
+
+                Ya convertido, deja de ser un botón de acción y pasa a ser el
+                link al remito: el que vuelve a esta pantalla necesita llegar a
+                él, y ofrecerle "Generar remito" otra vez —aunque el servidor
+                sea idempotente— le hace creer que no se generó. */}
+            {incidencia.remito_id !== null ? (
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/remitos/${incidencia.remito_id}`}>
+                  <PackageCheck />Ver remito
+                </Link>
+              </Button>
+            ) : incidencia.estado === 'cerrado' ? (
+              <Button size="sm" variant="outline" disabled={generandoRemito}
+                      onClick={generarRemito}>
+                <PackageCheck />
+                {generandoRemito ? 'Generando…' : 'Generar remito'}
+              </Button>
+            ) : null}
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 />Eliminar
             </Button>
@@ -480,7 +540,7 @@ export function IncidenciaDetalle() {
                                 <strong>{entry.data.equipo_descripcion}</strong>
                                 {entry.data.en_garantia && (
                                   <Badge variant="outline" className="gap-1">
-                                    <ShieldCheck className="size-3" />Garantía
+                                    <ShieldCheckAccion className="size-3" />Garantía
                                   </Badge>
                                 )}
                               </span>
@@ -585,10 +645,23 @@ export function IncidenciaDetalle() {
               <div className="grid gap-1.5">
                 <Label>Estado</Label>
                 <Select value={incidencia.estado} onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  {/* El punto también en el trigger y en cada opción: al
+                      cambiar el estado se ve a qué color se está pasando, que
+                      es la mitad de lo que uno decide al moverlo. */}
+                  <SelectTrigger>
+                    <span className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(ESTADO_LABELS) as (keyof typeof ESTADO_LABELS)[]).map((e) => (
-                      <SelectItem key={e} value={e}>{ESTADO_LABELS[e]}</SelectItem>
+                      <SelectItem key={e} value={e}>
+                        <span className="flex items-center gap-2">
+                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[e]}`} />
+                          {ESTADO_LABELS[e]}
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -785,6 +858,35 @@ export function IncidenciaDetalle() {
                   onBlur={(e) => {
                     const valor = e.target.value ? Number(e.target.value) : null
                     if (valor !== incidencia.horas_invertidas) actualizarCampo({ horas_invertidas: valor })
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                {/* El N° del Comprobante de Servicios: el talonario preimpreso
+                    que el técnico completa en el lugar y el cliente firma.
+                    Tipearlo acá es lo que ata esa conformidad con el ticket.
+                    Va pegado a las horas porque es el mismo momento de carga —
+                    se vuelve de la visita con el papel en la mano. */}
+                <Label htmlFor="nro-cds">N° CDS</Label>
+                <Input
+                  id="nro-cds"
+                  placeholder="0001-00041996"
+                  defaultValue={incidencia.nro_cds ?? ''}
+                  onBlur={(e) => {
+                    const valor = e.target.value.trim() || null
+                    if (valor !== incidencia.nro_cds) actualizarCampo({ nro_cds: valor })
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="reclamante">Reclamante</Label>
+                <Input
+                  id="reclamante"
+                  placeholder="Quién llamó"
+                  defaultValue={incidencia.reclamante ?? ''}
+                  onBlur={(e) => {
+                    const valor = e.target.value.trim() || null
+                    if (valor !== incidencia.reclamante) actualizarCampo({ reclamante: valor })
                   }}
                 />
               </div>

@@ -1,10 +1,26 @@
 """Mandar lo facturable a la instancia de Contalibra del mismo cliente.
 
 Fase B del puente (ver `app/services/facturacion_externa.py` y
-`wiki/analyses/libradesk-contalibra-puente-facturacion.md`). Hoy manda remitos y
-presupuestos, que son las dos fuentes que ya tienen importe. Las cuotas de
-contrato son la fase C y las incidencias la D — cuando existan, entran por acá
-sin tocar la tabla.
+`wiki/analyses/libradesk-contalibra-puente-facturacion.md`).
+
+## Sólo se manda el remito
+
+Desde el 2026-08-13 la única fuente es el **remito**: lo que habilita a facturar
+es la entrega hecha, y el remito es el documento que la prueba. Un presupuesto
+aceptado es una oferta aceptada — todavía no pasó nada que facturar. Los otros
+dos orígenes del producto llegan a facturación **convirtiéndose en remito**
+primero, no por un camino propio:
+
+- presupuesto aceptado → `POST /api/presupuestos/{id}/convertir-en-remito`
+- incidencia cerrada   → `POST /api/incidencias/{id}/convertir-en-remito`
+
+Las dos conversiones son idempotentes y dejan el origen linkeado, así que el
+mismo trabajo no puede terminar dos veces en la bandeja. Antes de este cambio sí
+podía: el detalle está en el comentario de `ORIGENES_ENVIABLES` en el servicio.
+
+Las cuotas de contrato siguen siendo la fase C y no tienen remito; cuando se
+implementen hay que decidir si entran como origen propio o si también generan
+uno.
 
 **Ninguna ruta de este módulo emite nada.** Lo peor que puede hacer es dejar una
 fila en una bandeja del otro lado, que se descarta con un click.
@@ -12,16 +28,10 @@ fila en una bandeja del otro lado, que se descarta con un click.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..dependencies import (
-    get_presupuesto_service,
-    get_puente_facturacion,
-    get_remito_service,
-)
+from ..dependencies import get_puente_facturacion, get_remito_service
 from ..services.facturacion_externa import (
-    ESTADOS_PRESUPUESTO_FACTURABLES,
-    ORIGEN_PRESUPUESTO,
     ORIGEN_REMITO,
-    ORIGENES,
+    ORIGENES_ENVIABLES,
     EnvioNoConfigurado,
     OrigenNoFacturable,
     PuenteFacturacion,
@@ -29,40 +39,35 @@ from ..services.facturacion_externa import (
     esta_configurado,
     nombre_destino,
 )
-from ..services.remitos_presupuestos import PresupuestoService, RemitoService
+from ..services.remitos_presupuestos import RemitoService
 
 router = APIRouter(prefix="/api/facturacion", tags=["facturacion"])
 
-# Cuántos comprobantes se ofrecen para mandar. Es el mismo tope que usan los
-# listados de remitos y presupuestos.
+# Cuántos comprobantes se ofrecen para mandar. Es el mismo tope que usa el
+# listado de remitos.
 _TOPE = 100
 
 
 class EnviarPayload(BaseModel):
-    origen_tipo: str
+    origen_tipo: str = ORIGEN_REMITO
     ids: list[int] = Field(min_length=1)
 
 
-def _traer(origen_tipo: str, origen_id: int, remitos: RemitoService,
-           presupuestos: PresupuestoService) -> dict:
-    """El comprobante, o 404. Valida además que se pueda facturar."""
-    if origen_tipo == ORIGEN_REMITO:
-        comprobante = remitos.get(origen_id)
-        if comprobante is None:
-            raise HTTPException(404, f"No existe el remito {origen_id}")
-        return comprobante
-
-    comprobante = presupuestos.get(origen_id)
+def _traer(origen_id: int, remitos: RemitoService) -> dict:
+    """El remito, o 404. Valida además que se pueda facturar."""
+    comprobante = remitos.get(origen_id)
     if comprobante is None:
-        raise HTTPException(404, f"No existe el presupuesto {origen_id}")
-    if comprobante.get("status") not in ESTADOS_PRESUPUESTO_FACTURABLES:
-        # Un presupuesto que el cliente no aceptó no se factura. Del otro lado
-        # el paso siguiente es emitir con CAE, así que dejarlo pasar pondría a
-        # una persona a un click de facturar algo que nadie aprobó.
+        raise HTTPException(404, f"No existe el remito {origen_id}")
+    if float(comprobante.get("total") or 0) <= 0:
+        # Un remito sin importe no se factura: del otro lado el paso siguiente
+        # es emitir con CAE y una factura en cero no existe. El caso real que
+        # esto ataja es un remito recién generado desde una incidencia, cuyos
+        # materiales todavía no tienen precio cargado — hay que ponérselo y
+        # recién ahí mandarlo. Y hace coincidir el envío con el débito en
+        # cuenta corriente, que ya saltea los totales en cero.
         raise OrigenNoFacturable(
-            f"El presupuesto {comprobante.get('number') or origen_id} está en "
-            f"estado «{comprobante.get('status')}»: sólo se puede facturar uno "
-            f"aceptado."
+            f"El remito {comprobante.get('number') or origen_id} tiene total 0: "
+            f"cargale los importes antes de mandarlo a facturar."
         )
     return comprobante
 
@@ -73,6 +78,10 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
 
     `configurado` es un booleano y **nada más**: la URL y el token no salen por
     la API ni enmascarados. Ver el docstring del servicio.
+
+    Los envíos históricos de tipo `presupuesto` **siguen saliendo por acá**
+    aunque ya no se pueda mandar uno nuevo: son lo que se mandó, y esconderlos
+    dejaría a la pantalla mintiendo sobre lo que hay del otro lado.
     """
     return {
         "configurado": esta_configurado(),
@@ -86,38 +95,26 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
 def pendientes(
     puente: PuenteFacturacion = Depends(get_puente_facturacion),
     remitos: RemitoService = Depends(get_remito_service),
-    presupuestos: PresupuestoService = Depends(get_presupuesto_service),
 ):
-    """Lo que se puede mandar, con el estado del envío anotado.
+    """Los remitos que se pueden mandar, con el estado del envío anotado.
 
     Trae también lo ya enviado, marcado: sin eso la pantalla no puede mostrar
     "esto ya fue" y el usuario lo manda de nuevo para averiguarlo.
     """
     envios_remitos = puente.estados_por_origen(ORIGEN_REMITO)
-    envios_presu = puente.estados_por_origen(ORIGEN_PRESUPUESTO)
-
-    def _fila(origen_tipo, comprobante, envio):
-        return {
-            "origen_tipo": origen_tipo,
-            "id": comprobante["id"],
-            "numero": comprobante.get("number") or "",
-            "fecha": comprobante.get("date") or "",
-            "cliente": comprobante.get("client_name") or "",
-            "cliente_cuit": comprobante.get("client_cuit") or "",
-            "total": float(comprobante.get("total") or 0),
-            "envio": envio,
-        }
 
     filas = [
-        _fila(ORIGEN_REMITO, r, envios_remitos.get(r["id"]))
+        {
+            "origen_tipo": ORIGEN_REMITO,
+            "id": r["id"],
+            "numero": r.get("number") or "",
+            "fecha": r.get("date") or "",
+            "cliente": r.get("client_name") or "",
+            "cliente_cuit": r.get("client_cuit") or "",
+            "total": float(r.get("total") or 0),
+            "envio": envios_remitos.get(r["id"]),
+        }
         for r in remitos.list(limit=_TOPE)
-    ]
-    # Sólo los aceptados: es la misma regla que aplica `_traer`, y ofrecer en
-    # la pantalla algo que el envío después rechaza sería una trampa.
-    filas += [
-        _fila(ORIGEN_PRESUPUESTO, p, envios_presu.get(p["id"]))
-        for p in presupuestos.list(limit=_TOPE)
-        if p.get("status") in ESTADOS_PRESUPUESTO_FACTURABLES
     ]
     return {
         "configurado": esta_configurado(),
@@ -132,17 +129,24 @@ def enviar(
     data: EnviarPayload,
     puente: PuenteFacturacion = Depends(get_puente_facturacion),
     remitos: RemitoService = Depends(get_remito_service),
-    presupuestos: PresupuestoService = Depends(get_presupuesto_service),
 ):
-    """Manda los comprobantes elegidos y devuelve qué pasó con cada uno.
+    """Manda los remitos elegidos y devuelve qué pasó con cada uno.
 
     Devuelve `200` aunque alguno haya fallado: cada ítem trae su propio estado.
     Fallar la request entera por uno dejaría al usuario sin saber cuáles de los
     otros sí llegaron — y como el destino es idempotente, reintentar los que
     fallaron es gratis.
     """
-    if data.origen_tipo not in ORIGENES:
-        raise HTTPException(422, f"origen_tipo invalido: {data.origen_tipo}")
+    if data.origen_tipo not in ORIGENES_ENVIABLES:
+        # 422 y con el motivo escrito: el que llegue acá con
+        # `origen_tipo=presupuesto` es un cliente viejo, y "invalido" a secas lo
+        # manda a buscar un typo que no existe.
+        raise HTTPException(
+            422,
+            f"Sólo se manda a facturar un remito, y llegó "
+            f"«{data.origen_tipo}». Un presupuesto aceptado se convierte primero "
+            f"en remito (POST /api/presupuestos/{{id}}/convertir-en-remito).",
+        )
     if not esta_configurado():
         raise HTTPException(
             409,
@@ -154,7 +158,7 @@ def enviar(
     resultados = []
     for origen_id in data.ids:
         try:
-            comprobante = _traer(data.origen_tipo, origen_id, remitos, presupuestos)
+            comprobante = _traer(origen_id, remitos)
         except OrigenNoFacturable as e:
             resultados.append({"origen_id": origen_id, "estado": "no_facturable",
                                "detalle": str(e)})

@@ -1,22 +1,27 @@
-// Configuración, en tres pestañas (pedido 36, 2026-08-04): datos de la empresa,
-// tipos de incidencia y proveedores. Antes eran tres tarjetas apiladas en una
-// sola pantalla larga.
+// Configuración, en pestañas (pedido 36, 2026-08-04): datos de la empresa,
+// catálogo de servicios, tipos de incidencia, facturación y datos / backup.
+// Antes eran tarjetas apiladas en una sola pantalla larga.
+//
+// **Proveedores ya no vive acá** (2026-08-13): es una pantalla propia bajo
+// Compras, en `pages/Proveedores.tsx`. Estando en las dos partes a la vez,
+// entrar por Compras → Proveedores aterrizaba en esta pantalla, con este título
+// y este conmutador, y no se distinguía de Configuración general.
 //
 // Los datos de la empresa encabezan los PDF de remitos y presupuestos: sin esto
 // salen con el encabezado en blanco, porque libracore.config_manager devuelve
 // strings vacios cuando no hay config.json. Solo admin puede guardar (el
 // backend exige el rol).
 //
-// 🔴 **`esAdmin` aplica SÓLO a los datos de la empresa.** Los otros dos
-// catálogos no están detrás de admin, y eso es deliberado (2026-08-04, reporte
-// del usuario: "en configuración no se pueden agregar ni editar ni eliminar
-// proveedores y tipos de incidencia").
+// 🔴 **`esAdmin` aplica SÓLO a los datos de la empresa.** Los catálogos no
+// están detrás de admin, y eso es deliberado (2026-08-04, reporte del usuario:
+// "en configuración no se pueden agregar ni editar ni eliminar proveedores y
+// tipos de incidencia").
 //
 // El motivo es el mismo que en depósitos: `app/main.py` monta
-// `categorias.router` y `proveedores.router` con `staff_or_admin`, así que
-// cualquier staff **ya podía** crear, editar y borrar por la API. Esconderle
-// los botones no restringía nada — sólo hacía que las dos pestañas se vieran
-// rotas para quien no fuera admin. Los datos de empresa sí son distintos: el
+// `categorias.router` con `staff_or_admin`, así que cualquier staff **ya
+// podía** crear, editar y borrar por la API. Esconderle los botones no
+// restringía nada — sólo hacía que la pestaña se viera rota para quien no
+// fuera admin. Los datos de empresa sí son distintos: el
 // `GET` de `/api/config/empresa` es staff, pero el `PUT` va en un router
 // aparte con `require_admin` de verdad, y ahí el gate se queda.
 //
@@ -25,7 +30,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   api, ApiError, type BackupGuardado, type CategoriaIncidencia, type ConfigEmpresa,
-  type Proveedor, type Servicio,
+  type Servicio,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Conmutador } from '@/components/conmutador'
@@ -37,16 +42,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Check, CornerDownRight, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
-
-/** Los cuatro campos editables de un proveedor, como strings del formulario
- *  (el backend recibe null donde acá hay cadena vacía). */
-type FormProveedor = {
-  nombre: string
-  contacto: string
-  telefono: string
-  email: string
-}
+import {
+  Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
+} from '@/components/iconos-accion'
+import { Settings } from 'lucide-react'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -58,6 +58,9 @@ type FormServicio = {
    *  elegida. */
   iva_rate: string
   activo: boolean
+  /** Si éste es el servicio con el que se cotiza la hora de trabajo al
+   *  generarle el remito a un reclamo. Uno solo puede estarlo. */
+  es_valor_hora: boolean
 }
 
 const VACIO: ConfigEmpresa = {
@@ -156,10 +159,17 @@ function CategoriasCard() {
 
   const raices = (categorias ?? []).filter((c) => c.parent_id === null)
 
-  function Fila({ c, esHija }: { c: CategoriaIncidencia; esHija: boolean }) {
+  // Función que devuelve JSX, **no** un componente — mismo motivo que
+  // `formulario` en `ServiciosCard`: declarada acá adentro, cada render creaba
+  // un tipo nuevo y React remontaba la fila entera, así que el campo de
+  // renombrar perdía el foco después de cada tecla.
+  function fila(c: CategoriaIncidencia, esHija: boolean) {
     if (renombrando?.id === c.id) {
       return (
-        <li className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
+        // La `key` va acá adentro y ya no en el sitio de llamada: el elemento la
+        // lleva consigo, y así entrar y salir del modo renombrar reconcilia la
+        // MISMA fila en vez de reemplazarla.
+        <li key={c.id} className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
           <Input
             value={renombrando.nombre}
             onChange={(e) => setRenombrando({ id: c.id, nombre: e.target.value })}
@@ -177,12 +187,12 @@ function CategoriasCard() {
       )
     }
     return (
-      <li className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
+      <li key={c.id} className={`flex items-center gap-2 px-3 py-2 ${esHija ? 'pl-9' : ''}`}>
         {esHija && <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />}
         <span className={`flex-1 text-sm ${esHija ? '' : 'font-medium'}`}>{c.nombre}</span>
         {!esHija && (
           <Button size="sm" variant="ghost" className="h-8" onClick={() => setNueva({ parent_id: c.id, nombre: '' })}>
-            <Plus />Subcategoría
+            <PlusCircle />Subcategoría
           </Button>
         )}
         <Button size="icon" variant="outline" className="size-8" title="Renombrar" aria-label={`Renombrar ${c.nombre}`} onClick={() => setRenombrando({ id: c.id, nombre: c.nombre })}><Pencil /></Button>
@@ -228,7 +238,7 @@ function CategoriasCard() {
         ) : (
           <div>
             <Button variant="outline" onClick={() => setNueva({ parent_id: null, nombre: '' })}>
-              <Plus />Nueva categoría
+              <FilePlus />Nueva categoría
             </Button>
           </div>
         )}
@@ -242,10 +252,10 @@ function CategoriasCard() {
         ) : (
           <ul className="divide-y rounded-md border">
             {raices.flatMap((raiz) => [
-              <Fila key={raiz.id} c={raiz} esHija={false} />,
+              fila(raiz, false),
               ...categorias
                 .filter((c) => c.parent_id === raiz.id)
-                .map((hija) => <Fila key={hija.id} c={hija} esHija />),
+                .map((hija) => fila(hija, true)),
             ])}
           </ul>
         )}
@@ -257,239 +267,6 @@ function CategoriasCard() {
         title={`¿Eliminar "${aBorrar?.nombre}"?`}
         description="Si alguna incidencia la usa, o si tiene subcategorías, no se borra y te avisa cuántas son."
         onConfirm={() => { const c = aBorrar; setABorrar(null); if (c) borrar(c) }}
-      />
-    </Card>
-  )
-}
-
-/** Proveedores de reparación: a quién se le manda un equipo cuando sale a
- *  service. Vive acá y no en una pantalla propia por el mismo motivo que el
- *  catálogo de categorías — es configuración que se toca una vez cada mucho.
- *
- *  Un proveedor **con reparaciones no se borra, se desactiva**: la reparación
- *  histórica lo sigue nombrando, y sin él el registro pierde justamente el dato
- *  que lo hacía útil. Mismo criterio que los clientes. */
-function ProveedoresCard() {
-  const [proveedores, setProveedores] = useState<Proveedor[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  const [nuevo, setNuevo] = useState<FormProveedor | null>(null)
-  const [editando, setEditando] = useState<(FormProveedor & { id: number }) | null>(null)
-  const [aBorrar, setABorrar] = useState<Proveedor | null>(null)
-
-  useEffect(() => {
-    recargar()
-  }, [])
-
-  function describeError(err: unknown): string {
-    if (err instanceof ApiError) return err.detail
-    return 'Error de conexión.'
-  }
-
-  async function recargar() {
-    try {
-      setProveedores(await api.get<Proveedor[]>('/api/proveedores'))
-      setError(null)
-    } catch (err) {
-      setError(describeError(err))
-    }
-  }
-
-  async function guardar() {
-    const datos = editando ?? nuevo
-    if (!datos || !datos.nombre.trim()) return
-    setGuardando(true)
-    setError(null)
-    try {
-      const payload = {
-        nombre: datos.nombre.trim(),
-        contacto: datos.contacto.trim() || null,
-        telefono: datos.telefono.trim() || null,
-        email: datos.email.trim() || null,
-      }
-      if (editando) await api.put(`/api/proveedores/${editando.id}`, payload)
-      else await api.post('/api/proveedores', payload)
-      setNuevo(null)
-      setEditando(null)
-      await recargar()
-    } catch (err) {
-      setError(describeError(err))
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  async function toggleActivo(p: Proveedor) {
-    setError(null)
-    try {
-      await api.post(`/api/proveedores/${p.id}/${p.activo ? 'desactivar' : 'activar'}`, {})
-      await recargar()
-    } catch (err) {
-      setError(describeError(err))
-    }
-  }
-
-  async function borrar(p: Proveedor) {
-    setError(null)
-    try {
-      await api.del(`/api/proveedores/${p.id}`)
-      await recargar()
-    } catch (err) {
-      // El 409 del backend dice cuántas reparaciones lo usan. No lo decide un
-      // `except IntegrityError`, que con el pragma de FKs apagado nunca se
-      // dispararía — lo cuenta el repositorio.
-      setError(describeError(err))
-    }
-  }
-
-  function Formulario({ datos, onChange, onCancel, titulo }: {
-    datos: FormProveedor
-    onChange: (d: FormProveedor) => void
-    onCancel: () => void
-    titulo: string
-  }) {
-    return (
-      <form
-        className="grid gap-2 rounded-md border p-3"
-        onSubmit={(e) => { e.preventDefault(); guardar() }}
-      >
-        <span className="text-xs text-muted-foreground">{titulo}</span>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Input
-            value={datos.nombre} autoFocus
-            placeholder="Compu Service SRL"
-            aria-label="Nombre del proveedor"
-            onChange={(e) => onChange({ ...datos, nombre: e.target.value })}
-            onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }}
-          />
-          <Input
-            value={datos.contacto} placeholder="Contacto (Juan Pérez)"
-            aria-label="Contacto"
-            onChange={(e) => onChange({ ...datos, contacto: e.target.value })}
-          />
-          <Input
-            value={datos.telefono} placeholder="Teléfono"
-            aria-label="Teléfono"
-            onChange={(e) => onChange({ ...datos, telefono: e.target.value })}
-          />
-          <Input
-            value={datos.email} placeholder="Email" type="email"
-            aria-label="Email"
-            onChange={(e) => onChange({ ...datos, email: e.target.value })}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button type="submit" disabled={guardando || !datos.nombre.trim()}>Guardar</Button>
-          <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
-        </div>
-      </form>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Proveedores de reparación</CardTitle>
-        <CardDescription>
-          A quién se le manda un equipo cuando sale a service. Son una tabla y
-          no un texto libre para que “Compu Service” y “compuservice” no sean
-          dos proveedores distintos — si lo fueran, no se podría saber cuánto
-          tarda cada uno en devolver.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        {nuevo === null && editando === null && (
-          <div>
-            <Button
-              variant="outline"
-              onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
-            >
-              <Plus />Nuevo proveedor
-            </Button>
-          </div>
-        )}
-
-        {nuevo !== null && (
-          <Formulario
-            datos={nuevo} onChange={setNuevo} onCancel={() => setNuevo(null)}
-            titulo="Proveedor nuevo"
-          />
-        )}
-
-        {proveedores === null ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
-        ) : proveedores.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Todavía no hay proveedores. Hasta que haya alguno, un envío a service
-            se registra sin decir a dónde fue el equipo.
-          </p>
-        ) : (
-          <ul className="divide-y rounded-md border">
-            {proveedores.map((p) => (
-              editando?.id === p.id ? (
-                <li key={p.id} className="p-2">
-                  <Formulario
-                    datos={editando}
-                    onChange={(d) => setEditando({ ...d, id: p.id })}
-                    onCancel={() => setEditando(null)}
-                    titulo={`Editando ${p.nombre}`}
-                  />
-                </li>
-              ) : (
-                <li key={p.id} className="flex items-center gap-2 px-3 py-2">
-                  <div className="grid flex-1 gap-0.5">
-                    <span className="text-sm font-medium">{p.nombre}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {[p.contacto, p.telefono, p.email].filter(Boolean).join(' · ') || '—'}
-                    </span>
-                  </div>
-                  {/* El badge alterna activo/inactivo. `aria-pressed` y no sólo
-                      el color: sin él es un `<span>` con onClick, invisible
-                      para el teclado y para un lector de pantalla. */}
-                  <Badge
-                    asChild
-                    variant={p.activo ? 'default' : 'outline'}
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={p.activo}
-                      aria-label={`${p.activo ? 'Desactivar' : 'Activar'} ${p.nombre}`}
-                      className="cursor-pointer"
-                      onClick={() => toggleActivo(p)}
-                    >
-                      {p.activo ? 'Activo' : 'Inactivo'}
-                    </button>
-                  </Badge>
-                  <Button
-                    size="icon" variant="outline" className="size-8"
-                    title="Editar" aria-label={`Editar ${p.nombre}`}
-                    onClick={() => setEditando({
-                      id: p.id, nombre: p.nombre,
-                      contacto: p.contacto ?? '', telefono: p.telefono ?? '',
-                      email: p.email ?? '',
-                    })}
-                  ><Pencil /></Button>
-                  <Button
-                    size="icon" variant="outline"
-                    className="size-8 text-destructive hover:text-destructive"
-                    title="Eliminar" aria-label={`Eliminar ${p.nombre}`}
-                    onClick={() => setABorrar(p)}
-                  ><Trash2 /></Button>
-                </li>
-              )
-            ))}
-          </ul>
-        )}
-      </CardContent>
-
-      <ConfirmDialog
-        open={aBorrar !== null}
-        onOpenChange={(open) => !open && setABorrar(null)}
-        title={`¿Eliminar "${aBorrar?.nombre}"?`}
-        description="Sólo se borra si no tiene ninguna reparación registrada. Si tiene, no se borra y te avisa cuántas son — para eso está desactivarlo."
-        onConfirm={() => { const p = aBorrar; setABorrar(null); if (p) borrar(p) }}
       />
     </Card>
   )
@@ -713,10 +490,51 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
 function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-4">
-      <h2 className="text-lg font-semibold">Configuración</h2>
+      <TituloPantalla icono={Settings}>
+          Configuración
+        </TituloPantalla>
       <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
       {children}
+      <CreditosIconos />
     </div>
+  )
+}
+
+/** Atribución del set de iconos.
+ *
+ *  La licencia ISC pide que se conserve el aviso de copyright en las
+ *  distribuciones, y un producto que se sirve compilado es una distribución. No
+ *  es un cartel de agradecimiento: es la condición bajo la que se puede usar.
+ *
+ *  Va al pie de Configuración —una vez, en el shell y no en cada pestaña—
+ *  porque es donde alguien busca "de qué está hecho esto" y no estorba a quien
+ *  vino a cambiar un ajuste.
+ *
+ *  **Nombraba también a Fluent UI System Icons hasta el 2026-08-14**, cuando los
+ *  96 iconos volvieron a lucide y los dos sets de Fluent salieron del producto.
+ *  Una atribución que sobrevive al set que atribuye no es inofensiva: le dice al
+ *  lector que el producto lleva un código que ya no lleva.
+ *
+ *  Ojo si se agrega un set nuevo: hubo un momento en que los candidatos eran
+ *  Streamline Plump (CC BY 4.0), que **exige** atribución visible, e Icons8
+ *  Plumpy, cuyo tier gratuito exige un enlace. Si alguna vez entra uno de ésos,
+ *  esta tarjeta deja de ser buena práctica y pasa a ser un requisito legal — y
+ *  el enlace tiene que ser un enlace de verdad, no texto.
+ */
+function CreditosIconos() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Iconos:{' '}
+      <a
+        className="underline underline-offset-2"
+        href="https://lucide.dev"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Lucide
+      </a>{' '}
+      (ISC).
+    </p>
   )
 }
 
@@ -734,15 +552,6 @@ export function ConfiguracionFacturacion() {
   return (
     <Pantalla actual="facturacion">
       <FacturacionConfigCard />
-    </Pantalla>
-  )
-}
-
-/** Pestaña de proveedores de reparación. */
-export function ConfiguracionProveedores() {
-  return (
-    <Pantalla actual="proveedores">
-      <ProveedoresCard />
     </Pantalla>
   )
 }
@@ -814,6 +623,7 @@ function ServiciosCard() {
         precio: Number(datos.precio) || 0,
         iva_rate: Number(datos.iva_rate),
         activo: datos.activo,
+        es_valor_hora: datos.es_valor_hora,
       }
       if (editando) await api.put(`/api/servicios/${editando.id}`, payload)
       else await api.post('/api/servicios', payload)
@@ -837,10 +647,25 @@ function ServiciosCard() {
     }
   }
 
-  function Formulario({ datos, onCambiar }: {
-    datos: FormServicio
-    onCambiar: (d: FormServicio) => void
-  }) {
+  // 🔴 **Es una función que devuelve JSX, no un componente**, y se la llama
+  // `formulario(...)` en vez de renderizarla como `<Formulario />`.
+  //
+  // Declarada adentro de `ServiciosCard`, cada render creaba una función nueva.
+  // React compara los tipos por identidad, así que un tipo nuevo no se
+  // actualiza: se **desmonta y se vuelve a montar**. El `<input>` pasaba a ser
+  // otro nodo del DOM, el que tenía el foco quedaba desprendido, y sólo entraba
+  // una letra por click. Reportado por el usuario cargando el valor hora
+  // (2026-08-14): *"tenía que escribir una, volver a hacer foco con el mouse,
+  // escribir otra letra"*.
+  //
+  // Llamándola, sus elementos se inlinean en el árbol de esta pantalla y no hay
+  // componente intermedio que remontar. Se elige esto y no subirla al módulo
+  // porque conserva el closure —`alicuotas`, `guardando`, `guardar`— sin
+  // enhebrar cinco props que sólo existirían para eso.
+  function formulario(
+    datos: FormServicio,
+    onCambiar: (d: FormServicio) => void,
+  ) {
     return (
       <div className="grid gap-3 rounded border p-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
@@ -883,6 +708,23 @@ function ServiciosCard() {
             onChange={(e) => onCambiar({ ...datos, descripcion: e.target.value })}
           />
         </div>
+        {/* El valor hora vive acá y no en una pantalla propia: es un precio
+            más del catálogo, con su alícuota, y así se edita donde se editan
+            todos los otros precios. */}
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox" className="mt-0.5"
+            checked={datos.es_valor_hora}
+            onChange={(e) => onCambiar({ ...datos, es_valor_hora: e.target.checked })}
+          />
+          <span>
+            Es el <strong>valor hora</strong> del servicio técnico
+            <span className="block text-xs text-muted-foreground">
+              Con esto se cotiza el trabajo de cada reclamo al generarle el
+              remito. Uno solo: marcarlo acá desmarca al que lo esté.
+            </span>
+          </span>
+        </label>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <Button type="button" disabled={guardando} onClick={guardar}>
             {guardando ? 'Guardando…' : 'Guardar'}
@@ -917,20 +759,19 @@ function ServiciosCard() {
             <Button
               type="button" size="sm"
               onClick={() => setNuevo({
-                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21', activo: true,
+                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21',
+                activo: true, es_valor_hora: false,
               })}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <PlusCircle className="mr-2 h-4 w-4" />
               Agregar servicio
             </Button>
           </div>
         )}
-        {nuevo && <Formulario datos={nuevo} onCambiar={setNuevo} />}
-        {editando && (
-          <Formulario
-            datos={editando}
-            onCambiar={(d) => setEditando({ ...d, id: editando.id })}
-          />
+        {nuevo && formulario(nuevo, setNuevo)}
+        {editando && formulario(
+          editando,
+          (d) => setEditando({ ...d, id: editando.id }),
         )}
 
         {servicios === null ? (
@@ -951,6 +792,9 @@ function ServiciosCard() {
                   {s.nombre}
                 </span>
                 {!s.activo && <Badge variant="outline">Inactivo</Badge>}
+                {/* Sin esto no hay forma de saber, mirando la lista, con qué
+                    precio se están cotizando los reclamos. */}
+                {s.es_valor_hora && <Badge>Valor hora</Badge>}
                 {s.descripcion && (
                   <span className="truncate text-xs text-muted-foreground">{s.descripcion}</span>
                 )}
@@ -970,7 +814,7 @@ function ServiciosCard() {
                       onClick={() => setEditando({
                         id: s.id, nombre: s.nombre, descripcion: s.descripcion,
                         precio: String(s.precio), iva_rate: String(s.iva_rate),
-                        activo: s.activo,
+                        activo: s.activo, es_valor_hora: s.es_valor_hora,
                       })}
                     >
                       <Pencil />

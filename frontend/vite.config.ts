@@ -14,6 +14,16 @@ const API_PATHS = [
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+// Sin `unplugin-icons` desde el 2026-08-13: los 96 iconos del producto volvieron
+// a **lucide**, que se importa como cualquier otra dependencia. Con eso se
+// fueron también `@iconify-json/fluent`, `@iconify-json/fluent-color` y los dos
+// `@svgr/*`, que existían sólo para resolver los `~icons/…` virtuales.
+//
+// ⚠️ Si alguna vez se sube el pin de `libra-ui` a v0.18.0 o mayor, el plugin
+// vuelve a hacer falta: esa versión trae el módulo compartido de iconos de
+// acción, que importa `~icons/fluent/…` y viaja como TSX crudo, o sea que se
+// compila con el pipeline de ESTE producto. Hoy el pin es v0.17.0 y no lo
+// necesita.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {

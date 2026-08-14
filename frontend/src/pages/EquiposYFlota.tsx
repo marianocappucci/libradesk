@@ -43,9 +43,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
-import {
-  Car, Check, LinkIcon, Pencil, Plus, Trash2, Unlink, Users,
-} from 'lucide-react'
+import { Car as IconoFlota } from 'lucide-react'
+import { Car, Check, FilePlus, LinkIcon, Pencil, Trash2, Unlink } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const SIN = '__sin__'
 
@@ -211,17 +211,17 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Users className="size-5" />Equipos y flota
-        </h2>
+        <TituloPantalla icono={IconoFlota}>
+          Equipos y flota
+        </TituloPantalla>
         {/* El botón de alta es el de la pestaña que se está mirando: dejar los
             dos siempre visibles haría que "Nuevo vehículo" apareciera parado en
             la agenda, donde no es lo que se vino a hacer. */}
         {seccion === 'equipos' && (
-          <Button onClick={() => abrirEquipo(null)}><Plus />Nuevo equipo</Button>
+          <Button onClick={() => abrirEquipo(null)}><FilePlus />Nuevo equipo</Button>
         )}
         {seccion === 'flota' && (
-          <Button onClick={() => abrirVehiculo(null)}><Plus />Nuevo vehículo</Button>
+          <Button onClick={() => abrirVehiculo(null)}><FilePlus />Nuevo vehículo</Button>
         )}
       </div>
 

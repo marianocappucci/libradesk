@@ -30,6 +30,8 @@ from libracore.pdf_generator import (
     _TextoSeguroPDF, _wrap_text,
 )
 
+from .pdf_texto import ancho_util, recortar
+
 _LINEA = 4.5
 _ALTO_AVISO = 14
 
@@ -78,6 +80,13 @@ class _IngresoPDF(_TextoSeguroPDF, FPDF):
         self.empresa = empresa
         self.datos = datos
         self.tipo = tipo
+        # El mismo marco que dibujan la cabecera, las reglas de sección y el
+        # pie. Sin esto queda el margen de fpdf2 —10 mm— y **todo el cuerpo
+        # sale 8 mm a la izquierda del recuadro que este documento acaba de
+        # dibujar**, línea de firma incluida. `InformePDF` ya lo hacía; acá
+        # faltaba. Desde LibraCore v1.37.0 lo pone la base y esta línea es
+        # redundante — se deja explícita igual, para no depender del pin.
+        self.set_margins(_LX, _LX, _LX)
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self) -> None:  # noqa: D102 — la firma la impone fpdf2
@@ -141,7 +150,7 @@ def _campo(pdf: FPDF, etiqueta: str, valor: str | None, ancho: float = _CW / 2) 
     pdf.set_text_color(*_MUTED)
     pdf.cell(30, _LINEA, f"{etiqueta}:")
     pdf.set_text_color(*_INK)
-    pdf.cell(ancho - 30, _LINEA, valor or "—")
+    pdf.cell(ancho - 30, _LINEA, recortar(pdf, valor or "—", ancho - 30))
 
 
 def _parrafo(pdf: FPDF, texto: str | None) -> None:
@@ -152,8 +161,12 @@ def _parrafo(pdf: FPDF, texto: str | None) -> None:
         pdf.cell(_CW, _LINEA, "—")
         pdf.ln(_LINEA)
         return
-    for linea in _wrap_text(pdf, texto, _CW):
-        pdf.cell(_CW, _LINEA, linea)
+    for linea in _wrap_text(pdf, texto, ancho_util(_CW)):
+        # El renglón que devuelve `_wrap_text` se mide igual antes de dibujarlo:
+        # el corte por carácter para una palabra sola más ancha que el renglón
+        # lo hace LibraCore desde v1.37.0, y esto sostiene la invariante —nada
+        # se dibuja sin medirse— con el pin anterior también.
+        pdf.cell(_CW, _LINEA, recortar(pdf, linea, _CW))
         pdf.ln(_LINEA)
 
 
@@ -178,7 +191,7 @@ def _bloque_firma(pdf: FPDF, etiqueta: str, aclaracion: str | None) -> None:
     pdf.ln(_LINEA)
     pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(*_INK)
-    pdf.cell(ancho, _LINEA, aclaracion or "")
+    pdf.cell(ancho, _LINEA, recortar(pdf, aclaracion or "", ancho))
     pdf.ln(_LINEA)
 
 
@@ -186,7 +199,7 @@ def _leyenda(pdf: FPDF, tipo: str) -> None:
     pdf.ln(4)
     pdf.set_font("Helvetica", "", 6.5)
     pdf.set_text_color(*_MUTED)
-    for linea in _wrap_text(pdf, _LEYENDA[tipo], _CW):
+    for linea in _wrap_text(pdf, _LEYENDA[tipo], ancho_util(_CW)):
         pdf.cell(_CW, 3.2, linea)
         pdf.ln(3.2)
     pdf.set_text_color(*_INK)
@@ -222,8 +235,14 @@ def generar_pdf_ingreso(datos: dict, *, tipo: str) -> bytes:
     # verdad, no el código.
     _titulo_seccion(pdf, "Equipo recibido" if tipo == "recepcion" else "Equipo")
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(_CW, 5, datos["equipo_descripcion"] or "—")
-    pdf.ln(6)
+    # La descripción del equipo la tipea el mostrador y no tiene tope de largo.
+    # Con `cell` a secas, una que incluya accesorios se dibuja fuera del papel
+    # — el mismo defecto que se midió en la orden de trabajo (295 mm de borde
+    # derecho en una hoja de 210). Va repartida en renglones.
+    for linea in _wrap_text(pdf, datos["equipo_descripcion"] or "—", ancho_util(_CW)):
+        pdf.cell(_CW, 5, recortar(pdf, linea, _CW))
+        pdf.ln(5)
+    pdf.ln(1)
     _campo(pdf, "Tipo", datos["equipo_tipo"])
     _campo(pdf, "Marca", datos["equipo_marca"])
     pdf.ln(_LINEA)

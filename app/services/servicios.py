@@ -38,7 +38,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Numeric, String, func, or_, select, true
+from sqlalchemy import (
+    Boolean, DateTime, Numeric, String, false, func, or_, select, true, update,
+)
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
@@ -84,6 +86,25 @@ class Servicio(Base):
     activo: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true(), index=True,
     )
+    # Cual de estos servicios es **la hora de trabajo**: el precio con el que se
+    # cotiza el trabajo de un reclamo al generarle el remito
+    # (`IncidenciaRepository.convertir_a_remito`).
+    #
+    # Vive aca y no en una tabla de configuracion propia porque este catalogo ya
+    # es exactamente eso: un nombre, un precio y una alicuota, editables desde
+    # una pantalla que existe (Configuracion -> Servicios). Una tabla de un solo
+    # numero habria necesitado migracion, endpoint y pestania nuevas para
+    # guardar menos de lo que esta fila ya guarda.
+    #
+    # 🔴 **Uno solo puede estar marcado**, y lo garantiza el repositorio
+    # desmarcando al resto en la misma transaccion --no un indice unico parcial,
+    # que SQLite y PostgreSQL declaran distinto--. Con dos marcados, `valor_hora()`
+    # devolveria "el primero por nombre" y el precio del trabajo pasaria a
+    # depender de como se llamen los servicios: la clase de dato que alguien
+    # cambia sin sospechar que le esta moviendo el importe a un remito.
+    es_valor_hora: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false(), index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -98,6 +119,7 @@ def _to_dict(s: Servicio) -> dict:
         "precio": float(s.precio or 0),
         "iva_rate": float(s.iva_rate if s.iva_rate is not None else iva.DEFECTO),
         "activo": s.activo,
+        "es_valor_hora": s.es_valor_hora,
     }
 
 
@@ -146,8 +168,42 @@ class ServicioRepository:
             s = session.get(Servicio, servicio_id)
             return _to_dict(s) if s else None
 
+    def valor_hora(self) -> dict | None:
+        """El servicio marcado como hora de trabajo, o `None` si no hay ninguno.
+
+        `None` **no es un error**: es una instancia que todavía no cargó su
+        valor hora, y el remito de un reclamo nace igual con la mano de obra en
+        cero para que el operador le ponga el precio. Devolver 0 en vez de
+        `None` borraría la diferencia entre "no está configurado" y "vale cero",
+        que son la misma pantalla pero no el mismo problema.
+
+        Sólo cuenta si está **activo**: dar de baja el servicio es la forma de
+        decir que se dejó de usar, y seguir cotizando con él sería usar un
+        precio que la pantalla ya no muestra.
+        """
+        with self.session_factory() as session:
+            s = session.execute(
+                select(Servicio)
+                .where(Servicio.es_valor_hora.is_(True))
+                .where(Servicio.activo.is_(True))
+            ).scalars().first()
+            return _to_dict(s) if s else None
+
+    def _marcar_unico_valor_hora(self, session, servicio_id: int) -> None:
+        """Deja a `servicio_id` como el único con el flag puesto.
+
+        En la misma sesión que la escritura que la llama, así que no hay una
+        ventana con dos marcados ni con ninguno.
+        """
+        session.execute(
+            update(Servicio)
+            .where(Servicio.id != servicio_id)
+            .where(Servicio.es_valor_hora.is_(True))
+            .values(es_valor_hora=False)
+        )
+
     def crear(self, nombre: str, descripcion: str = "", precio: float = 0,
-              iva_rate=None) -> dict:
+              iva_rate=None, es_valor_hora: bool = False) -> dict:
         # `iva.validar` explota con `AlicuotaInvalida` ante una alicuota que
         # ARCA no sabe mapear. Se valida al GUARDAR y no al mostrar: una fila
         # ya guardada se muestra como este, aunque la lista cambie.
@@ -158,14 +214,20 @@ class ServicioRepository:
                 descripcion=(descripcion or "").strip(),
                 precio=precio,
                 iva_rate=alicuota,
+                es_valor_hora=es_valor_hora,
             )
             session.add(s)
+            # Antes del commit hace falta el id, y el id lo da el flush.
+            session.flush()
+            if es_valor_hora:
+                self._marcar_unico_valor_hora(session, s.id)
             session.commit()
             session.refresh(s)
             return _to_dict(s)
 
     def actualizar(self, servicio_id: int, nombre: str, descripcion: str,
-                   precio: float, activo: bool, iva_rate=None) -> dict | None:
+                   precio: float, activo: bool, iva_rate=None,
+                   es_valor_hora: bool = False) -> dict | None:
         alicuota = iva.validar(iva.DEFECTO if iva_rate is None else iva_rate)
         with self.session_factory() as session:
             s = session.get(Servicio, servicio_id)
@@ -176,6 +238,9 @@ class ServicioRepository:
             s.precio = precio
             s.iva_rate = alicuota
             s.activo = activo
+            s.es_valor_hora = es_valor_hora
+            if es_valor_hora:
+                self._marcar_unico_valor_hora(session, servicio_id)
             session.commit()
             session.refresh(s)
             return _to_dict(s)

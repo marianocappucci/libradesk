@@ -22,9 +22,8 @@
 // absolutos dicen que lo son.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  AlarmClock, CalendarClock, FileWarning, ShieldCheck, UserX, Wrench,
-} from 'lucide-react'
+import { AlarmClock, CalendarClock, FileExclamationPoint as FileWarning, LayoutDashboard, ShieldCheck, UserX, Wrench } from 'lucide-react'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
   type DashboardOperativo, type DashboardSummary,
@@ -174,7 +173,11 @@ export function Dashboard() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Qué hay que hacer</h2>
+          {/* Es el título de ESTA pantalla, no una sección adentro: el
+              Dashboard no tenía otro. Por eso sale del mismo componente que el
+              resto y no de un `<h2>` a mano — era el único que quedaba con el
+              tamaño del título pero sin su tratamiento. */}
+          <TituloPantalla icono={LayoutDashboard}>Qué hay que hacer</TituloPantalla>
           <p className="text-sm text-muted-foreground">
             Lo que se vence, lo que espera hace mucho y lo que está en el taller.
           </p>

@@ -21,10 +21,17 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SelectBuscable } from '@/components/select-buscable'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import { ArrowLeft, Download, Search } from 'lucide-react'
 import {
   TODOS, buscarReporte, queryDeValores, valoresIniciales, type Campo,
 } from './reportes-definicion'
+import { FileSpreadsheet } from 'lucide-react'
+// `DownloadPlano`/`SearchPlano` son alias exactos de `Download`/`Search`: nacieron
+// cuando el botón primario era un caso especial y ya no lo es. Se mantienen sólo
+// para no tocar estos imports — ver la nota en `iconos-accion.tsx`.
+import {
+  ArrowLeft, DownloadPlano as Download, SearchPlano as Search,
+} from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function ReporteDetalle() {
   const { slug } = useParams<{ slug: string }>()
@@ -137,7 +144,7 @@ export function ReporteDetalle() {
             <Link to="/reportes"><ArrowLeft />Reportes</Link>
           </Button>
           <div>
-            <h2 className="text-lg font-semibold">{reporte.titulo}</h2>
+            <TituloPantalla icono={FileSpreadsheet}>{reporte.titulo}</TituloPantalla>
             <p className="text-sm text-muted-foreground">{reporte.descripcion}</p>
           </div>
         </div>

@@ -13,19 +13,32 @@ def _login(client) -> None:
     assert r.status_code == 200
 
 
-@pytest.mark.parametrize("ruta", ["/health", "/api/health"])
-def test_health(client, ruta):
-    """Las dos rutas mientras dure el alias. Se asierta **el cuerpo**, no sólo
-    el 200: con la SPA horneada cualquier ruta inexistente devuelve 200 con el
-    `index.html`, así que un assert sobre el status no distingue una ruta viva
-    de una que no existe. Es el falso positivo que este producto ya pagó, y por
-    el que el healthcheck generado hace `json.load` del cuerpo desde LibraCore
-    v1.34.0. Ver `app/routers/health.py`."""
-    r = client.get(ruta)
+def test_health(client):
+    """Se asierta **el cuerpo**, no sólo el 200: con la SPA horneada cualquier
+    ruta inexistente devuelve 200 con el `index.html`, así que un assert sobre
+    el status no distingue una ruta viva de una que no existe. Es el falso
+    positivo que este producto ya pagó, y por el que el healthcheck generado
+    hace `json.load` del cuerpo desde LibraCore v1.34.0. Ver
+    `app/routers/health.py`."""
+    r = client.get("/health")
 
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
     assert r.json()["status"] == "ok"
+
+
+def test_el_alias_viejo_ya_no_es_una_ruta(client):
+    """`/api/health` fue la ruta de este producto hasta el 2026-08-12 y alias de
+    transición hasta que se dieron vuelta todos sus consumidores. Ya no existe.
+
+    El assert va contra el router **sin** la SPA montada, que es donde la
+    ausencia se ve como un `404`. Con el `dist` horneado no se vería: la
+    contestaría el catch-all con un `200`, que es justamente lo que hace
+    peligroso este cambio para cualquier chequeo externo que haya quedado
+    apuntado ahí. Ese escenario lo cubre
+    `test_asgi_entrypoint.py::test_el_catch_all_de_la_spa_no_se_come_el_health`.
+    """
+    assert client.get("/api/health").status_code == 404
 
 
 def test_login_and_me(client):

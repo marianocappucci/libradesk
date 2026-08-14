@@ -15,13 +15,14 @@
  *  `app/services/facturacion_config.py`.
  */
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, KeyRound, Send, Trash2 } from 'lucide-react'
+import { Check, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AlertTriangle, KeyRound, Trash2 } from '@/components/iconos-accion'
 
 export type DestinoConfig = {
   destino: string

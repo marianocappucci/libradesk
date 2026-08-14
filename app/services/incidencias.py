@@ -17,6 +17,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+# Sin riesgo de import circular: `materiales` no importa nada del producto,
+# solo los dos motores.
+from . import materiales
 
 ESTADOS_VALIDOS = ("abierto", "en_progreso", "resuelta", "cerrado")
 PRIORIDADES_VALIDAS = ("alta", "media", "baja")
@@ -101,12 +104,36 @@ class Incidencia(Base):
     )
     titulo: Mapped[str] = mapped_column(String(255), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
+    # El numero del talonario preimpreso de Comprobante de Servicios --el
+    # papel que el tecnico completa en el lugar y el cliente firma--. Es la
+    # unica llave entre esa conformidad y este ticket. String y no entero:
+    # `0001-00041996` es un formato de imprenta, no una secuencia de este
+    # sistema. Ver la revision `0019`.
+    nro_cds: Mapped[str | None] = mapped_column(String(30), index=True)
+    # Quien llamo, distinto del cliente. Texto libre porque es lo que hay: un
+    # nombre de pila anotado por quien atiende el telefono.
+    reclamante: Mapped[str | None] = mapped_column(String(120))
     estado: Mapped[str] = mapped_column(String(50), nullable=False, default="abierto", index=True)
     prioridad: Mapped[str] = mapped_column(String(20), nullable=False, default="media")
     horas_invertidas: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     notas: Mapped[str | None] = mapped_column(Text)
     resolucion: Mapped[str | None] = mapped_column(Text)
     estado_facturacion: Mapped[str | None] = mapped_column(String(20))
+    # El remito que se genero de este ticket, si se genero (`convertir_a_remito`).
+    #
+    # 🔴 **Integer pelado, SIN ForeignKey a `remitos`** — y no es un descuido.
+    # `remitos` no es un modelo de SQLAlchemy: la crea el DDL crudo de
+    # `remitos_presupuestos.py`, asi que no esta en `Base.metadata`. Declarar la
+    # FK haria que Alembic quiera crear una referencia a una tabla que su
+    # autogenerate ni siquiera ve (`app/schema.py` `include_name()` filtra por
+    # `metadata.tables`). Es el mismo pozo que ya documenta
+    # `remitos_presupuestos.py` para `client_id -> clients`, con los dueños al
+    # reves.
+    #
+    # Quien sostiene la integridad es `RemitoService.delete()`, que se niega a
+    # borrar un remito que una incidencia referencia — igual que ya hacia con
+    # los presupuestos convertidos.
+    remito_id: Mapped[int | None] = mapped_column(Integer, index=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime)
@@ -152,12 +179,15 @@ def _to_dict(i: Incidencia) -> dict:
         "categoria_id": i.categoria_id,
         "titulo": i.titulo,
         "descripcion": i.descripcion,
+        "nro_cds": i.nro_cds,
+        "reclamante": i.reclamante,
         "estado": i.estado,
         "prioridad": i.prioridad,
         "horas_invertidas": float(i.horas_invertidas) if i.horas_invertidas is not None else None,
         "notas": i.notas,
         "resolucion": i.resolucion,
         "estado_facturacion": i.estado_facturacion,
+        "remito_id": i.remito_id,
         "activo": i.activo,
         "fecha_creacion": i.fecha_creacion.isoformat() if i.fecha_creacion else None,
         "fecha_cierre": i.fecha_cierre.isoformat() if i.fecha_cierre else None,
@@ -204,6 +234,43 @@ def _validar_modalidad(data: dict) -> None:
     modalidad = data.get("modalidad")
     if modalidad is not None and modalidad not in MODALIDADES_VALIDAS:
         raise ValueError(f"Modalidad inválida: {modalidad}")
+
+
+def _descripcion_del_trabajo(incidencia_id: int, titulo: str,
+                             nro_cds: str | None) -> str:
+    """Cómo se llama un reclamo dentro de un remito.
+
+    **El CDS va primero.** Es el mismo criterio con el que está en el encabezado
+    de la orden de trabajo: quien tiene el talonario en la mano busca por ese
+    número, y si está al final del renglón hay que leer la línea entera para
+    encontrarlo. Con tres trabajos en un remito, eso es la diferencia entre
+    conciliar de un vistazo y no poder.
+
+    Sin `nro_cds` la línea arranca por el ticket: un reclamo resuelto en remoto
+    no tiene papel, y un "CDS —" delante entrenaría a saltear la parte que sí
+    importa en los que sí lo tienen.
+    """
+    etiqueta = f"#{incidencia_id} {titulo}"
+    return f"CDS {nro_cds} — {etiqueta}" if nro_cds else etiqueta
+
+
+def _observaciones_del_lote(trabajos: list[dict]) -> str:
+    """De qué reclamos salió este remito, en una línea.
+
+    Redundante con las descripciones **a propósito**: el PDF recorta las
+    observaciones a 400 caracteres (`pdf_generator`), así que con muchos
+    reclamos esta línea se corta — y los CDS siguen estando completos renglón
+    por renglón, que es donde se los busca. Acá es el resumen, no la fuente.
+    """
+    reclamos = ", ".join(f"#{t['id']}" for t in trabajos)
+    cabeza = "Generado del reclamo" if len(trabajos) == 1 else "Generado de los reclamos"
+    texto = f"{cabeza} {reclamos}"
+    cds = [t["nro_cds"] for t in trabajos if t["nro_cds"]]
+    if cds:
+        # El numero del papel firmado es lo que ata el remito a la conformidad
+        # del cliente. Quien concilia despues busca por el.
+        texto += f" (CDS {', '.join(cds)})"
+    return texto
 
 
 class IncidenciaRepository:
@@ -329,9 +396,24 @@ class IncidenciaRepository:
                 "vendedor": persona(i.vendedor_id),
                 "titulo": i.titulo,
                 "descripcion": i.descripcion,
+                "nro_cds": i.nro_cds,
+                "reclamante": i.reclamante,
                 "resolucion": i.resolucion,
                 "notas": i.notas,
                 "actividad": actividad,
+                # Los materiales consumidos, que es la columna "Materiales
+                # Utilizados" del comprobante en papel de Lagrace.
+                #
+                # 🔴 Se leen por `materiales.listar()` y NO por SQLAlchemy: esa
+                # tabla la escribe la conexion de LibraCore, no el ORM (es lo
+                # que hace atomico el par "material anotado + stock
+                # descontado"). Consultarla desde esta sesion daria una lectura
+                # de otra transaccion.
+                #
+                # Sin `incluir_devueltos`: lo que se devolvio al deposito no se
+                # uso, y un comprobante que lo liste esta cobrando algo que
+                # volvio.
+                "materiales": materiales.listar(i.id),
             }
 
     def update(self, incidencia_id: int, usuario_actor: str | None = None, **data) -> dict:
@@ -459,3 +541,225 @@ class IncidenciaRepository:
                 .order_by(IncidenciaEstadoLog.fecha.desc(), IncidenciaEstadoLog.id.desc())
             )
             return [_estado_log_to_dict(e) for e in session.execute(stmt).scalars()]
+
+    def convertir_a_remito(self, incidencia_ids: list[int], remitos, clientes,
+                           servicios, usuario_id: int | None = None) -> dict:
+        """Genera **un** remito por los reclamos **cerrados** que se le pasen.
+
+        Es el camino a facturacion de un reclamo, y es el mismo que el de un
+        presupuesto aceptado: LibraDesk manda a facturar **solo remitos**,
+        porque lo que habilita a facturar es la entrega hecha (ver
+        `app/routers/facturacion.py`). Sin esto, un trabajo por servicio no
+        tenia como llegar a la bandeja.
+
+        **Recibe una lista y no un id**, aunque el 90% de las veces traiga uno.
+        El caso real es el otro: a un cliente se le hacen tres visitas en el mes
+        y se le emite **un** remito por las tres, porque es una factura la que
+        va a salir de ahi. Con un solo camino no hay dos formas de armar un
+        remito que puedan divergir --el de a uno es este con la lista de largo
+        1--, que es como el producto termino con el mismo defecto en tres
+        pantallas la ultima vez.
+
+        **Solo `cerrado`, no `resuelta`.** Es donde cae en el circuito real de
+        [[lagrace-comunicaciones]]: el tecnico trae el comprobante de servicios
+        en papel, alguien lo controla contra la hoja de ruta y recien ahi lo
+        cierra "decidiendo si va a facturacion". Un ticket `resuelta` todavia no
+        paso ese control.
+
+        **Todos del mismo cliente**: un remito se emite a nombre de uno solo.
+
+        **Idempotente por lote**: si TODOS los elegidos ya apuntan al MISMO
+        remito, devuelve ese --el doble click--. Una mezcla de remitados y no
+        remitados es un error, no una idempotencia: devolver el remito viejo
+        dejaria a los nuevos sin facturar y sin decirlo.
+
+        ## Que lleva el remito
+
+        - **Una linea de trabajo por reclamo**, encabezada por el **N° CDS** del
+          comprobante en papel cuando lo tiene. Ese numero es lo unico que ata
+          la conformidad firmada con el ticket del sistema, y con tres trabajos
+          en el mismo remito no alcanza con ponerlo en las observaciones: hay
+          que poder leer, renglon por renglon, cual es cual. `qty` son las horas
+          invertidas si estan cargadas, y `1` si no --un reclamo se cobra por
+          hora o como visita, y las dos formas entran en la misma linea--.
+        - **Los materiales de cada reclamo debajo de su trabajo**, al precio de
+          venta del catalogo (`materiales.valorizados`), con el reclamo del que
+          salieron dicho en la linea.
+
+        El PDF del remito **no imprime precios** (`_draw_items_table` con
+        `show_prices=False`): lo que se lee en el papel es la descripcion y la
+        cantidad. Por eso el CDS va en la descripcion y no en un campo aparte.
+
+        🔴 **Los precios pueden salir en cero, y esta bien.** El valor hora sale
+        del catalogo de servicios (`ServicioRepository.valor_hora`) y puede no
+        estar marcado todavia; un material sin `default_sale_price` tampoco
+        tiene precio. El remito nace con los importes que el sistema **sabe**, y
+        el operador completa el resto editandolo; inventar un numero seria peor.
+        Lo que cierra el circuito es que la bandeja de facturacion **se niega a
+        mandar un remito con total 0**, asi que un olvido no llega a facturarse.
+
+        ## Lo que NO es atomico
+
+        El remito lo escribe la conexion de LibraCore y el vinculo lo escribe
+        SQLAlchemy: son dos conexiones, asi que no hay una transaccion que las
+        cubra (mismo problema que documenta `materiales.py`). Si el proceso se
+        cae entre las dos, queda un remito emitido sin vinculo y el proximo
+        intento genera un segundo remito por los mismos tickets. Se elige este
+        orden --primero el remito, despues el vinculo-- porque el error al
+        reves es peor: un ticket que dice "ya se remitio" apuntando a un remito
+        que no existe deja el trabajo sin poder facturarse nunca.
+
+        El vinculo de los N si es una sola sentencia (`UPDATE ... WHERE id IN`),
+        asi que no hay un estado intermedio donde la mitad del lote quedo atada
+        al remito y la otra mitad no.
+        """
+        from . import fecha, materiales
+        from .remitos_presupuestos import datos_cliente_para_comprobante
+
+        # Sin repetidos y en el orden en que los eligieron: el remito se lee en
+        # el mismo orden en que la pantalla los mostraba. `dict.fromkeys` es la
+        # forma corta de deduplicar conservando el orden; un `set` lo perderia y
+        # el remito saldria con los trabajos barajados.
+        ids = list(dict.fromkeys(incidencia_ids))
+        if not ids:
+            raise ValueError("No se eligio ningun reclamo.")
+
+        with self.session_factory() as session:
+            filas = {
+                i.id: i for i in session.execute(
+                    select(Incidencia).where(Incidencia.id.in_(ids))
+                ).scalars()
+            }
+            faltantes = [x for x in ids if x not in filas]
+            if faltantes:
+                raise KeyError(faltantes[0] if len(faltantes) == 1 else tuple(faltantes))
+
+            # ── Idempotencia del LOTE, no de cada reclamo ────────────────
+            #
+            # Con uno solo alcanzaba con "si ya tiene remito, devolvelo". Con
+            # varios hay un caso que no existia: **algunos** ya remitados y
+            # otros no. Devolver el remito viejo dejaria a los nuevos sin
+            # facturar --y en silencio--, asi que solo se devuelve el existente
+            # cuando TODOS apuntan al MISMO remito, que es lo que produce un
+            # doble click. Cualquier mezcla es un error que hay que ver.
+            remitados = {x: filas[x].remito_id for x in ids if filas[x].remito_id}
+            if remitados:
+                unicos = set(remitados.values())
+                if len(remitados) == len(ids) and len(unicos) == 1:
+                    existente = remitos.get(next(iter(unicos)))
+                    if existente is not None:
+                        return existente
+                    # El remito que se referenciaba no esta: se borro por fuera.
+                    # Se sigue de largo y se genera uno nuevo en vez de devolver
+                    # None, que dejaria a los tickets sin camino a facturacion.
+                else:
+                    cuales = ", ".join(f"#{x}" for x in sorted(remitados))
+                    raise ValueError(
+                        f"Ya tienen remito: {cuales}. Sacalos de la seleccion o "
+                        f"emiti el remito de los que faltan."
+                    )
+
+            # ── Un remito se emite a nombre de UN cliente ────────────────
+            #
+            # Antes que el estado: es el error estructural. Que ademas alguno no
+            # este cerrado no cambia que el lote no puede existir.
+            clientes_del_lote = {filas[x].cliente_id for x in ids}
+            if len(clientes_del_lote) > 1:
+                raise ValueError(
+                    "Los reclamos elegidos son de mas de un cliente y un remito "
+                    "se emite a nombre de uno solo."
+                )
+
+            # **Solo `cerrado`, no `resuelta`** — ver el docstring.
+            abiertos = [x for x in ids if filas[x].estado != "cerrado"]
+            if abiertos:
+                detalle = ", ".join(
+                    f"#{x} («{filas[x].estado}»)" for x in sorted(abiertos)
+                )
+                raise ValueError(
+                    f"Solo se genera el remito de reclamos cerrados, y estos no "
+                    f"lo estan: {detalle}."
+                )
+
+            cliente_id = clientes_del_lote.pop()
+            cliente = clientes.get(cliente_id)
+            if cliente is None:
+                raise ValueError(
+                    "Los reclamos elegidos apuntan a un cliente que ya no existe, "
+                    "asi que no hay a nombre de quien emitir el remito."
+                )
+            # Copia de lo que se necesita afuera de la sesion: los materiales se
+            # leen por la conexion de LibraCore, no por esta.
+            trabajos = [
+                {
+                    "id": x,
+                    "titulo": filas[x].titulo,
+                    "nro_cds": filas[x].nro_cds,
+                    "horas": float(filas[x].horas_invertidas) if filas[x].horas_invertidas else 0.0,
+                }
+                for x in ids
+            ]
+
+        # El valor hora del catalogo, o `None` si nadie lo marco todavia. Se
+        # pide UNA vez para todo el lote: no puede pasar que dos lineas del
+        # mismo remito coticen la hora distinto.
+        valor_hora = servicios.valor_hora()
+
+        items: list[dict] = []
+        for t in trabajos:
+            linea = {
+                "description": _descripcion_del_trabajo(t["id"], t["titulo"], t["nro_cds"]),
+                # Sin horas cargadas la linea vale 1: es una visita, no cero
+                # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
+                # trabajo aunque le pongan precio.
+                "qty": t["horas"] if t["horas"] > 0 else 1,
+                "unit_price": float(valor_hora["precio"]) if valor_hora else 0,
+            }
+            if valor_hora:
+                # La alicuota del servicio, no la del documento: el valor hora
+                # es una linea del catalogo y trae la suya.
+                linea["tax_rate"] = float(valor_hora["iva_rate"])
+            items.append(linea)
+            # Los materiales de ESTE reclamo, debajo de su trabajo. Agrupado por
+            # ticket y no todo el trabajo primero: el remito se lee como la
+            # lista de visitas que es, y quien concilia contra los papeles va
+            # bajando de a un CDS por vez.
+            for m in materiales.valorizados(t["id"]):
+                nombre = m["descripcion"] or f"Material #{m['item_id']}"
+                items.append({
+                    # El `\n` no es cosmetico: `_draw_items_table` de LibraCore
+                    # parte la descripcion ahi y dibuja la segunda linea en
+                    # italica chica, asi que el reclamo del que salio el
+                    # material queda dicho sin robarle lugar al nombre.
+                    "description": f"{nombre}\nReclamo #{t['id']}",
+                    "qty": m["cantidad"],
+                    "unit_price": m["precio"],
+                })
+
+        remito = remitos.create(
+            # `fecha.hoy()` y no `fecha_cierre`: el cierre se guarda en UTC
+            # (`update()` usa `datetime.now(timezone.utc)`), asi que un ticket
+            # cerrado a las 22:00 de Chivilcoy daria un remito fechado al dia
+            # siguiente. La fecha del remito es la del dia en que se emite, en
+            # hora de Argentina, igual que todo lo demas del producto.
+            date=fecha.hoy(),
+            client_id=cliente["id"],
+            client_cuit=cliente["cuit"] or "",
+            items=items,
+            observations=_observaciones_del_lote(trabajos),
+            usuario_id=usuario_id,
+            # El domicilio si el cliente lo tiene cargado, y la ciudad si no.
+            # Los formularios de remito y presupuesto lo hacen tipear; aca no
+            # hay formulario, asi que se toma el mejor dato que haya en la
+            # ficha en vez de dejarlo vacio.
+            **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
+        )
+
+        with self.session_factory() as session:
+            session.execute(
+                update(Incidencia)
+                .where(Incidencia.id.in_(ids))
+                .values(remito_id=remito["id"])
+            )
+            session.commit()
+        return remito

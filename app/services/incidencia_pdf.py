@@ -32,6 +32,8 @@ from libracore.pdf_generator import (
     _TextoSeguroPDF, _wrap_text,
 )
 
+from .pdf_texto import ancho_util, recortar
+
 # La caja de la letra del membrete. `_draw_header_block` le aplica `.title()`
 # al título, así que va sin preposiciones.
 _LETRA = "OT"
@@ -54,6 +56,14 @@ class _IncidenciaPDF(_TextoSeguroPDF, FPDF):
         super().__init__()
         self.empresa = empresa
         self.datos = datos
+        # El mismo marco que dibujan la cabecera, las reglas de sección y el
+        # pie. Sin esto queda el margen de fpdf2 —10 mm— y **todo el cuerpo
+        # sale 8 mm a la izquierda del recuadro que este documento acaba de
+        # dibujar**: los títulos de sección y las etiquetas arrancan afuera de
+        # la línea que los subraya. `InformePDF` ya lo hacía; acá faltaba.
+        # Desde LibraCore v1.37.0 lo pone la base y esta línea es redundante —
+        # se deja explícita igual, como en el informe, para no depender del pin.
+        self.set_margins(_LX, _LX, _LX)
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self) -> None:  # noqa: D102 — la firma la impone fpdf2
@@ -65,6 +75,16 @@ class _IncidenciaPDF(_TextoSeguroPDF, FPDF):
                 ("Fecha:", self.datos["fecha_creacion"]),
                 ("Estado:", self.datos["estado_label"]),
             ]
+            # El N° CDS va en el encabezado, al lado del número de ticket, y no
+            # enterrado en una sección: **es la llave con el papel firmado**.
+            # Quien tiene el talonario en la mano busca por ese número, y abajo
+            # de todo el documento no sirve para eso.
+            #
+            # Sólo si existe: un reclamo resuelto en remoto no tiene
+            # comprobante, y una etiqueta con un guión al lado del número de
+            # ticket se lee como "acá falta algo" en vez de "no corresponde".
+            if self.datos.get("nro_cds"):
+                info.append(("N° CDS:", self.datos["nro_cds"]))
             self.set_y(_draw_header_block(
                 self, _LETRA, _TITULO, "", info, self.empresa,
             ))
@@ -94,7 +114,42 @@ def _campo(pdf: FPDF, etiqueta: str, valor: str | None, ancho: float = _CW / 2) 
     pdf.set_text_color(*_MUTED)
     pdf.cell(28, _LINEA, f"{etiqueta}:")
     pdf.set_text_color(*_INK)
-    pdf.cell(ancho - 28, _LINEA, valor or "—")
+    pdf.cell(ancho - 28, _LINEA, recortar(pdf, valor or "—", ancho - 28))
+
+
+def _materiales(pdf: FPDF, materiales: list[dict]) -> None:
+    """La columna «Materiales Utilizados» del comprobante en papel.
+
+    **Si no hay materiales la sección no se dibuja**, a diferencia de
+    Descripción o Resolución, que sí muestran un guión. El criterio no es
+    estético: la mayoría de los tickets de una mesa de ayuda no consumen nada
+    —un diagnóstico, una configuración remota— y un encabezado «MATERIALES
+    UTILIZADOS» seguido de un guión en todos ellos entrena a saltear la
+    sección justo en los que sí la tienen.
+
+    ⚠️ **No lleva importes.** Los materiales salen del inventario con su costo,
+    no con un precio de venta, y este documento es una orden de trabajo: poner
+    plata acá lo volvería un presupuesto sin serlo. Lo que se cobra sale de la
+    venta, que es otro comprobante.
+    """
+    if not materiales:
+        return
+    _titulo_seccion(pdf, "Materiales utilizados")
+    pdf.set_font("Helvetica", "", 8)
+    for m in materiales:
+        pdf.set_text_color(*_INK)
+        # La cantidad primero y alineada: la pregunta que se le hace a esta
+        # tabla es "cuánto salió del depósito", no "qué había".
+        cantidad = f"{m['cantidad']:g}"
+        pdf.cell(16, _LINEA, cantidad, align="R")
+        pdf.cell(4, _LINEA, "")
+        lineas = _wrap_text(pdf, m.get("descripcion") or "—", ancho_util(_CW - 20))
+        pdf.cell(_CW - 20, _LINEA, recortar(pdf, lineas[0] if lineas else "—", _CW - 20))
+        pdf.ln(_LINEA)
+        for extra in lineas[1:]:
+            pdf.cell(20, _LINEA, "")
+            pdf.cell(_CW - 20, _LINEA, recortar(pdf, extra, _CW - 20))
+            pdf.ln(_LINEA)
 
 
 def _parrafo(pdf: FPDF, texto: str | None) -> None:
@@ -105,8 +160,12 @@ def _parrafo(pdf: FPDF, texto: str | None) -> None:
         pdf.cell(_CW, _LINEA, "—")
         pdf.ln(_LINEA)
         return
-    for linea in _wrap_text(pdf, texto, _CW):
-        pdf.cell(_CW, _LINEA, linea)
+    for linea in _wrap_text(pdf, texto, ancho_util(_CW)):
+        # El renglón que devuelve `_wrap_text` se mide igual antes de dibujarlo:
+        # el corte por carácter para una palabra sola más ancha que el renglón
+        # lo hace LibraCore desde v1.37.0, y esto sostiene la invariante —nada
+        # se dibuja sin medirse— con el pin anterior también.
+        pdf.cell(_CW, _LINEA, recortar(pdf, linea, _CW))
         pdf.ln(_LINEA)
 
 
@@ -135,8 +194,14 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
 
     _titulo_seccion(pdf, "Ticket")
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(_CW, 5, datos["titulo"])
-    pdf.ln(6)
+    # El título lo escribe quien abre el ticket y no tiene tope de largo. Con
+    # `cell` a secas, uno que fuera una frase entera se dibujaba **fuera del
+    # papel**: medido, 295 mm de borde derecho en una hoja de 210. Va repartido
+    # en renglones, como la descripción.
+    for linea in _wrap_text(pdf, datos["titulo"] or "—", ancho_util(_CW)):
+        pdf.cell(_CW, 5, recortar(pdf, linea, _CW))
+        pdf.ln(5)
+    pdf.ln(1)
     _campo(pdf, "Prioridad", datos["prioridad_label"])
     _campo(pdf, "Modalidad", datos["modalidad_label"])
     pdf.ln(_LINEA)
@@ -157,10 +222,20 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
     _campo(pdf, "Ejecutó", datos["tecnico"])
     pdf.ln(_LINEA)
     _campo(pdf, "Vendedor", datos["vendedor"], _CW)
+    pdf.ln(_LINEA)
+    # Quien llamó, cuando no es el contacto habitual. Va en Personal y no en
+    # Ticket porque es una persona, no un atributo del reclamo.
+    _campo(pdf, "Reclamante", datos.get("reclamante"), _CW)
     pdf.ln(_LINEA + 1)
 
     _titulo_seccion(pdf, "Descripción")
     _parrafo(pdf, datos["descripcion"])
+
+    # Entre la descripción y la resolución a propósito: es el orden del papel
+    # que ellos completan (reclamo efectuado → materiales utilizados →
+    # observaciones del técnico). Ver
+    # `wiki/sources/lagrace-relevamiento-whatsapp.md`.
+    _materiales(pdf, datos.get("materiales") or [])
 
     _titulo_seccion(pdf, "Resolución")
     _parrafo(pdf, datos["resolucion"])
@@ -174,14 +249,14 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
         pdf.set_font("Helvetica", "", 8)
         for a in datos["actividad"]:
             pdf.set_text_color(*_MUTED)
-            pdf.cell(32, _LINEA, a["fecha"])
+            pdf.cell(32, _LINEA, recortar(pdf, a["fecha"], 32))
             pdf.set_text_color(*_INK)
-            lineas = _wrap_text(pdf, a["descripcion"] or "—", _CW - 32)
-            pdf.cell(_CW - 32, _LINEA, lineas[0] if lineas else "—")
+            lineas = _wrap_text(pdf, a["descripcion"] or "—", ancho_util(_CW - 32))
+            pdf.cell(_CW - 32, _LINEA, recortar(pdf, lineas[0] if lineas else "—", _CW - 32))
             pdf.ln(_LINEA)
             for extra in lineas[1:]:
                 pdf.cell(32, _LINEA, "")
-                pdf.cell(_CW - 32, _LINEA, extra)
+                pdf.cell(_CW - 32, _LINEA, recortar(pdf, extra, _CW - 32))
                 pdf.ln(_LINEA)
 
     # El aviso va al final y con lugar reservado, por el defecto que ya se pagó

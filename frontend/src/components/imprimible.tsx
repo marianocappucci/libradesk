@@ -16,9 +16,9 @@
  *  documento con membrete que sale de la empresa, no una pantalla.
  */
 import type { ReactNode } from 'react'
-import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { fechaHoraDeDate } from '@/lib/format'
+import { Printer } from '@/components/iconos-accion'
 
 export function Imprimible({ children }: { children: ReactNode }) {
   return <div id="zona-impresion">{children}</div>

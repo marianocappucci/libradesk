@@ -40,7 +40,7 @@ admitiria que dieran respuestas distintas.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from libragenda.domain import Appointment, AppointmentStatus
 from libragenda.scheduling import find_conflicts
@@ -162,7 +162,7 @@ def agenda_del_equipo(session, equipo_id: int, desde: datetime,
         ).scalars()
     ]
     filas = session.execute(
-        select(Incidencia, Cliente.nombre)
+        select(Incidencia, Cliente.nombre, Cliente.domicilio, Cliente.ciudad)
         .join(Cliente, Cliente.id == Incidencia.cliente_id, isouter=True)
         .where(
             Incidencia.equipo_trabajo_id == equipo_id,
@@ -178,6 +178,13 @@ def agenda_del_equipo(session, equipo_id: int, desde: datetime,
             "titulo": i.titulo,
             "cliente_id": i.cliente_id,
             "cliente_nombre": cliente,
+            # El domicilio se agrega por la hoja de ruta: una lista de paradas
+            # sin direcciones no sirve para salir a la calle. Va tambien en la
+            # respuesta de pantalla —y no solo en el PDF— porque la agenda del
+            # dia es donde se decide el recorrido, y decidirlo sin ver donde
+            # queda cada trabajo es la misma carencia con otra ropa.
+            "cliente_domicilio": domicilio,
+            "cliente_ciudad": ciudad,
             "estado": i.estado,
             "modalidad": i.modalidad,
             "desde": i.fecha_programada.isoformat(),
@@ -190,5 +197,75 @@ def agenda_del_equipo(session, equipo_id: int, desde: datetime,
             # tenga asignado. Plural porque nada impide dos.
             "vehiculos": vehiculos,
         }
-        for i, cliente in filas
+        for i, cliente, domicilio, ciudad in filas
     ]
+
+
+#: Las modalidades que NO se recorren. Un trabajo remoto ocupa la agenda del
+#: equipo —alguien lo esta haciendo— pero no es una parada de la camioneta, asi
+#: que no entra en la hoja de ruta ni suma al recorrido.
+_MODALIDADES_SIN_VISITA = ("remoto",)
+
+
+def datos_hoja_ruta(session, equipo_id: int, dia: date) -> dict | None:
+    """Todo lo que lleva la hoja de ruta de un equipo en un dia.
+
+    **La unidad es `equipo x dia`, y ese es el punto entero de esta funcion.**
+    Es al reves de la orden de trabajo (`incidencia_pdf`), que es por ticket, y
+    es el motivo por el que la hoja de ruta no aparecia "gratis" con lo ya
+    construido aunque todos sus datos estuvieran cargados: no hay ninguna fila
+    que represente una salida de cuadrilla. Se arma aca, juntando el equipo, su
+    gente, sus vehiculos y sus trabajos agendados.
+
+    Devuelve `None` si el equipo no existe — el router lo traduce a 404. Un
+    equipo **sin trabajos** ese dia si devuelve un documento, con la lista
+    vacia: es una hoja legitima ("hoy no salen") y negarla obligaria a la
+    pantalla a distinguir dos errores que no se distinguen solos.
+
+    ⚠️ **Los trabajos remotos quedan afuera.** Ocupan la agenda del equipo pero
+    no son una parada, y meterlos en una hoja de ruta que despues se controla
+    contra el satelital de la camioneta agregaria una fila que ese control no
+    puede cerrar nunca.
+    """
+    from .equipos_trabajo import EquipoTrabajo, EquipoTrabajoIntegrante, Vehiculo
+    from .tecnicos import Tecnico
+
+    equipo = session.get(EquipoTrabajo, equipo_id)
+    if equipo is None:
+        return None
+
+    responsable = (
+        session.get(Tecnico, equipo.responsable_id).nombre
+        if equipo.responsable_id else None
+    )
+    integrantes = [
+        nombre for (nombre,) in session.execute(
+            select(Tecnico.nombre)
+            .join(EquipoTrabajoIntegrante, EquipoTrabajoIntegrante.tecnico_id == Tecnico.id)
+            .where(EquipoTrabajoIntegrante.equipo_id == equipo_id)
+            .order_by(Tecnico.nombre)
+        ).all()
+    ]
+    vehiculos = [
+        {"patente": v.patente, "marca": v.marca, "modelo": v.modelo}
+        for v in session.execute(
+            select(Vehiculo)
+            .where(Vehiculo.equipo_id == equipo_id)
+            .order_by(Vehiculo.patente)
+        ).scalars()
+    ]
+
+    inicio = datetime.combine(dia, datetime.min.time())
+    paradas = [
+        p for p in agenda_del_equipo(session, equipo_id, inicio, inicio + timedelta(days=1))
+        if p["modalidad"] not in _MODALIDADES_SIN_VISITA
+    ]
+
+    return {
+        "equipo": equipo.nombre,
+        "responsable": responsable,
+        "integrantes": integrantes,
+        "vehiculos": vehiculos,
+        "dia": dia.isoformat(),
+        "paradas": paradas,
+    }

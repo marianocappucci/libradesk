@@ -106,9 +106,11 @@ Lo mismo por navegador desde el backoffice, en **https://admin.libradesk.com.ar*
 > código HTTP da verde sin haber tocado la app — incluso apuntado a una ruta inventada. Pedir
 > `/health` y verificar que el cuerpo sea un JSON con `status: ok`.
 >
-> Hasta el 2026-08-12 este producto servía su salud **sólo** en `/api/health`, y esa ruta sigue
-> respondiendo como alias de transición. Si aparece un compose o una config de monitoreo que la
-> use, es de antes: la canónica es `/health`, la misma que los otros cinco productos.
+> Hasta el 2026-08-12 este producto servía su salud **sólo** en `/api/health`. Esa ruta fue alias
+> de transición ese mismo día y **ya no existe**. Ojo con eso: pedirla hoy **no da 404** — la
+> contesta el catch-all de la SPA con un `200` y HTML, así que un chequeo que haya quedado
+> apuntado ahí y sólo mire el código va a decir "ok" para siempre sin tocar la app. Si aparece
+> uno, moverlo a `/health` y hacerle mirar el cuerpo.
 
 ### DNS y dominio
 

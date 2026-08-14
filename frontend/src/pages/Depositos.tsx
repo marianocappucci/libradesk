@@ -29,7 +29,9 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Building2, Check, Plus } from 'lucide-react'
+import { Building2 } from 'lucide-react'
+import { Check, FilePlus } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function Depositos() {
   const [depositos, setDepositos] = useState<Deposito[]>([])
@@ -118,10 +120,17 @@ export function Depositos() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Building2 className="size-5" />Depósitos de la empresa
-        </h2>
-        <Button onClick={abrirNuevo}><Plus />Nuevo depósito</Button>
+        {/* "Depósitos" y no "Depósitos de la empresa": el título nombra la
+            sección y el conmutador de abajo dice en cuál de las dos estás,
+            mismo patrón que Configuración. Mientras el título cambiaba con la
+            pestaña, el ítem del menú no podía llamarse como ninguna de las dos
+            pantallas — de ahí el "Depósitos de equipos" que no aparecía en
+            ningún lado adentro. El párrafo de abajo sigue siendo distinto por
+            pestaña: eso es lo que explica dónde estás parado. */}
+        <TituloPantalla icono={Building2}>
+          Depósitos
+        </TituloPantalla>
+        <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
       </div>
 
       <ConmutadorDepositos actual="propios" />

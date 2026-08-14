@@ -25,6 +25,26 @@ export default mergeConfig(
       env: { TZ: 'America/Argentina/Buenos_Aires' },
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
+      // 15 s en vez de los 5 s por defecto. **El motivo cambió el 2026-08-14 y
+      // el número quedó igual**, así que vale escribir cuál es cuál.
+      //
+      // El motivo VIEJO se fue: `unplugin-icons` compilaba cada SVG con svgr en
+      // frío y eso llevaba la compilación de la suite de 6,4 s a 53 s. Con los
+      // iconos de vuelta en lucide ese paso no existe (transform: ~6 s).
+      //
+      // El motivo NUEVO es que la suite tiene tests legítimamente lentos.
+      // Medido con la máquina en reposo: `recepciones.test.tsx` → "manda los
+      // campos del pedido y NO manda cadenas vacías" tarda **4,55 s**, y el
+      // archivo entero 12,6 s. Contra un techo de 5 s eso deja 450 ms de
+      // margen, o sea ninguno: se cayó apenas la máquina se puso a hacer otra
+      // cosa al mismo tiempo, y el CI corre en runners compartidos.
+      //
+      // Se intentó bajarlo a 5 s primero, con una medición mal leída —se tomó
+      // como "el test más lento" una línea de una salida truncada, que decía
+      // 1,83 s—. Lo destapó la suite completa poniéndose roja. Si alguien
+      // quiere volver a bajarlo, el número a mirar es el del test de
+      // recepciones, no el total de la corrida.
+      testTimeout: 15_000,
       coverage: {
         provider: 'v8',
         // Trinquete, no meta. Los tests de los SPAs son de HUMO a proposito

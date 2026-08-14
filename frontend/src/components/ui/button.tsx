@@ -31,6 +31,27 @@ const buttonVariants = cva(
         "icon-lg": "size-10",
       },
     },
+    /* El botón de acción de una fila lleva el TILE GRIS, no el contorno.
+     *
+     * `variant="outline" size="icon"` es el patrón canónico de la columna
+     * "Acciones" en toda la familia (ver la wiki, "Patrón de acciones en
+     * tablas"), así que el tratamiento se pone acá y no en las ~39 pantallas
+     * que lo usan: es la misma combinación en todas, y ponerlo en cada una
+     * garantiza que la próxima nazca sin él.
+     *
+     * Ojo con el alcance: esto NO toca al `outline` de tamaño normal —el botón
+     * "Cancelar" de un diálogo sigue siendo un contorno—, sólo a los de icono.
+     * La receta (fondo `muted`, sin borde visible, radio 6px) es la misma del
+     * `Tile` de `iconos-accion.tsx`, para que el recuadro del sidebar y el de
+     * la fila sean el mismo objeto y no dos parecidos. */
+    compoundVariants: [
+      {
+        variant: "outline",
+        size: ["icon", "icon-xs", "icon-sm", "icon-lg"],
+        className:
+          "rounded-sm border-transparent bg-muted shadow-none hover:bg-accent dark:border-transparent dark:bg-muted dark:hover:bg-accent",
+      },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

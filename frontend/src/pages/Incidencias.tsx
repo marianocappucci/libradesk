@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
-  api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
+  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_PILDORA, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
   type CategoriaIncidencia, type Cliente, type Equipo, type Incidencia,
 } from '../api'
@@ -25,8 +25,10 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { CircleAlert, Monitor, Plus } from 'lucide-react'
+import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
+import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -69,6 +71,11 @@ export function Incidencias() {
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
   const [filtroCategoria, setFiltroCategoria] = useState(TODOS)
+
+  // Los reclamos elegidos para entrar juntos al mismo remito (ver la barra de
+  // abajo de la grilla).
+  const [elegidos, setElegidos] = useState<number[]>([])
+  const [generando, setGenerando] = useState(false)
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -215,7 +222,120 @@ export function Incidencias() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ), [incidencias, categorias, filtroEstado, filtroPrioridad, filtroCliente, filtroCategoria])
 
+  // --- Varios reclamos, un solo remito -------------------------------------
+  //
+  // El caso real: a un cliente se le hicieron tres visitas en el mes y se le
+  // emite UNA factura. El remito es lo único que llega a la bandeja de
+  // facturación, así que agrupar es agrupar acá.
+
+  /** Un reclamo se puede remitar si está cerrado y no está ya en otro remito.
+   *
+   *  Es la misma regla que valida el backend, escrita también acá para poder
+   *  no ofrecer el tilde: un checkbox que siempre termina en un 409 es peor
+   *  que no tenerlo. La que manda es la del backend — ésta sólo evita el viaje.
+   */
+  const remitable = (i: Incidencia) => i.estado === 'cerrado' && !i.remito_id
+
+  // Si un reclamo elegido deja de estar a la vista —porque cambió un filtro—
+  // sale de la selección. Sin esto la barra contaría reclamos que no están en
+  // pantalla, y el remito saldría con un trabajo que el operador no ve.
+  useEffect(() => {
+    const visibles = new Set(incidenciasFiltradas.map((i) => i.id))
+    // Devolver `prev` sin tocar cuando no sobra nada: un array nuevo en cada
+    // render volvería a disparar este efecto para siempre.
+    setElegidos((prev) => prev.some((id) => !visibles.has(id))
+      ? prev.filter((id) => visibles.has(id))
+      : prev)
+  }, [incidenciasFiltradas])
+
+  const seleccionadas = useMemo(
+    () => incidenciasFiltradas.filter((i) => elegidos.includes(i.id)),
+    [incidenciasFiltradas, elegidos],
+  )
+  const clientesElegidos = new Set(seleccionadas.map((i) => i.cliente_id))
+  const mezclaClientes = clientesElegidos.size > 1
+
+  async function generarRemito() {
+    setGenerando(true)
+    setError(null)
+    try {
+      const remito = await api.post<{ id: number }>(
+        '/api/incidencias/convertir-en-remito',
+        { incidencia_ids: seleccionadas.map((i) => i.id) },
+      )
+      // Al remito recién creado y no de vuelta acá, igual que el botón de a
+      // uno de la ficha del reclamo: ahí se completan los importes que el
+      // sistema no sabe, y desde ahí se edita. Sin ese paso el remito queda en
+      // cero y la bandeja de facturación lo rechaza.
+      navigate(`/remitos/${remito.id}`)
+    } catch (err) {
+      setError(describeError(err))
+      setGenerando(false)
+    }
+  }
+
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
+    {
+      // El tilde para agrupar en un remito. Sólo aparece en los reclamos que
+      // se pueden remitar; en el resto la celda queda vacía, que dice "este no
+      // va" sin un control apagado que invite a intentarlo.
+      id: 'elegir',
+      header: () => null,
+      size: 36,
+      minSize: 36,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const i = row.original
+        if (!remitable(i)) return null
+        return (
+          <input
+            type="checkbox"
+            checked={elegidos.includes(i.id)}
+            // 🔴 `stopPropagation` **es necesario**: el `onRowClick` de la
+            // tabla sólo ignora los clicks que caen en un `button` o un `a`
+            // (`closest('button, a')` en libra-ui), así que sin esto tildar
+            // navega a la ficha del ticket y la selección se pierde.
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => setElegidos((prev) => prev.includes(i.id)
+              ? prev.filter((x) => x !== i.id)
+              : [...prev, i.id])}
+            aria-label={`Elegir el reclamo #${i.id} para el remito`}
+          />
+        )
+      },
+    },
+    {
+      // El semáforo. Va primero y sin encabezado: es una marca, no un dato que
+      // se lea. `aria-label` porque un punto de color no le dice nada a un
+      // lector de pantalla — y la columna de Estado, que sí es texto, sigue
+      // estando: el color acompaña, no reemplaza.
+      id: 'semaforo',
+      header: () => null,
+      size: 28,
+      minSize: 28,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span
+          className={`inline-block h-2.5 w-2.5 rounded-full ${ESTADO_COLOR[row.original.estado]}`}
+          aria-label={ESTADO_LABELS[row.original.estado]}
+          title={ESTADO_LABELS[row.original.estado]}
+        />
+      ),
+    },
+    {
+      // Antes del título y con ancho fijo: es el número del papel firmado, y
+      // la pregunta que se le hace a esta grilla teniendo el talonario en la
+      // mano es "¿qué reclamo es éste?". Ordenable porque el talonario es
+      // correlativo, así que ordenar por CDS es ordenar por orden de visita.
+      accessorKey: 'nro_cds',
+      header: sortableHeader('N° CDS'),
+      size: 120, minSize: 100,
+      cell: ({ row }) => row.original.nro_cds
+        ? <span className="tabular-nums">{row.original.nro_cds}</span>
+        // Guión y no vacío: distingue "sin comprobante" de una celda que no
+        // cargó.
+        : <span className="text-muted-foreground">—</span>,
+    },
     { accessorKey: 'titulo', header: sortableHeader('Título'), size: 240, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.titulo}>{row.original.titulo}</span> },
     { accessorKey: 'cliente_id', header: 'Cliente', size: 150, minSize: 110, cell: ({ row }) => clienteNombre(row.original.cliente_id) },
     { accessorKey: 'equipo_id', header: 'Equipo', size: 130, minSize: 100, cell: ({ row }) => equipoNombre(row.original.equipo_id) },
@@ -246,8 +366,18 @@ export function Incidencias() {
       header: sortableHeader('Estado'),
       size: 120,
       minSize: 95,
+      // La píldora lleva el color del semáforo (pedido del usuario,
+      // 2026-08-13). Antes era `default`/`outline` según si estaba terminado,
+      // así que "Abierto" y "En progreso" —los dos estados que hay que mirar—
+      // salían con el mismo contorno gris, y el color de la fila vivía sólo en
+      // el punto de la primera columna, a media fila de la palabra que
+      // significa lo mismo.
+      //
+      // `variant="outline"` y el color por `className`: `cn()` es tailwind-merge,
+      // así que estas clases le ganan a las de la variante dentro de su propio
+      // grupo (bg, text, border) sin pelear por especificidad.
       cell: ({ row }) => (
-        <Badge variant={row.original.estado === 'cerrado' || row.original.estado === 'resuelta' ? 'default' : 'outline'}>
+        <Badge variant="outline" className={ESTADO_PILDORA[row.original.estado]}>
           {ESTADO_LABELS[row.original.estado]}
         </Badge>
       ),
@@ -260,15 +390,17 @@ export function Incidencias() {
       cell: ({ row }) => row.original.fecha_creacion ? fechaDeDate(new Date(row.original.fecha_creacion)) : '—',
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [clientes, equipos, categorias])
+  ], [clientes, equipos, categorias, elegidos])
 
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Incidencias</h2>
+        <TituloPantalla icono={AlertCircle}>
+          Incidencias
+        </TituloPantalla>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
-            <Button onClick={startCreate}><Plus />Nueva incidencia</Button>
+            <Button onClick={startCreate}><FilePlus />Nueva incidencia</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
@@ -329,7 +461,7 @@ export function Incidencias() {
                       disabled={!form.watch('cliente_id')}
                       onClick={abrirAltaEquipo}
                     >
-                      <Plus className="size-3" />
+                      <PlusCircle className="size-3" />
                       {form.watch('cliente_id')
                         ? 'El equipo no está en la lista'
                         : 'Elegí un cliente para poder agregar un equipo'}
@@ -507,6 +639,44 @@ export function Incidencias() {
           )}
         </CardContent>
       </Card>
+
+      {/* La barra aparece recién con algo tildado: hasta entonces no hay nada
+          que decir, y una barra siempre visible con un botón apagado le come
+          lugar a la grilla todos los días para un flujo que es mensual. */}
+      {seleccionadas.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-medium">
+                {seleccionadas.length === 1
+                  ? '1 reclamo elegido'
+                  : `${seleccionadas.length} reclamos elegidos`}
+              </span>
+              {mezclaClientes && (
+                // El motivo al lado del botón apagado, no en un tooltip: un
+                // botón que no se puede apretar y no dice por qué manda a
+                // adivinar.
+                <span className="ml-2 text-destructive">
+                  Son de {clientesElegidos.size} clientes distintos y un remito
+                  se emite a nombre de uno solo.
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setElegidos([])}>
+                Limpiar
+              </Button>
+              <Button
+                onClick={generarRemito}
+                disabled={generando || mezclaClientes}
+              >
+                <PackageCheck />
+                {generando ? 'Generando…' : 'Generar remito'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

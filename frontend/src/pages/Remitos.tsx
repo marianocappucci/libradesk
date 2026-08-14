@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Download, Pencil, Trash2 } from 'lucide-react'
 import { api, ApiError, type Cliente, type Remito } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,6 +11,10 @@ import {
   ComprobanteForm, comprobanteADraft, draftAPayload, draftVacio, formatMoney,
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
+import { fecha } from '@/lib/format'
+import { Receipt } from 'lucide-react'
+import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function Remitos() {
   const navigate = useNavigate()
@@ -124,7 +127,13 @@ export function Remitos() {
       accessorKey: 'number', header: sortableHeader('Número'), size: 130, minSize: 110,
       cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.number}</span>,
     },
-    { accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95 },
+    {
+      accessorKey: 'date', header: sortableHeader('Fecha'), size: 110, minSize: 95,
+      // Sin `cell` la tabla imprime el valor crudo, que es el ISO que manda la
+      // API (`2026-08-11`). El orden se sigue calculando sobre `date`, no sobre
+      // lo que se muestra: por eso el formateo va acá y no en el `accessorFn`.
+      cell: ({ row }) => fecha(row.original.date),
+    },
     {
       accessorKey: 'client_name', header: sortableHeader('Cliente'), size: 220, minSize: 140,
       meta: { stretch: true },
@@ -169,7 +178,9 @@ export function Remitos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Remitos</h2>
+        <TituloPantalla icono={Receipt}>
+          Remitos
+        </TituloPantalla>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </div>
 

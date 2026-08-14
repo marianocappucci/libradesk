@@ -1,0 +1,147 @@
+"""Ventas y recibos. **Sin emision de factura** — eso lo hace SOS Contador.
+
+Una venta de LibraDesk es el comprobante interno: que se vendio, a quien, a que
+precio y como se cobro. El comprobante fiscal sale despues, por el puente de
+`facturacion_externa`. Ver `app/services/ventas.py`.
+
+Gate por plan: `ventas`, puesto en `main.py`.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+
+from ..auth import get_current_user
+from ..services import recibos, ventas
+
+router = APIRouter(prefix="/api", tags=["ventas"])
+
+
+class ItemVentaIn(BaseModel):
+    #: `None` = linea de servicio: se cobra y no mueve stock.
+    item_id: int | None = None
+    descripcion: str
+    cantidad: float = Field(gt=0)
+    precio: float = Field(ge=0)
+
+
+class PagoVentaIn(BaseModel):
+    medio: str
+    monto: float = Field(gt=0)
+    referencia: str = ""
+
+
+class VentaIn(BaseModel):
+    cliente_id: int | None = None
+    items: list[ItemVentaIn]
+    pagos: list[PagoVentaIn] = []
+    #: De que deposito sale la mercaderia. Obligatorio aunque la venta sea toda
+    #: de servicios: el motor lo pide igual y una venta sin deposito no se
+    #: puede corregir despues.
+    deposito_id: int
+    notas: str = ""
+    sucursal_id: int | None = None
+
+
+class AnulacionIn(BaseModel):
+    motivo: str = ""
+
+
+# ── Ventas ───────────────────────────────────────────────────────────────
+
+
+@router.get("/ventas")
+def listar_ventas(limit: int = 200):
+    return ventas.listar(limit=limit)
+
+
+@router.get("/ventas/{venta_id}")
+def obtener_venta(venta_id: int):
+    venta = ventas.obtener(venta_id)
+    if venta is None:
+        raise HTTPException(404, "La venta no existe.")
+    return venta
+
+
+@router.post("/ventas", status_code=201)
+def crear_venta(payload: VentaIn, user: dict = Depends(get_current_user)):
+    """Crea, confirma (descuenta stock) y registra los pagos, en una transaccion.
+
+    Devuelve 422 con el disponible cuando el stock no alcanza — la venta no
+    queda a medias.
+    """
+    try:
+        return ventas.crear(
+            payload.cliente_id,
+            [i.model_dump() for i in payload.items],
+            [p.model_dump() for p in payload.pagos],
+            deposito_id=payload.deposito_id, notas=payload.notas,
+            sucursal_id=payload.sucursal_id, usuario_id=int(user["id"]),
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+# ── Recibos ──────────────────────────────────────────────────────────────
+
+
+@router.get("/recibos")
+def listar_recibos(desde: str = "", hasta: str = "", q: str = "",
+                   cliente_id: int = 0, limit: int = 200):
+    return recibos.listar(desde=desde, hasta=hasta, q=q,
+                          cliente_id=cliente_id or None, limit=limit)
+
+
+@router.get("/recibos/{recibo_id}")
+def obtener_recibo(recibo_id: int):
+    recibo = recibos.obtener(recibo_id)
+    if recibo is None:
+        raise HTTPException(404, "El recibo no existe.")
+    return recibo
+
+
+@router.get("/recibos/{recibo_id}/pdf")
+def recibo_pdf(recibo_id: int):
+    """El comprobante para entregar o mandar por mail.
+
+    `inline` y no `attachment`, igual que remitos y la orden de trabajo: lo
+    normal es mirarlo y mandarlo a la impresora.
+    """
+    contenido = recibos.pdf(recibo_id)
+    if contenido is None:
+        raise HTTPException(404, "El recibo no existe.")
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="recibo-{recibo_id}.pdf"',
+        },
+    )
+
+
+@router.post("/ventas/{venta_id}/recibo", status_code=201)
+def emitir_recibo_de_venta(venta_id: int, user: dict = Depends(get_current_user)):
+    """Idempotente: pedirlo dos veces devuelve el mismo recibo, no emite otro."""
+    try:
+        return recibos.emitir_de_venta(venta_id, usuario_id=int(user["id"]))
+    except Exception as e:
+        # `SinCobros` del motor entre otras. 422 y no 500: el pedido es
+        # valido, lo que no se puede es emitir un recibo de algo sin cobros.
+        raise HTTPException(422, str(e))
+
+
+@router.post("/cuenta-corriente/pagos/{pago_id}/recibo", status_code=201)
+def emitir_recibo_de_cobranza(pago_id: int, user: dict = Depends(get_current_user)):
+    try:
+        return recibos.emitir_de_cobranza(pago_id, usuario_id=int(user["id"]))
+    except Exception as e:
+        raise HTTPException(422, str(e))
+
+
+@router.post("/recibos/{recibo_id}/anular")
+def anular_recibo(recibo_id: int, payload: AnulacionIn,
+                  user: dict = Depends(get_current_user)):
+    """Un recibo no se borra: se anula, y queda."""
+    if not recibos.anular(recibo_id, motivo=payload.motivo,
+                          usuario_id=int(user["id"])):
+        raise HTTPException(404, "El recibo no existe o ya estaba anulado.")
+    return {"ok": True}
