@@ -12,20 +12,29 @@
  *   - **MIT**: sin obligación de atribución visible, a diferencia de
  *     `streamline-plump` (CC BY 4.0), que es lo que había acá antes.
  *
- *  ## El recuadro
+ *  ## El color
  *
- *  Pedido del humano (2026-08-13): el icono va **en blanco sobre un recuadro
- *  sólido** del color que lo caracteriza, o sea al revés de como estaba.
+ *  Pedido del humano (2026-08-13, revisado el mismo día): el icono va **suelto,
+ *  teñido con el color que hereda**. Antes iba en blanco sobre un recuadro
+ *  sólido; se invirtió.
  *
- *  El truco es que el color no se elige acá: `bg-current` pinta el recuadro con
- *  el `currentColor` que le llega del contexto —el `text-destructive` del botón
- *  de borrar, el color de texto del botón común— y recién adentro el icono
- *  fuerza `text-white`. Así el tacho sigue siendo rojo sin que este archivo
- *  sepa nada de tachos ni de rojo, y una pantalla que cambie el color del
- *  botón se lleva el recuadro con ella.
+ *  El mecanismo no cambió, sólo la superficie sobre la que actúa: los SVG de
+ *  Fluent pintan con `fill="currentColor"`, así que el glifo toma el
+ *  `currentColor` que le llega del contexto —el `text-destructive` del botón de
+ *  borrar, el color de texto del botón común—. El tacho sigue poniéndose rojo
+ *  sin que este archivo sepa nada de tachos ni de rojo. Lo que se fue es el
+ *  `bg-current` que pintaba el bloque y el `text-white` que hacía falta encima
+ *  de ese bloque.
  *
- *  Se usa la variante `-filled` y no `-regular`: un contorno blanco sobre un
- *  bloque de color se lee mucho peor que una silueta llena.
+ *  **Se cae la excepción del botón primario.** Con recuadro había que exportar
+ *  variantes planas aparte: ahí `currentColor` ya es blanco, `bg-current`
+ *  pintaba un recuadro blanco y el glifo blanco encima desaparecía (pasó con el
+ *  "+" de "Nuevo cliente"). Sin recuadro eso es justamente lo correcto —un
+ *  glifo blanco sobre un botón sólido—, así que todos los iconos son el mismo
+ *  caso y hay una sola factory.
+ *
+ *  Se mantiene la variante `-filled`: decisión del humano (2026-08-13) tomada
+ *  sobre la hoja visual, con los 76 dibujos a la vista en las dos variantes.
  */
 import type { ComponentProps, ComponentType } from 'react'
 import { cn } from '@/lib/utils'
@@ -86,83 +95,73 @@ import VehicleCarRaw from '~icons/fluent/vehicle-car-20-filled'
 import WarningRaw from '~icons/fluent/warning-20-filled'
 import WrenchRaw from '~icons/fluent/wrench-20-filled'
 
-/** Envuelve un icono en el recuadro sólido. Devuelve un `<span>`, no un `<svg>`:
- *  por eso las reglas de shadcn que dimensionan `svg` sueltos dentro de un
- *  `Button` no lo pisan, y el tamaño lo fija esta función. */
-function conRecuadro(Icono: ComponentType<{ className?: string }>) {
-  return function IconoAccion({ className, ...props }: ComponentProps<'span'>) {
-    return (
-      <span
-        className={cn(
-          'inline-flex size-5 shrink-0 items-center justify-center rounded-[0.28rem] bg-current p-[0.15rem]',
-          className,
-        )}
-        {...props}
-      >
-        <Icono className="size-full text-white" />
-      </span>
-    )
-  }
-}
-
-/** El mismo icono **sin** recuadro, para cuando ya está sobre un bloque de
- *  color.
+/** El icono de acción: el glifo suelto, teñido con el color heredado.
  *
- *  Es la excepción necesaria a la regla del recuadro, y no es cosmética: en un
- *  botón primario `currentColor` ya es blanco, así que `bg-current` pinta un
- *  recuadro BLANCO y el glifo blanco encima desaparece. Se vio en "Nuevo
- *  cliente": el "+" no estaba. Un icono sobre un botón sólido no necesita que
- *  le fabriquemos un fondo — ya tiene uno. */
-function sinRecuadro(Icono: ComponentType<{ className?: string }>) {
-  return function IconoPlano({ className }: { className?: string }) {
-    return <Icono className={cn('size-4 shrink-0', className)} />
+ *  `size-4` y no `size-5`: el recuadro medía 20px pero tenía padding, así que
+ *  el dibujo adentro era de ~17px. 16px es lo que ya medían los que iban sin
+ *  recuadro, y deja a los ~60 del mismo tamaño en vez de dos tamaños según de
+ *  qué factory salieron.
+ *
+ *  ⚠️ **Ahora esto devuelve un `<svg>` y antes devolvía un `<span>`**, así que
+ *  pasa a estar al alcance de las reglas del `Button` de shadcn, que antes no
+ *  lo tocaban. Ese `Button` dimensiona con
+ *  `[&_svg:not([class*='size-'])]:size-4` — o sea que sólo pisa a los `svg`
+ *  que NO traen clase `size-`. Como acá siempre ponemos una, el icono queda
+ *  con tamaño fijo y las variantes `xs`/`icon-xs` del botón (que bajan a
+ *  `size-3`) ya no lo achican. Es a propósito: el recuadro tampoco se achicaba,
+ *  y un vocabulario que cambia de tamaño según el botón que lo contiene deja de
+ *  ser un vocabulario. Si alguna pantalla lo necesita más chico, le pasa
+ *  `className="size-3"` y `cn()` lo resuelve. */
+function icono(Icono: ComponentType<ComponentProps<'svg'>>) {
+  return function IconoAccion({ className, ...props }: ComponentProps<'svg'>) {
+    return <Icono className={cn('size-4 shrink-0', className)} {...props} />
   }
 }
 
 // Se exportan con el MISMO nombre que tenían en lucide: así el JSX de las
 // pantallas no cambia, sólo la línea de import.
-export const AlertTriangle = conRecuadro(WarningRaw)
-export const ArrowLeft = conRecuadro(ArrowLeftRaw)
-export const ArrowLeftRight = conRecuadro(ArrowSwapRaw)
-export const Boxes = conRecuadro(BoxMultipleRaw)
-export const Building2 = conRecuadro(BuildingRaw)
-export const Car = conRecuadro(VehicleCarRaw)
-export const Check = conRecuadro(CheckmarkRaw)
-export const CheckCircle2 = conRecuadro(CheckmarkCircleRaw)
-export const ChevronRight = conRecuadro(ChevronRightRaw)
-export const CircleAlert = conRecuadro(ErrorCircleRaw)
+export const AlertTriangle = icono(WarningRaw)
+export const ArrowLeft = icono(ArrowLeftRaw)
+export const ArrowLeftRight = icono(ArrowSwapRaw)
+export const Boxes = icono(BoxMultipleRaw)
+export const Building2 = icono(BuildingRaw)
+export const Car = icono(VehicleCarRaw)
+export const Check = icono(CheckmarkRaw)
+export const CheckCircle2 = icono(CheckmarkCircleRaw)
+export const ChevronRight = icono(ChevronRightRaw)
+export const CircleAlert = icono(ErrorCircleRaw)
 // Cobrar. Hoy no lo importa ninguna pantalla —"Recibos" es el título de una
 // sección y el ítem del menú, o sea identidad, y ésos salen de `fluent-color`.
 // Queda igual porque es el nombre canónico del vocabulario para cuando aparezca
 // un botón de cobrar.
-export const Coins = conRecuadro(MoneyRaw)
+export const Coins = icono(MoneyRaw)
 // Marca de anidado en la lista de tipos de incidencia: es un glifo estructural
-// de la lista, no una acción, así que va sin recuadro.
-export const CornerDownRight = sinRecuadro(ArrowTurnRightDownRaw)
-export const Download = conRecuadro(ArrowDownloadRaw)
-export const Eraser = conRecuadro(EraserRaw)
-export const Eye = conRecuadro(EyeRaw)
-export const FileCheck = conRecuadro(DocumentCheckmarkRaw)
-export const FileDown = conRecuadro(DocumentPdfRaw)
-export const FileText = conRecuadro(DocumentTextRaw)
-export const FileWarning = conRecuadro(DocumentErrorRaw)
-export const History = conRecuadro(HistoryRaw)
-export const Info = conRecuadro(InfoRaw)
-export const KeyRound = conRecuadro(KeyRaw)
-export const LinkIcon = conRecuadro(LinkRaw)
-export const MapPin = conRecuadro(LocationRaw)
-export const MessageSquare = conRecuadro(ChatRaw)
-export const Minus = conRecuadro(SubtractRaw)
-export const Monitor = conRecuadro(DesktopRaw)
-export const Package = conRecuadro(BoxRaw)
-export const PackageCheck = conRecuadro(BoxCheckmarkRaw)
+// de la lista, no una acción.
+export const CornerDownRight = icono(ArrowTurnRightDownRaw)
+export const Download = icono(ArrowDownloadRaw)
+export const Eraser = icono(EraserRaw)
+export const Eye = icono(EyeRaw)
+export const FileCheck = icono(DocumentCheckmarkRaw)
+export const FileDown = icono(DocumentPdfRaw)
+export const FileText = icono(DocumentTextRaw)
+export const FileWarning = icono(DocumentErrorRaw)
+export const History = icono(HistoryRaw)
+export const Info = icono(InfoRaw)
+export const KeyRound = icono(KeyRaw)
+export const LinkIcon = icono(LinkRaw)
+export const MapPin = icono(LocationRaw)
+export const MessageSquare = icono(ChatRaw)
+export const Minus = icono(SubtractRaw)
+export const Monitor = icono(DesktopRaw)
+export const Package = icono(BoxRaw)
+export const PackageCheck = icono(BoxCheckmarkRaw)
 // "Colocar equipo". Dibujaba el MISMO `box` que `Package`, o sea dos conceptos
 // con un glifo: no era una preferencia, era un defecto. `box-add` no existe en
 // Fluent; `box-arrow-up` es la caja que sale, que es lo que hace la acción.
-export const PackagePlus = conRecuadro(BoxArrowUpRaw)
-export const Pencil = conRecuadro(EditRaw)
-export const PenLine = conRecuadro(PenRaw)
-export const Percent = conRecuadro(TagPercentRaw)
+export const PackagePlus = icono(BoxArrowUpRaw)
+export const Pencil = icono(EditRaw)
+export const PenLine = icono(PenRaw)
+export const Percent = icono(TagPercentRaw)
 // Los tres "más" del vocabulario, que NO son el mismo concepto:
 //
 //   `FilePlus`   crear un registro nuevo — el botón "Nuevo …" de cada pantalla.
@@ -172,36 +171,40 @@ export const Percent = conRecuadro(TagPercentRaw)
 //                stock, donde es aritmética y no un alta: un documento-con-más
 //                al lado de un `Subtract` no significaría nada.
 //
-// Los tres van SIN recuadro. `FilePlus` porque sus usos son el botón primario,
-// que ya es un bloque de color (con recuadro, el glifo blanco desaparece).
-// `PlusCircle` porque el glifo ya trae su propio círculo: meterlo en un
-// cuadrado es dibujar dos contenedores.
-export const FilePlus = sinRecuadro(DocumentAddRaw)
-export const PlusCircle = sinRecuadro(AddCircleRaw)
-export const Plus = sinRecuadro(AddRaw)
-export const Printer = conRecuadro(PrintRaw)
-export const Repeat = conRecuadro(ArrowSyncRaw)
-export const Search = conRecuadro(SearchRaw)
-export const Send = conRecuadro(SendRaw)
-export const ShieldCheck = conRecuadro(ShieldCheckmarkRaw)
-export const ShoppingCart = conRecuadro(CartRaw)
-export const Star = conRecuadro(StarRaw)
-export const Tags = conRecuadro(TagRaw)
-export const Ticket = conRecuadro(TicketDiagonalRaw)
-export const Trash2 = conRecuadro(DeleteRaw)
-export const TrendingUp = conRecuadro(ArrowTrendingLinesRaw)
-export const TriangleAlert = conRecuadro(WarningRaw)
-export const Undo2 = conRecuadro(ArrowUndoRaw)
-export const Unlink = conRecuadro(LinkDismissRaw)
-export const Upload = conRecuadro(ArrowUploadRaw)
-export const Users = conRecuadro(PeopleRaw)
-export const UserX = conRecuadro(PersonDeleteRaw)
-export const Wrench = conRecuadro(WrenchRaw)
-export const X = conRecuadro(DismissRaw)
-export const XCircle = conRecuadro(DismissCircleRaw)
+// Los tres salían por la factory plana cuando había dos: `FilePlus` porque sus
+// usos son el botón primario, donde el recuadro blanco se comía el glifo
+// blanco, y `PlusCircle` porque el glifo ya trae su propio círculo y meterlo en
+// un cuadrado dibujaba dos contenedores. Sin recuadro los dos motivos
+// desaparecen, pero la distinción de CONCEPTO de arriba sigue en pie: es lo que
+// prueba el test de los tres dibujos distintos.
+export const FilePlus = icono(DocumentAddRaw)
+export const PlusCircle = icono(AddCircleRaw)
+export const Plus = icono(AddRaw)
+export const Printer = icono(PrintRaw)
+export const Repeat = icono(ArrowSyncRaw)
+export const Search = icono(SearchRaw)
+export const Send = icono(SendRaw)
+export const ShieldCheck = icono(ShieldCheckmarkRaw)
+export const ShoppingCart = icono(CartRaw)
+export const Star = icono(StarRaw)
+export const Tags = icono(TagRaw)
+export const Ticket = icono(TicketDiagonalRaw)
+export const Trash2 = icono(DeleteRaw)
+export const TrendingUp = icono(ArrowTrendingLinesRaw)
+export const TriangleAlert = icono(WarningRaw)
+export const Undo2 = icono(ArrowUndoRaw)
+export const Unlink = icono(LinkDismissRaw)
+export const Upload = icono(ArrowUploadRaw)
+export const Users = icono(PeopleRaw)
+export const UserX = icono(PersonDeleteRaw)
+export const Wrench = icono(WrenchRaw)
+export const X = icono(DismissRaw)
+export const XCircle = icono(DismissCircleRaw)
 
-// Variantes planas de los dos iconos que además aparecen en un botón primario
-// (`Search` en el buscador de ReporteDetalle, `Download` en Configuración).
-// El resto de sus usos son botones `outline` y siguen llevando recuadro.
-export const SearchPlano = sinRecuadro(SearchRaw)
-export const DownloadPlano = sinRecuadro(ArrowDownloadRaw)
+// Alias exactos de `Search` y `Download`, ya sin diferencia de dibujo ni de
+// tamaño: existían para el botón primario, que dejó de ser un caso especial al
+// irse el recuadro. Se mantienen exportados para no tocar los imports de
+// `ReporteDetalle` y `Configuracion`; el día que esas dos pantallas se editen
+// por otro motivo, se cambian por los canónicos y estos dos se borran.
+export const SearchPlano = icono(SearchRaw)
+export const DownloadPlano = icono(ArrowDownloadRaw)
