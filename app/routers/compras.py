@@ -75,8 +75,8 @@ class CategoriaEgresoIn(BaseModel):
 
 
 @router.get("/ordenes-compra")
-def listar_ordenes():
-    return compras.listar_ordenes()
+def listar_ordenes(sucursal_id: int | None = None):
+    return compras.listar_ordenes(sucursal_id=sucursal_id)
 
 
 @router.get("/ordenes-compra/{orden_id}")
@@ -104,10 +104,15 @@ def crear_orden(payload: OrdenIn, user: dict = Depends(get_current_user)):
 
 
 @router.get("/recepciones-compra")
-def listar_recepciones():
+def listar_recepciones(sucursal_id: int | None = None):
     """Prefijo `-compra` a proposito: `/api/recepciones` ya es la recepcion de
-    equipos en el taller, que es otro circuito y otra pantalla."""
-    return compras.listar_recepciones()
+    equipos en el taller, que es otro circuito y otra pantalla.
+
+    `sucursal_id` filtra por **el depósito donde entró la mercadería**, no por
+    la sucursal de la orden: son datos distintos y el que importa acá es dónde
+    quedó el stock. Ver `compras._sucursal_de_recepciones()`.
+    """
+    return compras.listar_recepciones(sucursal_id=sucursal_id)
 
 
 @router.get("/recepciones-compra/{recepcion_id}")

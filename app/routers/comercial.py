@@ -34,12 +34,18 @@ class ListaIn(BaseModel):
 class PrecioIn(BaseModel):
     item_id: int
     precio: float = Field(ge=0)
+    #: `None` es **el precio general de la lista**, no "sin especificar": es el
+    #: que se aplica en toda sucursal que no tenga uno propio.
+    sucursal_id: int | None = None
 
 
 class AjusteMasivoIn(BaseModel):
     #: Puede ser negativo (una baja de precios). Lo que no puede es dejar los
     #: precios en cero o menos — eso lo valida el servicio.
     porcentaje: float
+    #: `None` mueve **todos** los precios de la lista, incluidos los propios de
+    #: cada sucursal. Ver el docstring del servicio.
+    sucursal_id: int | None = None
 
 
 @router.get("/listas-precio")
@@ -72,14 +78,30 @@ def eliminar_lista(lista_id: int):
 
 
 @router.get("/listas-precio/{lista_id}/precios")
-def precios_de_lista(lista_id: int):
-    return listas_precio.precios_de(lista_id)
+def precios_de_lista(lista_id: int, sucursal_id: int | None = None):
+    """Con `sucursal_id`, una fila por producto: **el precio que se aplica ahí**.
+
+    Sin él, todas las filas cargadas, incluidas las propias de cada sucursal.
+    Ver `listas_precio.precios_de()`.
+    """
+    return listas_precio.precios_de(lista_id, sucursal_id=sucursal_id)
 
 
 @router.put("/listas-precio/{lista_id}/precios")
 def fijar_precio(lista_id: int, payload: PrecioIn):
-    listas_precio.fijar_precio(lista_id, payload.item_id, payload.precio)
+    try:
+        listas_precio.fijar_precio(lista_id, payload.item_id, payload.precio,
+                                   sucursal_id=payload.sucursal_id)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     return {"ok": True}
+
+
+@router.delete("/listas-precio/{lista_id}/precios/{item_id}", status_code=204)
+def borrar_precio(lista_id: int, item_id: int, sucursal_id: int | None = None):
+    """Saca un precio. Con `sucursal_id`, saca **sólo el propio de esa
+    sucursal** y el producto vuelve a cotizar por el general de la lista."""
+    listas_precio.borrar_precio(lista_id, item_id, sucursal_id=sucursal_id)
 
 
 @router.post("/listas-precio/{lista_id}/ajuste")
@@ -91,7 +113,7 @@ def ajustar_lista(lista_id: int, payload: AjusteMasivoIn):
     """
     try:
         return {"actualizados": listas_precio.ajustar_por_porcentaje(
-            lista_id, payload.porcentaje
+            lista_id, payload.porcentaje, sucursal_id=payload.sucursal_id
         )}
     except ValueError as e:
         raise HTTPException(422, str(e))

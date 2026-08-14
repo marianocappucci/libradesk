@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
-import { useSucursal } from '@/components/sucursal'
+import { useSucursal, useSucursalUrl } from '@/components/sucursal'
 import { fecha, pesos } from '@/lib/format'
 import type { Producto } from './Productos'
 import type { DepositoStock } from './Inventario'
@@ -32,10 +32,16 @@ type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {
   id: number; numero: string; estado: string; proveedor: string
   fecha: string | null; items: number; total: number; recibido_pct: number
+  //: Para dónde se compró. No es necesariamente dónde entra la mercadería.
+  sucursal_id: number | null; sucursal: string
 }
 type Recepcion = {
   id: number; estado: string; proveedor: string; fecha: string | null
   documento: string; orden_id: number | null; items: number; total: number
+  //: Dónde entró la mercadería. `purchase_receipts` no tiene sucursal propia:
+  //: el backend la deduce del depósito, no de la orden. Los dos pueden diferir.
+  deposito_id: number | null; deposito: string
+  sucursal_id: number | null; sucursal: string
 }
 type Egreso = {
   id: number; fecha: string; proveedor_nombre: string; concepto: string
@@ -49,7 +55,10 @@ type Linea = { item_id: number; producto: string; cantidad: string; costo: strin
 // ── Órdenes de compra ──────────────────────────────────────────────────────
 
 export function OrdenesCompra() {
-  const { datos, error, cargando, conError } = useDatos<Orden[]>('/api/ordenes-compra', [])
+  const conSucursal = useSucursalUrl()
+  const { activa } = useSucursal()
+  const { datos, error, cargando, conError } =
+    useDatos<Orden[]>(conSucursal('/api/ordenes-compra'), [])
   const { datos: proveedores } = useDatos<Proveedor[]>('/api/proveedores', [])
   const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
 
@@ -59,6 +68,11 @@ export function OrdenesCompra() {
     <Pagina titulo="Órdenes de compra" icono={IconoOrdenesCompra} error={error}
             acciones={<FormOrden proveedores={proveedores} productos={productos}
                                  onGuardar={conError} />}>
+      {activa && (
+        <p className="text-sm text-muted-foreground">
+          Se muestran las órdenes de {activa.nombre}.
+        </p>
+      )}
       <Tabla<Orden>
         vacio="Todavía no hay órdenes de compra."
         filas={datos}
@@ -67,6 +81,10 @@ export function OrdenesCompra() {
             render: (o) => <span className="tabular-nums">{o.numero}</span> },
           { clave: 'fecha', titulo: 'Fecha', ancho: '110px', render: (o) => fecha(o.fecha) },
           { clave: 'proveedor', titulo: 'Proveedor', render: (o) => o.proveedor },
+          // La columna aparece sólo mirando «Todas»: con una sucursal elegida
+          // sería el mismo valor en cada fila, ocupando ancho sin decir nada.
+          ...(activa ? [] : [{ clave: 'sucursal', titulo: 'Sucursal', ancho: '150px',
+            render: (o: Orden) => o.sucursal || <span className="text-muted-foreground">—</span> }]),
           { clave: 'items', titulo: 'Ítems', ancho: '70px', alinear: 'derecha',
             render: (o) => o.items },
           { clave: 'recibido', titulo: 'Recibido', ancho: '110px', alinear: 'derecha',
@@ -86,9 +104,16 @@ export function OrdenesCompra() {
 // ── Recepción de mercadería ────────────────────────────────────────────────
 
 export function RecepcionesCompra() {
-  const { datos, error, cargando, conError } = useDatos<Recepcion[]>('/api/recepciones-compra', [])
+  const conSucursal = useSucursalUrl()
+  const { activa } = useSucursal()
+  const { datos, error, cargando, conError } =
+    useDatos<Recepcion[]>(conSucursal('/api/recepciones-compra'), [])
   const { datos: proveedores } = useDatos<Proveedor[]>('/api/proveedores', [])
   const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
+  // ⚠️ Los depósitos van SIN filtrar a propósito: una orden de una sucursal se
+  // puede recibir en el depósito de otra —pasa cuando el central recibe todo y
+  // después reparte— y con el selector filtrado ese caso sería imposible de
+  // cargar. La sucursal de cada depósito se muestra en la opción.
   const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -100,6 +125,7 @@ export function RecepcionesCompra() {
       <p className="text-sm text-muted-foreground">
         Registrar una recepción <strong>suma el stock en el acto</strong> y
         actualiza el costo del producto con el de esta compra.
+        {activa && ` Se muestran las recibidas en depósitos de ${activa.nombre}.`}
       </p>
       <Tabla<Recepcion>
         vacio="Todavía no se recibió mercadería."
@@ -107,6 +133,15 @@ export function RecepcionesCompra() {
         columnas={[
           { clave: 'fecha', titulo: 'Fecha', ancho: '110px', render: (r) => fecha(r.fecha) },
           { clave: 'proveedor', titulo: 'Proveedor', render: (r) => r.proveedor },
+          { clave: 'deposito', titulo: 'Entró en', ancho: '180px',
+            render: (r) => (
+              <span>
+                {r.deposito || <span className="text-muted-foreground">—</span>}
+                {!activa && r.sucursal && (
+                  <span className="ml-2 text-xs text-muted-foreground">· {r.sucursal}</span>
+                )}
+              </span>
+            ) },
           { clave: 'documento', titulo: 'Comprobante', ancho: '190px',
             render: (r) => r.documento || <span className="text-muted-foreground">sin comprobante</span> },
           { clave: 'items', titulo: 'Ítems', ancho: '70px', alinear: 'derecha',
@@ -382,11 +417,19 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
             </div>
             <div>
               <Label htmlFor="rc-dep">Depósito de entrada</Label>
+              {/* Es lo que define en qué sucursal queda la recepción, así que
+                  la sucursal se muestra al lado de cada opción: elegir mal el
+                  depósito manda el stock a la otra punta sin ningún aviso. */}
               <Select value={depositoId} onValueChange={setDepositoId}>
                 <SelectTrigger id="rc-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
                 <SelectContent>
                   {depositos.filter((d) => d.activo).map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.nombre}
+                      {d.sucursal && (
+                        <span className="ml-2 text-xs text-muted-foreground">· {d.sucursal}</span>
+                      )}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
