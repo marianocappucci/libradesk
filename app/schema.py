@@ -66,12 +66,6 @@ from .services import equipos_trabajo as _equipos_trabajo  # noqa: F401
 # que ya esta rojo no avisa de nada.
 from .services import facturacion_config as _facturacion_config  # noqa: F401
 from .services import facturacion_externa as _facturacion_externa  # noqa: F401
-# `firma`: la creo la revision `0020` y esta linea faltaba — el TERCER caso del
-# mismo olvido, despues de `ingresos` y `config_facturacion`. Lo delato
-# `test_sin_el_filtro_si_las_dropearia`, que quedo rojo desde que se mergeo la
-# conformidad del cliente hasta el 2026-08-13: `incidencias_firmas` aparecia en
-# la lista de tablas que el autogenerate sin filtro dropearia.
-from .services import firma as _firma  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import ingresos as _ingresos  # noqa: F401
 from .services import modules as _modules  # noqa: F401
