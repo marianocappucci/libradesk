@@ -153,11 +153,25 @@ dependencies = [
     # `tipo_facturacion`). Con un pin anterior a `v1.33.0` ese import no existe
     # y la app ni arranca.
     #
-    # Las dos cosas ya venian desde `v1.33.0`; se pinea `v1.34.0` porque es la
+    # Las dos cosas ya venian desde `v1.33.0`; se pineo `v1.34.0` porque era la
     # mas nueva y suma el arreglo de `migrar_instancias.sh` --que este producto
     # no consume como libreria, pero es el paso de deploy que aplica las
     # migraciones del motor a las instancias--.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.34.0",
+    #
+    # v1.34.0 -> v1.37.0 (2026-08-14): los PDF no se salen del marco del papel.
+    # Lo que le llega a ESTE repo, que el arreglo local no podia dar:
+    #
+    # - `_wrap_text` parte por caracter la palabra que no entra en el renglon.
+    #   Un texto sin espacios --un serial pegado, una URL-- volvia entero y
+    #   `cell` lo dibujaba: medido, 536 mm de borde derecho en una hoja de 210.
+    #   El informe de servicio dependia de esto y no tenia como taparlo solo.
+    # - El margen del marco lo pone `_TextoSeguroPDF`, asi que un documento
+    #   nuevo de este repo ya no puede olvidarselo. Las tres clases de aca lo
+    #   fijan igual, a proposito, para no depender del pin.
+    #
+    # Los cinco comprobantes de LibraCore salen byte por byte identicos a como
+    # salian (sha256 comparado), asi que el bump no cambia nada de lo emitido.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.37.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
