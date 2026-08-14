@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import { FilePlus, PlusCircle } from '@/components/iconos-accion'
+import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
@@ -71,6 +71,11 @@ export function Incidencias() {
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
   const [filtroCategoria, setFiltroCategoria] = useState(TODOS)
+
+  // Los reclamos elegidos para entrar juntos al mismo remito (ver la barra de
+  // abajo de la grilla).
+  const [elegidos, setElegidos] = useState<number[]>([])
+  const [generando, setGenerando] = useState(false)
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -217,7 +222,88 @@ export function Incidencias() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ), [incidencias, categorias, filtroEstado, filtroPrioridad, filtroCliente, filtroCategoria])
 
+  // --- Varios reclamos, un solo remito -------------------------------------
+  //
+  // El caso real: a un cliente se le hicieron tres visitas en el mes y se le
+  // emite UNA factura. El remito es lo único que llega a la bandeja de
+  // facturación, así que agrupar es agrupar acá.
+
+  /** Un reclamo se puede remitar si está cerrado y no está ya en otro remito.
+   *
+   *  Es la misma regla que valida el backend, escrita también acá para poder
+   *  no ofrecer el tilde: un checkbox que siempre termina en un 409 es peor
+   *  que no tenerlo. La que manda es la del backend — ésta sólo evita el viaje.
+   */
+  const remitable = (i: Incidencia) => i.estado === 'cerrado' && !i.remito_id
+
+  // Si un reclamo elegido deja de estar a la vista —porque cambió un filtro—
+  // sale de la selección. Sin esto la barra contaría reclamos que no están en
+  // pantalla, y el remito saldría con un trabajo que el operador no ve.
+  useEffect(() => {
+    const visibles = new Set(incidenciasFiltradas.map((i) => i.id))
+    // Devolver `prev` sin tocar cuando no sobra nada: un array nuevo en cada
+    // render volvería a disparar este efecto para siempre.
+    setElegidos((prev) => prev.some((id) => !visibles.has(id))
+      ? prev.filter((id) => visibles.has(id))
+      : prev)
+  }, [incidenciasFiltradas])
+
+  const seleccionadas = useMemo(
+    () => incidenciasFiltradas.filter((i) => elegidos.includes(i.id)),
+    [incidenciasFiltradas, elegidos],
+  )
+  const clientesElegidos = new Set(seleccionadas.map((i) => i.cliente_id))
+  const mezclaClientes = clientesElegidos.size > 1
+
+  async function generarRemito() {
+    setGenerando(true)
+    setError(null)
+    try {
+      const remito = await api.post<{ id: number }>(
+        '/api/incidencias/convertir-en-remito',
+        { incidencia_ids: seleccionadas.map((i) => i.id) },
+      )
+      // Al remito recién creado y no de vuelta acá, igual que el botón de a
+      // uno de la ficha del reclamo: ahí se completan los importes que el
+      // sistema no sabe, y desde ahí se edita. Sin ese paso el remito queda en
+      // cero y la bandeja de facturación lo rechaza.
+      navigate(`/remitos/${remito.id}`)
+    } catch (err) {
+      setError(describeError(err))
+      setGenerando(false)
+    }
+  }
+
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
+    {
+      // El tilde para agrupar en un remito. Sólo aparece en los reclamos que
+      // se pueden remitar; en el resto la celda queda vacía, que dice "este no
+      // va" sin un control apagado que invite a intentarlo.
+      id: 'elegir',
+      header: () => null,
+      size: 36,
+      minSize: 36,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const i = row.original
+        if (!remitable(i)) return null
+        return (
+          <input
+            type="checkbox"
+            checked={elegidos.includes(i.id)}
+            // 🔴 `stopPropagation` **es necesario**: el `onRowClick` de la
+            // tabla sólo ignora los clicks que caen en un `button` o un `a`
+            // (`closest('button, a')` en libra-ui), así que sin esto tildar
+            // navega a la ficha del ticket y la selección se pierde.
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => setElegidos((prev) => prev.includes(i.id)
+              ? prev.filter((x) => x !== i.id)
+              : [...prev, i.id])}
+            aria-label={`Elegir el reclamo #${i.id} para el remito`}
+          />
+        )
+      },
+    },
     {
       // El semáforo. Va primero y sin encabezado: es una marca, no un dato que
       // se lea. `aria-label` porque un punto de color no le dice nada a un
@@ -304,7 +390,7 @@ export function Incidencias() {
       cell: ({ row }) => row.original.fecha_creacion ? fechaDeDate(new Date(row.original.fecha_creacion)) : '—',
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [clientes, equipos, categorias])
+  ], [clientes, equipos, categorias, elegidos])
 
   return (
     <div className="grid gap-4">
@@ -553,6 +639,44 @@ export function Incidencias() {
           )}
         </CardContent>
       </Card>
+
+      {/* La barra aparece recién con algo tildado: hasta entonces no hay nada
+          que decir, y una barra siempre visible con un botón apagado le come
+          lugar a la grilla todos los días para un flujo que es mensual. */}
+      {seleccionadas.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-medium">
+                {seleccionadas.length === 1
+                  ? '1 reclamo elegido'
+                  : `${seleccionadas.length} reclamos elegidos`}
+              </span>
+              {mezclaClientes && (
+                // El motivo al lado del botón apagado, no en un tooltip: un
+                // botón que no se puede apretar y no dice por qué manda a
+                // adivinar.
+                <span className="ml-2 text-destructive">
+                  Son de {clientesElegidos.size} clientes distintos y un remito
+                  se emite a nombre de uno solo.
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setElegidos([])}>
+                Limpiar
+              </Button>
+              <Button
+                onClick={generarRemito}
+                disabled={generando || mezclaClientes}
+              >
+                <PackageCheck />
+                {generando ? 'Generando…' : 'Generar remito'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

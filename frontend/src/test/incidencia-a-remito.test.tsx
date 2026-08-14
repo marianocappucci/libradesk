@@ -16,6 +16,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IncidenciaDetalle } from '../pages/IncidenciaDetalle'
+import { Incidencias } from '../pages/Incidencias'
 
 const navegado: string[] = []
 vi.mock('react-router-dom', async () => {
@@ -124,5 +125,101 @@ describe('generar el remito de un reclamo', () => {
     expect(screen.queryByRole('button', { name: /Generar remito/i })).toBeNull()
     const link = await screen.findByRole('link', { name: /Ver remito/i })
     expect(link).toHaveAttribute('href', '/remitos/7')
+  })
+})
+
+
+// ── Varios reclamos, un solo remito ──────────────────────────────────────
+//
+// El caso que motiva todo: tres visitas a un cliente en el mes, una sola
+// factura. Lo que se rompe en pantalla y estos tests fijan:
+//
+// - Que el tilde **no se ofrezca** en un reclamo que no se puede remitar: un
+//   checkbox que siempre termina en 409 es peor que no tenerlo.
+// - Que no se pueda armar un remito con reclamos de dos clientes, **y que se
+//   vea por qué**: un botón apagado sin motivo manda a adivinar.
+// - Que tildar no navegue a la ficha. El `onRowClick` de la tabla sólo ignora
+//   los clicks sobre `button` y `a`, así que sin `stopPropagation` tildar se
+//   llevaría puesta la selección entera.
+
+const OTRO_CLIENTE = { ...CLIENTE, id: 2, nombre: 'Otro', empresa: 'OTRA SRL' }
+const CERRADO = { ...BASE, estado: 'cerrado', fecha_cierre: '2026-08-13T18:00:00' }
+
+let enviado: { url: string; body: unknown } | null = null
+
+function montarGrilla(incidencias: Record<string, unknown>[]) {
+  enviado = null
+  navegado.length = 0
+  vi.stubGlobal('fetch', vi.fn((url: string, opciones?: RequestInit) => {
+    const u = String(url)
+    if ((opciones?.method ?? 'GET') === 'POST' && u.includes('/convertir-en-remito')) {
+      enviado = { url: u, body: JSON.parse(String(opciones?.body ?? '{}')) }
+      return Promise.resolve(json({ id: 7, number: 'REM-00000007' }))
+    }
+    if (u.includes('/api/incidencias')) return Promise.resolve(json(incidencias))
+    if (u.includes('/api/clientes')) return Promise.resolve(json([CLIENTE, OTRO_CLIENTE]))
+    return Promise.resolve(json([]))
+  }))
+}
+
+const tilde = (id: number) =>
+  screen.queryByRole('checkbox', { name: new RegExp(`reclamo #${id} `, 'i') })
+
+describe('agrupar reclamos en un remito', () => {
+  it('sólo ofrece el tilde en los que se pueden remitar', async () => {
+    montarGrilla([
+      { ...CERRADO, id: 1 },
+      { ...BASE, id: 2, titulo: 'Todavía abierto' },
+      { ...CERRADO, id: 3, titulo: 'Ya remitado', remito_id: 9 },
+    ])
+    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
+    await screen.findByText('Todavía abierto')
+
+    expect(tilde(1)).not.toBeNull()
+    // Abierto: el circuito todavía no decidió si va a facturación.
+    expect(tilde(2)).toBeNull()
+    // Ya remitado: cobrarlo dos veces es el error caro.
+    expect(tilde(3)).toBeNull()
+  })
+
+  it('manda los elegidos juntos y aterriza en el remito', async () => {
+    montarGrilla([
+      { ...CERRADO, id: 1 },
+      { ...CERRADO, id: 2, titulo: 'Sin acceso al correo' },
+      { ...CERRADO, id: 3, titulo: 'Cambio de switch' },
+    ])
+    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
+    await screen.findByText('Cambio de switch')
+
+    await userEvent.click(tilde(1)!)
+    await userEvent.click(tilde(3)!)
+
+    // Tildar no navega a la ficha: si lo hiciera, la selección se perdería
+    // antes de poder tocar el botón.
+    expect(navegado).toHaveLength(0)
+    expect(await screen.findByText('2 reclamos elegidos')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: /Generar remito/i }))
+
+    await waitFor(() => expect(enviado).not.toBeNull())
+    expect(enviado!.url).toContain('/api/incidencias/convertir-en-remito')
+    expect(enviado!.body).toEqual({ incidencia_ids: [1, 3] })
+    await waitFor(() => expect(navegado).toContain('/remitos/7'))
+  })
+
+  it('no deja mezclar clientes, y dice por qué', async () => {
+    montarGrilla([
+      { ...CERRADO, id: 1 },
+      { ...CERRADO, id: 2, cliente_id: 2, titulo: 'Nada que ver' },
+    ])
+    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
+    await screen.findByText('Nada que ver')
+
+    await userEvent.click(tilde(1)!)
+    await userEvent.click(tilde(2)!)
+
+    expect(screen.getByRole('button', { name: /Generar remito/i })).toBeDisabled()
+    expect(screen.getByText(/clientes distintos/i)).toBeTruthy()
+    expect(enviado).toBeNull()
   })
 })

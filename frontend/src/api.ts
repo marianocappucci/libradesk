@@ -897,6 +897,12 @@ export type Servicio = {
    *  el comprobante discrimina el IVA o muestra el precio final. */
   iva_rate: number
   activo: boolean
+  /** Si éste es el servicio con el que se cotiza **la hora de trabajo** al
+   *  generarle el remito a un reclamo.
+   *
+   *  Uno solo puede estarlo: marcarlo desmarca al que lo estuviera, y la regla
+   *  la aplica el backend. */
+  es_valor_hora: boolean
 }
 
 /** Un backup guardado en el servidor. Lo devuelve `GET /api/config/backups`
