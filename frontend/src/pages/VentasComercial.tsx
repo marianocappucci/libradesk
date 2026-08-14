@@ -8,8 +8,11 @@
 // Por eso no hay tipo A/B/C, ni CAE, ni punto de venta fiscal en ninguna de
 // estas pantallas. Si aparecen, algo se entendió mal.
 import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
+import { DetalleEstado } from '@/components/comprobante-detalle'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSucursal } from '@/components/sucursal'
 import { fecha, pesos } from '@/lib/format'
 import type { Cliente } from '../api'
@@ -29,7 +32,7 @@ import {
 import { ClipboardList, Coins, Wallet } from 'lucide-react'
 // `Eye` llegó de develop (el PDF del recibo se abre con un ojo, PR #127) y es
 // una ACCIÓN, así que entra por el módulo de acciones como el resto.
-import { Eye, FilePlus, Trash2 } from '@/components/iconos-accion'
+import { ArrowLeft, Eye, FilePlus, Trash2 } from '@/components/iconos-accion'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string
@@ -38,6 +41,19 @@ type Venta = {
   /** El recibo vigente de esta venta, si ya se emitió. `null` = todavía no.
    *  Un recibo anulado no cuenta: la venta vuelve a estar pendiente. */
   recibo_id: number | null
+}
+/** Lo que devuelve `GET /api/ventas/{id}`: la venta con sus líneas y cobros.
+ *
+ * No trae `recibo_id` — el recibo se maneja desde la lista. Si algún día el
+ * detalle tiene que ofrecerlo, se agrega al servicio, no se deriva acá. */
+type VentaDetalleData = {
+  id: number; numero: string; estado: string; fecha: string
+  cliente: { id: number; nombre: string; cuit: string; domicilio: string } | null
+  cliente_nombre: string
+  notas: string | null
+  items: { descripcion: string; cantidad: number; precio: number; subtotal: number }[]
+  pagos: { medio: string; monto: number; referencia: string }[]
+  subtotal: number; total: number
 }
 type Recibo = {
   id: number; numero: number; punto_venta: number; fecha: string
@@ -56,9 +72,22 @@ const MEDIOS = [
   { valor: 'cuenta_corriente', label: 'Cuenta corriente' },
 ]
 
+const medioLabel = (valor: string) =>
+  MEDIOS.find((m) => m.valor === valor)?.label ?? valor
+
+/** Los estados de `SaleStatus` de libracommerce, en castellano. */
+const ESTADOS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  draft: { label: 'Borrador', variant: 'outline' },
+  confirmed: { label: 'Confirmada', variant: 'default' },
+  cancelled: { label: 'Anulada', variant: 'destructive' },
+  partially_returned: { label: 'Devuelta en parte', variant: 'secondary' },
+  returned: { label: 'Devuelta', variant: 'secondary' },
+}
+
 // ── Ventas ─────────────────────────────────────────────────────────────────
 
 export function Ventas() {
+  const navigate = useNavigate()
   const { datos, error, cargando, conError } = useDatos<Venta[]>('/api/ventas', [])
   const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
   const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
@@ -77,6 +106,14 @@ export function Ventas() {
       <Tabla<Venta>
         vacio="Todavía no hay ventas registradas."
         filas={datos}
+        // La fila entera abre la venta. Es lo que la persona quiere hacer nueve
+        // de cada diez veces, y hasta ahora esta pantalla no tenía **ninguna**
+        // forma de ver una venta: la única columna de acciones era la del
+        // recibo, disfrazada de acción de la venta porque no tenía encabezado.
+        //
+        // El clic sobre los controles de la fila NO navega — la guarda está en
+        // `Tabla`, para que no haya que acordarse pantalla por pantalla.
+        onFila={(v) => navigate(`/ventas/${v.id}`)}
         columnas={[
           { clave: 'numero', titulo: 'Número', ancho: '130px',
             render: (v) => <span className="tabular-nums">{v.numero}</span> },
@@ -88,14 +125,32 @@ export function Ventas() {
               : <span className="text-muted-foreground">—</span> },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (v) => pesos(v.total) },
-          { clave: 'acciones', titulo: '', ancho: '150px',
-            // 🔴 La primera versión era un botón «Recibo» que hacía el POST y
-            // nada más: emitía un comprobante **en silencio** y no mostraba
-            // nada. Quien lo tocaba no sabía si había pasado algo, y volver a
-            // tocarlo parecía no hacer nada tampoco (el motor es idempotente y
-            // devuelve el mismo recibo). Un botón que emite un comprobante
-            // tiene que decir que lo emite, y después mostrarlo.
+          // El recibo es una columna con nombre, no una acción sin rótulo. Es
+          // un objeto propio con dos estados —emitido o no— y mezclarlo con las
+          // acciones de la venta hacía que el ojo del recibo se leyera como
+          // «ver la venta». Mismo criterio que la columna «Factura» de las
+          // ventas de Contalibra y Restolibra.
+          //
+          // 🔴 La primera versión era un botón «Recibo» que hacía el POST y
+          // nada más: emitía un comprobante **en silencio** y no mostraba
+          // nada. Quien lo tocaba no sabía si había pasado algo, y volver a
+          // tocarlo parecía no hacer nada tampoco (el motor es idempotente y
+          // devuelve el mismo recibo). Un botón que emite un comprobante
+          // tiene que decir que lo emite, y después mostrarlo.
+          { clave: 'recibo', titulo: 'Recibo', ancho: '150px',
             render: (v) => <AccionRecibo venta={v} onEmitido={conError} /> },
+          // El ojo hace lo mismo que el clic en la fila, y se queda igual: un
+          // `<tr>` clickeable no recibe foco ni se puede activar con el
+          // teclado. Sin este enlace, la pantalla sería inoperable sin mouse.
+          { clave: 'acciones', titulo: 'Acciones', ancho: '90px', alinear: 'derecha',
+            render: (v) => (
+              <Button asChild variant="outline" size="icon-sm">
+                <Link to={`/ventas/${v.id}`} title="Ver la venta"
+                      aria-label={`Ver la venta ${v.numero}`}>
+                  <Eye />
+                </Link>
+              </Button>
+            ) },
         ]}
       />
     </Pagina>
@@ -131,15 +186,13 @@ function AccionRecibo({ venta, onEmitido }: {
     // comprobante, y un botón que emite tiene que decir que emite (ver el
     // comentario de la columna en `Ventas`).
     return (
-      <div className="pl-4">
-        <Button asChild variant="outline" size="icon-sm">
-          <a href={`/api/recibos/${id}/pdf`} target="_blank" rel="noreferrer"
-             title="Ver el PDF del recibo"
-             aria-label={`Ver el recibo de la venta ${venta.numero}`}>
-            <Eye />
-          </a>
-        </Button>
-      </div>
+      <Button asChild variant="outline" size="icon-sm">
+        <a href={`/api/recibos/${id}/pdf`} target="_blank" rel="noreferrer"
+           title="Ver el PDF del recibo"
+           aria-label={`Ver el recibo de la venta ${venta.numero}`}>
+          <Eye />
+        </a>
+      </Button>
     )
   }
 
@@ -318,6 +371,116 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
   )
 }
 
+// ── Detalle de una venta ───────────────────────────────────────────────────
+
+/** La ficha de una venta: qué se vendió, a quién y cómo se cobró.
+ *
+ * El endpoint `GET /api/ventas/{id}` existía desde el principio y no lo llamaba
+ * nadie: la lista no tenía forma de abrir una venta, así que la única manera de
+ * ver qué contenía era el PDF del recibo — que no muestra las líneas.
+ *
+ * No reusa `ComprobanteDetalle` (Remitos, Presupuestos) a propósito: esa ficha
+ * tiene IVA discriminado, botón de PDF y una ruta de vuelta por tipo, y una
+ * venta no tiene nada de eso pero sí tiene cobros. Encajarla ahí obligaba a
+ * volver opcional media ficha de dos pantallas que hoy andan.
+ */
+export function VentaDetalle() {
+  const { id } = useParams<{ id: string }>()
+  const { datos, error, cargando } = useDatos<VentaDetalleData | null>(
+    `/api/ventas/${Number(id)}`, null,
+  )
+
+  if (cargando || error || !datos) return <DetalleEstado loading={cargando} error={error || null} />
+
+  const estado = ESTADOS[datos.estado] ?? { label: datos.estado, variant: 'outline' as const }
+  const cobrado = datos.pagos.reduce((acc, p) => acc + p.monto, 0)
+
+  return (
+    <Pagina
+      titulo={`Venta ${datos.numero}`}
+      icono={ClipboardList}
+      acciones={
+        <>
+          <Badge variant={estado.variant}>{estado.label}</Badge>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/ventas"><ArrowLeft />Volver</Link>
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Cliente</CardTitle></CardHeader>
+          <CardContent className="grid gap-1.5 text-sm">
+            <p><span className="text-muted-foreground">Nombre:</span> {datos.cliente_nombre}</p>
+            {datos.cliente?.cuit && (
+              <p><span className="text-muted-foreground">CUIT / DNI:</span> {datos.cliente.cuit}</p>
+            )}
+            {datos.cliente?.domicilio && (
+              <p><span className="text-muted-foreground">Domicilio:</span> {datos.cliente.domicilio}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-base">Datos de la venta</CardTitle></CardHeader>
+          <CardContent className="grid gap-1.5 text-sm">
+            <p><span className="text-muted-foreground">Número:</span>{' '}
+              <span className="font-mono">{datos.numero}</span></p>
+            <p><span className="text-muted-foreground">Fecha:</span> {fecha(datos.fecha)}</p>
+            {datos.notas && (
+              <p className="whitespace-pre-line">
+                <span className="text-muted-foreground">Notas:</span> {datos.notas}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabla<VentaDetalleData['items'][number]>
+        vacio="La venta no tiene líneas."
+        filas={datos.items}
+        columnas={[
+          { clave: 'descripcion', titulo: 'Descripción', render: (i) => i.descripcion },
+          { clave: 'cantidad', titulo: 'Cantidad', ancho: '110px', alinear: 'derecha',
+            render: (i) => i.cantidad },
+          { clave: 'precio', titulo: 'Precio unit.', ancho: '130px', alinear: 'derecha',
+            render: (i) => pesos(i.precio) },
+          { clave: 'subtotal', titulo: 'Importe', ancho: '130px', alinear: 'derecha',
+            render: (i) => pesos(i.subtotal) },
+        ]}
+      />
+
+      <div className="flex items-baseline justify-end gap-4 border-t pt-3">
+        <span className="text-sm text-muted-foreground">Total</span>
+        <span className="text-2xl font-semibold tabular-nums">{pesos(datos.total)}</span>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Cobros</CardTitle></CardHeader>
+        <CardContent className="grid gap-1.5 text-sm">
+          {datos.pagos.length === 0
+            ? <p className="text-muted-foreground">Sin cobros registrados.</p>
+            : datos.pagos.map((p, i) => (
+              <p key={i} className="flex justify-between gap-4">
+                <span>{medioLabel(p.medio)}{p.referencia && ` · ${p.referencia}`}</span>
+                <span className="tabular-nums">{pesos(p.monto)}</span>
+              </p>
+            ))}
+          {/* Lo cobrado contra el total: es la diferencia que explica por qué
+              una venta figura en cuenta corriente, y verlo acá evita ir a
+              buscarla a la pantalla de saldos. */}
+          {cobrado !== datos.total && (
+            <p className="flex justify-between gap-4 border-t pt-1.5 font-medium">
+              <span>Pendiente</span>
+              <span className="tabular-nums">{pesos(datos.total - cobrado)}</span>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </Pagina>
+  )
+}
+
 // ── Recibos ────────────────────────────────────────────────────────────────
 
 export function Recibos() {
@@ -349,27 +512,25 @@ export function Recibos() {
             render: (r) => r.anulado ? <Badge variant="destructive">Anulado</Badge> : null },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (r) => pesos(r.total) },
-          { clave: 'pdf', titulo: '', ancho: '70px',
+          { clave: 'pdf', titulo: 'Acciones', ancho: '90px', alinear: 'derecha',
             // También en los anulados: el papel anulado sigue siendo el
             // documento de lo que pasó, y es lo que hay que poder mostrar si
             // alguien pregunta por qué se anuló.
             //
-            // El `pl-4` separa el botón de la columna de importes, que va
-            // pegada a la derecha: sin él, el ojo queda contra el total y las
-            // dos cosas se leen como una sola.
+            // Va a la derecha como en todas las tablas del módulo. La
+            // separación con la columna de importes la da el gutter de
+            // `Tabla`, no un `pl-4` propio de esta pantalla.
             render: (r) => (
-              <div className="pl-4">
-                <Button asChild variant="outline" size="icon-sm">
-                  {/* Sin texto, el botón necesita nombre accesible propio, y el
-                      número lo hace distinguible entre filas. El `title` da la
-                      misma información al pasar el mouse. */}
-                  <a href={`/api/recibos/${r.id}/pdf`} target="_blank" rel="noreferrer"
-                     title="Ver el PDF del recibo"
-                     aria-label={`Ver el recibo ${String(r.punto_venta).padStart(4, '0')}-${String(r.numero).padStart(8, '0')}`}>
-                    <Eye />
-                  </a>
-                </Button>
-              </div>
+              <Button asChild variant="outline" size="icon-sm">
+                {/* Sin texto, el botón necesita nombre accesible propio, y el
+                    número lo hace distinguible entre filas. El `title` da la
+                    misma información al pasar el mouse. */}
+                <a href={`/api/recibos/${r.id}/pdf`} target="_blank" rel="noreferrer"
+                   title="Ver el PDF del recibo"
+                   aria-label={`Ver el recibo ${String(r.punto_venta).padStart(4, '0')}-${String(r.numero).padStart(8, '0')}`}>
+                  <Eye />
+                </a>
+              </Button>
             ) },
         ]}
       />
