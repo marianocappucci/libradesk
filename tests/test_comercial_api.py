@@ -335,9 +335,9 @@ def test_un_recibo_anulado_deja_la_venta_pendiente_otra_vez(comercial):
 def test_el_recibo_se_puede_ver_en_pdf(comercial):
     """El botón tiene que entregar el comprobante, no sólo emitirlo.
 
-    Se lee el PDF de vuelta con pypdf: un  con
-    cero bytes adentro pasa igual un assert sobre el status, y es exactamente
-    lo que se vería como «le doy click y no pasa nada».
+    Se lee el PDF de vuelta con pypdf: una respuesta con cero bytes adentro
+    pasa igual un assert sobre el status, y es exactamente lo que se vería
+    como «le doy click y no pasa nada».
     """
     from io import BytesIO
 
