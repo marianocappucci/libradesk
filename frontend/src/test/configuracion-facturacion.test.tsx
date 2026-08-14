@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FacturacionConfigCard } from '../pages/configuracion-facturacion'
+import { escribirEn } from './escribir'
 
 // Un `Response` de verdad y no un objeto parecido: el cliente de libra-ui
 // mira headers y `content-type`, así que el pato pintado no alcanza.
@@ -71,8 +72,11 @@ describe('configuración del destino de facturación', () => {
     render(<FacturacionConfigCard />)
 
     const letra = await screen.findByLabelText('Letra')
-    await userEvent.clear(letra)
-    await userEvent.type(letra, 'A')
+    // `escribirEn` y no `clear` + `type`: con la máquina cargada el cambio se
+    // pierde y el campo queda con la 'C' del mock, así que el PUT llevaba 'CA'.
+    // Falló así en CI el 2026-08-13 (run 31763007912). El detalle de lo que se
+    // midió está en `escribir.ts`.
+    await escribirEn(letra, 'A')
     await userEvent.click(screen.getAllByRole('button', { name: /^Guardar$/ })[1])
 
     await waitFor(() => expect(puts.length).toBe(1))
