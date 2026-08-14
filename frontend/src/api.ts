@@ -604,6 +604,13 @@ export type Incidencia = {
   notas: string | null
   resolucion: string | null
   estado_facturacion: string | null
+  /** El remito que se generó de este reclamo, o `null` si todavía no se
+   *  convirtió. Es el camino a facturación de un trabajo por servicio: la
+   *  bandeja de "Enviar a facturar" sólo acepta remitos.
+   *
+   *  Sólo de lectura — el PUT no lo recibe, así que editar el ticket no puede
+   *  borrarlo. */
+  remito_id: number | null
   activo: boolean
   fecha_creacion: string | null
   fecha_cierre: string | null

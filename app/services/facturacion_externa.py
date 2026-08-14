@@ -88,18 +88,37 @@ RUTA_BANDEJA = "/api/comprobantes-pendientes"
 TIMEOUT = 10.0
 
 ORIGEN_REMITO = "remito"
+# Ya no se manda ninguno, pero el valor **sigue existiendo en la tabla**: los
+# envíos hechos antes del 2026-08-13 lo tienen guardado y se siguen leyendo.
+# Que esté nombrado es lo que evita que alguien lo lea como un dato suelto.
 ORIGEN_PRESUPUESTO = "presupuesto"
-ORIGENES = (ORIGEN_REMITO, ORIGEN_PRESUPUESTO)
+
+# ── Lo único que se puede mandar hoy: el remito ─────────────────────────────
+#
+# Adrede **no hay** una tupla `ORIGENES` con los dos: mientras existió, validar
+# contra ella era lo natural, y eso es exactamente lo que dejaba entrar un
+# presupuesto por el servicio.
+#
+# Decidido con el humano el 2026-08-13, por el criterio contable: lo que
+# habilita a facturar es **la entrega hecha**, y el documento que la prueba es
+# el remito. Un presupuesto aceptado es una oferta aceptada — todavía no pasó
+# nada que facturar. El camino a facturación de un presupuesto es convertirlo
+# en remito (`PresupuestoService.convertir_a_remito`), que ya existía y es
+# idempotente.
+#
+# 🔴 **No es sólo una regla contable: antes de esto se facturaba dos veces.**
+# `convertir_a_remito()` deja el presupuesto en `aceptado` **y** linkeado al
+# remito nuevo. Con los presupuestos `aceptado` en la bandeja, el presupuesto y
+# su propio remito aparecían como dos filas mandables por el mismo trabajo, y
+# del otro lado el UNIQUE de desduplicación incluye `origen_tipo` — o sea que
+# `presupuesto:7` y `remito:12` entraban como **dos borradores distintos**. Con
+# el débito automático en cuenta corriente (ver `_debitar_en_cuenta_corriente`)
+# eso además le cargaba la deuda dos veces al cliente.
+ORIGENES_ENVIABLES = (ORIGEN_REMITO,)
 
 ESTADO_ENVIADO = "enviado"
 ESTADO_RESUELTO_REMOTO = "resuelto_remoto"
 ESTADO_ERROR = "error"
-
-# Sólo un presupuesto **aceptado** se factura. Mandar un borrador o uno
-# rechazado pondría en la bandeja del otro lado algo que el cliente no aprobó, y
-# ahí el próximo paso es emitir con CAE. Los remitos no tienen esta condición:
-# un remito ya es la entrega hecha.
-ESTADOS_PRESUPUESTO_FACTURABLES = ("aceptado",)
 
 
 class EnvioNoConfigurado(Exception):
@@ -399,7 +418,10 @@ class PuenteFacturacion:
     def _enviar(self, origen_tipo: str, comprobante: dict) -> dict:
         """El envío en sí. Lo separa de `enviar` para que el débito quede en un
         solo lugar y cubra los dos destinos, que tienen returns propios."""
-        if origen_tipo not in ORIGENES:
+        # `ORIGENES_ENVIABLES`, no `ORIGENES`: la segunda incluye `presupuesto`
+        # para poder **leer** los envíos históricos, y validar contra ella
+        # dejaría entrar por el servicio justo lo que el router ya no ofrece.
+        if origen_tipo not in ORIGENES_ENVIABLES:
             raise ValueError(f"origen_tipo invalido: {origen_tipo!r}")
 
         if destino() == DESTINO_SOS:

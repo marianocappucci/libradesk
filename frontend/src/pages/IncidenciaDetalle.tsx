@@ -79,6 +79,7 @@ export function IncidenciaDetalle() {
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
+  const [generandoRemito, setGenerandoRemito] = useState(false)
   // Estado del guardado automático, para que deje de ser invisible (pedido 40).
   // `enVuelo` es un ref y no estado porque `guardarYVolver` lo lee dentro de un
   // bucle: con `useState` leería siempre el valor del render en que se creó.
@@ -282,6 +283,32 @@ export function IncidenciaDetalle() {
     }
   }
 
+  /** Genera el remito del trabajo y lleva a su ficha para ponerle los importes.
+   *
+   * 🔴 **Aterriza en el remito y no vuelve acá.** El remito nace con las horas
+   * y los materiales pero **con los precios en cero** —este producto no tiene
+   * valor hora, y un material sin precio de venta tampoco aporta uno—, así que
+   * lo que sigue es cargarlos. Dejar al usuario en el ticket con un "listo"
+   * sería darle por terminado algo que todavía no se puede facturar: la
+   * bandeja rechaza un remito con total 0.
+   *
+   * Es idempotente del lado del servidor, así que un doble click no emite dos.
+   */
+  async function generarRemito() {
+    setGenerandoRemito(true)
+    setError(null)
+    try {
+      const remito = await api.post<{ id: number }>(
+        `/api/incidencias/${incidenciaId}/convertir-en-remito`, {},
+      )
+      navigate(`/remitos/${remito.id}`)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setGenerandoRemito(false)
+    }
+  }
+
   // Empate de fechas: las tres tablas usan CURRENT_TIMESTAMP, que en SQLite
   // tiene resolución de un segundo, así que dos entradas de la misma
   // operación empatan seguido. Sin desempate el orden queda a merced del
@@ -409,6 +436,28 @@ export function IncidenciaDetalle() {
             <Button size="sm" variant="outline" onClick={abrirReemplazo}>
               <ArrowLeftRightAccion />Reemplazar equipo
             </Button>
+            {/* El camino a facturación de un trabajo por servicio. Sólo con el
+                ticket cerrado: es donde el circuito real decide si va a
+                facturación, después de controlar el comprobante en papel
+                contra la hoja de ruta.
+
+                Ya convertido, deja de ser un botón de acción y pasa a ser el
+                link al remito: el que vuelve a esta pantalla necesita llegar a
+                él, y ofrecerle "Generar remito" otra vez —aunque el servidor
+                sea idempotente— le hace creer que no se generó. */}
+            {incidencia.remito_id !== null ? (
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/remitos/${incidencia.remito_id}`}>
+                  <PackageCheck />Ver remito
+                </Link>
+              </Button>
+            ) : incidencia.estado === 'cerrado' ? (
+              <Button size="sm" variant="outline" disabled={generandoRemito}
+                      onClick={generarRemito}>
+                <PackageCheck />
+                {generandoRemito ? 'Generando…' : 'Generar remito'}
+              </Button>
+            ) : null}
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 />Eliminar
             </Button>

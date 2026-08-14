@@ -26,11 +26,10 @@ const REMITO = {
   envio: null,
 }
 
-const PRESUPUESTO = {
+const OTRO_REMITO = {
   ...REMITO,
-  origen_tipo: 'presupuesto' as const,
-  id: 1,
-  numero: 'PRE-00000001',
+  id: 2,
+  numero: 'REM-00000002',
   total: 5000,
 }
 
@@ -123,11 +122,8 @@ describe('enviar a facturar', () => {
     expect(posts[0].body).toEqual({ origen_tipo: 'remito', ids: [1] })
   })
 
-  it('un remito y un presupuesto con el mismo id no se mezclan', async () => {
-    // Las dos numeraciones arrancan en 1. Con una clave que fuera sólo el id,
-    // tildar el remito 1 tildaría también el presupuesto 1 — y se mandaría a
-    // facturar algo que nadie eligió.
-    montar([REMITO, PRESUPUESTO])
+  it('tildar uno no arrastra al otro', async () => {
+    montar([REMITO, OTRO_REMITO])
     render(<Facturacion />)
     await screen.findByText('REM-00000001')
 
@@ -136,10 +132,12 @@ describe('enviar a facturar', () => {
     expect(await screen.findByText(/1 comprobante elegido/)).toBeInTheDocument()
   })
 
-  it('elegidos de los dos tipos salen en dos requests, uno por tipo', async () => {
-    montar([REMITO, PRESUPUESTO])
+  it('todo lo elegido sale en un solo request', async () => {
+    // Mientras la bandeja ofrecía presupuestos, esto eran dos requests, uno
+    // por tipo. Ahora hay un solo origen posible.
+    montar([REMITO, OTRO_REMITO])
     render(<Facturacion />)
-    await screen.findByText('PRE-00000001')
+    await screen.findByText('REM-00000002')
 
     // Se vuelve a consultar entre clicks: la tabla se rerenderiza y los nodos
     // de antes quedan desprendidos, así que el segundo click sobre la
@@ -150,9 +148,20 @@ describe('enviar a facturar', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Enviar a Contalibra/i }))
 
-    await waitFor(() => expect(posts).toHaveLength(2))
-    const tipos = posts.map((p) => (p.body as { origen_tipo: string }).origen_tipo)
-    expect(tipos.sort()).toEqual(['presupuesto', 'remito'])
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toEqual({ origen_tipo: 'remito', ids: [1, 2] })
+  })
+
+  // 🔴 La fila del presupuesto desapareció de esta pantalla el 2026-08-13. El
+  // que la venía usando así necesita leer acá a dónde se fue: sin esto, la
+  // pantalla se ve rota en vez de cambiada.
+  it('explica que sólo se manda el remito y cómo llega lo demás', async () => {
+    montar([REMITO])
+    render(<Facturacion />)
+
+    const aviso = await screen.findByText(/un presupuesto aceptado o un reclamo/i)
+    expect(aviso).toBeInTheDocument()
+    expect(aviso.textContent).toMatch(/convirtiéndose en remito/i)
   })
 
   it('lo ya enviado se ve como "en la bandeja", no como facturado', async () => {
@@ -205,11 +214,11 @@ describe('enviar a facturar', () => {
     ).toBeInTheDocument()
   })
 
-  it('sin nada para mandar lo dice', async () => {
+  it('sin nada para mandar lo dice, y dice cómo aparece algo', async () => {
     montar([])
     render(<Facturacion />)
     expect(
-      await screen.findByText(/No hay remitos ni presupuestos aceptados/i),
+      await screen.findByText(/No hay remitos para mandar/i),
     ).toBeInTheDocument()
   })
 })
