@@ -47,40 +47,23 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react'
-import { conTileDeMenu } from '@/components/iconos-accion'
-import { createLayout, type NavSection } from 'libra-ui/Layout'
+import { createLayout } from 'libra-ui/Layout'
 
-// El que usa `createLayout` cuando no se le pasa tipo propio, que es este caso.
-type Usuario = { role?: string; name?: string }
-
-/** Le pone el TILE GRIS a los iconos del menú, de una pasada sobre el árbol.
+/* El TILE del sidebar abarca el ítem entero —icono y texto—, y marca la sección
+ * elegida. Pedido del humano el 2026-08-14, cambiando la primera versión, que le
+ * ponía un recuadro chiquito a cada icono: eso decoraba los 30 ítems por igual y
+ * no destacaba ninguno, que es justo lo contrario de lo que un menú tiene que
+ * hacer.
  *
- *  De una pasada y no ítem por ítem a propósito: son ~30 y son una lista que
- *  crece. Envolviendo en cada `icon:` alcanza con que el próximo se agregue sin
- *  el wrapper para que quede un ítem sin tile, y eso no rompe nada —así que no
- *  se entera nadie hasta que alguien lo mira—. Acá el tile no es una propiedad
- *  de cada ítem: es del menú.
- *
- *  El tile lo pone LibraDesk y no `libra-ui` porque el sidebar es de los cinco
- *  productos y esto lo eligió uno solo. `NavItem.icon` es un `ComponentType`,
- *  así que envolverlo alcanza y el paquete compartido no se toca. */
-const conTiles = (secciones: NavSection<Usuario>[]): NavSection<Usuario>[] =>
-  secciones.map((seccion) => ({
-    ...seccion,
-    items: seccion.items.map((item) => ({
-      ...item,
-      icon: conTileDeMenu(item.icon),
-      children: item.children?.map((hijo) => ({
-        ...hijo,
-        icon: hijo.icon && conTileDeMenu(hijo.icon),
-      })),
-    })),
-  }))
-
+ * No se ve acá porque no hay nada que envolver: la fila la dibuja
+ * `SidebarMenuButton` de `libra-ui`, y el estado activo lo expone como
+ * `data-active`. El tratamiento vive en `index.css`, colgado de ese atributo —
+ * es la única forma de pintar algo según un estado que este archivo no conoce.
+ * Ver ahí la sección "El tile del ítem activo del sidebar". */
 export const Layout = createLayout({
   productName: 'LibraDesk',
   productInitial: 'L',
-  navSections: conTiles([
+  navSections: [
     // Sin label: es una sola entrada y un encabezado "General" arriba de un
     // único ítem es ruido.
     { items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
@@ -175,5 +158,5 @@ export const Layout = createLayout({
         { to: '/configuracion', label: 'Configuración', icon: Settings },
       ],
     },
-  ]),
+  ],
 })

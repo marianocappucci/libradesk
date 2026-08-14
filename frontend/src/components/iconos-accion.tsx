@@ -28,7 +28,7 @@
  *  lado del import se escribe el canónico y se renombra acá: importar el alias
  *  compila hoy y es deuda que vence sola en el próximo major.
  */
-import type { ComponentType, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export {
@@ -154,34 +154,14 @@ export function Tile({ children, className }: { children: ReactNode; className?:
   )
 }
 
-/** Envuelve un icono en su tile y devuelve un componente con la misma firma que
- *  el original, para poder pasárselo a algo que espera el icono pelado.
+/* No hay envoltorio de iconos para el sidebar, y es a propósito.
  *
- *  El caso es `libra-ui/Layout`, que rinde `<item.icon className="size-4" />`:
- *  ese `className` dimensiona el GLIFO, y acá lo que se dimensiona es el tile,
- *  así que **se descarta**. Es el único lugar donde un `className` entrante se
- *  ignora, y es la razón por la que esto existe en vez de envolver a mano en el
- *  `Layout`: el sidebar sale del paquete compartido y no recibe el tile de
- *  ninguna otra forma sin tocar `libra-ui`, que es de los cinco productos. */
-function conTile(Icono: ComponentType<{ className?: string }>, claseTile?: string) {
-  return function IconoConTile() {
-    return (
-      <Tile className={claseTile}>
-        <Icono />
-      </Tile>
-    )
-  }
-}
-
-/** El tile del sidebar, con lo que necesita para sobrevivir al modo colapsado.
+ * La primera versión (2026-08-13) le ponía un tile chiquito a cada icono del
+ * menú. El humano lo cambió al día siguiente: el tile tiene que abarcar el ítem
+ * entero —icono y texto— y marcar la sección elegida. Un recuadro en los 30
+ * ítems decoraba a todos por igual y no destacaba a ninguno.
  *
- *  Colapsado, `SidebarMenuButton` se fuerza a `size-8` con `p-2`: le quedan
- *  16 px de contenido, y un tile de 28 px ahí no entra —el botón tiene
- *  `overflow-hidden`, así que no se desborda, se RECORTA—. Colapsado el tile no
- *  aporta nada además: no hay texto del que separarlo, el ítem ya es un cuadro.
- *  Así que se apaga y queda el glifo pelado, que es lo que había antes. */
-export const conTileDeMenu = (Icono: ComponentType<{ className?: string }>): ComponentType<{ className?: string }> =>
-  conTile(
-    Icono,
-    'group-data-[collapsible=icon]:size-4 group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent',
-  )
+ * Como ahora lo que se pinta es la FILA según su estado, no hay nada que
+ * envolver desde acá: vive en `index.css`, colgado del `data-active` que expone
+ * `SidebarMenuButton`. Este archivo sigue exportando `Tile` porque el título de
+ * pantalla sí lleva el recuadro alrededor del icono — ver `titulo-pantalla.tsx`. */

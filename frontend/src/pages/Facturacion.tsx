@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import { CheckCircle2, Info, Send as SendAccion, Tile, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 type Envio = {
   id: number
@@ -231,9 +232,9 @@ export function Facturacion() {
 
   return (
     <div className="grid gap-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Tile className="size-8 [&>svg]:size-5"><Send /></Tile>Enviar a facturar
-      </h2>
+      <TituloPantalla icono={Send}>
+        Enviar a facturar
+      </TituloPantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

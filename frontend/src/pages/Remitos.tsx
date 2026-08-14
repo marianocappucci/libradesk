@@ -13,7 +13,8 @@ import {
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import { Receipt } from 'lucide-react'
-import { Download, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
+import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function Remitos() {
   const navigate = useNavigate()
@@ -177,9 +178,9 @@ export function Remitos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><Receipt /></Tile>Remitos
-        </h2>
+        <TituloPantalla icono={Receipt}>
+          Remitos
+        </TituloPantalla>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </div>
 

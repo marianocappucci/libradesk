@@ -201,7 +201,11 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
     <Card>
       <CardContent className="pt-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-semibold">{lista.nombre}</h2>
+          {/* Subsección, no título de pantalla: es el panel de la lista elegida
+              adentro de "Listas de precios", que ya trae su propio encabezado
+              desde `comercial-ui`. Usaba el tamaño del título, y eso era parte
+              del desorden que se vino a ordenar. */}
+          <h2 className="text-base font-semibold">{lista.nombre}</h2>
           <Button variant="ghost" onClick={onCerrar}>Cerrar</Button>
         </div>
 

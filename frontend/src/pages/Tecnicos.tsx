@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { UserCog, Wrench } from 'lucide-react'
-import { FilePlus, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
+import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const tecnicoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -213,9 +214,9 @@ export function Tecnicos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><UserCog /></Tile>Técnicos
-        </h2>
+        <TituloPantalla icono={UserCog}>
+          Técnicos
+        </TituloPantalla>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo técnico</Button>

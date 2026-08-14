@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/dialog'
 import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import { FilePlus, PlusCircle, Tile } from '@/components/iconos-accion'
+import { FilePlus, PlusCircle } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -308,9 +309,9 @@ export function Incidencias() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><AlertCircle /></Tile>Incidencias
-        </h2>
+        <TituloPantalla icono={AlertCircle}>
+          Incidencias
+        </TituloPantalla>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
             <Button onClick={startCreate}><FilePlus />Nueva incidencia</Button>

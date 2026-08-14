@@ -37,7 +37,8 @@ import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_RECEPCION } from './recepciones-piezas'
 import { ClipboardCheck } from 'lucide-react'
 import { fechaHora } from '@/lib/format'
-import { FilePlus, PackageCheck, Printer, Tile, Trash2 } from '@/components/iconos-accion'
+import { FilePlus, PackageCheck, Printer, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
 
@@ -189,9 +190,9 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><ClipboardCheck /></Tile>Recepción de equipos
-        </h2>
+        <TituloPantalla icono={ClipboardCheck}>
+          Recepción de equipos
+        </TituloPantalla>
         <Button onClick={() => { setAlta({ ...VACIO }); setError(null) }}>
           <FilePlus />Recibir equipo
         </Button>

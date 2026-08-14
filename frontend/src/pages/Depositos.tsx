@@ -30,7 +30,8 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Building2 } from 'lucide-react'
-import { Check, FilePlus, Tile } from '@/components/iconos-accion'
+import { Check, FilePlus } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function Depositos() {
   const [depositos, setDepositos] = useState<Deposito[]>([])
@@ -126,9 +127,9 @@ export function Depositos() {
             pantallas — de ahí el "Depósitos de equipos" que no aparecía en
             ningún lado adentro. El párrafo de abajo sigue siendo distinto por
             pestaña: eso es lo que explica dónde estás parado. */}
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><Building2 /></Tile>Depósitos
-        </h2>
+        <TituloPantalla icono={Building2}>
+          Depósitos
+        </TituloPantalla>
         <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
       </div>
 

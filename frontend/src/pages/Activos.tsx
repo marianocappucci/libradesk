@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RotateCcwClock as History, Briefcase as IconoActivos } from 'lucide-react'
-import { Boxes, FilePlus, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
+import { Boxes, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const TODOS = '__todos__'
 
@@ -280,9 +281,9 @@ export function Activos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><IconoActivos /></Tile>Activos en alquiler
-        </h2>
+        <TituloPantalla icono={IconoActivos}>
+          Activos en alquiler
+        </TituloPantalla>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo activo</Button>

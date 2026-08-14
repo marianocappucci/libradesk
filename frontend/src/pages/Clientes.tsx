@@ -21,15 +21,12 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-// El reparto de dos sets: `fluent-color` para IDENTIDAD (el icono del titulo,
-// que etiqueta de que se habla y no cambia nunca) y `fluent` monocromo para
-// ACCION, desde `components/iconos-accion`.
-//
-// Este bloque describia el spike y quedo viejo: nombraba a `streamline-plump`
-// (descartado por la atribucion que exige CC BY 4.0) y decia que `Plus` y `X`
-// seguian en lucide, que ya no es cierto. Los dos sets vigentes son MIT.
+// Los de IDENTIDAD (el icono del título, que etiqueta de qué se habla y no
+// cambia nunca) se importan directo de lucide; los de ACCIÓN salen del
+// vocabulario de `components/iconos-accion`.
 import { Users } from 'lucide-react'
-import { Check, FilePlus, MapPin, Pencil, Tile, Trash2, Undo2, X } from '@/components/iconos-accion'
+import { Check, FilePlus, MapPin, Pencil, Trash2, Undo2, X } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -330,9 +327,9 @@ export function Clientes() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Tile className="size-8 [&>svg]:size-5"><Users /></Tile>Clientes
-        </h2>
+        <TituloPantalla icono={Users}>
+          Clientes
+        </TituloPantalla>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo cliente</Button>

@@ -28,8 +28,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeftRight, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
+import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
 
@@ -368,7 +369,7 @@ export function IncidenciaDetalle() {
         <div className="flex items-center gap-2">
           <Button asChild size="sm" variant="outline"><Link to="/incidencias"><ArrowLeft />Volver</Link></Button>
           {incidencia && (
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <TituloPantalla icono={AlertCircle}>
               {incidencia.titulo}
               {/* El mismo semáforo que la grilla, adentro del badge de estado:
                   quien viene de la lista reconoce el color y no tiene que
@@ -383,7 +384,7 @@ export function IncidenciaDetalle() {
               <Badge variant={incidencia.prioridad === 'alta' ? 'destructive' : 'outline'}>
                 {PRIORIDAD_LABELS[incidencia.prioridad]}
               </Badge>
-            </h2>
+            </TituloPantalla>
           )}
         </div>
         {incidencia && (

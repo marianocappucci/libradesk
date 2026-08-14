@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 /** Carga datos de la API con estado de error y una forma de recargar.
  *
@@ -62,9 +63,9 @@ export function Pagina({ titulo, icono: Icono, acciones, error, children }: {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Icono className="h-6 w-6" /> {titulo}
-        </h1>
+        <TituloPantalla icono={Icono}>
+          {titulo}
+        </TituloPantalla>
         {acciones && <div className="flex gap-2 flex-wrap">{acciones}</div>}
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
