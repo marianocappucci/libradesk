@@ -87,9 +87,13 @@ function json(body: unknown) {
 
 let pedidos: { url: string; metodo: string; cuerpo: unknown }[] = []
 
-/** Mockea `fetch` devolviendo `equipos` en el catálogo y `trabajos` en la agenda
- *  de la Cuadrilla Norte. El resto de las cuadrillas, sin nada. */
-function stub(trabajos: unknown[] = [TRABAJO], equipos: unknown[] = [NORTE, SUR]) {
+/** Mockea `fetch` devolviendo `equipos` en el catálogo, `trabajos` en la agenda
+ *  de la Cuadrilla Norte y `deSur` en la de la Sur. */
+function stub(
+  trabajos: unknown[] = [TRABAJO],
+  equipos: unknown[] = [NORTE, SUR],
+  deSur: unknown[] = [],
+) {
   vi.stubGlobal('fetch', vi.fn((url: string, opciones?: RequestInit) => {
     const u = String(url)
     const metodo = opciones?.method ?? 'GET'
@@ -99,6 +103,7 @@ function stub(trabajos: unknown[] = [TRABAJO], equipos: unknown[] = [NORTE, SUR]
     })
     if (metodo !== 'GET') return Promise.resolve(json({ ok: true }))
     if (u.includes('/api/agenda/equipo/1')) return Promise.resolve(json(trabajos))
+    if (u.includes('/api/agenda/equipo/2')) return Promise.resolve(json(deSur))
     if (u.includes('/api/agenda/equipo/')) return Promise.resolve(json([]))
     if (u.includes('/api/equipos-trabajo')) return Promise.resolve(json(equipos))
     return Promise.resolve(json([]))
@@ -255,7 +260,12 @@ describe('Agenda — la vista de semana', () => {
     stub([TRABAJO, DEL_JUEVES])
     renderAgenda(SEMANA)
 
-    const columna = (await screen.findByRole('link', { name: /Jue 13/ }))
+    // Se espera por el CHIP y no por el encabezado de la columna: la grilla se
+    // dibuja en cuanto llega el catálogo de cuadrillas, con las siete columnas
+    // vacías, así que esperar por "Jue 13" devuelve una grilla sin datos y el
+    // `getByText` de abajo —que es sincrónico— corre antes que la agenda.
+    await screen.findByText('Tendido de fibra')
+    const columna = screen.getByRole('link', { name: /Jue 13/ })
       .parentElement as HTMLElement
     expect(within(columna).getByText('Tendido de fibra')).toBeInTheDocument()
     expect(within(columna).queryByText('Cambio de switch')).not.toBeInTheDocument()
@@ -335,12 +345,18 @@ describe('Agenda — el filtro de cuadrilla', () => {
     // Si el filtro además recortara el fetch, el "+N más" de la celda del mes y
     // la cuenta del día pasarían a mentir en cuanto alguien elige una cuadrilla:
     // la pantalla no sabría que existen los trabajos que dejó de pedir.
-    stub([TRABAJO])
+    //
+    // La Sur tiene su propio trabajo **a propósito**: sin él, la ausencia del de
+    // la Norte se cumpliría sola mientras la grilla está vacía, y el test daría
+    // verde con el filtro roto. El de la Sur es el ancla que dice que la agenda
+    // ya llegó y se dibujó.
+    stub([TRABAJO], [NORTE, SUR], [{ ...TRABAJO, incidencia_id: 90, titulo: 'Ronda del Sur' }])
     renderAgenda(`?vista=semana&dia=${MARTES}&equipo=2`)
-    await waitFor(() => expect(pedidosDeAgenda()).toHaveLength(2))
 
-    // La Norte es la única con trabajos, y está filtrada afuera.
+    expect(await screen.findByText('Ronda del Sur')).toBeInTheDocument()
     expect(screen.queryByText('Cambio de switch')).not.toBeInTheDocument()
+    // Y la agenda de la Norte se pidió igual, aunque no se dibuje.
+    await waitFor(() => expect(pedidosDeAgenda()).toHaveLength(2))
     expect(pedidosDeAgenda().some((u) => u.includes('/equipo/1?'))).toBe(true)
   })
 })
