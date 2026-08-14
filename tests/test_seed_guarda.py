@@ -9,11 +9,15 @@ instancia de cliente llamada `demoliciones.libradesk.com.ar` habría pasado. Es
 un agujero improbable pero silencioso: nada avisa, el seed corre y los datos
 quedan mezclados.
 """
+import pathlib
+import re
+
 import pytest
 
 from app.routers.clientes import ClienteIn
 from app.routers.incidencias import IncidenciaIn
 from app.services.incidencias import ESTADOS_VALIDOS
+from scripts import seed_dev
 from scripts.seed_dev import (
     CAMPOS_CLIENTE, CAMPOS_INCIDENCIA, CIERRES, DOMICILIOS, url_no_productiva,
 )
@@ -201,6 +205,54 @@ def test_el_cliente_no_reenvia_lo_que_pone_el_producto():
 
 def test_no_hay_campos_repetidos_en_la_lista_del_cliente():
     assert len(CAMPOS_CLIENTE) == len(set(CAMPOS_CLIENTE))
+
+
+def test_ningun_equipo_de_ejemplo_lleva_un_id_de_cliente_literal():
+    """🔴 Lee el fuente, y es a propósito.
+
+    `equipos_spec` se arma **adentro** de `sembrar()`, así que no se puede
+    importar para mirarlo. Y el defecto que este test previene no se ve en
+    ninguna otra parte: las filas de arriba de la lista usaban `cliente["id"]`
+    y las de abajo un `1` y un `2` escritos a mano, asumiendo que `clientes[0]`
+    y `clientes[1]` son los ids 1 y 2.
+
+    **No lo son.** `ClienteRepository.list()` ordena **por nombre**, así que la
+    posición en la lista no tiene nada que ver con el id. En dev `otro` era el
+    id 4, el equipo salía con `cliente_id=2` hacia un depósito del 4, y el
+    producto lo rechazaba con 422 — **matando el seed entero** y dejando sin
+    sembrar todo lo que viene después.
+
+    El test lee el archivo porque el error es sintáctico: un número donde tenía
+    que haber una expresión.
+
+    ⚠️ **La primera versión de este test era vacua y pasaba con el defecto
+    puesto.** Buscaba `equipos_spec` y había **dos variables con ese nombre** en
+    el archivo —la de las cuadrillas y la de los equipos del cliente, a
+    cuatrocientas líneas de distancia—, así que medía la lista equivocada. El
+    archivo ya advertía de esa colisión en un comentario. Se resolvió
+    renombrando la de las cuadrillas a `cuadrillas_spec`; el `assert` de abajo
+    verifica que quedó **una sola**, para que el test no vuelva a medir otra
+    cosa en silencio.
+    """
+    fuente = pathlib.Path(seed_dev.__file__).read_text(encoding="utf-8")
+    assert fuente.count("equipos_spec = [") == 1, (
+        "hay más de una variable `equipos_spec`: este test mediría la que "
+        "encuentre primero, que es como la versión anterior pasaba en falso."
+    )
+    bloque = re.search(r"equipos_spec = \[(.*?)\n    \]", fuente, re.S)
+    assert bloque, "no se encontró `equipos_spec`: ¿se renombró?"
+    assert "Sala de racks" in bloque.group(1), (
+        "el bloque encontrado no es el de los equipos del cliente"
+    )
+
+    literales = re.findall(
+        r'^\s*\("[^"]+",\s*(\d+)\s*,', bloque.group(1), re.M,
+    )
+    assert not literales, (
+        f"hay ids de cliente escritos a mano en equipos_spec: {literales}. "
+        "Tienen que salir de cliente['id'] / otro['id'], que es de donde sale "
+        "el dueño del depósito."
+    )
 
 
 def test_los_domicilios_de_ejemplo_no_repiten_la_ciudad_adentro():
