@@ -47,6 +47,7 @@ const CLIENTES = [RESPONSABLE, CONSUMIDOR, SIN_CARGAR]
 const EXENTO: Servicio = {
   id: 1, nombre: 'Libro de instructivos', descripcion: '',
   texto: 'Libro de instructivos', precio: 5000, iva_rate: 0, activo: true,
+  es_valor_hora: false,
 }
 
 function json(body: unknown) {

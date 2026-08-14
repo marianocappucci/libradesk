@@ -36,6 +36,10 @@ class ServicioIn(BaseModel):
     # de error nombra las alicuotas validas, que es mas util que un 422 de
     # pydantic diciendo "value is not a valid enumeration member".
     iva_rate: float = Field(default=0.21, ge=0, le=1)
+    #: Si este es el servicio con el que se cotiza **la hora de trabajo** al
+    #: generarle el remito a un reclamo. Marcarlo desmarca al que lo estuviera:
+    #: es uno solo, y la regla la aplica el repositorio.
+    es_valor_hora: bool = False
 
 
 class ServicioUpdate(ServicioIn):
@@ -52,6 +56,7 @@ class ServicioOut(BaseModel):
     precio: float
     iva_rate: float
     activo: bool
+    es_valor_hora: bool
 
 
 @router.get("", response_model=list[ServicioOut])
@@ -84,7 +89,10 @@ def obtener(servicio_id: int, servicios: ServicioRepository = Depends(get_servic
 @router.post("", status_code=201, response_model=ServicioOut)
 def crear(data: ServicioIn, servicios: ServicioRepository = Depends(get_servicio_repository)):
     try:
-        return servicios.crear(data.nombre, data.descripcion, data.precio, data.iva_rate)
+        return servicios.crear(
+            data.nombre, data.descripcion, data.precio, data.iva_rate,
+            data.es_valor_hora,
+        )
     except AlicuotaInvalida as e:
         raise HTTPException(422, str(e))
 
@@ -98,7 +106,7 @@ def actualizar(
     try:
         s = servicios.actualizar(
             servicio_id, data.nombre, data.descripcion, data.precio, data.activo,
-            data.iva_rate,
+            data.iva_rate, data.es_valor_hora,
         )
     except AlicuotaInvalida as e:
         raise HTTPException(422, str(e))

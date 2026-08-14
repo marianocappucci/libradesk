@@ -58,6 +58,9 @@ type FormServicio = {
    *  elegida. */
   iva_rate: string
   activo: boolean
+  /** Si éste es el servicio con el que se cotiza la hora de trabajo al
+   *  generarle el remito a un reclamo. Uno solo puede estarlo. */
+  es_valor_hora: boolean
 }
 
 const VACIO: ConfigEmpresa = {
@@ -613,6 +616,7 @@ function ServiciosCard() {
         precio: Number(datos.precio) || 0,
         iva_rate: Number(datos.iva_rate),
         activo: datos.activo,
+        es_valor_hora: datos.es_valor_hora,
       }
       if (editando) await api.put(`/api/servicios/${editando.id}`, payload)
       else await api.post('/api/servicios', payload)
@@ -682,6 +686,23 @@ function ServiciosCard() {
             onChange={(e) => onCambiar({ ...datos, descripcion: e.target.value })}
           />
         </div>
+        {/* El valor hora vive acá y no en una pantalla propia: es un precio
+            más del catálogo, con su alícuota, y así se edita donde se editan
+            todos los otros precios. */}
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox" className="mt-0.5"
+            checked={datos.es_valor_hora}
+            onChange={(e) => onCambiar({ ...datos, es_valor_hora: e.target.checked })}
+          />
+          <span>
+            Es el <strong>valor hora</strong> del servicio técnico
+            <span className="block text-xs text-muted-foreground">
+              Con esto se cotiza el trabajo de cada reclamo al generarle el
+              remito. Uno solo: marcarlo acá desmarca al que lo esté.
+            </span>
+          </span>
+        </label>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <Button type="button" disabled={guardando} onClick={guardar}>
             {guardando ? 'Guardando…' : 'Guardar'}
@@ -716,7 +737,8 @@ function ServiciosCard() {
             <Button
               type="button" size="sm"
               onClick={() => setNuevo({
-                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21', activo: true,
+                nombre: '', descripcion: '', precio: '0', iva_rate: '0.21',
+                activo: true, es_valor_hora: false,
               })}
             >
               <PlusCircle className="mr-2 h-4 w-4" />
@@ -750,6 +772,9 @@ function ServiciosCard() {
                   {s.nombre}
                 </span>
                 {!s.activo && <Badge variant="outline">Inactivo</Badge>}
+                {/* Sin esto no hay forma de saber, mirando la lista, con qué
+                    precio se están cotizando los reclamos. */}
+                {s.es_valor_hora && <Badge>Valor hora</Badge>}
                 {s.descripcion && (
                   <span className="truncate text-xs text-muted-foreground">{s.descripcion}</span>
                 )}
@@ -769,7 +794,7 @@ function ServiciosCard() {
                       onClick={() => setEditando({
                         id: s.id, nombre: s.nombre, descripcion: s.descripcion,
                         precio: String(s.precio), iva_rate: String(s.iva_rate),
-                        activo: s.activo,
+                        activo: s.activo, es_valor_hora: s.es_valor_hora,
                       })}
                     >
                       <Pencil />

@@ -1,13 +1,13 @@
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
 from ..dependencies import (
     get_cliente_repository, get_firma_repository,
     get_equipo_repository, get_incidencia_repository, get_reemplazo_service,
-    get_remito_service,
+    get_remito_service, get_servicio_repository,
 )
 from ..services import incidencia_pdf
 from ..services.clientes import ClienteRepository
@@ -18,6 +18,7 @@ from ..services.reemplazo import (
     DESTINOS, CierreService, DatosService, ReemplazoService,
 )
 from ..services.remitos_presupuestos import RemitoService
+from ..services.servicios import ServicioRepository
 
 router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 
@@ -282,6 +283,61 @@ def reemplazar_equipo(
 # único que la bandeja acepta (ver `app/routers/facturacion.py`). El endpoint
 # es el gemelo de `POST /api/presupuestos/{id}/convertir-en-remito`, con el
 # mismo nombre a propósito.
+#
+# Son dos rutas y **una sola implementación**: la de a uno llama a la de a
+# varios con una lista de un elemento. Dos caminos que arman un remito habrían
+# podido divergir en qué lleva la línea o en qué se valida, que es exactamente
+# como este producto terminó con el mismo defecto en tres pantallas.
+
+
+class ConvertirLote(BaseModel):
+    #: Los reclamos que entran al mismo remito. Todos del mismo cliente y todos
+    #: cerrados; el servicio explica por qué.
+    incidencia_ids: list[int] = Field(min_length=1)
+
+
+def _convertir(incidencias, ids, remitos, clientes, servicios, user):
+    """El manejo de errores, que es igual para las dos rutas."""
+    try:
+        return incidencias.convertir_a_remito(
+            ids, remitos, clientes, servicios, int(user["id"]),
+        )
+    except KeyError as e:
+        faltan = e.args[0]
+        if isinstance(faltan, tuple):
+            cuales = ", ".join(f"#{x}" for x in faltan)
+            raise HTTPException(404, f"No existen los reclamos {cuales}.")
+        raise HTTPException(404, "incidencia not found")
+    except ValueError as e:
+        # 409 y no 422: el pedido está bien formado, es el estado de los
+        # reclamos el que no lo permite todavía. Es el mismo código que usa la
+        # conversión de un presupuesto rechazado.
+        raise HTTPException(409, str(e))
+
+
+# Antes de `/{incidencia_id}/…`: FastAPI matchea en orden de declaración y esta
+# ruta literal tiene un segmento menos, así que en realidad no compiten — pero
+# declararla arriba deja la de a varios a la vista de quien lee el archivo
+# buscando la de a uno.
+@router.post("/convertir-en-remito", status_code=201)
+def convertir_lote_en_remito(
+    data: ConvertirLote,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+    remitos: RemitoService = Depends(get_remito_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    servicios: ServicioRepository = Depends(get_servicio_repository),
+    user: dict = Depends(get_current_user),
+):
+    """**Un** remito por los reclamos elegidos, para facturarlos juntos.
+
+    El caso real: a un cliente se le hicieron tres visitas en el mes y se le
+    emite una sola factura. Cada reclamo es su propia línea, encabezada por el
+    N° CDS del comprobante que firmó, para poder conciliar renglón por renglón
+    contra los papeles.
+    """
+    return _convertir(
+        incidencias, data.incidencia_ids, remitos, clientes, servicios, user,
+    )
 
 
 @router.post("/{incidencia_id}/convertir-en-remito", status_code=201)
@@ -290,6 +346,7 @@ def convertir_en_remito(
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
     remitos: RemitoService = Depends(get_remito_service),
     clientes: ClienteRepository = Depends(get_cliente_repository),
+    servicios: ServicioRepository = Depends(get_servicio_repository),
     user: dict = Depends(get_current_user),
 ):
     """El remito del trabajo hecho. Idempotente: devuelve el que ya existe.
@@ -299,17 +356,9 @@ def convertir_en_remito(
     distinguir los dos casos por el status invitaría a tratar un doble click
     como un error.
     """
-    try:
-        return incidencias.convertir_a_remito(
-            incidencia_id, remitos, clientes, int(user["id"]),
-        )
-    except KeyError:
-        raise HTTPException(404, "incidencia not found")
-    except ValueError as e:
-        # 409 y no 422: el pedido está bien formado, es el estado del ticket el
-        # que no lo permite todavía. Es el mismo código que usa la conversión
-        # de un presupuesto rechazado.
-        raise HTTPException(409, str(e))
+    return _convertir(
+        incidencias, [incidencia_id], remitos, clientes, servicios, user,
+    )
 
 
 # ── La conformidad del cliente ───────────────────────────────────────────
