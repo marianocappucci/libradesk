@@ -18,7 +18,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
-import MapPin from '~icons/fluent-color/location-ripple-16'
+import { MapPin } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'

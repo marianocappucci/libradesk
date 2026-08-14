@@ -19,8 +19,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import IconoStock from '~icons/fluent-color/vault-24'
+import { PackageSearch as IconoStock } from 'lucide-react'
 import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export type Consumible = {
   id: number
@@ -94,9 +95,9 @@ export function Stock() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <IconoStock className="h-6 w-6" /> Stock de consumibles
-        </h1>
+        <TituloPantalla icono={IconoStock}>
+          Stock de consumibles
+        </TituloPantalla>
         <div className="flex gap-2">
           <NuevoConsumible onListo={(fn) => conError(fn)} />
           <NuevoDeposito onListo={(fn) => conError(fn)} />

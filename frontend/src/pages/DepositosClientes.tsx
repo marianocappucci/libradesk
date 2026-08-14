@@ -25,9 +25,9 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import Building2 from '~icons/fluent-color/building-16'
-import Users from '~icons/fluent-color/people-16'
+import { Building2, Users } from 'lucide-react'
 import { Check, FilePlus } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const TODOS = '__todos__'
 
@@ -142,9 +142,9 @@ export function DepositosClientes() {
         {/* Mismo título e ícono que la otra pestaña, a propósito: las dos son
             "Depósitos" y quien dice en cuál estás es el conmutador de abajo.
             Un ícono distinto con el mismo título se lee como otra pantalla. */}
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Building2 className="size-5" />Depósitos
-        </h2>
+        <TituloPantalla icono={Building2}>
+          Depósitos
+        </TituloPantalla>
         <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
       </div>
 

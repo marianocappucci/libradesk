@@ -24,12 +24,14 @@ import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/impri
 import {
   TODOS, buscarReporte, queryDeValores, valoresIniciales, type Campo,
 } from './reportes-definicion'
-// Los dos botones de acción de esta pantalla son PRIMARIOS (ya son un bloque de
-// color), así que sus iconos van sin recuadro — ver la nota de `sinRecuadro` en
-// iconos-accion.tsx. `ArrowLeft` sí lo lleva: está en un botón `outline`.
+import { FileSpreadsheet } from 'lucide-react'
+// `DownloadPlano`/`SearchPlano` son alias exactos de `Download`/`Search`: nacieron
+// cuando el botón primario era un caso especial y ya no lo es. Se mantienen sólo
+// para no tocar estos imports — ver la nota en `iconos-accion.tsx`.
 import {
   ArrowLeft, DownloadPlano as Download, SearchPlano as Search,
 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export function ReporteDetalle() {
   const { slug } = useParams<{ slug: string }>()
@@ -142,7 +144,7 @@ export function ReporteDetalle() {
             <Link to="/reportes"><ArrowLeft />Reportes</Link>
           </Button>
           <div>
-            <h2 className="text-lg font-semibold">{reporte.titulo}</h2>
+            <TituloPantalla icono={FileSpreadsheet}>{reporte.titulo}</TituloPantalla>
             <p className="text-sm text-muted-foreground">{reporte.descripcion}</p>
           </div>
         </div>

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import Send from '~icons/fluent-color/send-16'
+// `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
+// remito se manda a facturar" borró la rama de presupuestos, que era la única
+// que los dibujaba.
+import { Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,6 +12,7 @@ import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 type Envio = {
   id: number
@@ -218,9 +222,9 @@ export function Facturacion() {
 
   return (
     <div className="grid gap-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Send className="size-5 text-primary" />Enviar a facturar
-      </h2>
+      <TituloPantalla icono={Send}>
+        Enviar a facturar
+      </TituloPantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

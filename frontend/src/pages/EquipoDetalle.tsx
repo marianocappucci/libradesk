@@ -23,13 +23,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import Building2 from '~icons/fluent-color/building-16'
-import History from '~icons/fluent-color/history-16'
-import MapPin from '~icons/fluent-color/location-ripple-16'
-import Monitor from '~icons/fluent-color/laptop-16'
-import Wrench from '~icons/fluent-color/wrench-16'
+import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
 import { fechaDeDate, fechaHora } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -147,13 +144,12 @@ export function EquipoDetalle() {
         <div className="flex items-center gap-3">
           {volver}
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Monitor className="size-5 text-primary" />
+            <TituloPantalla icono={Monitor}>
               {equipo.descripcion}
               <Badge variant={equipo.estado === 'activo' ? 'default' : 'outline'}>
                 {ESTADO_EQUIPO_LABELS[equipo.estado] ?? equipo.estado}
               </Badge>
-            </h2>
+            </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[equipo.serial ? `Serial ${equipo.serial}` : 'Sin serial',
                 ubicacionTexto(equipo.lugar, equipo.ubicacion_oficina)].join(' · ')}

@@ -19,8 +19,9 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import FileText from '~icons/fluent-color/document-text-20'
+import { FileText } from 'lucide-react'
 import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 
@@ -293,9 +294,9 @@ export function Presupuestos() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <FileText className="size-5" />Presupuestos
-        </h2>
+        <TituloPantalla icono={FileText}>
+          Presupuestos
+        </TituloPantalla>
         {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
       </div>
 

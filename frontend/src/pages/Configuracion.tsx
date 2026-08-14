@@ -45,7 +45,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
 } from '@/components/iconos-accion'
-import Settings from '~icons/fluent-color/settings-20'
+import { Settings } from 'lucide-react'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -479,9 +480,9 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
 function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-4">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Settings className="size-5" />Configuración
-        </h2>
+      <TituloPantalla icono={Settings}>
+          Configuración
+        </TituloPantalla>
       <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
       {children}
       <CreditosIconos />
@@ -489,38 +490,31 @@ function Pantalla({ actual, children }: { actual: string; children: React.ReactN
   )
 }
 
-/** Atribución de los sets de iconos.
+/** Atribución del set de iconos.
  *
- *  Las tres licencias (MIT, MIT e ISC) piden que se conserve el aviso de
- *  copyright en las distribuciones, y un producto que se sirve compilado es una
- *  distribución. No es un cartel de agradecimiento: es la condición bajo la que
- *  se pueden usar.
+ *  La licencia ISC pide que se conserve el aviso de copyright en las
+ *  distribuciones, y un producto que se sirve compilado es una distribución. No
+ *  es un cartel de agradecimiento: es la condición bajo la que se puede usar.
  *
  *  Va al pie de Configuración —una vez, en el shell y no en cada pestaña—
  *  porque es donde alguien busca "de qué está hecho esto" y no estorba a quien
  *  vino a cambiar un ajuste.
  *
- *  Ojo si se agrega un set nuevo: hubo un momento en que el candidato para los
- *  iconos de acción era Streamline Plump (CC BY 4.0), que **exige** atribución
- *  visible, e Icons8 Plumpy, cuyo tier gratuito exige un enlace. Se descartaron
- *  los dos a favor de Fluent monocromo, que es MIT. Si alguna vez entra un set
- *  con CC BY o con obligación de enlace, esta tarjeta deja de ser buena
- *  práctica y pasa a ser un requisito legal — y el enlace tiene que ser un
- *  enlace de verdad, no texto.
+ *  **Nombraba también a Fluent UI System Icons hasta el 2026-08-14**, cuando los
+ *  96 iconos volvieron a lucide y los dos sets de Fluent salieron del producto.
+ *  Una atribución que sobrevive al set que atribuye no es inofensiva: le dice al
+ *  lector que el producto lleva un código que ya no lleva.
+ *
+ *  Ojo si se agrega un set nuevo: hubo un momento en que los candidatos eran
+ *  Streamline Plump (CC BY 4.0), que **exige** atribución visible, e Icons8
+ *  Plumpy, cuyo tier gratuito exige un enlace. Si alguna vez entra uno de ésos,
+ *  esta tarjeta deja de ser buena práctica y pasa a ser un requisito legal — y
+ *  el enlace tiene que ser un enlace de verdad, no texto.
  */
 function CreditosIconos() {
   return (
     <p className="text-xs text-muted-foreground">
       Iconos:{' '}
-      <a
-        className="underline underline-offset-2"
-        href="https://github.com/microsoft/fluentui-system-icons"
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        Fluent UI System Icons
-      </a>{' '}
-      © Microsoft (MIT) y{' '}
       <a
         className="underline underline-offset-2"
         href="https://lucide.dev"

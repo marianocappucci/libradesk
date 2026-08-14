@@ -19,7 +19,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { FilePenLine as FileSignature } from 'lucide-react'
 import { ArrowLeft, PackagePlus, Repeat, TrendingUp, Undo2 } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const HOY = () => new Date().toISOString().slice(0, 10)
 
@@ -216,7 +218,7 @@ export function ContratoDetalle() {
             <ArrowLeft />
           </Button>
           <div>
-            <h2 className="text-lg font-semibold">{contrato.numero}</h2>
+            <TituloPantalla icono={FileSignature}>{contrato.numero}</TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {TIPO_CONTRATO_LABELS[contrato.tipo_contrato]} · {contrato.cliente_nombre}
             </p>

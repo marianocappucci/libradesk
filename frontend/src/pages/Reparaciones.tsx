@@ -25,9 +25,10 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import Wrench from '~icons/fluent-color/wrench-16'
+import { Wrench } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const TODOS = '__todos__'
 
@@ -273,13 +274,12 @@ export function Reparaciones() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Wrench className="size-5" />
+        <TituloPantalla icono={Wrench}>
           Reparaciones
           {estado === 'abiertas' && abiertas > 0 && (
             <Badge variant="secondary">{abiertas} en service</Badge>
           )}
-        </h2>
+        </TituloPantalla>
         {/* Donde el resto de las pantallas tiene el alta, ésta explica por qué
             no la tiene. El motivo está en el docstring de arriba y no cambia;
             lo que faltaba era decírselo al que mira la pantalla: sin este

@@ -14,10 +14,10 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import MapPin from '~icons/fluent-color/location-ripple-16'
-import Monitor from '~icons/fluent-color/laptop-16'
+import { MapPin, Monitor, Users } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -225,10 +225,10 @@ export function ClienteDetalle() {
         <div className="flex items-center gap-3">
           {volver}
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <TituloPantalla icono={Users}>
               {cliente.nombre}
               {!cliente.activo && <Badge variant="outline">Inactivo</Badge>}
-            </h2>
+            </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[cliente.empresa, ...contacto].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
             </p>

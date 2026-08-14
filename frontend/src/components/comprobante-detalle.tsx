@@ -8,13 +8,14 @@
 // que cambia es de donde salen los datos.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import Receipt from '~icons/fluent-color/receipt-16'
+import { Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import type { ComprobanteItem } from '../api'
 import { ArrowLeft, FileDown } from '@/components/iconos-accion'
+import { TituloPantalla } from '@/components/titulo-pantalla'
 
 export type ComprobanteDetalleData = {
   id: number
@@ -61,10 +62,9 @@ export function ComprobanteDetalle({
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Receipt className="size-5 text-primary" />
+          <TituloPantalla icono={Receipt}>
             {TITULO[tipo]} <span className="font-mono">{c.number}</span>
-          </h2>
+          </TituloPantalla>
           {insignia}
         </div>
         <div className="flex flex-wrap gap-2">
