@@ -23,13 +23,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import Building2 from '~icons/fluent-color/building-16'
-import History from '~icons/fluent-color/history-16'
-import MapPin from '~icons/fluent-color/location-ripple-16'
-import Monitor from '~icons/fluent-color/laptop-16'
-import Wrench from '~icons/fluent-color/wrench-16'
+import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
 import { fechaDeDate, fechaHora } from '@/lib/format'
-import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket, Tile } from '@/components/iconos-accion'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
@@ -148,7 +144,7 @@ export function EquipoDetalle() {
           {volver}
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Monitor className="size-5 text-primary" />
+              <Tile className="size-8 [&>svg]:size-5"><Monitor /></Tile>
               {equipo.descripcion}
               <Badge variant={equipo.estado === 'activo' ? 'default' : 'outline'}>
                 {ESTADO_EQUIPO_LABELS[equipo.estado] ?? equipo.estado}

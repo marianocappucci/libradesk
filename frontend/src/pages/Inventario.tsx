@@ -20,8 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import IconoDepositosStock from '~icons/fluent-color/vault-24'
-import IconoListasPrecio from '~icons/fluent-color/list-bar-24'
+import { Boxes as IconoDepositosStock, Tags as IconoListasPrecio } from 'lucide-react'
 import { FilePlus, Percent } from '@/components/iconos-accion'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────

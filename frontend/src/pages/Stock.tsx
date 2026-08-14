@@ -19,7 +19,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import IconoStock from '~icons/fluent-color/vault-24'
+import { PackageSearch as IconoStock } from 'lucide-react'
 import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
 
 export type Consumible = {

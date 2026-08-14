@@ -28,11 +28,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
-import History from '~icons/fluent-color/history-16'
-import MessageSquare from '~icons/fluent-color/comment-16'
-import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
-import Wrench from '~icons/fluent-color/wrench-16'
+import { ArrowLeftRight, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
 
 const NONE = '__none__'

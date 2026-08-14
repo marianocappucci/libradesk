@@ -45,7 +45,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
 } from '@/components/iconos-accion'
-import Settings from '~icons/fluent-color/settings-20'
+import { Settings } from 'lucide-react'
+import { Tile } from '@/components/iconos-accion'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -480,7 +481,7 @@ function Pantalla({ actual, children }: { actual: string; children: React.ReactN
   return (
     <div className="grid gap-4">
       <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Settings className="size-5" />Configuración
+          <Tile className="size-8 [&>svg]:size-5"><Settings /></Tile>Configuración
         </h2>
       <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
       {children}

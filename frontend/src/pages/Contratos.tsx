@@ -27,8 +27,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import FileSignature from '~icons/fluent-color/document-edit-16'
-import { FilePlus } from '@/components/iconos-accion'
+import { FilePenLine as FileSignature } from 'lucide-react'
+import { FilePlus, Tile } from '@/components/iconos-accion'
 
 const TODOS = '__todos__'
 
@@ -219,7 +219,7 @@ export function Contratos() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <FileSignature className="size-5" />Equipos en alquiler
+          <Tile className="size-8 [&>svg]:size-5"><FileSignature /></Tile>Equipos en alquiler
         </h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

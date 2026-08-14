@@ -25,17 +25,19 @@ export default mergeConfig(
       env: { TZ: 'America/Argentina/Buenos_Aires' },
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
-      // 15 s en vez de los 5 s por defecto, por los iconos `fluent-color`
-      // (2026-08-13). `unplugin-icons` compila cada SVG con svgr la primera
-      // vez que se importa, y son 52 iconos repartidos en 43 archivos: con la
-      // caché de Vite fría la compilación de la suite pasó de 6,4 s a 53 s y
-      // dos tests se pasaron del presupuesto de 5 s **sin que nada estuviera
-      // roto** (en caliente los 201 pasaban). CI siempre corre en frío, así
-      // que sin esto el rojo sería sistemático ahí y verde en local.
+      // Vuelve al techo de 5 s por defecto: no hay `testTimeout` acá.
       //
-      // No se toca el presupuesto de los tests: se corrige el techo, que
-      // estaba calibrado para un pipeline sin este paso de compilación.
-      testTimeout: 15_000,
+      // Los 15 s que había existieron por un motivo que se fue. `unplugin-icons`
+      // compilaba cada SVG con svgr la primera vez que se importaba, y con la
+      // caché de Vite fría eso llevó la compilación de la suite de 6,4 s a 53 s
+      // y tiró dos tests por el presupuesto **sin que nada estuviera roto**.
+      // Con los iconos de vuelta en lucide ese paso no existe.
+      //
+      // Medido en frío (`rm -rf node_modules/.vite`) el 2026-08-13, sobre los
+      // 210 tests: 14,97 s en total, 6,91 s de transform, y el test más lento
+      // 1,83 s. Se restaura el default en vez de dejar el techo alto porque un
+      // techo de 15 s deja pasar en silencio la próxima regresión de tiempo.
+      // Si el CI se pone rojo por tiempo, este es el número a mirar.
       coverage: {
         provider: 'v8',
         // Trinquete, no meta. Los tests de los SPAs son de HUMO a proposito

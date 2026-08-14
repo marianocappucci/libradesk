@@ -11,48 +11,76 @@
 // cliente) y "Recepción de mercadería" en Compras (entra stock de un
 // proveedor), aunque las dos sean "recepciones". Agruparlas juntas por el
 // nombre sería juntar dos cosas que nunca hace la misma persona.
-import AlertCircle from '~icons/fluent-color/alert-urgent-16'
-import ArrowDownToLine from '~icons/fluent-color/arrow-square-down-20'
-import Building2 from '~icons/fluent-color/building-16'
-import ClipboardCheck from '~icons/fluent-color/clipboard-task-16'
-import ClipboardList from '~icons/fluent-color/clipboard-16'
-import Coins from '~icons/fluent-color/coin-multiple-16'
-import FileSignature from '~icons/fluent-color/document-edit-16'
-import FileSpreadsheet from '~icons/fluent-color/table-16'
-import FileText from '~icons/fluent-color/document-text-16'
-import LayoutDashboard from '~icons/fluent-color/board-16'
-import MapPin from '~icons/fluent-color/location-ripple-16'
-import Monitor from '~icons/fluent-color/laptop-16'
-import Receipt from '~icons/fluent-color/receipt-16'
-import ScrollText from '~icons/fluent-color/text-bullet-list-square-16'
-import Send from '~icons/fluent-color/send-16'
-import Settings from '~icons/fluent-color/settings-16'
-import UserCog from '~icons/fluent-color/person-key-20'
-import Users from '~icons/fluent-color/people-16'
-import Wallet from '~icons/fluent-color/savings-16'
-import Wrench from '~icons/fluent-color/wrench-16'
-import PackageSearch from '~icons/fluent-color/vault-16'
-// Elegidos por el humano el 2026-08-13 mirando un comparador de candidatos.
-// Estos 6 ítems venían mostrando el icono MONOCROMO EN RECUADRO en un sidebar
-// de colores: el barrido los había mandado ahí por descarte, porque
-// `fluent-color` no tiene camión, ni caja/paquete, ni etiqueta de precio, ni
-// carrito — son 890 iconos de concepto, no de logística, y a 16 px hay 157.
-// Ninguno es literal: se eligió el más cercano de los que existen.
-import Activos from '~icons/fluent-color/briefcase-16'
-import EquiposFlota from '~icons/fluent-color/people-team-16'
-import DepositosStock from '~icons/fluent-color/vault-16'
-import ListasPrecio from '~icons/fluent-color/list-bar-16'
-import OrdenesCompra from '~icons/fluent-color/approvals-app-16'
-import Productos from '~icons/fluent-color/apps-16'
-// Proveedores sale de `building-store` para no chocar con Depósitos de stock:
-// dos ítems del mismo menú no pueden compartir dibujo.
-import Truck from '~icons/fluent-color/building-people-16'
-import { createLayout } from 'libra-ui/Layout'
+// Seis se importan con ALIAS de dominio (`Activos`, `DepositosStock`,
+// `EquiposFlota`, `ListasPrecio`, `OrdenesCompra`, `Productos`) porque el nombre
+// lucide no dice qué ítem del menú es. La regla que los ordena es que **dos
+// ítems del mismo menú no pueden compartir dibujo**: por eso Activos es
+// `Briefcase` y no la caja que ya usa Depósitos de stock, y Proveedores es
+// `Truck` y no un edificio que chocaría con Sucursales.
+import {
+  ArrowDownToLine,
+  Boxes as DepositosStock,
+  Briefcase as Activos,
+  Building2,
+  Car as EquiposFlota,
+  CircleAlert as AlertCircle,
+  ClipboardCheck,
+  ClipboardList,
+  Coins,
+  FilePenLine as FileSignature,
+  FileSpreadsheet,
+  FileText,
+  LayoutDashboard,
+  MapPin,
+  Monitor,
+  Package as Productos,
+  PackageSearch,
+  Receipt,
+  ScrollText,
+  Send,
+  Settings,
+  ShoppingCart as OrdenesCompra,
+  Tags as ListasPrecio,
+  Truck,
+  UserCog,
+  Users,
+  Wallet,
+  Wrench,
+} from 'lucide-react'
+import { conTileDeMenu } from '@/components/iconos-accion'
+import { createLayout, type NavSection } from 'libra-ui/Layout'
+
+// El que usa `createLayout` cuando no se le pasa tipo propio, que es este caso.
+type Usuario = { role?: string; name?: string }
+
+/** Le pone el TILE GRIS a los iconos del menú, de una pasada sobre el árbol.
+ *
+ *  De una pasada y no ítem por ítem a propósito: son ~30 y son una lista que
+ *  crece. Envolviendo en cada `icon:` alcanza con que el próximo se agregue sin
+ *  el wrapper para que quede un ítem sin tile, y eso no rompe nada —así que no
+ *  se entera nadie hasta que alguien lo mira—. Acá el tile no es una propiedad
+ *  de cada ítem: es del menú.
+ *
+ *  El tile lo pone LibraDesk y no `libra-ui` porque el sidebar es de los cinco
+ *  productos y esto lo eligió uno solo. `NavItem.icon` es un `ComponentType`,
+ *  así que envolverlo alcanza y el paquete compartido no se toca. */
+const conTiles = (secciones: NavSection<Usuario>[]): NavSection<Usuario>[] =>
+  secciones.map((seccion) => ({
+    ...seccion,
+    items: seccion.items.map((item) => ({
+      ...item,
+      icon: conTileDeMenu(item.icon),
+      children: item.children?.map((hijo) => ({
+        ...hijo,
+        icon: hijo.icon && conTileDeMenu(hijo.icon),
+      })),
+    })),
+  }))
 
 export const Layout = createLayout({
   productName: 'LibraDesk',
   productInitial: 'L',
-  navSections: [
+  navSections: conTiles([
     // Sin label: es una sola entrada y un encabezado "General" arriba de un
     // único ítem es ruido.
     { items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
@@ -147,5 +175,5 @@ export const Layout = createLayout({
         { to: '/configuracion', label: 'Configuración', icon: Settings },
       ],
     },
-  ],
+  ]),
 })

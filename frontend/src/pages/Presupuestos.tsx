@@ -19,8 +19,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import FileText from '~icons/fluent-color/document-text-20'
-import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
+import { FileText } from 'lucide-react'
+import { Download, FileCheck, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 
@@ -294,7 +294,7 @@ export function Presupuestos() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <FileText className="size-5" />Presupuestos
+          <Tile className="size-8 [&>svg]:size-5"><FileText /></Tile>Presupuestos
         </h2>
         {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
       </div>

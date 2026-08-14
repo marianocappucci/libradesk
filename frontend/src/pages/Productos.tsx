@@ -20,7 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import IconoProductos from '~icons/fluent-color/apps-24'
+import { Package as IconoProductos } from 'lucide-react'
 import { AlertTriangle, FilePlus, Pencil } from '@/components/iconos-accion'
 
 export type Producto = {

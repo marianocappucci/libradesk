@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import MapPin from '~icons/fluent-color/location-ripple-16'
-import Monitor from '~icons/fluent-color/laptop-16'
+import { MapPin, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
 

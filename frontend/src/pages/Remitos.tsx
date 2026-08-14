@@ -12,8 +12,8 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import Receipt from '~icons/fluent-color/receipt-20'
-import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
+import { Receipt } from 'lucide-react'
+import { Download, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
 
 export function Remitos() {
   const navigate = useNavigate()
@@ -178,7 +178,7 @@ export function Remitos() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Receipt className="size-5" />Remitos
+          <Tile className="size-8 [&>svg]:size-5"><Receipt /></Tile>Remitos
         </h2>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </div>

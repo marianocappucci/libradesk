@@ -16,7 +16,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import MapPin from '~icons/fluent-color/location-ripple-16'
+import { MapPin } from 'lucide-react'
 import { FilePlus } from '@/components/iconos-accion'
 
 export function Sucursales() {

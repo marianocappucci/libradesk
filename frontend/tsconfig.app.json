@@ -4,9 +4,7 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    /* `unplugin-icons/types/react` declara el modulo virtual `~icons/*` como
-       componente de React; sin el, `tsc -b` no resuelve esos imports. */
-    "types": ["vite/client", "unplugin-icons/types/react"],
+    "types": ["vite/client"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

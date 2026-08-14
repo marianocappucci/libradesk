@@ -28,8 +28,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // Este bloque describia el spike y quedo viejo: nombraba a `streamline-plump`
 // (descartado por la atribucion que exige CC BY 4.0) y decia que `Plus` y `X`
 // seguian en lucide, que ya no es cierto. Los dos sets vigentes son MIT.
-import Users from '~icons/fluent-color/people-16'
-import { Check, FilePlus, MapPin, Pencil, Trash2, Undo2, X } from '@/components/iconos-accion'
+import { Users } from 'lucide-react'
+import { Check, FilePlus, MapPin, Pencil, Tile, Trash2, Undo2, X } from '@/components/iconos-accion'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -331,7 +331,7 @@ export function Clientes() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Users className="size-5" />Clientes
+          <Tile className="size-8 [&>svg]:size-5"><Users /></Tile>Clientes
         </h2>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>

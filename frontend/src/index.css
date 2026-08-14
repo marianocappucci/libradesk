@@ -24,6 +24,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-marca: var(--marca);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -58,6 +59,15 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  /* Acento de contraste, elegido por el humano el 2026-08-13. Es el `#f56565`
+     de lucide.dev (su `--vp-c-brand`), medido de la página, no estimado: allá
+     pinta el borde del tile seleccionado en la grilla de iconos, que es el uso
+     que tiene acá.
+
+     Es un token propio y NO reemplaza a `--primary` ni a `--destructive`: el
+     alcance que pidió el humano es "algunos bordes o algunos textos". El botón
+     primario y el recuadro del logo siguen índigo. */
+  --marca: #f56565;
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -107,6 +117,35 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* --- El acento `--marca` ----------------------------------------------------
+ *
+ * Dos usos, los dos elegidos por el humano el 2026-08-13. Viven acá y no en el
+ * JSX porque los dos cuelgan del ESTADO de un ancestro (el ítem activo del
+ * menú, el tamaño del botón), que es justo lo que una clase suelta no puede
+ * mirar. */
+
+/* 1. El tile del ítem activo del sidebar. El `data-active` lo pone
+ *    `SidebarMenuButton` sobre el `<a>` que envuelve al tile, así que la regla
+ *    tiene que bajar desde el ancestro: el tile no se entera solo de que la
+ *    ruta que representa es la actual. El borde ya está declarado transparente
+ *    en `Tile`, así que prenderlo no corre el dibujo. */
+[data-sidebar='menu-button'][data-active='true'] [data-slot='icono-tile'] {
+  border-color: var(--marca);
+}
+
+/* 2. El icono de la acción destructiva de una fila.
+ *
+ *    Sólo el de los botones de ICONO, y a propósito: `--destructive` se queda
+ *    como está para todo lo demás. El rojo pleno es el del botón de confirmar
+ *    borrado (`bg-destructive` con texto blanco encima), donde el coral no
+ *    llega al contraste que ese blanco necesita, y el de los mensajes de error
+ *    del formulario, que son una alarma. El tacho de una fila no es ninguna de
+ *    las dos cosas: es un detalle. */
+[data-slot='button'][data-size^='icon'].text-destructive,
+[data-slot='button'][data-size^='icon'].text-destructive:hover {
+  color: var(--marca);
 }
 
 /* --- Impresión -------------------------------------------------------------

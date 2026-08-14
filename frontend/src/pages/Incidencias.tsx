@@ -25,11 +25,9 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import CircleAlert from '~icons/fluent-color/alert-urgent-16'
-import Monitor from '~icons/fluent-color/laptop-16'
+import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import AlertCircle from '~icons/fluent-color/alert-urgent-20'
-import { FilePlus, PlusCircle } from '@/components/iconos-accion'
+import { FilePlus, PlusCircle, Tile } from '@/components/iconos-accion'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -311,7 +309,7 @@ export function Incidencias() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <AlertCircle className="size-5" />Incidencias
+          <Tile className="size-8 [&>svg]:size-5"><AlertCircle /></Tile>Incidencias
         </h2>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>

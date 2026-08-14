@@ -22,12 +22,7 @@
 // absolutos dicen que lo son.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import AlarmClock from '~icons/fluent-color/clock-alarm-16'
-import CalendarClock from '~icons/fluent-color/calendar-clock-16'
-import FileWarning from '~icons/fluent-color/warning-16'
-import ShieldCheck from '~icons/fluent-color/shield-checkmark-16'
-import UserX from '~icons/fluent-color/person-warning-16'
-import Wrench from '~icons/fluent-color/wrench-16'
+import { AlarmClock, CalendarClock, FileExclamationPoint as FileWarning, ShieldCheck, UserX, Wrench } from 'lucide-react'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
   type DashboardOperativo, type DashboardSummary,

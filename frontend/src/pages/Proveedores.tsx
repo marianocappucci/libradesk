@@ -22,8 +22,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import Truck from '~icons/fluent-color/building-people-20'
-import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
+import { Truck } from 'lucide-react'
+import { FilePlus, Pencil, Tile, Trash2 } from '@/components/iconos-accion'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */
@@ -164,7 +164,7 @@ export function Proveedores() {
           (reporte del usuario, 2026-08-13). */}
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Truck className="size-5" />Proveedores
+          <Tile className="size-8 [&>svg]:size-5"><Truck /></Tile>Proveedores
         </h2>
         {nuevo === null && editando === null && (
           <Button

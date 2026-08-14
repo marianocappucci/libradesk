@@ -8,10 +8,7 @@
  *  botón "atrás" del navegador hace lo que se espera.
  */
 import type { Pestania } from '@/components/conmutador'
-import Building2 from '~icons/fluent-color/building-16'
-import Database from '~icons/fluent-color/database-16'
-import ListChecks from '~icons/fluent-color/text-bullet-list-square-16'
-import Send from '~icons/fluent-color/send-16'
+import { Building2, Database, ListChecks, Send } from 'lucide-react'
 import { Tags } from '@/components/iconos-accion'
 
 export const PESTANIAS_CONFIG: readonly Pestania[] = [

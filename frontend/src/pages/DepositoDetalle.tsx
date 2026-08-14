@@ -26,9 +26,8 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
-import ArrowLeftRight from '~icons/fluent-color/arrow-sync-16'
-import Building2 from '~icons/fluent-color/building-16'
-import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Monitor } from '@/components/iconos-accion'
+import { ArrowLeftRight, Building2 } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Monitor, Tile } from '@/components/iconos-accion'
 
 // Destino "ninguno": el equipo sale del depósito y vuelve al sector del
 // cliente. Radix no admite un <SelectItem value="">.
@@ -165,7 +164,7 @@ export function DepositoDetalle() {
           {volver}
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Building2 className="size-5 text-primary" />{deposito.nombre}
+              <Tile className="size-8 [&>svg]:size-5"><Building2 /></Tile>{deposito.nombre}
               {deposito.es_default && <Badge>Predeterminado</Badge>}
               {!deposito.activo && <Badge variant="secondary">Inactivo</Badge>}
             </h2>

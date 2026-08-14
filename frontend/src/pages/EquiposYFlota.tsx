@@ -43,8 +43,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AgendaEquipos } from '@/components/agenda-equipos'
 import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
-import IconoFlota from '~icons/fluent-color/people-team-20'
-import { Car, Check, FilePlus, LinkIcon, Pencil, Trash2, Unlink } from '@/components/iconos-accion'
+import { Car as IconoFlota } from 'lucide-react'
+import { Car, Check, FilePlus, LinkIcon, Pencil, Tile, Trash2, Unlink } from '@/components/iconos-accion'
 
 const SIN = '__sin__'
 
@@ -211,7 +211,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <IconoFlota className="size-5" />Equipos y flota
+          <Tile className="size-8 [&>svg]:size-5"><IconoFlota /></Tile>Equipos y flota
         </h2>
         {/* El botón de alta es el de la pestaña que se está mirando: dejar los
             dos siempre visibles haría que "Nuevo vehículo" apareciera parado en

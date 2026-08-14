@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import FileText from '~icons/fluent-color/document-text-16'
-import Receipt from '~icons/fluent-color/receipt-16'
-import Send from '~icons/fluent-color/send-16'
+import { FileText, Receipt, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { CheckCircle2, Info, Send as SendAccion, Tile, TriangleAlert, XCircle } from '@/components/iconos-accion'
 
 type Envio = {
   id: number
@@ -234,7 +232,7 @@ export function Facturacion() {
   return (
     <div className="grid gap-4">
       <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Send className="size-5 text-primary" />Enviar a facturar
+        <Tile className="size-8 [&>svg]:size-5"><Send /></Tile>Enviar a facturar
       </h2>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
