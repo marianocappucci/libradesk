@@ -139,15 +139,51 @@ def test_el_movimiento_dice_de_que_comprobante_salio(client, configurado):
     assert movs[0]["referencia"].endswith(f"remito-{remito['id']}")
 
 
-def test_tambien_debita_un_presupuesto_aceptado(client, configurado):
+def test_un_presupuesto_convertido_debita_UNA_vez(client, configurado):
+    """🔴 El test de la plata: un trabajo, un débito.
+
+    Hasta el 2026-08-13 la bandeja ofrecía el presupuesto `aceptado` **y** el
+    remito que salía de convertirlo, porque `convertir_a_remito()` deja el
+    presupuesto en `aceptado`. Mandar los dos —que es lo que hacía cualquiera
+    que tildara todo— generaba dos débitos con referencias distintas
+    (`…presupuesto-1` y `…remito-1`), y el cliente quedaba debiendo el doble del
+    trabajo. La desduplicación del otro lado tampoco los unía: su UNIQUE incluye
+    `origen_tipo`.
+
+    Ahora el presupuesto no es mandable, así que el circuito completo deja un
+    solo débito por definición.
+    """
+    cliente_id = _cliente_final(client)
+    presupuesto = _presupuesto(client, cliente_id)
+
+    remito = client.post(
+        f"/api/presupuestos/{presupuesto['id']}/convertir-en-remito"
+    ).json()
+    # El presupuesto sigue en `aceptado` después de convertirse: es la condición
+    # que hacía posible el doble cobro, y no cambió.
+    estado = client.get(f"/api/presupuestos/{presupuesto['id']}").json()["status"]
+    assert estado == "aceptado"
+
+    _con_puente_falso(client, ClienteFalso())
+    client.post("/api/facturacion/enviar",
+                json={"origen_tipo": "remito", "ids": [remito["id"]]})
+
+    assert len(_debitos_del_puente(cliente_id)) == 1
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+
+
+def test_un_presupuesto_no_puede_debitar_por_su_cuenta(client, configurado):
+    """La otra mitad: aunque alguien llame a la API a mano con el tipo viejo."""
     cliente_id = _cliente_final(client)
     presupuesto = _presupuesto(client, cliente_id)
 
     _con_puente_falso(client, ClienteFalso())
-    client.post("/api/facturacion/enviar",
-                json={"origen_tipo": "presupuesto", "ids": [presupuesto["id"]]})
+    r = client.post("/api/facturacion/enviar",
+                    json={"origen_tipo": "presupuesto", "ids": [presupuesto["id"]]})
 
-    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+    assert r.status_code == 422, r.text
+    assert _debitos_del_puente(cliente_id) == []
+    assert _saldo(cliente_id) == 0
 
 
 # ── Lo que NO tiene que debitar ──────────────────────────────────────────────

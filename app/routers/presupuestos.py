@@ -25,6 +25,7 @@ from ..dependencies import (
 from ..services.clientes import ClienteRepository
 from ..services.remitos_presupuestos import (
     ESTADOS_PRESUPUESTO, PresupuestoService, RemitoService,
+    datos_cliente_para_comprobante,
 )
 
 router = APIRouter(prefix="/api/presupuestos", tags=["presupuestos"])
@@ -63,15 +64,11 @@ class EstadoIn(BaseModel):
 
 
 def _datos_cliente(client_id: int, clientes: ClienteRepository, override_address: str | None) -> dict:
+    """El 404 es lo unico propio del router; el mapeo vive en el servicio."""
     cliente = clientes.get(client_id)
     if cliente is None:
         raise HTTPException(404, "cliente not found")
-    return {
-        "client_name": cliente["empresa"] or cliente["nombre"],
-        "client_address": override_address if override_address is not None else (cliente["ciudad"] or ""),
-        "client_email": cliente["email"] or "",
-        "client_phone": cliente["telefono"] or "",
-    }
+    return datos_cliente_para_comprobante(cliente, override_address)
 
 
 def _validar_estado(status: str) -> None:

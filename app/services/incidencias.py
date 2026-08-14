@@ -119,6 +119,21 @@ class Incidencia(Base):
     notas: Mapped[str | None] = mapped_column(Text)
     resolucion: Mapped[str | None] = mapped_column(Text)
     estado_facturacion: Mapped[str | None] = mapped_column(String(20))
+    # El remito que se genero de este ticket, si se genero (`convertir_a_remito`).
+    #
+    # 🔴 **Integer pelado, SIN ForeignKey a `remitos`** — y no es un descuido.
+    # `remitos` no es un modelo de SQLAlchemy: la crea el DDL crudo de
+    # `remitos_presupuestos.py`, asi que no esta en `Base.metadata`. Declarar la
+    # FK haria que Alembic quiera crear una referencia a una tabla que su
+    # autogenerate ni siquiera ve (`app/schema.py` `include_name()` filtra por
+    # `metadata.tables`). Es el mismo pozo que ya documenta
+    # `remitos_presupuestos.py` para `client_id -> clients`, con los dueños al
+    # reves.
+    #
+    # Quien sostiene la integridad es `RemitoService.delete()`, que se niega a
+    # borrar un remito que una incidencia referencia — igual que ya hacia con
+    # los presupuestos convertidos.
+    remito_id: Mapped[int | None] = mapped_column(Integer, index=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime)
@@ -172,6 +187,7 @@ def _to_dict(i: Incidencia) -> dict:
         "notas": i.notas,
         "resolucion": i.resolucion,
         "estado_facturacion": i.estado_facturacion,
+        "remito_id": i.remito_id,
         "activo": i.activo,
         "fecha_creacion": i.fecha_creacion.isoformat() if i.fecha_creacion else None,
         "fecha_cierre": i.fecha_cierre.isoformat() if i.fecha_cierre else None,
@@ -513,3 +529,123 @@ class IncidenciaRepository:
                 .order_by(IncidenciaEstadoLog.fecha.desc(), IncidenciaEstadoLog.id.desc())
             )
             return [_estado_log_to_dict(e) for e in session.execute(stmt).scalars()]
+
+    def convertir_a_remito(self, incidencia_id: int, remitos, clientes,
+                           usuario_id: int | None = None) -> dict:
+        """Genera el remito del trabajo hecho en un ticket **cerrado**.
+
+        Es el camino a facturacion de un reclamo, y es el mismo que el de un
+        presupuesto aceptado: LibraDesk manda a facturar **solo remitos**,
+        porque lo que habilita a facturar es la entrega hecha (ver
+        `app/routers/facturacion.py`). Sin esto, un trabajo por servicio no
+        tenia como llegar a la bandeja.
+
+        **Solo `cerrado`, no `resuelta`.** Es donde cae en el circuito real de
+        [[lagrace-comunicaciones]]: el tecnico trae el comprobante de servicios
+        en papel, alguien lo controla contra la hoja de ruta y recien ahi lo
+        cierra "decidiendo si va a facturacion". Un ticket `resuelta` todavia no
+        paso ese control.
+
+        **Idempotente**, igual que `PresupuestoService.convertir_a_remito`: si
+        ya tiene remito devuelve ese. Dos clicks no facturan dos veces.
+
+        ## Que lleva el remito
+
+        - **Una linea por el trabajo**, con el titulo del ticket. `qty` son las
+          horas invertidas si estan cargadas, y `1` si no --un reclamo se cobra
+          por hora o como visita, y las dos formas entran en la misma linea--.
+        - **Una linea por material consumido** que no se haya devuelto, al
+          precio de venta del catalogo (`materiales.valorizados`).
+
+        🔴 **Los precios pueden salir en cero, y esta bien.** La mano de obra no
+        tiene precio en ningun lado de este producto --no hay valor hora-- y un
+        material sin `default_sale_price` tampoco. El remito nace con los
+        importes que el sistema **sabe**, y el operador completa el resto
+        editandolo; inventar un numero seria peor. Lo que cierra el circuito es
+        que la bandeja de facturacion **se niega a mandar un remito con total
+        0**, asi que un olvido no llega a facturarse.
+
+        ## Lo que NO es atomico
+
+        El remito lo escribe la conexion de LibraCore y el vinculo lo escribe
+        SQLAlchemy: son dos conexiones, asi que no hay una transaccion que las
+        cubra (mismo problema que documenta `materiales.py`). Si el proceso se
+        cae entre las dos, queda un remito emitido sin vinculo y el proximo
+        intento genera un segundo remito por el mismo ticket. Se elige este
+        orden --primero el remito, despues el vinculo-- porque el error al
+        reves es peor: un ticket que dice "ya se remitio" apuntando a un remito
+        que no existe deja el trabajo sin poder facturarse nunca.
+        """
+        from . import fecha, materiales
+        from .remitos_presupuestos import datos_cliente_para_comprobante
+
+        with self.session_factory() as session:
+            i = session.get(Incidencia, incidencia_id)
+            if i is None:
+                raise KeyError(incidencia_id)
+            if i.remito_id:
+                existente = remitos.get(i.remito_id)
+                if existente is not None:
+                    return existente
+                # El remito que se referenciaba no esta: se borro por fuera.
+                # Se sigue de largo y se genera uno nuevo en vez de devolver
+                # None, que dejaria al ticket sin camino a facturacion.
+            if i.estado != "cerrado":
+                raise ValueError(
+                    f"El reclamo #{incidencia_id} esta en estado «{i.estado}»: "
+                    f"solo se genera el remito de uno cerrado."
+                )
+            cliente = clientes.get(i.cliente_id)
+            if cliente is None:
+                raise ValueError(
+                    f"El reclamo #{incidencia_id} apunta a un cliente que ya no "
+                    f"existe, asi que no hay a nombre de quien emitir el remito."
+                )
+            horas = float(i.horas_invertidas) if i.horas_invertidas else 0.0
+            titulo = i.titulo
+            numero_cds = i.nro_cds
+
+        items = [{
+            "description": titulo,
+            # Sin horas cargadas la linea vale 1: es una visita, no cero
+            # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
+            # trabajo aunque le pongan precio.
+            "qty": horas if horas > 0 else 1,
+            "unit_price": 0,
+        }]
+        items += [
+            {"description": m["descripcion"] or f"Material #{m['item_id']}",
+             "qty": m["cantidad"], "unit_price": m["precio"]}
+            for m in materiales.valorizados(incidencia_id)
+        ]
+
+        origen = f"Generado del reclamo #{incidencia_id}"
+        if numero_cds:
+            # El numero del papel firmado es lo que ata el remito a la
+            # conformidad del cliente. Quien concilia despues busca por el.
+            origen += f" (CDS {numero_cds})"
+
+        remito = remitos.create(
+            # `fecha.hoy()` y no `fecha_cierre`: el cierre se guarda en UTC
+            # (`update()` usa `datetime.now(timezone.utc)`), asi que un ticket
+            # cerrado a las 22:00 de Chivilcoy daria un remito fechado al dia
+            # siguiente. La fecha del remito es la del dia en que se emite, en
+            # hora de Argentina, igual que todo lo demas del producto.
+            date=fecha.hoy(),
+            client_id=cliente["id"],
+            client_cuit=cliente["cuit"] or "",
+            items=items,
+            observations=origen,
+            usuario_id=usuario_id,
+            # El domicilio si el cliente lo tiene cargado, y la ciudad si no.
+            # Los formularios de remito y presupuesto lo hacen tipear; aca no
+            # hay formulario, asi que se toma el mejor dato que haya en la
+            # ficha en vez de dejarlo vacio.
+            **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
+        )
+
+        with self.session_factory() as session:
+            i = session.get(Incidencia, incidencia_id)
+            i.remito_id = remito["id"]
+            session.commit()
+        return remito
