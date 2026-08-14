@@ -8,9 +8,11 @@ de reglas y no de persistencia.
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
 from ..dependencies import get_equipo_trabajo_repository, get_incidencia_repository
 from ..services import agenda as agenda_service
+from ..services import hoja_ruta_pdf
 from ..services.equipos_trabajo import EquipoTrabajoRepository
 from ..services.incidencias import IncidenciaRepository
 
@@ -42,3 +44,40 @@ def agenda_de_equipo(
         return agenda_service.agenda_del_equipo(
             session, equipo_id, inicio, inicio + timedelta(days=dias),
         )
+
+
+@router.get("/equipo/{equipo_id}/hoja-de-ruta")
+def hoja_de_ruta(
+    equipo_id: int,
+    dia: str = Query(..., description="El día de la salida, ISO (YYYY-MM-DD)"),
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """La hoja de ruta del equipo para ese día, en PDF y lista para imprimir.
+
+    **Un día y no un rango**, a diferencia del endpoint de arriba: una hoja de
+    ruta es una salida, y una salida es de un día. Pedirla por rango produciría
+    un papel que la cuadrilla no puede usar —¿con cuántos kilómetros salió, los
+    del martes o los del jueves?— y una sola firma para tres jornadas.
+
+    `inline` y no `attachment`, igual que la orden de trabajo: se abre y se
+    manda a la impresora.
+    """
+    try:
+        el_dia = date.fromisoformat(dia)
+    except ValueError:
+        raise HTTPException(422, "Fecha inválida: se espera ISO (YYYY-MM-DD)")
+
+    with incidencias.session_factory() as session:
+        datos = agenda_service.datos_hoja_ruta(session, equipo_id, el_dia)
+    if datos is None:
+        raise HTTPException(404, "equipo not found")
+
+    return Response(
+        content=hoja_ruta_pdf.generar_pdf_hoja_ruta(datos),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="hoja-de-ruta-{equipo_id}-{dia}.pdf"'
+            ),
+        },
+    )
