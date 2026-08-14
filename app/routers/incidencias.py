@@ -60,6 +60,18 @@ class IncidenciaIn(BaseModel):
     notas: str | None = None
     resolucion: str | None = None
     estado_facturacion: str | None = None
+    #: Qué parte de este reclamo cubre el abono del cliente: `total`, `parcial`
+    #: o `fuera`. Sólo tiene sentido con un cliente `tipo_facturacion='mensual'`.
+    #:
+    #: 🔴 `None` **no** es "se factura entero": es "nadie lo decidió". Con
+    #: abono, `convertir_a_remito` se niega a emitir hasta que se elija — que es
+    #: la diferencia entre no cobrar de más por olvido y cobrar de más en
+    #: silencio.
+    cobertura_abono: str | None = None
+    #: Cuántas de las `horas_invertidas` cubre el abono. Sólo con `parcial`.
+    abono_horas_cubiertas: float | None = None
+    #: Si los materiales del reclamo entran al abono. Sólo con `parcial`.
+    abono_materiales_incluidos: bool | None = None
     activo: bool = True
 
 

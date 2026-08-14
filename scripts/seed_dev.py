@@ -73,6 +73,7 @@ CAMPOS_INCIDENCIA = (
     "sector_id", "categoria_id", "titulo", "descripcion",
     "nro_cds", "reclamante", "estado", "prioridad",
     "horas_invertidas", "notas", "resolucion", "estado_facturacion",
+    "cobertura_abono", "abono_horas_cubiertas", "abono_materiales_incluidos",
     "activo",
 )
 
@@ -839,6 +840,53 @@ def sembrar(api: Api) -> None:
             "estado_facturacion": estado_fact,
         })
         contar("incidencias_cerradas", True)
+
+    # ── Un cliente con abono, y sus tres coberturas ────────────────────────
+    #
+    # Sin esto el bloque "Cobertura del abono" del reclamo **no aparece en
+    # ninguna pantalla de dev ni de la demo**: sólo se muestra a clientes
+    # `tipo_facturacion='mensual'`, y ninguno de los que siembra este script lo
+    # es. Una pantalla que no se puede abrir no se puede revisar.
+    #
+    # Los tres estados a propósito, que es el mismo criterio con el que la
+    # flota deja un vehículo asignado, uno libre y uno en taller: con los tres
+    # reclamos iguales, la mitad del comportamiento queda sin mirarse. El
+    # `fuera` además es el que hace que aparezca en el reporte de facturación,
+    # y el `total` el que NO tiene que aparecer.
+    con_abono = buscar(api.get("/api/clientes") or [], "nombre", "Abono Sur SRL")
+    if con_abono is None:
+        con_abono = api.post("/api/clientes", {
+            "nombre": "Abono Sur SRL", "empresa": "ABONO SUR SRL",
+            "cuit": "30-71234567-9", "ciudad": "Chivilcoy",
+            "tipo_facturacion": "mensual",
+        })
+        contar("clientes_con_abono", True)
+
+    del_abono = {i["titulo"]: i for i in (api.get("/api/incidencias") or [])}
+    for titulo, cobertura, horas, cubiertas, materiales in (
+        ("Revisión mensual de central", "total", 2, None, None),
+        ("Cableado de puesto nuevo", "fuera", 4, None, None),
+        ("Reparación de UPS", "parcial", 5, 2, False),
+    ):
+        if titulo in del_abono:
+            continue
+        creada = api.post("/api/incidencias", {
+            "cliente_id": con_abono["id"], "titulo": titulo,
+            "descripcion": "Ejemplo para revisar la cobertura del abono.",
+            "modalidad": "on_site",
+        })
+        # En dos pasos y no en el alta: la cobertura se decide al **cerrar** el
+        # reclamo, que es donde la pantalla la ofrece, y el backend valida las
+        # horas cubiertas contra las trabajadas — que recién existen acá.
+        api.put(f"/api/incidencias/{creada['id']}", {
+            **{k: creada.get(k) for k in CAMPOS_INCIDENCIA},
+            "estado": "cerrado", "horas_invertidas": horas,
+            "resolucion": "Trabajo terminado.",
+            "cobertura_abono": cobertura,
+            "abono_horas_cubiertas": cubiertas,
+            "abono_materiales_incluidos": materiales,
+        })
+        contar("incidencias_con_abono", True)
 
     # El logo del negocio, para que los comprobantes salgan como los de un
     # cliente y no con un hueco arriba.

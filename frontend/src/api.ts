@@ -564,6 +564,18 @@ export const MODALIDAD_LABELS: Record<ModalidadIncidencia, string> = {
   remoto: 'Remoto',
 }
 
+/** Qué parte de un reclamo cubre el abono mensual del cliente. */
+export type CoberturaAbono = 'total' | 'parcial' | 'fuera'
+
+/** Las etiquetas dicen **qué pasa con la plata**, no repiten el nombre técnico:
+ *  quien cierra el ticket decide si esto se cobra, y "Total"/"Parcial" a secas
+ *  obligan a acordarse de total *de qué*. */
+export const COBERTURA_ABONO_LABELS: Record<CoberturaAbono, string> = {
+  total: 'Todo dentro del abono — no se factura',
+  parcial: 'Parcial — parte se factura',
+  fuera: 'Fuera del abono — se factura entero',
+}
+
 export type Incidencia = {
   id: number
   cliente_id: number
@@ -604,6 +616,17 @@ export type Incidencia = {
   notas: string | null
   resolucion: string | null
   estado_facturacion: string | null
+  /** Qué parte del reclamo cubre el abono mensual del cliente.
+   *
+   *  🔴 `null` **no** es "se factura entero": es "nadie lo decidió todavía".
+   *  Con un cliente de abono el backend se niega a generar el remito hasta que
+   *  se elija — es la diferencia entre no cobrar por olvido y cobrar de más en
+   *  silencio. En un cliente `por_servicio` queda siempre en `null`. */
+  cobertura_abono: CoberturaAbono | null
+  /** Cuántas de las `horas_invertidas` cubre el abono. Sólo con `parcial`. */
+  abono_horas_cubiertas: number | null
+  /** Si los materiales entran al abono o se facturan. Sólo con `parcial`. */
+  abono_materiales_incluidos: boolean | null
   /** El remito que se generó de este reclamo, o `null` si todavía no se
    *  convirtió. Es el camino a facturación de un trabajo por servicio: la
    *  bandeja de "Enviar a facturar" sólo acepta remitos.
