@@ -15,10 +15,15 @@ de las dos cosas es cierta.
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from ..dependencies import get_cuota_repository
+from ..auth import get_current_user
+from ..dependencies import (
+    get_cliente_repository, get_cuota_repository, get_remito_service,
+)
+from ..services.clientes import ClienteRepository
 from ..services.cuotas import CuotaRepository
+from ..services.remitos_presupuestos import RemitoService
 
 router = APIRouter(prefix="/api/cuotas", tags=["cuotas"])
 
@@ -78,6 +83,40 @@ def generar(
     return repo.generar(
         datos.ancla, contrato_id=datos.contrato_id, usuario=_usuario(request),
     )
+
+
+class ConvertirLote(BaseModel):
+    #: Las cuotas que entran al mismo remito. Todas de contratos del mismo
+    #: cliente; el servicio explica por qué.
+    cuota_ids: list[int] = Field(min_length=1)
+
+
+# Antes de `/{cuota_id}/…`, igual que en el router de incidencias: no compiten
+# de verdad, pero declararla acá la deja a la vista de quien lee el archivo.
+@router.post("/convertir-en-remito", status_code=201)
+def convertir_en_remito(
+    datos: ConvertirLote,
+    repo: CuotaRepository = Depends(get_cuota_repository),
+    remitos: RemitoService = Depends(get_remito_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    user: dict = Depends(get_current_user),
+):
+    """**Un** remito por las cuotas elegidas — la pieza B de la fase 2.
+
+    El puente **no se toca**: con `ORIGENES_ENVIABLES = (ORIGEN_REMITO,)`, una
+    cuota convertida en remito llega a SOS Contador sin una línea nueva del lado
+    del adaptador.
+    """
+    try:
+        return repo.convertir_a_remito(
+            datos.cuota_ids, remitos, clientes, usuario_id=user.get("id"),
+        )
+    except KeyError as e:
+        raise HTTPException(404, f"No existe el id {e.args[0]}")
+    except ValueError as e:
+        # 409 y no 422: el pedido está bien formado, lo que no da es el estado
+        # de las cuotas. Mismo criterio que el resto del producto.
+        raise HTTPException(409, str(e))
 
 
 @router.get("/{cuota_id}")

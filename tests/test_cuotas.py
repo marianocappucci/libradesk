@@ -545,6 +545,165 @@ def test_no_se_puede_anular_una_cuota_que_ya_salio_en_un_remito(client, cliente)
     assert "remito" in r.json()["detail"]
 
 
+# ── Pieza B: el remito a partir de una cuota ───────────────────────────────
+
+def _remito_de(client, cuota_ids):
+    return client.post("/api/cuotas/convertir-en-remito", json={"cuota_ids": cuota_ids})
+
+
+def test_una_cuota_se_convierte_en_remito(client, cliente):
+    """El destino de todo el devengado: el comprobante que sale hacia el
+    cliente."""
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+
+    r = _remito_de(client, [cuota["id"]])
+    assert r.status_code == 201, r.text
+    remito = r.json()
+
+    assert len(remito["items"]) == 1
+    # 🔑 El período viaja en la DESCRIPCIÓN: el PDF de un remito sólo imprime
+    # descripción y cantidad, y `armar_payload` del puente manda los campos de
+    # período en vacío. Si no está acá, no llega a ninguna parte.
+    assert "Alquiler agosto 2026" in remito["items"][0]["description"]
+    assert remito["items"][0]["unit_price"] == 31000
+    assert remito["items"][0]["qty"] == 1
+
+
+def test_la_cuota_queda_atada_al_remito(client, cliente):
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+
+    remito = _remito_de(client, [cuota["id"]]).json()
+
+    assert client.get(f"/api/cuotas/{cuota['id']}").json()["remito_id"] == remito["id"]
+
+
+def test_varias_cuotas_del_mismo_cliente_van_en_UN_remito(client, cliente):
+    """Un cliente con tres contratos recibe un remito por los tres: es una
+    factura la que va a salir de ahí."""
+    for _ in range(3):
+        _contrato(client, cliente)
+    cuotas = _generar(client, date(2026, 8, 15))["generadas"]
+    assert len(cuotas) == 3
+
+    remito = _remito_de(client, [c["id"] for c in cuotas]).json()
+
+    assert len(remito["items"]) == 3
+    assert sum(i["unit_price"] for i in remito["items"]) == 93000
+
+
+def test_cuotas_de_dos_clientes_se_rechazan(client, cliente):
+    """Un remito se emite a nombre de uno solo. El cliente sale del CONTRATO —
+    la cuota no lo guarda."""
+    otro = client.post("/api/clientes", json={"nombre": "Otro SRL"}).json()
+    _contrato(client, cliente)
+    _contrato(client, otro)
+    cuotas = _generar(client, date(2026, 8, 15))["generadas"]
+
+    r = _remito_de(client, [c["id"] for c in cuotas])
+    assert r.status_code == 409
+    assert "más de un cliente" in r.json()["detail"]
+
+
+def test_convertir_dos_veces_devuelve_el_mismo_remito(client, cliente):
+    """El doble click. Emitir un segundo remito por la misma cuota es cobrarla
+    dos veces."""
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+
+    primero = _remito_de(client, [cuota["id"]]).json()
+    segundo = _remito_de(client, [cuota["id"]])
+
+    assert segundo.status_code == 201
+    assert segundo.json()["id"] == primero["id"]
+
+
+def test_mezclar_una_ya_convertida_con_una_nueva_es_un_error(client, cliente):
+    """🔴 No es idempotencia: devolver el remito viejo dejaría a la nueva sin
+    facturar, y en silencio."""
+    _contrato(client, cliente)
+    _contrato(client, cliente)
+    cuotas = _generar(client, date(2026, 8, 15))["generadas"]
+    _remito_de(client, [cuotas[0]["id"]])
+
+    r = _remito_de(client, [c["id"] for c in cuotas])
+    assert r.status_code == 409
+    assert "Ya salieron en un remito" in r.json()["detail"]
+
+    # Y la que faltaba sigue sin remito: el error no dejó nada a medias.
+    assert client.get(f"/api/cuotas/{cuotas[1]['id']}").json()["remito_id"] is None
+
+
+def test_una_cuota_anulada_no_se_convierte(client, cliente):
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+    client.post(f"/api/cuotas/{cuota['id']}/anular", json={})
+
+    r = _remito_de(client, [cuota["id"]])
+    assert r.status_code == 409
+    assert "anulada" in r.json()["detail"]
+
+
+def test_emitir_el_remito_NO_marca_la_cuota_como_facturada(client, cliente):
+    """🔴 La factura la produce SOS Contador desde la bandeja, no este paso.
+
+    Decir `facturada` acá sería afirmar algo que no pasó. Lo que dice que la
+    cuota ya salió es `remito_id`, que es también lo que mira la guarda de
+    anular.
+    """
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+
+    _remito_de(client, [cuota["id"]])
+
+    ficha = client.get(f"/api/cuotas/{cuota['id']}").json()
+    assert ficha["estado"] == "pendiente"
+    assert ficha["remito_id"] is not None
+
+
+def test_una_cuota_ya_remitada_no_se_puede_anular(client, cliente):
+    """La guarda que escribió la fase 2, ahora ejercida por el camino real y no
+    escribiendo `remito_id` a mano."""
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+    _remito_de(client, [cuota["id"]])
+
+    r = client.post(f"/api/cuotas/{cuota['id']}/anular", json={})
+    assert r.status_code == 422
+    assert "remito" in r.json()["detail"]
+
+
+def test_el_remito_de_una_cuota_llega_a_la_bandeja_de_facturacion(client, cliente):
+    """🔑 El punto de haberlo hecho como remito y no como un origen nuevo.
+
+    `ORIGENES_ENVIABLES` es `(ORIGEN_REMITO,)`, así que esto tiene que aparecer
+    en la bandeja **sin una línea nueva del lado del adaptador**. Si no
+    apareciera, todo el diseño de la pieza B estaría mal.
+    """
+    _contrato(client, cliente)
+    cuota = _generar(client, date(2026, 8, 15))["generadas"][0]
+    remito = _remito_de(client, [cuota["id"]]).json()
+
+    r = client.get("/api/facturacion/pendientes")
+    assert r.status_code == 200, r.text
+    # La bandeja devuelve `{configurado, destino, items}` y no una lista pelada.
+    filas = {p["id"]: p for p in r.json()["items"] if p["origen_tipo"] == "remito"}
+
+    assert remito["id"] in filas
+    # El importe de la cuota llegó, y no en cero: un remito con total 0 la
+    # bandeja se niega a mandarlo, así que un importe perdido en el camino se
+    # vería justo acá.
+    #
+    # 🔑 **31.000 + 21 %.** El total del remito lleva IVA y el `importe_total` de
+    # la cuota es NETO. No se le pasa `tax_rate` al ítem —un contrato no tiene
+    # una línea de catálogo de la que sacarlo— así que rige el default de
+    # LibraCore. Se afirma el número exacto a propósito: si algún día cambia ese
+    # default, lo que cambia es cuánto se le cobra a un cliente por su alquiler,
+    # y eso tiene que avisar.
+    assert filas[remito["id"]]["total"] == 37510  # 31000 * 1.21
+
+
 # El gate del módulo `alquileres` sobre esta bandeja se prueba en
 # `test_modulos_y_planes.py`, junto a los otros dos routers del mismo módulo y
 # con el arnés que ya distingue una ruta gateada del fallback de la SPA.
