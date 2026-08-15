@@ -167,4 +167,14 @@ export const Layout = createLayout({
       ],
     },
   ],
+  // El nombre de la empresa, debajo de "LibraDesk" en el encabezado del
+  // sidebar. Pedido del humano (2026-08-14): "como usa contalibra", y
+  // normalizarlo en los seis.
+  //
+  // `libra-ui` lo dibuja desde siempre; lo que faltaba era el dato. Contalibra
+  // y Restolibra lo mostraban porque arman su propio `/auth/me`, y los cuatro
+  // que no lo mostraban eran exactamente los cuatro que usan el router de
+  // `libraauth` — que recién en v0.25.0 lo incluye. Del lado del backend lo
+  // alimenta `_empresa_nombre` en `app/routers/auth.py`.
+  getUserSubtitle: (u) => (u as { empresa_nombre?: string }).empresa_nombre,
 })
