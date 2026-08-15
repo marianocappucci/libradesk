@@ -312,7 +312,7 @@ function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="tr-destino">Hacia</Label>
             <Select value={destino} onValueChange={setDestino}>
               <SelectTrigger id="tr-destino"><SelectValue placeholder="Depósito de destino" /></SelectTrigger>
@@ -328,7 +328,7 @@ function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Cantidad</Label>
             <Input value={cantidad} onChange={(e) => setCantidad(e.target.value)}
                    inputMode="decimal" placeholder="0" />
@@ -383,12 +383,12 @@ function NuevoConsumible({ onListo }: ConAccion) {
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo consumible</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label>Nombre</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="Plug RJ45" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Stock mínimo (opcional)</Label>
             <Input value={minimo} onChange={(e) => setMinimo(e.target.value)}
                    inputMode="decimal" placeholder="0" />
@@ -431,7 +431,7 @@ function NuevoDeposito({ onListo }: ConAccion) {
           Es un lugar con existencias por cantidad —el depósito central, la
           camioneta de una cuadrilla—, distinto de los depósitos de equipos.
         </p>
-        <div>
+        <div className="grid gap-2">
           <Label>Nombre</Label>
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
                  placeholder="Camioneta Norte" />

@@ -245,7 +245,7 @@ function DetalleEgreso({ egreso, onCerrar, onCambio }: {
             </div>
           )}
           <div className="flex items-end gap-2 rounded-md border bg-muted/40 p-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="eg-monto">Registrar pago</Label>
               <Input id="eg-monto" type="number" value={monto} className="w-36"
                      onChange={(e) => setMonto(e.target.value)} />
@@ -352,7 +352,7 @@ function FormOrden({ proveedores, productos, onGuardar }: {
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva orden de compra</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="oc-prov">Proveedor</Label>
             <Select value={proveedorId} onValueChange={setProveedorId}>
               <SelectTrigger id="oc-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
@@ -404,7 +404,7 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
         <DialogHeader><DialogTitle>Recepción de mercadería</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="rc-prov">Proveedor</Label>
               <Select value={proveedorId} onValueChange={setProveedorId}>
                 <SelectTrigger id="rc-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
@@ -415,7 +415,7 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="rc-dep">Depósito de entrada</Label>
               {/* Es lo que define en qué sucursal queda la recepción, así que
                   la sucursal se muestra al lado de cada opción: elegir mal el
@@ -435,7 +435,7 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
               </Select>
             </div>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="rc-doc">Comprobante</Label>
             {/* Opcional a propósito: la mercadería en garantía vuelve sin
                 factura, y ése es un caso normal del negocio, no un olvido. */}
@@ -486,24 +486,24 @@ function FormEgreso({ proveedores, onGuardar }: {
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo egreso</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="eg-concepto">Concepto</Label>
             <Input id="eg-concepto" value={concepto}
                    onChange={(e) => setConcepto(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="eg-total">Total</Label>
               <Input id="eg-total" type="number" value={total}
                      onChange={(e) => setTotal(e.target.value)} />
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="eg-numero">Comprobante</Label>
               <Input id="eg-numero" value={numero}
                      onChange={(e) => setNumero(e.target.value)} />
             </div>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="eg-prov">Proveedor</Label>
             <Select value={proveedorId} onValueChange={setProveedorId}>
               <SelectTrigger id="eg-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
@@ -514,7 +514,7 @@ function FormEgreso({ proveedores, onGuardar }: {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="eg-cat">Categoría</Label>
             <Input id="eg-cat" value={categoria}
                    onChange={(e) => setCategoria(e.target.value)}

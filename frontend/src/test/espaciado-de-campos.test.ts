@@ -73,6 +73,34 @@ describe('el espaciado de los campos no vuelve a divergir', () => {
       + '`gap-1.5` deja el label pegado al input').toEqual([])
   })
 
+  it('🔴 ningún campo va dentro de un `<div>` sin clase', () => {
+    // La OTRA forma de no tener separación, y la que el humano reportó el
+    // 2026-08-15 en los modales de nueva venta y editar sucursal: el
+    // contenedor no diverge a 6 px, **no tiene ninguna clase**, así que el
+    // label queda pegado al input.
+    //
+    // El guard original no la veía: buscaba `gap-1.5`, y acá no hay `gap` que
+    // buscar. Eran 36 en 6 archivos, casi todas del módulo comercial —que se
+    // escribió con otra convención—, y el humano reportó 2. Las otras 34 las
+    // encontró este chequeo.
+    const culpables: string[] = []
+    for (const rel of ARCHIVOS) {
+      const lineas = readFileSync(join(process.cwd(), rel), 'utf8').split('\n')
+      lineas.forEach((linea, i) => {
+        if (!/^\s*<div>\s*$/.test(linea)) return
+        // La primera línea con contenido después del `<div>`, salteando
+        // comentarios: entre el contenedor y el label suele haber uno.
+        let j = i + 1
+        while (j < lineas.length && (!lineas[j].trim() || /^\s*(\{?\/\*|\*|\/\/)/.test(lineas[j]))) j++
+        if (/^\s*<Label\b/.test(lineas[j] ?? '')) {
+          culpables.push(`${rel.replace(/\\/g, '/')}:${i + 1}`)
+        }
+      })
+    }
+    expect(culpables, 'un campo va en `<div className="grid gap-2">`: un `<div>` '
+      + 'pelado deja el label pegado al input').toEqual([])
+  })
+
   it('y el patrón que los detecta realmente matchea las dos formas viejas', () => {
     // El control del caso de arriba. Sin esto, un regex que no matchea nada
     // daría la lista vacía y el test pasaría con las 118 instancias presentes —

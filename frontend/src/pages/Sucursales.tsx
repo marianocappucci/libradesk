@@ -117,17 +117,17 @@ function FormSucursal({ sucursal, onGuardar }: {
           <DialogTitle>{editando ? 'Editar sucursal' : 'Nueva sucursal'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="s-nombre">Nombre</Label>
             <Input id="s-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="CHIVILCOY" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="s-codigo">Código</Label>
             <Input id="s-codigo" value={codigo} onChange={(e) => setCodigo(e.target.value)}
                    placeholder="CHI" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="s-dir">Dirección</Label>
             <Input id="s-dir" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
           </div>
