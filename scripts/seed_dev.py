@@ -1277,8 +1277,22 @@ def _sembrar_circuito_comercial(api: Api, contar) -> None:
         contar("ventas", True)
 
     # ── Cuenta corriente: un débito y un pago ─────────────────────────────
-    cc = api.get(f"/api/cuenta-corriente/{otro_cliente['id']}") or {}
-    if not (cc.get("movimientos") or []):
+    #
+    # 🔴 **Cada tipo de movimiento se chequea por separado.** La guarda vieja
+    # miraba "¿hay movimientos?", y en Lagrace —que ya traía pagos— salteaba el
+    # bloque entero: `cc_debitos` quedó en cero después de sembrar. Un débito y
+    # un pago son las dos mitades de la pantalla y hay que mirarlas por
+    # separado, porque una instancia puede tener una y no la otra.
+    # 🔴 **La idempotencia va por un marcador PROPIO, no por el tipo del
+    # movimiento.** La versión anterior miraba si ya había algún movimiento de
+    # tipo "débito", y en Lagrace eso da verdadero por los débitos que genera
+    # una VENTA a cuenta corriente — que no son filas de `cc_debitos`. Resultado:
+    # el seed daba el débito por cubierto y la tabla quedaba en cero. Se busca
+    # la referencia que escribe este mismo seed, que es lo único que identifica
+    # sin ambigüedad lo que ya sembró.
+    movimientos = (api.get(f"/api/cuenta-corriente/{otro_cliente['id']}") or {}).get("movimientos") or []
+    referencias = {str(m.get("referencia") or "") for m in movimientos}
+    if "B-0002-00000341" not in referencias:
         api.post("/api/cuenta-corriente/debitos", {
             "cliente_id": otro_cliente["id"], "monto": 89000,
             "fecha": str(HOY - timedelta(days=20)),
@@ -1286,6 +1300,7 @@ def _sembrar_circuito_comercial(api: Api, contar) -> None:
             "referencia": "B-0002-00000341",
         })
         contar("debitos_de_cuenta_corriente", True)
+    if "TR-4471" not in referencias:
         api.post("/api/cuenta-corriente/pagos", {
             "cliente_id": otro_cliente["id"], "monto": 50000,
             "fecha": str(HOY - timedelta(days=4)),
@@ -1293,6 +1308,22 @@ def _sembrar_circuito_comercial(api: Api, contar) -> None:
             "medio_pago": "transferencia",
         })
         contar("pagos_de_cuenta_corriente", True)
+
+    # ── El historial de un ticket ─────────────────────────────────────────
+    # `actividades_incidencia` es el timeline del detalle: sin ninguna, ese
+    # bloque abre vacío y no se ve que las notas se mezclan con los cambios de
+    # estado. Quedó en cero en Lagrace después de la primera corrida, porque
+    # nada en este seed las creaba.
+    for ticket in (api.get("/api/incidencias") or [])[:3]:
+        if api.get(f"/api/incidencias/{ticket['id']}/actividades"):
+            continue
+        for nota in (
+            "Se coordinó la visita con el encargado del edificio.",
+            "Falta un patchcord de 5 m: se pide con la próxima orden.",
+        ):
+            api.post(f"/api/incidencias/{ticket['id']}/actividades",
+                     {"descripcion": nota})
+            contar("actividades_de_incidencia", True)
 
     # ── Materiales usados en un ticket ────────────────────────────────────
     # Es lo que conecta el stock con el trabajo: sin ninguno, la pestaña de
