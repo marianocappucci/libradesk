@@ -1058,14 +1058,22 @@ def _sembrar_sucursales_y_stock(api: Api, contar) -> None:
 #: | tabla | por qué |
 #: |---|---|
 #: | `facturas`, `cajas`, `caja_movimientos` | LibraDesk **no factura ni lleva caja**: no hay endpoint ni pantalla que las escriba. Existen porque el motor las consulta —`get_cc_saldo()` hace un JOIN contra las dos primeras y `create_pago_egreso()` busca la caja por defecto—, y vacías devuelven 0 y NULL, que es la respuesta correcta. Ver `app/services/comercial.py`. |
-#: | `item_variants`, `cc_resumenes_enviados` | Mismo caso: son del motor y este producto no las usa. |
+#: | `item_variants`, `cc_resumenes_enviados`, `commerce_settings` | Mismo caso: son del motor y este producto no las usa. |
+#: | `sale_payments` | El motor la trae, pero **LibraDesk escribe los pagos en `ventas_pagos`** — está dicho en el docstring de `app/services/ventas.py`. Sembrarla dejaría los pagos en la tabla que no lee nadie. |
 #: | `smtp_settings`, `config_facturacion` | Llevan **credenciales**. Sembrar unas falsas deja la instancia diciendo que está configurada cuando no lo está, y el primer envío falla en el peor momento. Se configuran a mano, por su pantalla. |
 #: | `password_reset_tokens` | Tokens de un solo uso que crea el flujo de recuperación. Sembrar tokens es sembrar basura con fecha de vencimiento. |
 #: | `envios_facturacion` | Nace de mandar algo al puente, y el puente necesita `config_facturacion`. |
 #: | `auth_log`, `alembic_version_libradesk`, `schema_migrations` | Auditoría e infraestructura. |
+#:
+#: 🔴 **La lista se verificó contra la base, no se escribió de memoria.** Tras
+#: sembrar dev el 2026-08-15 quedaron 11 tablas en cero (de 27 que había antes),
+#: y son **exactamente** éstas menos las tres de infraestructura y auditoría,
+#: que nunca estuvieron vacías. `sale_payments` y `commerce_settings` entraron
+#: acá por ese cotejo: yo las había dado por sembradas.
 TABLAS_VACIAS_A_PROPOSITO = (
     "facturas", "cajas", "caja_movimientos",
-    "item_variants", "cc_resumenes_enviados",
+    "item_variants", "cc_resumenes_enviados", "commerce_settings",
+    "sale_payments",
     "smtp_settings", "config_facturacion",
     "password_reset_tokens", "envios_facturacion",
     "auth_log", "alembic_version_libradesk", "schema_migrations",
@@ -1105,13 +1113,28 @@ def _sembrar_circuito_comercial(api: Api, contar) -> None:
     """
     clientes = api.get("/api/clientes") or []
     proveedores = api.get("/api/proveedores") or []
-    depositos = api.get("/api/depositos") or []
     consumibles = api.get("/api/consumibles") or []
+
+    # 🔴 **`/api/depositos-stock` y NO `/api/depositos`.** Son dos cosas
+    # distintas con nombres parecidos: `/api/depositos` es dónde está guardado
+    # un EQUIPO (el taller, el pañol del cliente) y `/api/depositos-stock` es
+    # dónde está la MERCADERÍA — la tabla `locations`, que es a la que apunta
+    # la FK de `stock_movements`.
+    #
+    # La primera versión usaba el primero. La suite pasó igual, porque en una
+    # base recién creada los ids de las dos tablas arrancan en 1 y coinciden de
+    # casualidad, así que la FK quedaba satisfecha sin querer. Contra dev, con
+    # las tablas ya desfasadas, el primer POST de recepción devolvió **500**:
+    # `stock_movements_location_id_fkey — Key (location_id)=(2) is not present
+    # in table "locations"`. Es el mismo modo de fallar de siempre: un dato de
+    # prueba con una forma que producción no tiene.
+    depositos = api.get("/api/depositos-stock") or []
+
     if not (clientes and proveedores and depositos and consumibles):
         # Sin las bases no se puede armar nada de esto, y fallar con un
         # KeyError tres pantallas más abajo no explicaría por qué.
-        print("  circuito comercial: faltan clientes/proveedores/depósitos/"
-              "consumibles, se saltea")
+        print("  circuito comercial: faltan clientes/proveedores/depósitos de "
+              "stock/consumibles, se saltea")
         return
 
     cliente = clientes[0]
@@ -1139,7 +1162,14 @@ def _sembrar_circuito_comercial(api: Api, contar) -> None:
             contar("codigos_de_barra", True)
 
     # ── Compras: una orden recibida y otra pendiente ──────────────────────
-    if not (api.get("/api/ordenes-compra") or []):
+    #
+    # 🔴 **La guarda mira las RECEPCIONES, no las órdenes.** Con `if not
+    # ordenes` el bloque era todo-o-nada, y una corrida que se cortara en el
+    # medio —pasó: el 500 del depósito equivocado dejó una orden creada y
+    # ninguna recepción— quedaba trabada para siempre: en la corrida siguiente
+    # ya había una orden, así que se salteaba entero y la recepción no se creaba
+    # nunca. Colgando de la recepción, el seed se puede reanudar.
+    if not (api.get("/api/recepciones-compra") or []):
         recibida = api.post("/api/ordenes-compra", {
             "proveedor_id": proveedor["id"],
             "items": [
