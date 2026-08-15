@@ -162,11 +162,22 @@ function montarGrilla(incidencias: Record<string, unknown>[]) {
   }))
 }
 
+// Anclado al final (`$`) y sin el espacio: el `aria-label` decía «…#1 para el
+// remito» y desde el 2026-08-15 dice «Elegir el reclamo #1» a secas, porque el
+// tilde dejó de ser sólo para remitos — con reclamos abiertos arma una salida
+// de cuadrilla.
 const tilde = (id: number) =>
-  screen.queryByRole('checkbox', { name: new RegExp(`reclamo #${id} `, 'i') })
+  screen.queryByRole('checkbox', { name: new RegExp(`reclamo #${id}$`, 'i') })
 
 describe('agrupar reclamos en un remito', () => {
-  it('sólo ofrece el tilde en los que se pueden remitar', async () => {
+  it('el tilde no aparece en un reclamo ya remitado', async () => {
+    // 🔴 **Este caso cambió el 2026-08-15**, y conviene decir en qué. Antes
+    // afirmaba que el tilde salía SÓLO en los remitables, y por eso incluía un
+    // reclamo abierto esperando que no lo tuviera. Ahora el abierto sí se
+    // tilda: es lo que se elige para armar una salida de cuadrilla.
+    //
+    // Lo que no cambió —y es lo caro— es que un reclamo YA REMITADO no se pueda
+    // volver a elegir: cobrarlo dos veces es el error que este tilde evita.
     montarGrilla([
       { ...CERRADO, id: 1 },
       { ...BASE, id: 2, titulo: 'Todavía abierto' },
@@ -176,10 +187,13 @@ describe('agrupar reclamos en un remito', () => {
     await screen.findByText('Todavía abierto')
 
     expect(tilde(1)).not.toBeNull()
-    // Abierto: el circuito todavía no decidió si va a facturación.
-    expect(tilde(2)).toBeNull()
-    // Ya remitado: cobrarlo dos veces es el error caro.
+    // Cerrado y ya remitado: no entra a ninguna de las dos acciones.
     expect(tilde(3)).toBeNull()
+    // El abierto SÍ se tilda ahora, pero para agendar — y por eso con él
+    // elegido la barra no ofrece el remito.
+    expect(tilde(2)).not.toBeNull()
+    await userEvent.click(tilde(2)!)
+    expect(screen.queryByRole('button', { name: /Generar remito/i })).toBeNull()
   })
 
   it('manda los elegidos juntos y aterriza en el remito', async () => {
