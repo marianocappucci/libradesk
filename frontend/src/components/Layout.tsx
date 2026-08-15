@@ -49,6 +49,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
+import { SelectorDeSucursal } from '@/components/sucursal'
 
 /* El TILE del sidebar abarca el ítem entero —icono y texto—, y marca la sección
  * elegida. Pedido del humano el 2026-08-14, cambiando la primera versión, que le
@@ -167,4 +168,22 @@ export const Layout = createLayout({
       ],
     },
   ],
+  // El nombre de la empresa, debajo de "LibraDesk" en el encabezado del
+  // sidebar. Pedido del humano (2026-08-14): "como usa contalibra", y
+  // normalizarlo en los seis.
+  //
+  // `libra-ui` lo dibuja desde siempre; lo que faltaba era el dato. Contalibra
+  // y Restolibra lo mostraban porque arman su propio `/auth/me`, y los cuatro
+  // que no lo mostraban eran exactamente los cuatro que usan el router de
+  // `libraauth` — que recién en v0.25.0 lo incluye. Del lado del backend lo
+  // alimenta `_empresa_nombre` en `app/routers/auth.py`.
+  getUserSubtitle: (u) => (u as { empresa_nombre?: string }).empresa_nombre,
+  // El selector de sucursal, en el menú del usuario (`libra-ui` v0.20.0).
+  //
+  // El elemento se crea acá, a nivel de módulo, pero se **renderiza** adentro
+  // del `AppSidebar`, que cuelga del `SucursalProvider` de `App.tsx`: por eso
+  // su `useSucursal()` encuentra el contexto. Si algún día el provider dejara
+  // de envolver al Layout, esto rompe con "no hay contexto" y no con una lista
+  // vacía — que es la forma preferible de fallar.
+  userMenu: <SelectorDeSucursal />,
 })
