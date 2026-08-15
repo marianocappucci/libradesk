@@ -3,10 +3,11 @@
 // `aria-invalid` que `input.tsx` — un textarea que se ve distinto al input de
 // al lado es lo que hace que un formulario parezca armado de retazos.
 //
-// `IncidenciaDetalle.tsx` tiene **cuatro** `<textarea>` crudos con una copia de
-// la clase escrita a mano, de antes de que este archivo existiera. Migrarlos es
-// una limpieza aparte: cambiar el aspecto de una pantalla que hoy funciona no
-// es parte del pedido 43.
+// ✅ **Los crudos se migraron el 2026-08-15.** Eran **cinco**, no cuatro: los
+// cuatro de `IncidenciaDetalle.tsx` que esta nota listaba, más uno en
+// `Incidencias.tsx` con la misma clase copiada a mano, que la nota no había
+// visto. Que no vuelvan lo cuida el guard de
+// `test/primitivos-de-formulario.test.ts`, que lee el fuente.
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

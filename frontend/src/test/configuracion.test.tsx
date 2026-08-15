@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // la pantalla (2026-08-13).
 import { Configuracion, ConfiguracionCategorias } from '../pages/Configuracion'
 import { Depositos } from '../pages/Depositos'
+import { escribirEn } from './escribir'
 
 // `useAuth` viene del contexto; las pestañas sólo lo usan para saber si es
 // admin, y acá alcanza con que no sea.
@@ -145,7 +146,7 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
     await screen.findByText('Hardware')
 
     await user.click(screen.getByRole('button', { name: /Subcategoría/ }))
-    await user.type(screen.getByLabelText('Nombre de la categoría'), 'Impresoras')
+    await escribirEn(screen.getByLabelText('Nombre de la categoría'), 'Impresoras')
     await user.click(screen.getByRole('button', { name: 'Agregar' }))
 
     await waitFor(() => {

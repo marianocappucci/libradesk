@@ -291,7 +291,7 @@ export function Activos() {
               dos columnas y sin bordes, el modal salía más alto que la pantalla
               y el pie se perdía contra los últimos campos. El cuerpo scrollea
               solo, así que el título y los botones quedan siempre a la vista. */}
-          <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogContent className="grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
             <DialogHeader className="border-b p-6">
               <DialogTitle className="flex items-center gap-2">
                 <Boxes className="size-4" />

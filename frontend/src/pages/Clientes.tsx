@@ -476,7 +476,7 @@ export function Clientes() {
       </Card>
 
       <Dialog open={sectoresDe !== null} onOpenChange={(open) => !open && setSectoresDe(null)}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Sectores</DialogTitle>
             <DialogDescription>

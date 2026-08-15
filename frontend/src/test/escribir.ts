@@ -56,6 +56,11 @@
  *  secuencia de teclas —un debounce, un autocompletado, un contador de
  *  caracteres— hay que seguir usando `userEvent.type`, que es lo que hace el
  *  test del catálogo de servicios. Esto es para *dejar un campo en un valor*.
+ *
+ *  ⚠️ **Y no enfoca el campo.** `fireEvent.change` no da foco, así que donde el
+ *  efecto a probar cuelga del **blur** —la ficha de incidencia guarda sola al
+ *  salir del campo— hay que hacer `click` antes, o el blur no ocurre nunca y el
+ *  guardado no se dispara.
  */
 import { fireEvent, waitFor } from '@testing-library/react'
 import { expect } from 'vitest'
@@ -63,6 +68,12 @@ import { expect } from 'vitest'
 export async function escribirEn(campo: HTMLElement, valor: string) {
   await waitFor(() => {
     fireEvent.change(campo, { target: { value: valor } })
-    expect(campo).toHaveValue(valor)
+    // Se compara contra `.value` y no con `toHaveValue`, que sobre un
+    // `<input type="number">` devuelve el **número** y hace fallar la
+    // comparación contra la cadena que se acaba de escribir (`3` vs `'3'`).
+    // `.value` es lo que se quiere afirmar en los dos casos: el campo quedó con
+    // este texto. No afloja nada — si el componente repusiera el valor viejo,
+    // esto sigue expirando igual.
+    expect((campo as HTMLInputElement).value).toBe(valor)
   })
 }
