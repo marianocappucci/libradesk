@@ -13,6 +13,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -478,7 +479,7 @@ export function Incidencias() {
                   <FormItem className="w-full">
                     <FormLabel>Descripción</FormLabel>
                     <FormControl>
-                      <textarea {...field} rows={3} className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs" />
+                      <Textarea {...field} rows={3} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -20,6 +20,13 @@ import type { Cliente } from '../api'
 import {
   ComprobanteForm, draftVacio, type ComprobanteDraft,
 } from '../components/comprobante-form'
+import { escribirEn } from './escribir'
+
+// ⚠️ Los `type` sobre la descripción se quedan como están, a propósito: acá el
+// hecho a probar **es el tecleo** —el debounce, el mínimo de dos letras, que las
+// sugerencias no pisen lo escrito—, y `escribirEn` dispara un solo `change`. Ver
+// el cierre del docstring de `escribir.ts`. Lo único que se migró es la
+// cantidad, que sí es "dejar un campo en un valor".
 
 const CLIENTES: Cliente[] = [
   {
@@ -162,8 +169,7 @@ describe('Elegir una sugerencia', () => {
     const usuario = userEvent.setup()
 
     const cantidad = screen.getByLabelText(/Cantidad del ítem 1/)
-    await usuario.clear(cantidad)
-    await usuario.type(cantidad, '3')
+    await escribirEn(cantidad, '3')
 
     await usuario.type(screen.getByLabelText(/Descripción del ítem 1/), 'Manten')
     await usuario.click(await screen.findByRole('button', { name: /Mantenimiento preventivo/ }))

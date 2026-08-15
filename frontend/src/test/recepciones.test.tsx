@@ -16,6 +16,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RecepcionesEntregados, RecepcionesTaller } from '../pages/Recepciones'
+import { escribirEn } from './escribir'
 
 const render = (ui: ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -183,11 +184,11 @@ describe('Recibir un equipo', () => {
     await user.click(await within(await screen.findByRole('listbox'))
       .findByRole('option', { name: /Estudio Sur/ }))
 
-    await user.type(within(dialogo).getByLabelText('Tipo'), 'Notebook')
-    await user.type(within(dialogo).getByLabelText('Falla declarada por el cliente'),
-                    'No enciende')
-    await user.type(within(dialogo).getByLabelText('Accesorios entregados'),
-                    'Cargador')
+    await escribirEn(within(dialogo).getByLabelText('Tipo'), 'Notebook')
+    await escribirEn(within(dialogo).getByLabelText('Falla declarada por el cliente'),
+                     'No enciende')
+    await escribirEn(within(dialogo).getByLabelText('Accesorios entregados'),
+                     'Cargador')
     await user.click(within(dialogo).getByRole('button', { name: /Recibir e imprimir/ }))
 
     await waitFor(() => {
@@ -212,7 +213,7 @@ describe('Recibir un equipo', () => {
     await user.click(within(dialogo).getByRole('combobox', { name: 'Cliente' }))
     await user.click(await within(await screen.findByRole('listbox'))
       .findByRole('option', { name: /Estudio Sur/ }))
-    await user.type(within(dialogo).getByLabelText('Tipo'), 'Notebook')
+    await escribirEn(within(dialogo).getByLabelText('Tipo'), 'Notebook')
     await user.click(within(dialogo).getByRole('button', { name: /Recibir e imprimir/ }))
 
     await waitFor(() => {
@@ -248,8 +249,8 @@ describe('Entregar', () => {
 
     await user.click(screen.getByRole('button', { name: /Entregar/ }))
     const dialogo = await screen.findByRole('dialog')
-    await user.type(within(dialogo).getByLabelText('Trabajo realizado'),
-                    'Cambio de teclado')
+    await escribirEn(within(dialogo).getByLabelText('Trabajo realizado'),
+                     'Cambio de teclado')
     await user.click(within(dialogo).getByRole('button', { name: /Entregar e imprimir/ }))
 
     await waitFor(() => {

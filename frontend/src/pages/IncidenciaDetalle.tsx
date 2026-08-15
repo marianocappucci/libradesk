@@ -19,6 +19,7 @@ import { deIsoALocal, deLocalAIso, fechaHora } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -515,10 +516,9 @@ export function IncidenciaDetalle() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Descripción</Label>
-                  <textarea
+                  <Textarea
                     defaultValue={incidencia.descripcion ?? ''}
                     rows={3}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
                     onBlur={(e) => e.target.value !== (incidencia.descripcion ?? '') && actualizarCampo({ descripcion: e.target.value || null })}
                   />
                 </div>
@@ -618,12 +618,11 @@ export function IncidenciaDetalle() {
                   </div>
                 )}
                 <div className="flex gap-2 pt-2">
-                  <textarea
+                  <Textarea
                     value={notaTexto}
                     onChange={(e) => setNotaTexto(e.target.value)}
                     rows={2}
                     placeholder="Agregar una nota…"
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
                   />
                   <Button onClick={agregarNota} disabled={guardandoNota || !notaTexto.trim()}>
                     {guardandoNota ? 'Guardando…' : 'Agregar'}
@@ -642,19 +641,17 @@ export function IncidenciaDetalle() {
               <CardContent className="grid gap-3">
                 <div className="grid gap-2">
                   <Label>Notas</Label>
-                  <textarea
+                  <Textarea
                     defaultValue={incidencia.notas ?? ''}
                     rows={2}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
                     onBlur={(e) => e.target.value !== (incidencia.notas ?? '') && actualizarCampo({ notas: e.target.value || null })}
                   />
                 </div>
                 <div className="grid gap-2">
                   <Label>Resolución</Label>
-                  <textarea
+                  <Textarea
                     defaultValue={incidencia.resolucion ?? ''}
                     rows={2}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
                     onBlur={(e) => e.target.value !== (incidencia.resolucion ?? '') && actualizarCampo({ resolucion: e.target.value || null })}
                   />
                 </div>
