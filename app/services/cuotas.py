@@ -59,6 +59,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import (
     Date, DateTime, ForeignKey, Index, Numeric, String, Text, func, select, text,
+    update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -654,6 +655,165 @@ class CuotaRepository:
             session.commit()
             session.refresh(cuota)
             return _to_dict(cuota)
+
+    def convertir_a_remito(self, cuota_ids: list[int], remitos, clientes,
+                           usuario_id: int | None = None) -> dict:
+        """El remito de las cuotas elegidas — **pieza B de la fase 2**.
+
+        Cierra el pedido del humano del 2026-08-14: *"son remitos que se
+        deberian generar automaticamente en el sistema"*. La cuota dice que el
+        periodo se devengo; esto emite el comprobante que sale hacia el cliente.
+
+        ## Por que no toca el puente de facturacion
+
+        `ORIGENES_ENVIABLES` de la bandeja es `(ORIGEN_REMITO,)`. Una cuota
+        convertida en remito llega a [[sos-contador]] **sin una linea nueva del
+        lado del adaptador**: es un remito como cualquier otro. Sumar `cuota`
+        como tercer origen habria sido mas fiel y bastante mas caro.
+
+        ## El periodo viaja en la DESCRIPCION
+
+        `armar_payload` del puente manda `periodo_desde` y `periodo_hasta` en
+        vacio, y el PDF de un remito **solo imprime descripcion y cantidad**
+        (`_draw_items_table` con `show_prices=False`). Asi que el periodo tiene
+        que estar escrito en el concepto o no llega a ninguna parte — mismo
+        motivo por el que el `N° CDS` va ahi y no en un campo propio. El
+        concepto ya lo trae: *"Alquiler agosto 2026 — CTR-00000012"*.
+
+        ## Recibe una LISTA, igual que el de los reclamos
+
+        Un cliente con tres contratos recibe **un** remito por los tres, porque
+        es una factura la que va a salir de ahi. Y con un solo camino no hay dos
+        formas de armar el remito de una cuota que puedan divergir: el de a una
+        es este con la lista de largo 1.
+
+        **Todas del mismo cliente** —un remito se emite a nombre de uno solo— y
+        el cliente sale del contrato, no de la cuota.
+
+        **Idempotente por lote**, mismo criterio que `convertir_a_remito()` de
+        incidencias: si TODAS apuntan al MISMO remito se devuelve ese (el doble
+        click); una mezcla de convertidas y no convertidas es un error, porque
+        devolver el remito viejo dejaria a las nuevas sin facturar y en silencio.
+
+        ## Lo que NO se toca: el `estado` de la cuota
+
+        Emitir el remito **no** la pasa a `facturada`. La factura la produce SOS
+        Contador desde la bandeja, y hasta que eso ocurra decir "facturada"
+        seria afirmar algo que no paso. El hecho de que la cuota ya salio lo
+        dice `remito_id`, que es tambien lo que mira la guarda de `anular()`.
+
+        ## Lo que NO es atomico
+
+        Igual que en incidencias: el remito lo escribe la conexion de LibraCore
+        y el vinculo lo escribe SQLAlchemy, asi que no hay una transaccion que
+        cubra las dos. Se emite primero el remito y despues se ata, porque el
+        error al reves es peor — una cuota que dice "ya se remitio" apuntando a
+        un remito que no existe no se podria facturar nunca.
+        """
+        from . import fecha
+        from .remitos_presupuestos import datos_cliente_para_comprobante
+
+        # Sin repetidas y en el orden elegido, igual que el de los reclamos: el
+        # remito se lee en el mismo orden en que la pantalla las mostraba.
+        ids = list(dict.fromkeys(cuota_ids))
+        if not ids:
+            raise ValueError("No se eligió ninguna cuota.")
+
+        with self.session_factory() as session:
+            filas = {
+                c.id: c for c in session.execute(
+                    select(ContratoCuota).where(ContratoCuota.id.in_(ids))
+                ).scalars()
+            }
+            faltantes = [x for x in ids if x not in filas]
+            if faltantes:
+                raise KeyError(
+                    faltantes[0] if len(faltantes) == 1 else tuple(faltantes)
+                )
+
+            # ── Idempotencia del LOTE ────────────────────────────────────
+            convertidas = {x: filas[x].remito_id for x in ids if filas[x].remito_id}
+            if convertidas:
+                unicos = set(convertidas.values())
+                if len(convertidas) == len(ids) and len(unicos) == 1:
+                    existente = remitos.get(next(iter(unicos)))
+                    if existente is not None:
+                        return existente
+                    # El remito que se referenciaba no está: se borró por fuera.
+                    # Se sigue de largo, para no dejar la cuota sin camino.
+                else:
+                    cuales = ", ".join(f"#{x}" for x in sorted(convertidas))
+                    raise ValueError(
+                        f"Ya salieron en un remito: {cuales}. Sacalas de la "
+                        "selección o emití el remito de las que faltan."
+                    )
+
+            anuladas = [x for x in ids if filas[x].estado == "anulada"]
+            if anuladas:
+                detalle = ", ".join(f"#{x}" for x in sorted(anuladas))
+                raise ValueError(
+                    f"Están anuladas y no se cobran: {detalle}."
+                )
+
+            # El cliente sale del CONTRATO: la cuota no lo guarda, y duplicarlo
+            # ahí sería una segunda fuente de verdad sobre a quién se le cobra.
+            contratos = {
+                c.id: c for c in session.execute(
+                    select(Contrato).where(
+                        Contrato.id.in_({filas[x].contrato_id for x in ids})
+                    )
+                ).scalars()
+            }
+            clientes_del_lote = {
+                contratos[filas[x].contrato_id].cliente_id for x in ids
+            }
+            if len(clientes_del_lote) > 1:
+                raise ValueError(
+                    "Las cuotas elegidas son de contratos de más de un cliente, "
+                    "y un remito se emite a nombre de uno solo."
+                )
+            cliente_id = clientes_del_lote.pop()
+
+            items = [
+                {
+                    # El concepto ya trae el período adentro. Ver el docstring:
+                    # es lo único que llega al PDF y al puente.
+                    "description": filas[x].concepto,
+                    # Una cuota es una línea, no N horas: el importe ya está
+                    # calculado y congelado.
+                    "qty": 1,
+                    "unit_price": float(filas[x].importe_total),
+                }
+                for x in ids
+            ]
+
+        cliente = clientes.get(cliente_id)
+        if cliente is None:
+            raise KeyError(cliente_id)
+
+        remito = remitos.create(
+            # El día en que se emite, en hora de Argentina — no la fecha de
+            # emisión de la cuota, que puede ser de hace meses si se está
+            # poniendo al día un devengado viejo.
+            date=fecha.hoy(),
+            client_id=cliente["id"],
+            client_cuit=cliente["cuit"] or "",
+            items=items,
+            observations="",
+            usuario_id=usuario_id,
+            **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
+        )
+
+        with self.session_factory() as session:
+            # Una sola sentencia, así que no hay un estado intermedio donde la
+            # mitad del lote quedó atada al remito y la otra mitad no.
+            session.execute(
+                update(ContratoCuota)
+                .where(ContratoCuota.id.in_(ids))
+                .values(remito_id=remito["id"])
+            )
+            session.commit()
+        return remito
 
     def anular(self, cuota_id: int, *, motivo: str | None = None) -> dict:
         """Anula en vez de borrar, mismo criterio que la baja logica de clientes.

@@ -15,7 +15,15 @@ import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { Cuotas } from '../pages/Cuotas'
+
+const navegado: string[] = []
+vi.mock('react-router-dom', async () => {
+  const real = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return { ...real, useNavigate: () => (r: string) => { navegado.push(r) } }
+})
+
+// Después del mock, a propósito: el módulo se importa con el mock ya puesto.
+const { Cuotas } = await import('../pages/Cuotas')
 
 const render = (ui: ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -77,6 +85,7 @@ let previa: unknown
 
 beforeEach(() => {
   posts = []
+  navegado.length = 0
   previa = {
     ancla: '2026-09-01',
     a_generar: [PROPUESTA_ENTERA, PROPUESTA_PRORRATEADA],
@@ -89,6 +98,9 @@ beforeEach(() => {
       posts.push({ url: u, cuerpo: init?.body ? JSON.parse(String(init.body)) : null })
       if (u.includes('/generar')) {
         return Promise.resolve(json({ generadas: [CUOTA_ENTERA], ya_generadas: [] }))
+      }
+      if (u.includes('/convertir-en-remito')) {
+        return Promise.resolve(json({ id: 99, number: 'REM-00000099' }))
       }
       return Promise.resolve(json(CUOTA_ENTERA))
     }
@@ -192,6 +204,70 @@ describe('La previsualización explica lo que va a cobrar', () => {
 
     expect(within(dialogo).getByText(/1 contrato ya tiene emitido este período/))
       .toBeInTheDocument()
+  })
+})
+
+
+describe('🔴 Pieza B: el remito de una cuota', () => {
+  // Cierra el pedido del 2026-08-14: *"son remitos que se deberían generar
+  // automáticamente en el sistema"*. La cuota dice que el período se devengó;
+  // el remito es el comprobante que sale hacia el cliente.
+
+  const tilde = (id: number) =>
+    screen.queryByRole('checkbox', { name: `Elegir la cuota #${id}` })
+
+  it('sólo ofrece el tilde en las que se pueden convertir', async () => {
+    render(<Cuotas />)
+    await screen.findByText('CTR-00000001')
+
+    expect(tilde(1)).not.toBeNull()
+    // Ya salió en un remito: convertirla de nuevo sería cobrarla dos veces.
+    expect(tilde(2)).toBeNull()
+  })
+
+  it('manda las elegidas juntas y aterriza en el remito', async () => {
+    // Un cliente con tres contratos recibe UN remito por los tres: es una
+    // factura la que va a salir de ahí.
+    const user = userEvent.setup()
+    render(<Cuotas />)
+    await screen.findByText('CTR-00000001')
+
+    await user.click(tilde(1)!)
+    await user.click(screen.getByRole('button', { name: /Generar remito/ }))
+
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].url).toContain('/api/cuotas/convertir-en-remito')
+    expect(posts[0].cuerpo).toEqual({ cuota_ids: [1] })
+    expect(navegado).toContain('/remitos/99')
+  })
+
+  it('🔴 la barra muestra el total como NETO, y lo dice', async () => {
+    // El `importe_total` de la cuota es neto; el total del remito lleva IVA.
+    // Mostrarlo pelado haría que el número de la barra y el del remito no
+    // coincidan y parezca un error de cálculo.
+    const user = userEvent.setup()
+    render(<Cuotas />)
+    await screen.findByText('CTR-00000001')
+
+    await user.click(tilde(1)!)
+
+    expect(await screen.findByText(/\+ IVA/)).toBeInTheDocument()
+  })
+
+  it('una cuota ya remitada enlaza a su remito', async () => {
+    // 🔑 El `estado` NO cambia al emitir el remito —la factura la produce SOS
+    // Contador desde la bandeja—, así que lo único que dice que la cuota ya
+    // salió es este enlace.
+    render(<Cuotas />)
+    await screen.findByText('CTR-00000002')
+
+    const fila = screen.getByText('CTR-00000002').closest('tr')!
+    const enlace = within(fila).getByRole('link', { name: 'remitada' })
+    expect(enlace).toHaveAttribute('href', '/remitos/44')
+
+    // Y el control: la que no salió no lo tiene.
+    const otra = screen.getByText('CTR-00000001').closest('tr')!
+    expect(within(otra).queryByRole('link', { name: 'remitada' })).toBeNull()
   })
 })
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
@@ -20,7 +21,7 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ReceiptText } from 'lucide-react'
-import { FilePlus } from '@/components/iconos-accion'
+import { FilePlus, PackageCheck } from '@/components/iconos-accion'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const TODOS = '__todos__'
@@ -47,6 +48,7 @@ function primerDiaDelMes(): string {
  * queda quemado. El job automático se suma después, sobre este mismo camino.
  */
 export function Cuotas() {
+  const navigate = useNavigate()
   const [cuotas, setCuotas] = useState<Cuota[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +60,10 @@ export function Cuotas() {
   const [cargandoPrevia, setCargandoPrevia] = useState(false)
   const [generando, setGenerando] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
+
+  // Las cuotas tildadas para entrar juntas al mismo remito (pieza B).
+  const [elegidas, setElegidas] = useState<number[]>([])
+  const [generandoRemito, setGenerandoRemito] = useState(false)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -105,6 +111,36 @@ export function Cuotas() {
     }
   }
 
+  // Las que se pueden convertir en remito: ni anuladas ni ya convertidas. Es la
+  // misma regla que valida el backend, escrita también acá para no ofrecer un
+  // tilde que siempre termina en 409.
+  const remitable = (c: Cuota) => c.estado !== 'anulada' && c.remito_id === null
+
+  const paraRemitir = useMemo(
+    () => cuotas.filter((c) => elegidas.includes(c.id)),
+    [cuotas, elegidas],
+  )
+  const totalElegido = paraRemitir.reduce((acc, c) => acc + c.importe_total, 0)
+  // Un remito se emite a nombre de uno solo, y el cliente sale del contrato.
+  const contratosElegidos = new Set(paraRemitir.map((c) => c.contrato_numero))
+
+  async function generarRemito() {
+    setGenerandoRemito(true)
+    setError(null)
+    try {
+      const remito = await api.post<{ id: number }>(
+        '/api/cuotas/convertir-en-remito',
+        { cuota_ids: paraRemitir.map((c) => c.id) },
+      )
+      // Al remito recién creado, igual que la conversión de un reclamo: ahí se
+      // revisa antes de mandarlo a facturar.
+      navigate(`/remitos/${remito.id}`)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : 'No se pudo generar el remito')
+      setGenerandoRemito(false)
+    }
+  }
+
   async function anular(cuota: Cuota) {
     try {
       await api.post(`/api/cuotas/${cuota.id}/anular`, {})
@@ -115,6 +151,30 @@ export function Cuotas() {
   }
 
   const columnas = useMemo<ColumnDef<Cuota>[]>(() => [
+    {
+      // El tilde para agrupar en un remito. Sólo en las que se pueden convertir;
+      // en el resto la celda queda vacía, que dice "esta no va" sin un control
+      // apagado que invite a intentarlo.
+      id: 'elegir',
+      header: () => null,
+      size: 36,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original
+        if (!remitable(c)) return null
+        return (
+          <input
+            type="checkbox"
+            checked={elegidas.includes(c.id)}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => setElegidas((prev) => prev.includes(c.id)
+              ? prev.filter((x) => x !== c.id)
+              : [...prev, c.id])}
+            aria-label={`Elegir la cuota #${c.id}`}
+          />
+        )
+      },
+    },
     {
       accessorKey: 'contrato_numero',
       header: sortableHeader('Contrato'),
@@ -164,11 +224,28 @@ export function Cuotas() {
     {
       accessorKey: 'estado',
       header: 'Estado',
-      cell: ({ row }) => (
-        <Badge variant={row.original.estado === 'anulada' ? 'outline' : 'secondary'}>
-          {ESTADO_CUOTA_LABELS[row.original.estado] ?? row.original.estado}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const c = row.original
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={c.estado === 'anulada' ? 'outline' : 'secondary'}>
+              {ESTADO_CUOTA_LABELS[c.estado] ?? c.estado}
+            </Badge>
+            {/* El remito es lo que dice que la cuota ya salió. El `estado` NO se
+                toca al emitirlo: la factura la produce SOS Contador desde la
+                bandeja, y decir «facturada» acá sería afirmar algo que no pasó. */}
+            {c.remito_id !== null && (
+              <Link
+                to={`/remitos/${c.remito_id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-muted-foreground underline"
+              >
+                remitada
+              </Link>
+            )}
+          </div>
+        )
+      },
     },
     {
       id: 'acciones',
@@ -187,7 +264,11 @@ export function Cuotas() {
         )
       },
     },
-  ], [])
+    // 🔴 `elegidas` **tiene que estar acá**. La celda del tilde la lee para su
+    // `checked`, y con la lista de dependencias vacía las columnas quedaban
+    // memoizadas con el `elegidas` del primer render —siempre `[]`—, así que el
+    // casillero no se marcaba nunca aunque el estado sí cambiara.
+  ], [elegidas])
 
   return (
     <div className="space-y-4">
@@ -251,6 +332,44 @@ export function Cuotas() {
           )}
         </CardContent>
       </Card>
+
+      {/* La barra aparece recién con algo tildado, igual que la de reclamos:
+          una barra siempre visible con un botón apagado le come lugar a la
+          grilla todos los días para un flujo que es mensual. */}
+      {paraRemitir.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-medium">
+                {paraRemitir.length === 1
+                  ? '1 cuota elegida'
+                  : `${paraRemitir.length} cuotas elegidas`}
+              </span>
+              <span className="ml-2 text-muted-foreground">
+                {pesos(totalElegido)} + IVA
+              </span>
+              {contratosElegidos.size > 1 && (
+                // El motivo al lado, no en un tooltip. La validación real es del
+                // backend —mira el cliente de cada contrato, no el contrato—,
+                // así que dos contratos del MISMO cliente sí se pueden juntar y
+                // esto es sólo un aviso.
+                <span className="ml-2 text-muted-foreground">
+                  de {contratosElegidos.size} contratos
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setElegidas([])}>
+                Limpiar
+              </Button>
+              <Button onClick={() => void generarRemito()} disabled={generandoRemito}>
+                <PackageCheck />
+                {generandoRemito ? 'Generando…' : 'Generar remito'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={previaOpen} onOpenChange={setPreviaOpen}>
         <DialogContent className="sm:max-w-3xl">
