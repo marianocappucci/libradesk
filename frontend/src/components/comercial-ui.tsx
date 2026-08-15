@@ -9,6 +9,7 @@
 // ordenamiento ni paginación del lado del cliente).
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { api, ApiError } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { TituloPantalla } from '@/components/titulo-pantalla'
@@ -62,12 +63,12 @@ export function Pagina({ titulo, icono: Icono, acciones, error, children }: {
 }) {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <TituloPantalla icono={Icono}>
-          {titulo}
-        </TituloPantalla>
-        {acciones && <div className="flex gap-2 flex-wrap">{acciones}</div>}
-      </div>
+      {/* El armazón del encabezado lo pone `EncabezadoDePantalla` de libra-ui y
+          no este archivo: es el mismo de los seis productos, y acá ya había
+          divergido (`gap-4 flex-wrap` contra el `gap-2 flex-wrap` del resto). */}
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Icono}>{titulo}</TituloPantalla>}>
+        {acciones}
+      </EncabezadoDePantalla>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {children}
     </div>

@@ -119,6 +119,30 @@ describe('detalle de presupuesto', () => {
     // Aceptar es del estado `enviado`, no del borrador.
     expect(screen.queryByRole('button', { name: /^Aceptar$/ })).not.toBeInTheDocument()
   })
+
+  it('🔴 el "Volver" es el ÚLTIMO control del encabezado', async () => {
+    // El pedido del humano (2026-08-14): "los botones de volver en las
+    // distintas pantallas siempre del lado derecho". Ésta era la pantalla que
+    // ya lo cumplía y de la que se copió `EncabezadoDePantalla` para los seis
+    // productos; el test fija la posición para que el componente compartido no
+    // pueda cambiársela por debajo.
+    //
+    // Se mide el ORDEN REAL en el DOM y no la clase del contenedor: Tailwind no
+    // corre en jsdom, así que preguntar por `justify-end` daría verde con los
+    // botones en cualquier orden. El orden del documento sí es real, y es el
+    // que decide cuál queda más a la derecha dentro de una fila flex.
+    montar('/presupuestos/7', '/presupuestos/:id', PresupuestoDetalle)
+    const titulo = await screen.findByRole('heading', { name: /PRES-00000007/ })
+
+    // El encabezado entero: el ancestro que contiene al título y a las acciones.
+    const encabezado = titulo.closest('div')!.parentElement!
+    const controles = [...encabezado.querySelectorAll('button, a')]
+
+    // Control de que hay algo que ordenar: sin esto, un encabezado vacío haría
+    // pasar la afirmación de abajo por no tener con qué contradecirla.
+    expect(controles.length).toBeGreaterThan(2)
+    expect(controles.at(-1)).toHaveTextContent('Volver')
+  })
 })
 
 describe('detalle de remito', () => {

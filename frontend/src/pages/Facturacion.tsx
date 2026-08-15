@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { BarraDeAcciones } from 'libra-ui/acciones'
 import { type ColumnDef } from '@tanstack/react-table'
 // `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
 // remito se manda a facturar" borró la rama de presupuestos, que era la única
@@ -317,29 +318,42 @@ export function Facturacion() {
                 </p>
               )
               : <DataTable columns={columns} data={items} />}
-
-          {elegidos.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 p-3">
-              <p className="text-sm">
-                <strong>
-                  {elegidos.length === 1
-                    ? '1 comprobante elegido'
-                    : `${elegidos.length} comprobantes elegidos`}
-                </strong>
-                {' · '}
-                <strong>{formatMoney(totalElegido)}</strong>
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setElegidos([])}>Limpiar</Button>
-                <Button disabled={enviando || !configurado} onClick={enviar}>
-                  <SendAccion className="mr-1 size-4" />
-                  {enviando ? 'Enviando…' : 'Enviar a ' + destinoNombre}
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* La barra de enviar, al PIE y pegada abajo — es el caso que motivó a
+          `BarraDeAcciones` en libra-ui. Antes vivía adentro del `CardContent`,
+          debajo de la tabla: con la lista larga, para tildar un remito del
+          medio había que scrollear hasta el final para ver cuántos llevabas y
+          volver a subir. Pedido del humano: "así podemos movernos por los
+          remitos y buscar los que queremos sin perder de vista el botón".
+
+          Sale de la Card a propósito: `BarraDeAcciones` usa `-mx` para llegar
+          de borde a borde compensando el padding del `<main>`, y adentro de la
+          Card ese margen negativo se comería el borde de la tarjeta. Además el
+          `sticky` necesita apoyarse en el área que scrollea, no en la Card.
+
+          El resumen va con `mr-auto`: la barra alinea a la derecha, y sin eso
+          la cuenta de lo elegido viajaría pegada a los botones en vez de
+          quedar del lado en el que se la lee. */}
+      {elegidos.length > 0 && (
+        <BarraDeAcciones>
+          <p className="mr-auto text-sm">
+            <strong>
+              {elegidos.length === 1
+                ? '1 comprobante elegido'
+                : `${elegidos.length} comprobantes elegidos`}
+            </strong>
+            {' · '}
+            <strong>{formatMoney(totalElegido)}</strong>
+          </p>
+          <Button variant="outline" onClick={() => setElegidos([])}>Limpiar</Button>
+          <Button disabled={enviando || !configurado} onClick={enviar}>
+            <SendAccion className="mr-1 size-4" />
+            {enviando ? 'Enviando…' : 'Enviar a ' + destinoNombre}
+          </Button>
+        </BarraDeAcciones>
+      )}
     </div>
   )
 }

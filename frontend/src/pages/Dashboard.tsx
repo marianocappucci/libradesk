@@ -22,6 +22,7 @@
 // absolutos dicen que lo son.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { AlarmClock, CalendarClock, CalendarDays, FileExclamationPoint as FileWarning, LayoutDashboard, ShieldCheck, UserX, Wrench } from 'lucide-react'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 import {
@@ -98,7 +99,7 @@ function BloqueVencimiento({
         </CardDescription>
         <CardTitle className="text-3xl">{total}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-1.5 text-sm">
+      <CardContent className="grid gap-2 text-sm">
         {total === 0 ? (
           <p className="text-muted-foreground">Nada en el horizonte elegido.</p>
         ) : (
@@ -272,18 +273,26 @@ export function Dashboard() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          {/* Es el título de ESTA pantalla, no una sección adentro: el
-              Dashboard no tenía otro. Por eso sale del mismo componente que el
-              resto y no de un `<h2>` a mano — era el único que quedaba con el
-              tamaño del título pero sin su tratamiento. */}
-          <TituloPantalla icono={LayoutDashboard}>Qué hay que hacer</TituloPantalla>
-          <p className="text-sm text-muted-foreground">
-            Lo que se vence, lo que espera hace mucho y lo que está en el taller.
-          </p>
-        </div>
-        <div className="grid gap-1.5">
+      {/* `items-end` por lo mismo que la Agenda: a la derecha va un filtro con
+          etiqueta, no un botón, y su base tiene que coincidir con la del
+          párrafo del título. El `cn` del componente es `twMerge`, así que esta
+          clase le gana al `items-center` de adentro. */}
+      <EncabezadoDePantalla
+        className="items-end"
+        titulo={
+          <div>
+            {/* Es el título de ESTA pantalla, no una sección adentro: el
+                Dashboard no tenía otro. Por eso sale del mismo componente que el
+                resto y no de un `<h2>` a mano — era el único que quedaba con el
+                tamaño del título pero sin su tratamiento. */}
+            <TituloPantalla icono={LayoutDashboard}>Qué hay que hacer</TituloPantalla>
+            <p className="text-sm text-muted-foreground">
+              Lo que se vence, lo que espera hace mucho y lo que está en el taller.
+            </p>
+          </div>
+        }
+      >
+        <div className="grid gap-2">
           <Label htmlFor="horizonte">Horizonte</Label>
           <Select value={dias} onValueChange={setDias}>
             <SelectTrigger id="horizonte" className="w-40" aria-label="Horizonte de vencimientos">
@@ -296,7 +305,7 @@ export function Dashboard() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -406,7 +415,7 @@ export function Dashboard() {
                   )}
                 </div>
 
-                <div className="grid gap-1.5 text-sm">
+                <div className="grid gap-2 text-sm">
                   {backlog.mas_viejas.length === 0 ? (
                     <p className="text-muted-foreground">No hay incidencias abiertas.</p>
                   ) : (
@@ -447,12 +456,12 @@ export function Dashboard() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h3 className="text-base font-semibold">Totales</h3>
           <div className="flex items-end gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="date-from">Desde</Label>
               <Input id="date-from" type="date" value={dateFrom} className="w-40"
                      onChange={(e) => setDateFrom(e.target.value)} />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="date-to">Hasta</Label>
               <Input id="date-to" type="date" value={dateTo} className="w-40"
                      onChange={(e) => setDateTo(e.target.value)} />

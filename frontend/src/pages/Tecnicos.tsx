@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -213,10 +214,7 @@ export function Tecnicos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={UserCog}>
-          Técnicos
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={UserCog}>Técnicos</TituloPantalla>}>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo técnico</Button>
@@ -269,7 +267,7 @@ export function Tecnicos() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

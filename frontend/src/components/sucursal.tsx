@@ -131,7 +131,7 @@ export function SelectorDeSucursal() {
   const { sucursales, activa, elegir } = useSucursal()
   if (sucursales.length < 2) return null
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-2">
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <MapPin className="h-3.5 w-3.5" />
         Sucursal activa

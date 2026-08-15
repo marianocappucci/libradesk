@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useNavigate } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, describirEquipo, lugarDe, opcionesCliente,
   opcionesDeposito, ubicacionTexto,
@@ -303,10 +304,7 @@ export function Equipos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={Monitor}>
-          Equipos
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Monitor}>Equipos</TituloPantalla>}>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo equipo</Button>
@@ -445,12 +443,12 @@ export function Equipos() {
             </Form>
             </DialogContent>
           </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Cliente</span>
           <SelectBuscable
             value={filtroCliente}

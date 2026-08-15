@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, MARCA_CLASE,
   type CategoriaIncidencia, type Cliente, type Sector, type VistaReporte,
@@ -138,21 +139,21 @@ export function ReporteDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 no-imprimir">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/reportes"><ArrowLeft />Reportes</Link>
-          </Button>
+      <EncabezadoDePantalla
+        className="no-imprimir"
+        titulo={
           <div>
             <TituloPantalla icono={FileSpreadsheet}>{reporte.titulo}</TituloPantalla>
             <p className="text-sm text-muted-foreground">{reporte.descripcion}</p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <BotonImprimir disabled={!vista || vista.cantidad_filas === 0} />
-          <Button onClick={descargar}><Download />Descargar Excel</Button>
-        </div>
-      </div>
+        }
+      >
+        <BotonImprimir disabled={!vista || vista.cantidad_filas === 0} />
+        <Button onClick={descargar}><Download />Descargar Excel</Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/reportes"><ArrowLeft />Reportes</Link>
+        </Button>
+      </EncabezadoDePantalla>
 
       {reporte.campos.length > 0 && (
         <Card className="no-imprimir">
@@ -210,7 +211,7 @@ function CampoFiltro({ campo, slug, valor, onChange, clientes, sectores, categor
 
   if (campo.tipo === 'fecha' || campo.tipo === 'numero' || campo.tipo === 'texto') {
     return (
-      <div className="grid gap-1.5">
+      <div className="grid gap-2">
         <Label htmlFor={id}>{campo.label}</Label>
         <Input
           id={id}
@@ -238,7 +239,7 @@ function CampoFiltro({ campo, slug, valor, onChange, clientes, sectores, categor
     : 'Todos'
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-2">
       <Label htmlFor={id}>{campo.label}</Label>
       <SelectBuscable
         value={valor || TODOS}

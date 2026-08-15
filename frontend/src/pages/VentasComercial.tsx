@@ -433,7 +433,7 @@ export function VentaDetalle() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Cliente</CardTitle></CardHeader>
-          <CardContent className="grid gap-1.5 text-sm">
+          <CardContent className="grid gap-2 text-sm">
             <p><span className="text-muted-foreground">Nombre:</span> {datos.cliente_nombre}</p>
             {datos.cliente?.cuit && (
               <p><span className="text-muted-foreground">CUIT / DNI:</span> {datos.cliente.cuit}</p>
@@ -445,7 +445,7 @@ export function VentaDetalle() {
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-base">Datos de la venta</CardTitle></CardHeader>
-          <CardContent className="grid gap-1.5 text-sm">
+          <CardContent className="grid gap-2 text-sm">
             <p><span className="text-muted-foreground">Número:</span>{' '}
               <span className="font-mono">{datos.numero}</span></p>
             <p><span className="text-muted-foreground">Fecha:</span> {fecha(datos.fecha)}</p>
@@ -479,7 +479,7 @@ export function VentaDetalle() {
 
       <Card>
         <CardHeader><CardTitle className="text-base">Cobros</CardTitle></CardHeader>
-        <CardContent className="grid gap-1.5 text-sm">
+        <CardContent className="grid gap-2 text-sm">
           {datos.pagos.length === 0
             ? <p className="text-muted-foreground">Sin cobros registrados.</p>
             : datos.pagos.map((p, i) => (

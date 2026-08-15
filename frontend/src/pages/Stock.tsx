@@ -13,6 +13,7 @@
 // la mercadería es justamente el que no aparece en el selector. Pedir la lista
 // completa una vez y recortarla para la tabla resuelve las dos cosas con un
 // request; pedirla filtrada obligaría a un segundo pedido para el destino.
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
@@ -119,15 +120,12 @@ export function Stock() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <TituloPantalla icono={IconoStock}>
-          Stock de consumibles
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={IconoStock}>Stock de consumibles</TituloPantalla>}>
         <div className="flex gap-2">
           <NuevoConsumible onListo={(fn) => conError(fn)} />
           <NuevoDeposito onListo={(fn) => conError(fn)} />
         </div>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

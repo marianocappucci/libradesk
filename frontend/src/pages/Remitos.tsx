@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { type ColumnDef } from '@tanstack/react-table'
 import { api, ApiError, type Cliente, type Remito } from '../api'
 import { Button } from '@/components/ui/button'
@@ -177,12 +178,9 @@ export function Remitos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={Receipt}>
-          Remitos
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Receipt}>Remitos</TituloPantalla>}>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
