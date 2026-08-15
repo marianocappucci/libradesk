@@ -15,6 +15,7 @@
  *  mezcla los 40 ingresos históricos con los 3 que están en el mostrador no
  *  contesta nada.
  */
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -189,14 +190,11 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <TituloPantalla icono={ClipboardCheck}>
-          Recepción de equipos
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ClipboardCheck}>Recepción de equipos</TituloPantalla>}>
         <Button onClick={() => { setAlta({ ...VACIO }); setError(null) }}>
           <FilePlus />Recibir equipo
         </Button>
-      </div>
+      </EncabezadoDePantalla>
 
       <Conmutador
         pestanias={PESTANIAS_RECEPCION}
@@ -333,7 +331,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
               className="grid gap-3"
               onSubmit={(e) => { e.preventDefault(); recibir() }}
             >
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Cliente</Label>
                 <SelectBuscable
                   value={alta.cliente_id}
@@ -343,7 +341,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   className="w-full"
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Equipo del inventario</Label>
                 <SelectBuscable
                   value={alta.equipo_id}
@@ -363,7 +361,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-tipo">Tipo</Label>
                   <Input
                     id="rec-tipo" placeholder="Notebook, impresora…"
@@ -371,28 +369,28 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                     onChange={(e) => setAlta({ ...alta, equipo_tipo: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-marca">Marca</Label>
                   <Input
                     id="rec-marca" value={alta.equipo_marca}
                     onChange={(e) => setAlta({ ...alta, equipo_marca: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-modelo">Modelo</Label>
                   <Input
                     id="rec-modelo" value={alta.equipo_modelo}
                     onChange={(e) => setAlta({ ...alta, equipo_modelo: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-serie">N.º de serie</Label>
                   <Input
                     id="rec-serie" value={alta.equipo_serial}
                     onChange={(e) => setAlta({ ...alta, equipo_serial: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-contacto">Contacto</Label>
                   <Input
                     id="rec-contacto" placeholder="Quién trae el equipo"
@@ -400,7 +398,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                     onChange={(e) => setAlta({ ...alta, contacto: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-tel">Teléfono</Label>
                   <Input
                     id="rec-tel" value={alta.contacto_telefono}
@@ -408,7 +406,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   />
                 </div>
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="rec-falla">Falla declarada por el cliente</Label>
                 <Textarea
                   id="rec-falla" rows={2}
@@ -417,7 +415,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   onChange={(e) => setAlta({ ...alta, falla_declarada: e.target.value })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="rec-acc">Accesorios entregados</Label>
                 <Input
                   id="rec-acc" placeholder="Cargador, funda, cable de red…"
@@ -425,7 +423,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   onChange={(e) => setAlta({ ...alta, accesorios: e.target.value })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="rec-estado">Estado físico visible</Label>
                 <Textarea
                   id="rec-estado" rows={2}
@@ -434,7 +432,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   onChange={(e) => setAlta({ ...alta, estado_fisico: e.target.value })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="rec-obs">Observaciones y daños preexistentes</Label>
                 <Textarea
                   id="rec-obs" rows={2}
@@ -443,7 +441,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                 />
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Técnico receptor</Label>
                   <SelectBuscable
                     value={alta.tecnico_id}
@@ -456,7 +454,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                     className="w-full"
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="rec-firma">Firma quien entrega (aclaración)</Label>
                   <Input
                     id="rec-firma" placeholder="Nombre de quien firma el papel"
@@ -493,7 +491,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
             className="grid gap-3"
             onSubmit={(e) => { e.preventDefault(); confirmarEntrega() }}
           >
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="ent-trabajo">Trabajo realizado</Label>
               <Textarea
                 id="ent-trabajo" rows={3}
@@ -501,7 +499,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                 onChange={(e) => setEntrega({ ...entrega, trabajo_realizado: e.target.value })}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="ent-obs">Observaciones</Label>
               <Textarea
                 id="ent-obs" rows={2}
@@ -509,14 +507,14 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                 onChange={(e) => setEntrega({ ...entrega, observaciones_entrega: e.target.value })}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="ent-firma">Firma quien retira (aclaración)</Label>
               <Input
                 id="ent-firma" value={entrega.retirado_por}
                 onChange={(e) => setEntrega({ ...entrega, retirado_por: e.target.value })}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Técnico que entrega</Label>
               <SelectBuscable
                 value={entrega.tecnico_entrega_id}

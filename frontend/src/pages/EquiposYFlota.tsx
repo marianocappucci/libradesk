@@ -15,6 +15,7 @@
  *  Cada pestaña es una ruta (ver `equipos-flota-piezas.tsx`), así que se puede
  *  linkear una sección y el botón "atrás" del navegador hace lo que se espera.
  */
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { useCallback, useEffect, useState } from 'react'
 import {
   api, ApiError, ESTADO_VEHICULO_LABELS, ESTADOS_VEHICULO_MANUALES,
@@ -204,10 +205,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <TituloPantalla icono={IconoFlota}>
-          Equipos y flota
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={IconoFlota}>Equipos y flota</TituloPantalla>}>
         {/* El botón de alta es el de la pestaña que se está mirando: dejar los
             dos siempre visibles ofrecería dar de alta un vehículo desde la
             pantalla de equipos, que no es lo que se vino a hacer. */}
@@ -217,7 +215,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
         {seccion === 'flota' && (
           <Button onClick={() => abrirVehiculo(null)}><FilePlus />Nuevo vehículo</Button>
         )}
-      </div>
+      </EncabezadoDePantalla>
 
       <Conmutador pestanias={PESTANIAS_EQUIPOS} actual={seccion} />
 
@@ -360,11 +358,11 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="eq-nombre">Nombre</Label>
               <Input id="eq-nombre" value={nombre} autoFocus onChange={(e) => setNombre(e.target.value)} placeholder="Cuadrilla Norte" />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Responsable</Label>
               <SelectBuscable
                 value={responsableId}
@@ -374,7 +372,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
                 emptyMessage="Nadie tiene el rol de responsable en Personal."
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Integrantes</Label>
               <div className="grid max-h-40 gap-1 overflow-y-auto rounded-md border p-2">
                 {personal.map((t) => (
@@ -394,7 +392,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
                 ))}
               </div>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="eq-obs">Observaciones</Label>
               <Input id="eq-obs" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
             </div>
@@ -419,25 +417,25 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="veh-patente">Patente</Label>
               <Input id="veh-patente" value={patente} autoFocus onChange={(e) => setPatente(e.target.value)} placeholder="AB123CD" />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="veh-marca">Marca</Label>
                 <Input id="veh-marca" value={marca} onChange={(e) => setMarca(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="veh-modelo">Modelo</Label>
                 <Input id="veh-modelo" value={modelo} onChange={(e) => setModelo(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="veh-anio">Año</Label>
                 <Input id="veh-anio" type="number" value={anio} onChange={(e) => setAnio(e.target.value)} />
               </div>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Estado</Label>
               {editandoVeh?.estado === 'asignado' ? (
                 <p className="text-sm text-muted-foreground">
@@ -476,7 +474,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
             </DialogDescription>
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Vehículo</Label>
             <SelectBuscable
               value={vehiculoAAsignar}

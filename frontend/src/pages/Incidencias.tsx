@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -394,10 +395,7 @@ export function Incidencias() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={AlertCircle}>
-          Incidencias
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={AlertCircle}>Incidencias</TituloPantalla>}>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
             <Button onClick={startCreate}><FilePlus />Nueva incidencia</Button>
@@ -493,7 +491,7 @@ export function Incidencias() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {/* El alta de equipo vive FUERA del Dialog de la incidencia: anidar dos
           Dialog de Radix cierra el de adentro al hacer foco en el de afuera, y
@@ -513,7 +511,7 @@ export function Incidencias() {
           </DialogHeader>
           <div className="grid gap-3">
             {equipoError && <p className="text-sm text-destructive">{equipoError}</p>}
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Tipo</span>
               <Input
                 autoFocus
@@ -523,14 +521,14 @@ export function Incidencias() {
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <span className="text-sm font-medium">Marca</span>
                 <Input
                   value={equipoNuevo.marca}
                   onChange={(e) => setEquipoNuevo({ ...equipoNuevo, marca: e.target.value })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <span className="text-sm font-medium">Modelo</span>
                 <Input
                   value={equipoNuevo.modelo}
@@ -538,7 +536,7 @@ export function Incidencias() {
                 />
               </div>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Número de serie</span>
               <Input
                 value={equipoNuevo.serial}
@@ -558,7 +556,7 @@ export function Incidencias() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Estado</span>
           <Select value={filtroEstado} onValueChange={setFiltroEstado}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -570,7 +568,7 @@ export function Incidencias() {
             </SelectContent>
           </Select>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Prioridad</span>
           <Select value={filtroPrioridad} onValueChange={setFiltroPrioridad}>
             <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -582,7 +580,7 @@ export function Incidencias() {
             </SelectContent>
           </Select>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Cliente</span>
           <SelectBuscable
             value={filtroCliente}
@@ -596,7 +594,7 @@ export function Incidencias() {
             raíz es el caso interesante ("todo lo de Hardware"). En cambio
             asignarle una a un ticket usa sólo las hojas. */}
         {categorias.length > 0 && (
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <span className="text-xs text-muted-foreground">Categoría</span>
             <SelectBuscable
               value={filtroCategoria}

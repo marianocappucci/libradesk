@@ -18,6 +18,7 @@
  *  backend (`app/main.py`), no acá.
  */
 import { useEffect, useState } from 'react'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { api, ApiError, type Deposito } from '../api'
 import { ConmutadorDepositos, TarjetaDeposito } from '@/components/deposito-piezas'
 import { Card, CardContent } from '@/components/ui/card'
@@ -119,19 +120,16 @@ export function Depositos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* "Depósitos" y no "Depósitos de la empresa": el título nombra la
-            sección y el conmutador de abajo dice en cuál de las dos estás,
-            mismo patrón que Configuración. Mientras el título cambiaba con la
-            pestaña, el ítem del menú no podía llamarse como ninguna de las dos
-            pantallas — de ahí el "Depósitos de equipos" que no aparecía en
-            ningún lado adentro. El párrafo de abajo sigue siendo distinto por
-            pestaña: eso es lo que explica dónde estás parado. */}
-        <TituloPantalla icono={Building2}>
-          Depósitos
-        </TituloPantalla>
+      {/* "Depósitos" y no "Depósitos de la empresa": el título nombra la
+          sección y el conmutador de abajo dice en cuál de las dos estás,
+          mismo patrón que Configuración. Mientras el título cambiaba con la
+          pestaña, el ítem del menú no podía llamarse como ninguna de las dos
+          pantallas — de ahí el "Depósitos de equipos" que no aparecía en
+          ningún lado adentro. El párrafo de abajo sigue siendo distinto por
+          pestaña: eso es lo que explica dónde estás parado. */}
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Building2}>Depósitos</TituloPantalla>}>
         <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
-      </div>
+      </EncabezadoDePantalla>
 
       <ConmutadorDepositos actual="propios" />
 
@@ -180,7 +178,7 @@ export function Depositos() {
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="dep-nombre">Nombre</Label>
               <Input
                 id="dep-nombre" value={nombre} autoFocus
@@ -188,7 +186,7 @@ export function Depositos() {
                 placeholder="Taller, Depósito central…"
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="dep-desc">Descripción</Label>
               <Input
                 id="dep-desc" value={descripcion}

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, opcionesCliente, opcionesProveedor,
   type Cliente, type Proveedor, type Reparacion,
@@ -273,13 +274,16 @@ export function Reparaciones() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <TituloPantalla icono={Wrench}>
-          Reparaciones
-          {estado === 'abiertas' && abiertas > 0 && (
-            <Badge variant="secondary">{abiertas} en service</Badge>
-          )}
-        </TituloPantalla>
+      <EncabezadoDePantalla
+        titulo={
+          <TituloPantalla icono={Wrench}>
+            Reparaciones
+            {estado === 'abiertas' && abiertas > 0 && (
+              <Badge variant="secondary">{abiertas} en service</Badge>
+            )}
+          </TituloPantalla>
+        }
+      >
         {/* Donde el resto de las pantallas tiene el alta, ésta explica por qué
             no la tiene. El motivo está en el docstring de arriba y no cambia;
             lo que faltaba era decírselo al que mira la pantalla: sin este
@@ -291,11 +295,11 @@ export function Reparaciones() {
             Ir a Incidencias
           </Link>
         </p>
-      </div>
+      </EncabezadoDePantalla>
 
       <Card>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -306,7 +310,7 @@ export function Reparaciones() {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Cliente</Label>
             <SelectBuscable
               value={clienteId}
@@ -315,7 +319,7 @@ export function Reparaciones() {
               placeholder="Todos los clientes"
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Proveedor</Label>
             <SelectBuscable
               value={proveedorId}

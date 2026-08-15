@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, opcionesDeposito,
   type Deposito, type EquipoEnDeposito,
@@ -160,9 +161,9 @@ export function DepositoDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 no-imprimir">
-        <div className="flex items-center gap-3">
-          {volver}
+      <EncabezadoDePantalla
+        className="no-imprimir"
+        titulo={
           <div>
             <TituloPantalla icono={Building2}>
               {deposito.nombre}
@@ -176,18 +177,18 @@ export function DepositoDetalle() {
               ].filter(Boolean).join(' · ')}
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <BotonImprimir disabled={equipos.length === 0} />
-          <Button
-            disabled={seleccion.size === 0}
-            onClick={() => { setMoverError(null); setMoverOpen(true) }}
-          >
-            <ArrowLeftRightAccion />
-            Mover {seleccion.size > 0 ? `(${seleccion.size})` : ''}
-          </Button>
-        </div>
-      </div>
+        }
+      >
+        <BotonImprimir disabled={equipos.length === 0} />
+        <Button
+          disabled={seleccion.size === 0}
+          onClick={() => { setMoverError(null); setMoverOpen(true) }}
+        >
+          <ArrowLeftRightAccion />
+          Mover {seleccion.size > 0 ? `(${seleccion.size})` : ''}
+        </Button>
+        {volver}
+      </EncabezadoDePantalla>
 
       <Imprimible>
         <EncabezadoImpreso
@@ -278,7 +279,7 @@ export function DepositoDetalle() {
           </DialogHeader>
           {moverError && <p className="text-sm text-destructive">{moverError}</p>}
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Destino</Label>
               <SelectBuscable
                 value={destino}
@@ -296,7 +297,7 @@ export function DepositoDetalle() {
                 </p>
               )}
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="mov-motivo">Motivo</Label>
               <Input
                 id="mov-motivo" value={motivo}

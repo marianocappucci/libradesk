@@ -217,7 +217,7 @@ function CategoriasCard() {
 
         {nueva !== null ? (
           <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); crear() }}>
-            <div className="grid flex-1 gap-1.5">
+            <div className="grid flex-1 gap-2">
               <span className="text-xs text-muted-foreground">
                 {nueva.parent_id === null
                   ? 'Categoría nueva'
@@ -668,21 +668,21 @@ function ServiciosCard() {
   ) {
     return (
       <div className="grid gap-3 rounded border p-3 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <Label htmlFor="srv-nombre">Nombre</Label>
           <Input
             id="srv-nombre" value={datos.nombre} placeholder="Mantenimiento preventivo"
             onChange={(e) => onCambiar({ ...datos, nombre: e.target.value })}
           />
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <Label htmlFor="srv-precio">Precio</Label>
           <Input
             id="srv-precio" type="number" min="0" step="0.01" value={datos.precio}
             onChange={(e) => onCambiar({ ...datos, precio: e.target.value })}
           />
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           {/* La alícuota es del servicio, no del cliente: en Argentina el
               21 / 10,5 / 27 / exento sale de QUÉ se vende. De la condición del
               cliente depende otra cosa — si el comprobante la discrimina. */}
@@ -700,7 +700,7 @@ function ServiciosCard() {
             ))}
           </select>
         </div>
-        <div className="grid gap-1.5 sm:col-span-2">
+        <div className="grid gap-2 sm:col-span-2">
           <Label htmlFor="srv-desc">Descripción para el comprobante</Label>
           <Input
             id="srv-desc" value={datos.descripcion}

@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, ApiError, type EquipoTrabajo } from '../api'
 import { TituloPantalla } from '@/components/titulo-pantalla'
@@ -144,15 +145,24 @@ export function Agenda() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <TituloPantalla icono={CalendarDays}>Agenda</TituloPantalla>
-          <p className="text-sm text-muted-foreground">
-            Qué tiene cada cuadrilla y en qué sale. Entrá a un día para ver el
-            detalle e imprimir la hoja de ruta.
-          </p>
-        </div>
-        <div className="grid gap-1.5">
+      {/* `items-end` pisa al `items-center` del componente (su `cn` es
+          `twMerge`, así que gana la clase de acá). Lo que va a la derecha no es
+          un botón sino un filtro CON etiqueta: alineado al centro, el select
+          queda flotando contra un bloque de título de dos renglones; alineado
+          abajo, su base coincide con la del párrafo. */}
+      <EncabezadoDePantalla
+        className="items-end"
+        titulo={
+          <div>
+            <TituloPantalla icono={CalendarDays}>Agenda</TituloPantalla>
+            <p className="text-sm text-muted-foreground">
+              Qué tiene cada cuadrilla y en qué sale. Entrá a un día para ver el
+              detalle e imprimir la hoja de ruta.
+            </p>
+          </div>
+        }
+      >
+        <div className="grid gap-2">
           <label htmlFor="filtro-cuadrilla" className="text-sm font-medium">
             Cuadrilla
           </label>
@@ -171,7 +181,7 @@ export function Agenda() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </EncabezadoDePantalla>
 
       {/* La barra de navegación, con la forma de Google Calendar: `Hoy`, las dos
           flechas y el título, **en ese orden y anclados a la izquierda**.

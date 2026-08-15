@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_ACTIVO_LABELS, ESTADOS_ACTIVO_MANUALES,
   type Activo, type HitoActivo, type ResumenActivos,
@@ -280,10 +281,7 @@ export function Activos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={IconoActivos}>
-          Activos en alquiler
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={IconoActivos}>Activos en alquiler</TituloPantalla>}>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo activo</Button>
@@ -372,7 +370,7 @@ export function Activos() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -392,7 +390,7 @@ export function Activos() {
       )}
 
       <Card>
-        <CardContent className="grid gap-1.5 sm:max-w-xs">
+        <CardContent className="grid gap-2 sm:max-w-xs">
           <Label>Estado</Label>
           <Select value={estado} onValueChange={setEstado}>
             <SelectTrigger><SelectValue /></SelectTrigger>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type Cliente, type EstadoPresupuesto,
@@ -293,12 +294,9 @@ export function Presupuestos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={FileText}>
-          Presupuestos
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={FileText}>Presupuestos</TituloPantalla>}>
         {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

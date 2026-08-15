@@ -15,6 +15,7 @@
 // backend monta `proveedores.router` con `staff_or_admin`, así que cualquier
 // staff ya podía crear, editar y borrar por la API. Si se decide restringirlo,
 // el lugar es el backend, no esta pantalla.
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { useEffect, useState } from 'react'
 import { api, ApiError, type Proveedor } from '../api'
 import { Button } from '@/components/ui/button'
@@ -168,10 +169,7 @@ export function Proveedores() {
           dentro de la tarjeta, debajo de un `CardDescription` de cuatro
           líneas, y en una notebook había que bajar la vista para encontrarla
           (reporte del usuario, 2026-08-13). */}
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={Truck}>
-          Proveedores
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Truck}>Proveedores</TituloPantalla>}>
         {nuevo === null && editando === null && (
           <Button
             onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
@@ -179,7 +177,7 @@ export function Proveedores() {
             <FilePlus />Nuevo proveedor
           </Button>
         )}
-      </div>
+      </EncabezadoDePantalla>
 
       <Card>
         <CardHeader>

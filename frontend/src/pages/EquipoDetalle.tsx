@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, ubicacionTexto, type EquipoFicha,
@@ -140,9 +141,9 @@ export function EquipoDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 no-imprimir">
-        <div className="flex items-center gap-3">
-          {volver}
+      <EncabezadoDePantalla
+        className="no-imprimir"
+        titulo={
           <div>
             <TituloPantalla icono={Monitor}>
               {equipo.descripcion}
@@ -155,9 +156,11 @@ export function EquipoDetalle() {
                 ubicacionTexto(equipo.lugar, equipo.ubicacion_oficina)].join(' · ')}
             </p>
           </div>
-        </div>
+        }
+      >
         <BotonImprimir>Imprimir informe</BotonImprimir>
-      </div>
+        {volver}
+      </EncabezadoDePantalla>
 
       <Imprimible>
         <EncabezadoImpreso

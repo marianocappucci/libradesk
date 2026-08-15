@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useNavigate } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_CONTRATO_LABELS, METODO_ACTUALIZACION_LABELS,
   PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, TIPOS_CON_CUOTA, opcionesCliente,
@@ -218,10 +219,7 @@ export function Contratos() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={FileSignature}>
-          Equipos en alquiler
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={FileSignature}>Equipos en alquiler</TituloPantalla>}>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo contrato</Button>
@@ -355,13 +353,13 @@ export function Contratos() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Card>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={setEstado}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -373,7 +371,7 @@ export function Contratos() {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Modalidad</Label>
             <Select value={tipo} onValueChange={setTipo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -385,7 +383,7 @@ export function Contratos() {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Cliente</Label>
             <SelectBuscable
               value={clienteId}
