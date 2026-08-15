@@ -182,37 +182,37 @@ function FormProducto({ producto, categorias, onGuardar }: {
           <DialogTitle>{editando ? 'Editar producto' : 'Nuevo producto'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="p-nombre">Nombre</Label>
             <Input id="p-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="PLUG RJ 45 CAT 6" />
           </div>
           {!editando && (
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="p-codigo">Código</Label>
               <Input id="p-codigo" value={codigo} onChange={(e) => setCodigo(e.target.value)}
                      placeholder="10000315" />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="p-costo">Costo</Label>
               <Input id="p-costo" type="number" value={costo}
                      onChange={(e) => setCosto(e.target.value)} />
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="p-precio">Precio de venta</Label>
               <Input id="p-precio" type="number" value={precio}
                      onChange={(e) => setPrecio(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="p-minimo">Stock mínimo</Label>
               <Input id="p-minimo" type="number" value={minimo}
                      onChange={(e) => setMinimo(e.target.value)} />
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="p-unidad">Unidad</Label>
               <Select value={unidad} onValueChange={setUnidad}>
                 <SelectTrigger id="p-unidad"><SelectValue /></SelectTrigger>
@@ -224,7 +224,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
               </Select>
             </div>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="p-categoria">Categoría</Label>
             <Select value={categoriaId} onValueChange={setCategoriaId}>
               <SelectTrigger id="p-categoria"><SelectValue /></SelectTrigger>
