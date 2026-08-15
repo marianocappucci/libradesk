@@ -286,8 +286,13 @@ export function Activos() {
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo activo</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
+          {/* Más ancho y en tres columnas, con una línea abajo del título y otra
+              arriba del pie (pedido del humano, 2026-08-15). Son 14 campos: en
+              dos columnas y sin bordes, el modal salía más alto que la pantalla
+              y el pie se perdía contra los últimos campos. El cuerpo scrollea
+              solo, así que el título y los botones quedan siempre a la vista. */}
+          <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
+            <DialogHeader className="border-b p-6">
               <DialogTitle className="flex items-center gap-2">
                 <Boxes className="size-4" />
                 {editando === null ? 'Nuevo activo' : `Editar — ${editando.descripcion}`}
@@ -298,8 +303,9 @@ export function Activos() {
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form className="grid gap-3 sm:grid-cols-2" onSubmit={form.handleSubmit(handleSubmit)}>
-                {formError && <p className="sm:col-span-2 text-sm text-destructive">{formError}</p>}
+              <form className="flex min-h-0 flex-col" onSubmit={form.handleSubmit(handleSubmit)}>
+                <div className="grid gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
+                {formError && <p className="sm:col-span-2 lg:col-span-3 text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="tipo" render={({ field }) => (
                   <FormItem><FormLabel>Tipo</FormLabel><FormControl><Input {...field} autoFocus placeholder="Central telefónica" /></FormControl><FormMessage /></FormItem>
                 )} />
@@ -355,12 +361,13 @@ export function Activos() {
                   <FormItem><FormLabel>Valor de reposición</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="accesorios" render={({ field }) => (
-                  <FormItem className="sm:col-span-2"><FormLabel>Accesorios entregados</FormLabel><FormControl><Input {...field} placeholder="Fuente, cables, soporte de pared" /></FormControl></FormItem>
+                  <FormItem className="sm:col-span-2 lg:col-span-3"><FormLabel>Accesorios entregados</FormLabel><FormControl><Input {...field} placeholder="Fuente, cables, soporte de pared" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="observaciones" render={({ field }) => (
-                  <FormItem className="sm:col-span-2"><FormLabel>Observaciones</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                  <FormItem className="sm:col-span-2 lg:col-span-3"><FormLabel>Observaciones</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
                 )} />
-                <DialogFooter className="sm:col-span-2">
+                </div>
+                <DialogFooter className="border-t p-6">
                   <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                   <Button type="submit" disabled={saving}>
                     {saving ? 'Guardando…' : editando === null ? 'Crear activo' : 'Guardar'}
