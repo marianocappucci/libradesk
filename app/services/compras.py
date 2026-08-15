@@ -62,9 +62,20 @@ def _nombre_proveedores(conn) -> dict[int, str]:
 # ── Ordenes de compra ────────────────────────────────────────────────────
 
 
-def listar_ordenes() -> list[dict]:
+def listar_ordenes(sucursal_id: int | None = None) -> list[dict]:
+    """Las ordenes de compra, opcionalmente recortadas a una sucursal.
+
+    Filtra por `purchase_orders.branch_id`, que es **para donde se compro** --no
+    donde entro la mercaderia--. Los dos pueden no coincidir: una orden de
+    Chivilcoy se puede recibir en el deposito central. Ver
+    `listar_recepciones()`, que resuelve la sucursal por el otro lado.
+    """
     with libracore_core.get_connection() as conn:
         nombres = _nombre_proveedores(conn)
+        sucursales = {
+            s["id"]: s["nombre"]
+            for s in conn.execute("SELECT id, nombre FROM sucursales").fetchall()
+        }
         ordenes = _repo(conn).list_purchase_orders()
         return [
             {
@@ -76,6 +87,8 @@ def listar_ordenes() -> list[dict]:
                     comercial.proveedor_de_party(o.supplier_party_id), "—"
                 ),
                 "fecha": o.ordered_at.isoformat() if o.ordered_at else None,
+                "sucursal_id": o.branch_id,
+                "sucursal": sucursales.get(o.branch_id, ""),
                 "items": len(o.items),
                 "total": float(
                     sum(i.quantity_ordered * i.unit_cost for i in o.items)
@@ -83,6 +96,7 @@ def listar_ordenes() -> list[dict]:
                 "recibido_pct": _recibido_pct(o),
             }
             for o in ordenes
+            if sucursal_id is None or o.branch_id == sucursal_id
         ]
 
 
@@ -157,6 +171,9 @@ def crear_orden(proveedor_id: int, items: list[dict], *, notas: str = "",
         for i in items
     )
     with libracore_core.get_connection() as conn:
+        # `purchase_orders.branch_id` no tiene FK contra `sucursales`. Sin esta
+        # guarda, una orden con un id inventado se pierde de la vista filtrada.
+        comercial.verificar_sucursal(conn, sucursal_id)
         orden = _repo(conn).save_purchase_order(
             PurchaseOrder(
                 None, _proximo_numero(conn, "purchase_orders", "OC"),
@@ -183,12 +200,60 @@ def _proximo_numero(conn, tabla: str, prefijo: str) -> str:
 # ── Recepciones ──────────────────────────────────────────────────────────
 
 
-def listar_recepciones() -> list[dict]:
+def _sucursal_de_recepciones(conn) -> dict[int, dict]:
+    """De que sucursal es cada recepcion, resuelta por el deposito donde entro.
+
+    ⚠️ **`purchase_receipts` no tiene `branch_id`** --el motor se lo puso a las
+    ordenes y no a las recepciones-- asi que la sucursal no se puede leer de la
+    fila. Se deduce del **movimiento de stock que la recepcion genero**: el
+    motor lo escribe con `source_type='purchase_receipt'` y `source_id` = id de
+    la recepcion (ver `confirm_purchase_receipt`), y ese movimiento tiene el
+    `location_id` donde entro la mercaderia.
+
+    Deducirlo por ahi y no por la orden vinculada es lo que hace que funcione
+    para **las recepciones sin orden**, que son la mayoria: una compra de
+    mostrador no tiene orden que consultar. Y no falla para las que si la
+    tienen, porque toda recepcion de LibraDesk se confirma en el acto y por lo
+    tanto siempre movio stock (ver `crear_recepcion`).
+    """
+    return {
+        r["recepcion_id"]: {"sucursal_id": r["branch_id"],
+                            "deposito_id": r["deposito_id"],
+                            "deposito": r["deposito"]}
+        for r in conn.execute(
+            # `DISTINCT` y no `GROUP BY sm.source_id`: agrupar solo por el id y
+            # seleccionar las columnas del deposito es valido en SQLite y
+            # PostgreSQL lo rechaza ("column l.branch_id must appear in the
+            # GROUP BY clause"). Da una fila por recepcion igual, porque
+            # `confirm_purchase_receipt` recibe UN `location_id` y escribe todas
+            # las lineas de la recepcion contra ese deposito.
+            """
+            SELECT DISTINCT sm.source_id AS recepcion_id, l.branch_id,
+                   l.id AS deposito_id, l.name AS deposito
+            FROM stock_movements sm
+            JOIN locations l ON l.id = sm.location_id
+            WHERE sm.source_type = 'purchase_receipt'
+            """
+        ).fetchall()
+    }
+
+
+def listar_recepciones(sucursal_id: int | None = None) -> list[dict]:
     with libracore_core.get_connection() as conn:
         nombres = _nombre_proveedores(conn)
+        sucursales = {
+            s["id"]: s["nombre"]
+            for s in conn.execute("SELECT id, nombre FROM sucursales").fetchall()
+        }
+        donde = _sucursal_de_recepciones(conn)
         recepciones = _repo(conn).list_purchase_receipts()
-        return [
-            {
+        salida = []
+        for r in recepciones:
+            ubicacion = donde.get(r.id, {})
+            suc = ubicacion.get("sucursal_id")
+            if sucursal_id is not None and suc != sucursal_id:
+                continue
+            salida.append({
                 "id": r.id,
                 "estado": str(r.status),
                 "proveedor_id": comercial.proveedor_de_party(r.supplier_party_id),
@@ -198,11 +263,14 @@ def listar_recepciones() -> list[dict]:
                 "fecha": r.received_at.isoformat() if r.received_at else None,
                 "documento": r.document_reference or "",
                 "orden_id": r.purchase_order_id,
+                "deposito_id": ubicacion.get("deposito_id"),
+                "deposito": ubicacion.get("deposito", ""),
+                "sucursal_id": suc,
+                "sucursal": sucursales.get(suc, ""),
                 "items": len(r.items),
                 "total": float(sum(i.quantity * i.unit_cost for i in r.items)),
-            }
-            for r in recepciones
-        ]
+            })
+        return salida
 
 
 def crear_recepcion(proveedor_id: int, deposito_id: int, items: list[dict], *,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -326,10 +327,7 @@ export function Clientes() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <TituloPantalla icono={Users}>
-          Clientes
-        </TituloPantalla>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Users}>Clientes</TituloPantalla>}>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo cliente</Button>
@@ -450,7 +448,7 @@ export function Clientes() {
             </Form>
             </DialogContent>
           </Dialog>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -493,7 +491,7 @@ export function Clientes() {
             className="flex items-end gap-2"
             onSubmit={(e) => { e.preventDefault(); crearSector() }}
           >
-            <div className="grid flex-1 gap-1.5">
+            <div className="grid flex-1 gap-2">
               <span className="text-xs text-muted-foreground">Nuevo sector</span>
               <Input
                 value={nuevoSector}

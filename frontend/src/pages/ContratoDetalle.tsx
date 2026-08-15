@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_CONTRATO_LABELS, METODO_ACTUALIZACION_LABELS,
   PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, opcionesActivo, opcionesProveedor,
@@ -212,22 +213,26 @@ export function ContratoDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <Button size="icon" variant="outline" aria-label="Volver" onClick={() => navigate('/contratos')}>
-            <ArrowLeft />
-          </Button>
+      <EncabezadoDePantalla
+        titulo={
           <div>
             <TituloPantalla icono={FileSignature}>{contrato.numero}</TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {TIPO_CONTRATO_LABELS[contrato.tipo_contrato]} · {contrato.cliente_nombre}
             </p>
           </div>
-        </div>
+        }
+      >
         <Badge variant={contrato.estado === 'activo' ? 'default' : 'outline'}>
           {ESTADO_CONTRATO_LABELS[contrato.estado] ?? contrato.estado}
         </Badge>
-      </div>
+        {/* Era el "Volver" que estaba del lado izquierdo, y además como botón
+            de sólo icono: las dos cosas que esta pantalla hacía distinto del
+            resto. Ahora es el mismo de los otros detalles. */}
+        <Button size="sm" variant="outline" onClick={() => navigate('/contratos')}>
+          <ArrowLeft />Volver
+        </Button>
+      </EncabezadoDePantalla>
 
       <Card>
         <CardHeader><CardTitle>Datos del contrato</CardTitle></CardHeader>
@@ -377,7 +382,7 @@ export function ContratoDetalle() {
             {formError && <p className="text-sm text-destructive">{formError}</p>}
 
             {(accion?.tipo === 'colocar' || accion?.tipo === 'reemplazar') && (
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>{accion.tipo === 'colocar' ? 'Activo' : 'Activo de reemplazo'}</Label>
                 <SelectBuscable
                   value={activoId}
@@ -401,7 +406,7 @@ export function ContratoDetalle() {
               </div>
             )}
 
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>
                 {accion?.tipo === 'colocar' && 'Fecha de instalación'}
                 {accion?.tipo === 'retirar' && 'Fecha de retiro'}
@@ -412,14 +417,14 @@ export function ContratoDetalle() {
             </div>
 
             {accion?.tipo === 'colocar' && (
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Ubicación</Label>
                 <Input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} placeholder="Rack sala de servidores" />
               </div>
             )}
 
             {accion?.tipo === 'retirar' && (
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Motivo</Label>
                 <Select value={motivoRetiro} onValueChange={setMotivoRetiro}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -432,7 +437,7 @@ export function ContratoDetalle() {
             )}
 
             {(accion?.tipo === 'retirar' || accion?.tipo === 'reemplazar') && (
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>El equipo que sale queda</Label>
                 <Select value={estadoActivo} onValueChange={setEstadoActivo}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -448,7 +453,7 @@ export function ContratoDetalle() {
             )}
 
             {accion?.tipo === 'precio' && (
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Importe nuevo</Label>
                 <Input type="number" step="0.01" value={importe} onChange={(e) => setImporte(e.target.value)} />
               </div>
@@ -460,7 +465,7 @@ export function ContratoDetalle() {
             {mandaAService && (accion?.tipo === 'retirar' || accion?.tipo === 'reemplazar') && (
               <div className="grid gap-3 rounded-md border p-3">
                 <p className="text-sm font-medium">Se manda a service</p>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Proveedor</Label>
                   <SelectBuscable
                     value={proveedorId}
@@ -469,12 +474,12 @@ export function ContratoDetalle() {
                     placeholder="Elegí un proveedor"
                   />
                 </div>
-                <div className="grid gap-1.5 sm:grid-cols-2 sm:gap-3">
-                  <div className="grid gap-1.5">
+                <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                  <div className="grid gap-2">
                     <Label>Remito de salida</Label>
                     <Input value={remitoSalida} onChange={(e) => setRemitoSalida(e.target.value)} />
                   </div>
-                  <div className="grid gap-1.5">
+                  <div className="grid gap-2">
                     <Label>RMA</Label>
                     <Input value={rma} onChange={(e) => setRma(e.target.value)} />
                   </div>
@@ -498,7 +503,7 @@ export function ContratoDetalle() {
             {vuelveDeService && (accion?.tipo === 'colocar' || accion?.tipo === 'reemplazar') && (
               <div className="grid gap-3 rounded-md border p-3">
                 <p className="text-sm font-medium">Vuelve del service</p>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Diagnóstico del proveedor</Label>
                   <Input
                     value={cierreDiagnostico}
@@ -506,7 +511,7 @@ export function ContratoDetalle() {
                     placeholder="Se cambió la fuente"
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Costo de la reparación</Label>
                   <Input
                     type="number" step="0.01" value={cierreCosto}

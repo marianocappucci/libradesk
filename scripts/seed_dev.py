@@ -901,11 +901,630 @@ def sembrar(api: Api) -> None:
         })
         contar("incidencias_con_abono", True)
 
+    _sembrar_sucursales_y_stock(api, contar)
+
     # El logo del negocio, para que los comprobantes salgan como los de un
     # cliente y no con un hueco arriba.
     _cargar_logo(api, "Compulibra Servicios IT", "C", (79, 70, 229), contar)
 
+    # El circuito comercial completo: compras, ventas, egresos, cuenta
+    # corriente, materiales y catálogo. Hasta el 2026-08-15 esas pantallas
+    # abrían **vacías** en dev — medido con un conteo por tabla, no a ojo: 27
+    # de 64 tablas en cero.
+    _sembrar_circuito_comercial(api, contar)
+
+    # La agenda, con trabajos en un rango de días hacia atrás y hacia adelante.
+    _sembrar_agenda_en_rango(api, contar)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
+
+
+def _sembrar_sucursales_y_stock(api: Api, contar) -> None:
+    """Dos sucursales con stock **desbalanceado**, y una transferencia entre ellas.
+
+    Sin esto el módulo comercial de dev es invisible: al desplegar sucursales el
+    2026-08-14, dev tenía 0 sucursales, 0 depósitos de stock y 0 consumibles, así
+    que ninguna de las pantallas que filtran por sucursal se podía mirar.
+
+    ## Por qué el stock arranca desbalanceado
+
+    **Con la misma cantidad de los dos lados no se puede revisar el filtro**: una
+    pantalla que ignora la sucursal muestra exactamente el mismo número que una
+    que la respeta. Chivilcoy arranca sobrada y Mercedes corta, así que cambiar
+    el selector del encabezado tiene que cambiar lo que se ve — y si no cambia,
+    se ve que no cambia.
+
+    Por lo mismo hay **un consumible bajo mínimo sólo en Mercedes** (mínimo 50,
+    30 allá y 400 en Chivilcoy): es el caso que hace visible la decisión de que
+    el mínimo se compara contra el stock de la sucursal mirada, no contra el de
+    la empresa.
+
+    ## Qué estados deja a la vista
+
+    - un depósito **sin sucursal** (el taller), que es el caso de la empresa de
+      un solo local y el que rompe si algún filtro asume que todo tiene sucursal;
+    - un **precio propio de sucursal** conviviendo con el general, para que la
+      lista de precios muestre las píldoras «Propio» y «General»;
+    - una **transferencia entre sucursales** ya hecha, así el historial no
+      arranca vacío.
+
+    Idempotente por nombre, como el resto del seed. Los ajustes de stock **no**
+    lo son —el ledger es aditivo— así que sólo se cargan la primera vez, cuando
+    el depósito se acaba de crear.
+    """
+    sucursales = {}
+    for nombre, codigo, direccion in (
+        ("Chivilcoy", "CHI", "Av. Villarino 250"),
+        ("Mercedes", "MER", "Calle 29 y 18"),
+    ):
+        s, nuevo = obtener_o_crear(
+            api, "/api/sucursales?solo_activas=false", "nombre", nombre,
+            {"nombre": nombre, "codigo": codigo, "direccion": direccion},
+        )
+        sucursales[nombre] = s
+        contar("sucursales", nuevo)
+
+    consumibles = {}
+    for nombre, minimo, costo, precio in (
+        ("Plug RJ45", 50, 120, 260),
+        ("Cable UTP Cat 6 (m)", 100, 900, 1650),
+        ("Patchcord 2 m", 20, 2400, 4300),
+    ):
+        c, nuevo = obtener_o_crear(
+            api, "/api/consumibles?solo_activos=false", "nombre", nombre,
+            {"nombre": nombre, "stock_minimo": minimo, "costo": costo,
+             "precio": precio},
+        )
+        consumibles[nombre] = c
+        contar("consumibles", nuevo)
+
+    depositos = {}
+    for nombre, sucursal in (
+        ("Depósito central Chivilcoy", "Chivilcoy"),
+        ("Kangoo Norte", "Chivilcoy"),
+        ("Depósito Mercedes", "Mercedes"),
+        # A propósito sin sucursal: es el caso de la empresa de un solo local, y
+        # el que destapa cualquier filtro que asuma que todo tiene sucursal.
+        ("Taller", None),
+    ):
+        d, nuevo = obtener_o_crear(
+            api, "/api/depositos-stock", "nombre", nombre,
+            {"nombre": nombre,
+             "sucursal_id": sucursales[sucursal]["id"] if sucursal else None},
+        )
+        depositos[nombre] = (d, nuevo)
+        contar("depositos_stock", nuevo)
+
+    # (consumible, depósito, cantidad). El desbalance es el punto: ver el
+    # docstring.
+    for item, deposito, cantidad in (
+        ("Plug RJ45", "Depósito central Chivilcoy", 400),
+        ("Plug RJ45", "Kangoo Norte", 60),
+        ("Plug RJ45", "Depósito Mercedes", 30),      # bajo el mínimo de 50
+        ("Cable UTP Cat 6 (m)", "Depósito central Chivilcoy", 850),
+        ("Cable UTP Cat 6 (m)", "Depósito Mercedes", 120),
+        ("Patchcord 2 m", "Depósito central Chivilcoy", 45),
+        ("Patchcord 2 m", "Taller", 12),
+    ):
+        # Sólo si el depósito se acaba de crear: un ajuste de stock NO es
+        # idempotente —el ledger es aditivo— y correr el seed dos veces
+        # duplicaría las existencias sin que nada avise.
+        if not depositos[deposito][1]:
+            continue
+        api.post(f"/api/consumibles/{consumibles[item]['id']}/ajuste", {
+            "deposito_id": depositos[deposito][0]["id"],
+            "cantidad": cantidad, "nota": "Carga inicial (seed)",
+        })
+        contar("ajustes_de_stock", True)
+
+    # Una transferencia entre sucursales ya hecha, para que el historial de
+    # `/api/stock/transferencias` no arranque vacío.
+    if depositos["Depósito Mercedes"][1]:
+        api.post("/api/consumibles/transferir", {
+            "item_id": consumibles["Cable UTP Cat 6 (m)"]["id"],
+            "origen_id": depositos["Depósito central Chivilcoy"][0]["id"],
+            "destino_id": depositos["Depósito Mercedes"][0]["id"],
+            "cantidad": 50,
+            "nota": "Reposición Mercedes (seed)",
+        })
+        contar("transferencias_entre_sucursales", True)
+
+    # Una lista de precios con un precio propio de sucursal conviviendo con el
+    # general: es lo que hace visibles las píldoras «Propio» y «General».
+    lista, nueva = obtener_o_crear(
+        api, "/api/listas-precio", "nombre", "Mostrador",
+        {"nombre": "Mostrador", "descripcion": "Precio de lista al público"},
+    )
+    contar("listas_precio", nueva)
+    if nueva:
+        for item, precio in (("Plug RJ45", 260), ("Cable UTP Cat 6 (m)", 1650),
+                             ("Patchcord 2 m", 4300)):
+            api.put(f"/api/listas-precio/{lista['id']}/precios", {
+                "item_id": consumibles[item]["id"], "precio": precio,
+            })
+            contar("precios", True)
+        # Mercedes cobra el plug más caro: mismo producto, precio propio.
+        api.put(f"/api/listas-precio/{lista['id']}/precios", {
+            "item_id": consumibles["Plug RJ45"]["id"], "precio": 310,
+            "sucursal_id": sucursales["Mercedes"]["id"],
+        })
+        contar("precios_de_sucursal", True)
+
+
+#: Tablas que quedan vacías **a propósito** y que este seed no toca. Está
+#: escrito acá y no sólo en el commit porque la pregunta "¿por qué esto sigue
+#: vacío?" vuelve cada vez que alguien mira el conteo por tabla.
+#:
+#: | tabla | por qué |
+#: |---|---|
+#: | `facturas`, `cajas`, `caja_movimientos` | LibraDesk **no factura ni lleva caja**: no hay endpoint ni pantalla que las escriba. Existen porque el motor las consulta —`get_cc_saldo()` hace un JOIN contra las dos primeras y `create_pago_egreso()` busca la caja por defecto—, y vacías devuelven 0 y NULL, que es la respuesta correcta. Ver `app/services/comercial.py`. |
+#: | `item_variants`, `cc_resumenes_enviados`, `commerce_settings` | Mismo caso: son del motor y este producto no las usa. |
+#: | `sale_payments` | El motor la trae, pero **LibraDesk escribe los pagos en `ventas_pagos`** — está dicho en el docstring de `app/services/ventas.py`. Sembrarla dejaría los pagos en la tabla que no lee nadie. |
+#: | `smtp_settings`, `config_facturacion` | Llevan **credenciales**. Sembrar unas falsas deja la instancia diciendo que está configurada cuando no lo está, y el primer envío falla en el peor momento. Se configuran a mano, por su pantalla. |
+#: | `password_reset_tokens` | Tokens de un solo uso que crea el flujo de recuperación. Sembrar tokens es sembrar basura con fecha de vencimiento. |
+#: | `envios_facturacion` | Nace de mandar algo al puente, y el puente necesita `config_facturacion`. |
+#: | `auth_log`, `alembic_version_libradesk`, `schema_migrations` | Auditoría e infraestructura. |
+#:
+#: 🔴 **La lista se verificó contra la base, no se escribió de memoria.** Tras
+#: sembrar dev el 2026-08-15 quedaron 11 tablas en cero (de 27 que había antes),
+#: y son **exactamente** éstas menos las tres de infraestructura y auditoría,
+#: que nunca estuvieron vacías. `sale_payments` y `commerce_settings` entraron
+#: acá por ese cotejo: yo las había dado por sembradas.
+TABLAS_VACIAS_A_PROPOSITO = (
+    "facturas", "cajas", "caja_movimientos",
+    "item_variants", "cc_resumenes_enviados", "commerce_settings",
+    "sale_payments",
+    "smtp_settings", "config_facturacion",
+    "password_reset_tokens", "envios_facturacion",
+    "auth_log", "alembic_version_libradesk", "schema_migrations",
+)
+
+
+def _sembrar_circuito_comercial(api: Api, contar) -> None:
+    """Compras, ventas, egresos, cuenta corriente, materiales y catálogo.
+
+    Pedido del humano (2026-08-15): *"que no quede nada absolutamente nada
+    vacío, que haya de todo en todos lados de todos los modos posibles"*.
+
+    El agujero se midió, no se supuso: un conteo por tabla sobre dev daba **27
+    de 64 tablas en cero**, y todo el módulo comercial estaba entre ellas. Seis
+    pantallas —Compras, Recepciones, Ventas, Egresos, Cuenta corriente y los
+    materiales de un ticket— abrían sin una sola fila.
+
+    ## Los estados, no sólo el caso feliz
+
+    Vale el mismo criterio que el resto de este archivo: cada circuito deja al
+    menos **dos filas en estados distintos**, porque una pantalla donde todo
+    está igual no muestra si los filtros y las píldoras hacen algo.
+
+    - Una orden de compra **recibida** y otra **pendiente**.
+    - Un egreso **pagado** y otro **impago** (y uno pagado a medias, que es el
+      que hace visible el estado "parcial").
+    - Una venta **cobrada al contado** y otra **a cuenta corriente**, que es la
+      que le deja saldo al cliente.
+    - Un recibo emitido sobre una de las ventas: la otra queda sin recibo, que
+      es lo que distingue las dos filas en la lista.
+
+    ## Idempotente, como el resto
+
+    Los circuitos que no tienen un nombre por el que buscar —una venta, un
+    egreso— se saltean si la lista ya trae filas. Así el seed se puede correr
+    después de cada deploy sin apilar veinte ventas iguales.
+    """
+    clientes = api.get("/api/clientes") or []
+    proveedores = api.get("/api/proveedores") or []
+    consumibles = api.get("/api/consumibles") or []
+
+    # 🔴 **`/api/depositos-stock` y NO `/api/depositos`.** Son dos cosas
+    # distintas con nombres parecidos: `/api/depositos` es dónde está guardado
+    # un EQUIPO (el taller, el pañol del cliente) y `/api/depositos-stock` es
+    # dónde está la MERCADERÍA — la tabla `locations`, que es a la que apunta
+    # la FK de `stock_movements`.
+    #
+    # La primera versión usaba el primero. La suite pasó igual, porque en una
+    # base recién creada los ids de las dos tablas arrancan en 1 y coinciden de
+    # casualidad, así que la FK quedaba satisfecha sin querer. Contra dev, con
+    # las tablas ya desfasadas, el primer POST de recepción devolvió **500**:
+    # `stock_movements_location_id_fkey — Key (location_id)=(2) is not present
+    # in table "locations"`. Es el mismo modo de fallar de siempre: un dato de
+    # prueba con una forma que producción no tiene.
+    depositos = api.get("/api/depositos-stock") or []
+
+    if not (clientes and proveedores and depositos and consumibles):
+        # Sin las bases no se puede armar nada de esto, y fallar con un
+        # KeyError tres pantallas más abajo no explicaría por qué.
+        print("  circuito comercial: faltan clientes/proveedores/depósitos de "
+              "stock/consumibles, se saltea")
+        return
+
+    cliente = clientes[0]
+    otro_cliente = clientes[1] if len(clientes) > 1 else clientes[0]
+    proveedor = proveedores[0]
+    deposito = depositos[0]
+    items = {c["nombre"]: c for c in consumibles}
+    alguno = consumibles[0]
+
+    # ── Catálogo: categorías y códigos de barra ───────────────────────────
+    for nombre in ("Cableado estructurado", "Conectividad", "Energía"):
+        _, nuevo = obtener_o_crear(
+            api, "/api/consumibles-categorias", "nombre", nombre,
+            {"nombre": nombre},
+        )
+        contar("categorias_de_consumible", nuevo)
+
+    # Un código por ítem: es lo que hace que la búsqueda por código encuentre
+    # algo. Sin ninguno, esa mitad del buscador no se puede probar.
+    for i, item in enumerate(consumibles[:4]):
+        codigos = api.get(f"/api/consumibles/{item['id']}/codigos") or []
+        if not codigos:
+            api.post(f"/api/consumibles/{item['id']}/codigos",
+                     {"codigo": f"779{i:04d}00{i}"})
+            contar("codigos_de_barra", True)
+
+    # ── Compras: una orden recibida y otra pendiente ──────────────────────
+    #
+    # 🔴 **La guarda mira las RECEPCIONES, no las órdenes.** Con `if not
+    # ordenes` el bloque era todo-o-nada, y una corrida que se cortara en el
+    # medio —pasó: el 500 del depósito equivocado dejó una orden creada y
+    # ninguna recepción— quedaba trabada para siempre: en la corrida siguiente
+    # ya había una orden, así que se salteaba entero y la recepción no se creaba
+    # nunca. Colgando de la recepción, el seed se puede reanudar.
+    if not (api.get("/api/recepciones-compra") or []):
+        recibida = api.post("/api/ordenes-compra", {
+            "proveedor_id": proveedor["id"],
+            "items": [
+                {"item_id": alguno["id"], "descripcion": alguno["nombre"],
+                 "cantidad": 100, "precio": 180},
+            ],
+            "notas": "Reposición de stock de mostrador.",
+        })
+        contar("ordenes_de_compra", True)
+
+        # La recepción cuelga de esa orden: es lo que la pasa a "recibida" y,
+        # de paso, suma el stock. Sin `orden_id` quedarían dos cosas sueltas
+        # que la pantalla no puede relacionar.
+        api.post("/api/recepciones-compra", {
+            "proveedor_id": proveedor["id"],
+            "deposito_id": deposito["id"],
+            "orden_id": recibida["id"],
+            "documento": "R-0001-00004521",
+            "items": [
+                {"item_id": alguno["id"], "descripcion": alguno["nombre"],
+                 "cantidad": 100, "precio": 180},
+            ],
+        })
+        contar("recepciones_de_compra", True)
+
+        # Y una que sigue esperando, para que la lista tenga los dos estados.
+        api.post("/api/ordenes-compra", {
+            "proveedor_id": proveedor["id"],
+            "items": [
+                {"item_id": items.get("Patchcord 2 m", alguno)["id"],
+                 "descripcion": "Patchcord 2 m", "cantidad": 40, "precio": 2900},
+            ],
+            "notas": "Pendiente de entrega, prometida para la semana que viene.",
+        })
+        contar("ordenes_de_compra", True)
+
+    # ── Egresos: pagado, impago y parcial ─────────────────────────────────
+    for nombre in ("Alquiler", "Servicios", "Combustible", "Herramientas"):
+        _, nuevo = obtener_o_crear(
+            api, "/api/egresos-categorias", "nombre", nombre, {"nombre": nombre},
+        )
+        contar("categorias_de_egreso", nuevo)
+
+    if not (api.get("/api/egresos") or []):
+        # (concepto, total, categoría, cuánto se paga) — el cuarto valor es lo
+        # que produce los tres estados que la pantalla distingue.
+        egresos_ejemplo = (
+            ("Alquiler del local — agosto", 380000, "Alquiler", 380000),
+            ("Nafta de la camioneta", 62000, "Combustible", 30000),
+            ("Crimpeadora y tester de red", 145000, "Herramientas", 0),
+        )
+        for j, (concepto, total, categoria, pagado) in enumerate(egresos_ejemplo):
+            egreso = api.post("/api/egresos", {
+                "fecha": str(HOY - timedelta(days=10 - j * 3)),
+                "concepto": concepto, "total": total,
+                "proveedor_id": proveedor["id"],
+                "tipo_comprobante": "factura", "numero": f"A-0003-0000{j+11}",
+                "categoria": categoria,
+                "monto_neto": round(total / 1.21, 2), "iva_pct": 21,
+                "iva_monto": round(total - total / 1.21, 2),
+            })
+            contar("egresos", True)
+            if pagado:
+                api.post(f"/api/egresos/{egreso['id']}/pagos", {
+                    "fecha": str(HOY - timedelta(days=5)),
+                    "monto": pagado, "medio_pago": "transferencia",
+                    "referencia": f"TR-{9000 + j}",
+                })
+                contar("pagos_de_egreso", True)
+
+    # ── Ventas: una al contado y otra a cuenta corriente ──────────────────
+    if not (api.get("/api/ventas") or []):
+        contado = api.post("/api/ventas", {
+            "cliente_id": cliente["id"],
+            "deposito_id": deposito["id"],
+            "items": [
+                {"item_id": alguno["id"], "descripcion": alguno["nombre"],
+                 "cantidad": 20, "precio": 260},
+                # `item_id` en None es una línea de SERVICIO: se cobra y no
+                # mueve stock. Es el otro tipo de línea que la ficha muestra.
+                {"item_id": None, "descripcion": "Mano de obra — armado de rack",
+                 "cantidad": 3, "precio": 18000},
+            ],
+            "pagos": [{"medio": "efectivo", "monto": 20 * 260 + 3 * 18000}],
+            "notas": "Mostrador.",
+        })
+        contar("ventas", True)
+
+        # El recibo va sobre ésta y no sobre la otra: así la lista tiene una
+        # fila con recibo y otra sin, que es lo que distingue la columna.
+        api.post(f"/api/ventas/{contado['id']}/recibo", {})
+        contar("recibos", True)
+
+        # Sin pagos: queda como saldo del cliente en la cuenta corriente.
+        api.post("/api/ventas", {
+            "cliente_id": otro_cliente["id"],
+            "deposito_id": deposito["id"],
+            "items": [
+                {"item_id": None, "descripcion": "Service preventivo mensual",
+                 "cantidad": 1, "precio": 145000},
+            ],
+            "pagos": [],
+            "notas": "A cuenta corriente.",
+        })
+        contar("ventas", True)
+
+    # ── Cuenta corriente: un débito y un pago ─────────────────────────────
+    #
+    # 🔴 **Cada tipo de movimiento se chequea por separado.** La guarda vieja
+    # miraba "¿hay movimientos?", y en Lagrace —que ya traía pagos— salteaba el
+    # bloque entero: `cc_debitos` quedó en cero después de sembrar. Un débito y
+    # un pago son las dos mitades de la pantalla y hay que mirarlas por
+    # separado, porque una instancia puede tener una y no la otra.
+    # 🔴 **La idempotencia va por un marcador PROPIO, no por el tipo del
+    # movimiento.** La versión anterior miraba si ya había algún movimiento de
+    # tipo "débito", y en Lagrace eso da verdadero por los débitos que genera
+    # una VENTA a cuenta corriente — que no son filas de `cc_debitos`. Resultado:
+    # el seed daba el débito por cubierto y la tabla quedaba en cero. Se busca
+    # la referencia que escribe este mismo seed, que es lo único que identifica
+    # sin ambigüedad lo que ya sembró.
+    movimientos = (api.get(f"/api/cuenta-corriente/{otro_cliente['id']}") or {}).get("movimientos") or []
+    referencias = {str(m.get("referencia") or "") for m in movimientos}
+    if "B-0002-00000341" not in referencias:
+        api.post("/api/cuenta-corriente/debitos", {
+            "cliente_id": otro_cliente["id"], "monto": 89000,
+            "fecha": str(HOY - timedelta(days=20)),
+            "concepto": "Factura B-0002-00000341 (emitida en SOS Contador)",
+            "referencia": "B-0002-00000341",
+        })
+        contar("debitos_de_cuenta_corriente", True)
+    if "TR-4471" not in referencias:
+        api.post("/api/cuenta-corriente/pagos", {
+            "cliente_id": otro_cliente["id"], "monto": 50000,
+            "fecha": str(HOY - timedelta(days=4)),
+            "concepto": "Pago a cuenta", "referencia": "TR-4471",
+            "medio_pago": "transferencia",
+        })
+        contar("pagos_de_cuenta_corriente", True)
+
+    # ── El historial de un ticket ─────────────────────────────────────────
+    # `actividades_incidencia` es el timeline del detalle: sin ninguna, ese
+    # bloque abre vacío y no se ve que las notas se mezclan con los cambios de
+    # estado. Quedó en cero en Lagrace después de la primera corrida, porque
+    # nada en este seed las creaba.
+    for ticket in (api.get("/api/incidencias") or [])[:3]:
+        if api.get(f"/api/incidencias/{ticket['id']}/actividades"):
+            continue
+        for nota in (
+            "Se coordinó la visita con el encargado del edificio.",
+            "Falta un patchcord de 5 m: se pide con la próxima orden.",
+        ):
+            api.post(f"/api/incidencias/{ticket['id']}/actividades",
+                     {"descripcion": nota})
+            contar("actividades_de_incidencia", True)
+
+    # ── Materiales usados en un ticket ────────────────────────────────────
+    # Es lo que conecta el stock con el trabajo: sin ninguno, la pestaña de
+    # materiales de una incidencia abre vacía y no se ve que descuenta.
+    incidencias = api.get("/api/incidencias") or []
+    if incidencias:
+        ticket = incidencias[0]
+        if not (api.get(f"/api/incidencias/{ticket['id']}/materiales") or []):
+            api.post(f"/api/incidencias/{ticket['id']}/materiales", {
+                "item_id": alguno["id"], "deposito_id": deposito["id"],
+                "cantidad": 4,
+            })
+            contar("materiales_de_incidencia", True)
+
+
+#: Trabajos de cuadrilla, para los tickets que la agenda necesita crear.
+#: Mezclan las dos modalidades a propósito: la agenda las distingue y con una
+#: sola no se ve la diferencia.
+TRABAJOS_DE_AGENDA = (
+    ("Tendido de fibra hasta el depósito", "on_site"),
+    ("Recambio de switch de planta baja", "on_site"),
+    ("Relevamiento de rack y etiquetado", "on_site"),
+    ("Configuración de VLANs", "remoto"),
+    ("Instalación de AP en el salón", "on_site"),
+    ("Migración de central telefónica", "on_site"),
+    ("Diagnóstico de enlace intermitente", "remoto"),
+    ("Certificación de bocas nuevas", "on_site"),
+    ("Mantenimiento preventivo de UPS", "on_site"),
+    ("Alta de usuarios y permisos", "remoto"),
+    ("Cambio de cámaras del acceso", "on_site"),
+    ("Puesta a tierra del rack", "on_site"),
+)
+
+
+def _sembrar_agenda_en_rango(api: Api, contar) -> None:
+    """Trabajos agendados **hacia atrás y hacia adelante**, no sólo hoy.
+
+    Pedido del humano (2026-08-15): *"la agenda también completala en varios
+    días para adelante y para atrás"*.
+
+    🔴 **El motivo es concreto y ya pasó dos veces.** El seed viejo agendaba un
+    puñado de trabajos en fechas fijas, y la agenda de dev abrió vacía más de
+    una vez porque el día que la pantalla muestra por defecto —hoy— no tenía
+    nada. Quedó anotado en el wiki como *"la agenda de dev abre vacía y no está
+    rota"*, que es exactamente la clase de aclaración que no debería hacer
+    falta: si hay que explicar por qué una pantalla está vacía, la pantalla no
+    se puede revisar.
+
+    El rango es **relativo a hoy** y no fechas fijas, por lo mismo: un seed con
+    fechas escritas a mano envejece y a la semana siguiente vuelve a dejar la
+    agenda de hoy vacía.
+
+    ## Por qué ±21 días
+
+    Cubre las tres vistas de la pantalla con margen: el día, la semana y el
+    mes, y en el mes cubre también las celdas de los bordes —la grilla arranca
+    el lunes anterior al día 1—. Con ±7 la vista de mes quedaba con tres
+    cuartos de las celdas vacías.
+    """
+    equipos_trabajo = api.get("/api/equipos-trabajo") or []
+    incidencias = api.get("/api/incidencias") or []
+    if not equipos_trabajo or not incidencias:
+        print("  agenda: faltan equipos de trabajo o incidencias, se saltea")
+        return
+
+    activos = [e for e in equipos_trabajo if e.get("activo", True)] or equipos_trabajo
+
+    # Si ya hay trabajos repartidos en el rango, no se vuelve a sembrar: el
+    # chequeo mira **cuántos días distintos** tienen algo, no cuántos trabajos
+    # hay. Con "cuántos trabajos" el seed viejo —que deja varios en una sola
+    # fecha— habría dado por cubierto un rango que sigue vacío.
+    agendadas = [i for i in incidencias if i.get("fecha_programada")]
+    dias_con_trabajo = {str(i["fecha_programada"])[:10] for i in agendadas}
+    if len(dias_con_trabajo) >= 10:
+        return
+
+    cliente_por_incidencia = {i["id"]: i for i in incidencias}
+    sin_agendar = [i for i in incidencias if not i.get("fecha_programada")]
+
+    def _rango(inicio_iso: str, minutos) -> tuple[datetime, datetime] | None:
+        try:
+            inicio = datetime.fromisoformat(str(inicio_iso)[:16])
+        except ValueError:
+            return None
+        return inicio, inicio + timedelta(minutes=int(minutos or 60))
+
+    # 🔴 **Lo que ya está agendado se respeta.** El producto RECHAZA con 409 dos
+    # trabajos solapados de la misma cuadrilla —"El equipo ya tiene el trabajo
+    # #1 entre 10:00 y 11:00"—, y es una regla del negocio, no un obstáculo:
+    # una cuadrilla no puede estar en dos lados a la vez. La primera versión de
+    # esta función repartía franjas sin mirar lo que había y el seed se cortaba
+    # a la mitad. Lo agarró `test_el_seed_corre_entero`.
+    #
+    # Se guarda por cuadrilla la lista de intervalos ocupados, y crece con cada
+    # trabajo que este mismo seed agenda: si sólo mirara el estado inicial, se
+    # pisaría a sí mismo en el segundo trabajo del mismo día.
+    ocupado: dict[int, list[tuple[datetime, datetime]]] = {}
+    for i in agendadas:
+        equipo_id = i.get("equipo_trabajo_id")
+        r = _rango(i.get("fecha_programada"), i.get("duracion_minutos"))
+        if equipo_id and r:
+            ocupado.setdefault(int(equipo_id), []).append(r)
+
+    def libre(equipo_id: int, desde: datetime, hasta: datetime, propio_id) -> bool:
+        for ini, fin in ocupado.get(equipo_id, []):
+            # `<` y no `<=`: dos trabajos PEGADOS —uno termina 11:00 y el otro
+            # empieza 11:00— son válidos y el seed viejo los crea a propósito.
+            if desde < fin and ini < hasta:
+                return False
+        return True
+
+    # (días respecto de hoy, hora, duración) — negativos son pasado. Se
+    # reparten desparejo a propósito: días con un solo trabajo, días con tres
+    # y días sin nada, que es como se ve una agenda real y lo que hace
+    # distinguible una vista de otra.
+    plan = [
+        (-21, time(9, 0), 120), (-21, time(14, 30), 90),
+        (-14, time(8, 30), 180),
+        (-9, time(10, 0), 60), (-9, time(11, 0), 120), (-9, time(15, 0), 90),
+        (-4, time(9, 30), 240),
+        (-1, time(13, 0), 60),
+        (0, time(8, 0), 90), (0, time(10, 30), 120), (0, time(16, 0), 60),
+        (1, time(9, 0), 180),
+        (3, time(14, 0), 120),
+        (7, time(8, 30), 90), (7, time(9, 0), 90),
+        (12, time(11, 0), 150),
+        (18, time(10, 0), 120),
+        (21, time(9, 0), 60),
+    ]
+
+    # 🔴 **La agenda necesita tickets propios, y hay que crearlos.**
+    #
+    # Primero se intentó reusar los que ya había, para no ensuciar la lista de
+    # incidencias. No alcanza, y el techo no es negociable: **una incidencia
+    # tiene UNA fecha programada**, así que la cantidad de días distintos que
+    # puede cubrir la agenda nunca supera la cantidad de tickets. Con los 6 del
+    # seed viejo se llenaban 9 franjas de 18 y la agenda seguía apretada — lo
+    # marcó `test_la_agenda_queda_con_dias_para_los_dos_lados`, que cuenta días
+    # y no trabajos.
+    #
+    # Y mirado de nuevo, la lista con 24 tickets en vez de 6 **no es ruido**:
+    # una empresa que manda cuadrillas todos los días tiene esa cantidad de
+    # trabajo abierto. La lista corta era lo poco realista.
+    candidatos = sin_agendar + agendadas
+    faltan = len(plan) - len(candidatos)
+    if faltan > 0:
+        clientes = api.get("/api/clientes") or []
+        tecnicos = [t for t in (api.get("/api/tecnicos") or []) if t.get("es_tecnico")]
+        if clientes:
+            for n in range(faltan):
+                cli = clientes[n % len(clientes)]
+                titulo, modalidad = TRABAJOS_DE_AGENDA[n % len(TRABAJOS_DE_AGENDA)]
+                nuevo = api.post("/api/incidencias", {
+                    "cliente_id": cli["id"],
+                    "titulo": f"{titulo} — {cli['nombre']}",
+                    "modalidad": modalidad,
+                    "tecnico_id": tecnicos[n % len(tecnicos)]["id"] if tecnicos else None,
+                    "descripcion": "Trabajo de cuadrilla, cargado como ejemplo "
+                                   "para que la agenda tenga días con y sin carga.",
+                })
+                contar("incidencias_de_agenda", True)
+                candidatos.append(nuevo)
+    candidatos = candidatos[:len(plan)]
+    if not candidatos:
+        return
+
+    for (dias, hora, duracion), ticket in zip(plan, candidatos):
+        desde = datetime.combine(HOY + timedelta(days=dias), hora)
+        hasta = desde + timedelta(minutes=duracion)
+        actual = cliente_por_incidencia.get(ticket["id"], ticket)
+
+        # El ticket que se está moviendo libera su franja anterior: si no se
+        # sacara, un ticket ya agendado chocaría contra sí mismo.
+        anterior = _rango(actual.get("fecha_programada"), actual.get("duracion_minutos"))
+        equipo_anterior = actual.get("equipo_trabajo_id")
+        if anterior and equipo_anterior and anterior in ocupado.get(int(equipo_anterior), []):
+            ocupado[int(equipo_anterior)].remove(anterior)
+
+        # La primera cuadrilla que tenga el hueco libre. Se prueban todas y no
+        # una elegida por módulo: con dos cuadrillas y tres trabajos el mismo
+        # día, la fórmula fija devolvía siempre la misma y chocaba.
+        equipo = next(
+            (e for e in activos if libre(int(e["id"]), desde, hasta, ticket["id"])),
+            None,
+        )
+        if equipo is None:
+            # Ninguna cuadrilla libre en esa franja. Se saltea en vez de forzar:
+            # el 409 es una regla del negocio y el seed no la pelea.
+            if anterior and equipo_anterior:
+                ocupado.setdefault(int(equipo_anterior), []).append(anterior)
+            continue
+
+        # PUT reemplaza, no parchea: hay que reenviar todo lo demás o se borra.
+        # Es el defecto que ya se pagó una vez —ver `CAMPOS_INCIDENCIA`—.
+        cuerpo = {c: actual.get(c) for c in CAMPOS_INCIDENCIA}
+        cuerpo["fecha_programada"] = desde.isoformat(timespec="minutes")
+        cuerpo["duracion_minutos"] = duracion
+        cuerpo["equipo_trabajo_id"] = equipo["id"]
+        api.put(f"/api/incidencias/{ticket['id']}", cuerpo)
+        ocupado.setdefault(int(equipo["id"]), []).append((desde, hasta))
+        contar("trabajos_agendados", True)
 
 
 #: Los subdominios que NO son de un cliente. Se compara contra la **primera

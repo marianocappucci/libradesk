@@ -50,8 +50,14 @@ class AnulacionIn(BaseModel):
 
 
 @router.get("/ventas")
-def listar_ventas(limit: int = 200):
-    return ventas.listar(limit=limit)
+def listar_ventas(limit: int = 200, sucursal_id: int | None = None):
+    """`sucursal_id` filtra por `sales.branch_id`.
+
+    ⚠️ **Los recibos y la cuenta corriente de más abajo NO filtran**, y no es un
+    olvido: el saldo de un cliente es uno solo entre sucursales. Ver
+    `comercial.listar_sucursales()`.
+    """
+    return ventas.listar(limit=limit, sucursal_id=sucursal_id)
 
 
 @router.get("/ventas/{venta_id}")

@@ -221,6 +221,53 @@ describe('Depositos: el menu se llama como la pantalla', () => {
   })
 })
 
+// Pedido del usuario (2026-08-14): la agenda dejo de ser la pestaña del medio
+// de "Equipos y flota" y paso a pantalla propia, con item propio en el menu.
+//
+// Va aca por lo mismo que Proveedores: lo que hay que probar es el cableado
+// real -- el href que pone el sidebar y adonde lleva la ruta vieja.
+describe('la Agenda tiene pantalla propia', () => {
+  it('el item del menu apunta a /agenda', async () => {
+    conSesion()
+    montar('/agenda')
+    const links = await screen.findAllByRole('link', { name: 'Agenda' })
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/agenda'])
+  })
+
+  it('encabeza el menu: va apenas debajo de Dashboard', async () => {
+    // Pedido del usuario (2026-08-14), corrigiendo la primera version, que la
+    // dejaba al pie de "Mesa de ayuda" junto a Equipos y flota. El orden del
+    // menu es el orden en que se usa, y esto es lo primero que se mira a la
+    // manana. Sin este test, "primero de todo" es un comentario que el proximo
+    // item nuevo puede correr sin que nadie se entere.
+    conSesion()
+    montar('/agenda')
+    await screen.findAllByRole('link', { name: 'Agenda' })
+
+    // Los del sidebar: rutas planas, sin query. El conmutador de la pantalla
+    // linkea a `/agenda?vista=…`, asi que no entra en esta lista.
+    const rutas = screen.getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => /^\/[a-z-]+$/.test(h))
+    expect(rutas.indexOf('/agenda')).toBe(rutas.indexOf('/dashboard') + 1)
+    expect(rutas.indexOf('/agenda')).toBeLessThan(rutas.indexOf('/incidencias'))
+  })
+
+  it('la ruta vieja redirige en vez de caer en el dashboard', async () => {
+    // Quedo linkeada en el wiki y en favoritos desde que era pestaña. Y sin el
+    // redirect no daria 404: el `*` de App.tsx la mandaria al dashboard, que es
+    // peor -- la pantalla carga y no es la que se fue a buscar.
+    conSesion()
+    montar('/equipos-trabajo/agenda')
+    // Se afirma sobre el titulo de la pantalla y no sobre el item del menu: el
+    // item esta en el sidebar en TODAS las rutas, asi que buscarlo daria verde
+    // aunque el redirect no existiera.
+    expect(await screen.findByRole('heading', { name: 'Agenda' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Qué hay que hacer' }))
+      .not.toBeInTheDocument()
+  })
+})
+
 describe('las pantallas de recuperacion son publicas', () => {
   // Invariante con comentario propio en App.tsx: son publicas a proposito,
   // porque quien las necesita no puede iniciar sesion. Si el guard las

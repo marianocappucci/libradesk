@@ -1364,3 +1364,62 @@ def test_activar_desactivar_un_cliente_inexistente_da_404(client):
     _login(client)
     assert client.post("/api/clientes/9999/desactivar").status_code == 404
     assert client.post("/api/clientes/9999/activar").status_code == 404
+
+
+# --- el nombre de la empresa, en el usuario --------------------------------
+#
+# El sidebar lo muestra debajo de "LibraDesk" (`getUserSubtitle` de libra-ui).
+# Este test vive del lado del BACKEND a proposito: el mock del smoke test del
+# frontend ya traia `empresa_nombre` —copiado de la forma de Contalibra— asi que
+# la pantalla daba verde mientras el `/auth/me` real no lo mandaba y el subtitulo
+# quedaba vacio. Lo que puede fallar es el dato, no el render.
+
+
+def test_el_usuario_trae_el_nombre_de_la_empresa(client):
+    """Sale de la config de LibraCore, la misma que imprimen los PDF: si hubiera
+    dos lugares donde escribirlo, el encabezado del remito y el pie del menu
+    dirian cosas distintas de la misma empresa."""
+    _login(client)
+    client.put("/api/config/empresa", json={"empresa_nombre": "Lagrace Comunicaciones"})
+
+    # En `/me` **y** en el login: con el campo solo en `/me`, el sidebar
+    # aparece sin subtitulo al entrar y con subtitulo despues de recargar.
+    assert client.get("/auth/me").json()["empresa_nombre"] == "Lagrace Comunicaciones"
+    r = client.post("/auth/login", json={"username": "admin", "password": "admin"})
+    assert r.json()["empresa_nombre"] == "Lagrace Comunicaciones"
+
+
+def test_sin_nombre_cargado_el_campo_va_en_null_y_no_vacio(client):
+    """`None` y no `""`: el sidebar dibuja el subtitulo si el valor es truthy,
+    asi que una cadena vacia le pondria un renglon en blanco debajo del nombre
+    del producto — que es peor que no tener subtitulo."""
+    _login(client)
+    assert client.get("/auth/me").json()["empresa_nombre"] is None
+
+
+def test_cambiar_el_nombre_se_ve_sin_reiniciar(client):
+    """Se lee en cada request, no al importar. Es lo que hace que editar el dato
+    en Configuracion se vea en el proximo login."""
+    _login(client)
+    client.put("/api/config/empresa", json={"empresa_nombre": "Antes"})
+    assert client.get("/auth/me").json()["empresa_nombre"] == "Antes"
+    client.put("/api/config/empresa", json={"empresa_nombre": "Despues"})
+    assert client.get("/auth/me").json()["empresa_nombre"] == "Despues"
+
+
+def test_cambiar_la_propia_password_desde_la_sesion(client):
+    """`POST /auth/change-password` (libraauth v0.25.0), que es lo que hay
+    detras del item del menu de usuario. Se prueba el EFECTO —que la nueva
+    loguee y la vieja deje de loguear—: un 200 no dice que se haya tocado nada.
+    """
+    _login(client)
+    r = client.post("/auth/change-password", json={
+        "current_password": "admin", "new_password": "una-clave-nueva",
+    })
+    assert r.status_code == 200, r.text
+
+    client.post("/auth/logout")
+    assert client.post("/auth/login", json={
+        "username": "admin", "password": "admin"}).status_code == 401
+    assert client.post("/auth/login", json={
+        "username": "admin", "password": "una-clave-nueva"}).status_code == 200

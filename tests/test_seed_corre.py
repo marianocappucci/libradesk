@@ -19,6 +19,7 @@ forma de que un defecto del seed se vea antes de un despliegue.
 """
 
 import os
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -127,3 +128,63 @@ def test_el_seed_reusa_el_cliente_con_abono_que_ya_existe(api):
                  if c["tipo_facturacion"] == "mensual"]
     assert len(mensuales) == 1, [c["nombre"] for c in mensuales]
     assert mensuales[0]["nombre"] == "Estudio Pereyra & Asociados"
+
+
+def test_la_agenda_queda_con_dias_para_los_dos_lados(api):
+    """Pedido del humano (2026-08-15): la agenda con *"varios días para adelante
+    y para atrás"*.
+
+    🔴 **Se cuentan DÍAS DISTINTOS, no trabajos.** Es la diferencia que importa:
+    el seed viejo dejaba varios trabajos y la agenda igual abría vacía, porque
+    caían todos en una o dos fechas fijas. Un assert sobre "hay N trabajos"
+    habría estado verde durante todo ese tiempo.
+
+    Y se mide contra **hoy**, que es el día que la pantalla abre por defecto.
+    """
+    sembrar(api)
+
+    hoy = str(date.today())
+    dias = {
+        str(i["fecha_programada"])[:10]
+        for i in api.get("/api/incidencias")
+        if i.get("fecha_programada")
+    }
+    assert len(dias) >= 8, f"la agenda quedó apretada en pocos días: {sorted(dias)}"
+    assert [d for d in dias if d < hoy], f"nada antes de hoy ({hoy}): {sorted(dias)}"
+    assert [d for d in dias if d > hoy], f"nada después de hoy ({hoy}): {sorted(dias)}"
+
+
+def test_ninguna_cuadrilla_queda_con_dos_trabajos_encimados(api):
+    """El producto rechaza el solape con un 409, y el seed tiene que respetarlo.
+
+    Es el defecto que este archivo cazó cuando se escribió el bloque de la
+    agenda: repartía franjas sin mirar lo ya agendado y el seed se cortaba a la
+    mitad. Este caso lo fija sobre el RESULTADO, que es lo que importa, y no
+    sobre el 409 — que con el arreglo puesto ya no llega, así que un test que
+    esperara la excepción no mediría nada.
+
+    Dos trabajos **pegados** (uno termina 11:00, el otro empieza 11:00) son
+    válidos y el seed los crea a propósito: por eso la comparación es `>=`.
+    """
+    sembrar(api)
+
+    por_cuadrilla: dict[int, list[tuple]] = {}
+    for i in api.get("/api/incidencias"):
+        equipo, cuando = i.get("equipo_trabajo_id"), i.get("fecha_programada")
+        if not equipo or not cuando:
+            continue
+        desde = datetime.fromisoformat(str(cuando)[:16])
+        hasta = desde + timedelta(minutes=int(i.get("duracion_minutos") or 60))
+        por_cuadrilla.setdefault(int(equipo), []).append((desde, hasta, i["id"]))
+
+    # Control: sin esto, una respuesta sin `equipo_trabajo_id` dejaría el dict
+    # vacío y el test pasaría sin haber comparado un solo par.
+    assert por_cuadrilla, "ninguna incidencia quedó agendada con cuadrilla"
+
+    for equipo, franjas in por_cuadrilla.items():
+        franjas.sort()
+        for (d1, h1, id1), (d2, _h2, id2) in zip(franjas, franjas[1:]):
+            assert d2 >= h1, (
+                f"la cuadrilla {equipo} tiene encimados el #{id1} (termina {h1}) "
+                f"y el #{id2} (empieza {d2})"
+            )

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, opcionesCliente, opcionesProveedor,
   type Cliente, type Proveedor, type Reparacion,
@@ -71,6 +72,11 @@ export function Reparaciones() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // La ficha completa, que se abre al click en la fila. Es un estado aparte del
+  // de cierre porque las dos cosas pueden encadenarse: desde la ficha se puede
+  // registrar la vuelta, y ahí se cierra una y se abre la otra.
+  const [detalle, setDetalle] = useState<Reparacion | null>(null)
+
   const form = useForm<CierreFormValues>({
     resolver: zodResolver(cierreSchema),
     defaultValues: { fecha_retorno: '', diagnostico: '', costo: '' },
@@ -113,6 +119,9 @@ export function Reparaciones() {
   }
 
   function abrirCierre(r: Reparacion) {
+    // Si venía de la ficha, se cierra: dos diálogos superpuestos dejan el foco
+    // en el de abajo y el `Escape` cierra el equivocado.
+    setDetalle(null)
     setACerrar(r)
     setFormError(null)
     form.reset({
@@ -175,12 +184,6 @@ export function Reparaciones() {
     },
     { accessorKey: 'proveedor_nombre', header: sortableHeader('Proveedor'), size: 160, minSize: 120 },
     {
-      accessorKey: 'fecha_envio',
-      header: sortableHeader('Envío'),
-      size: 110, minSize: 90,
-      cell: ({ row }) => fecha(row.original.fecha_envio),
-    },
-    {
       accessorKey: 'dias_afuera',
       header: sortableHeader('Días'),
       size: 90, minSize: 70,
@@ -198,43 +201,6 @@ export function Reparaciones() {
       },
     },
     {
-      id: 'referencias',
-      header: 'Remito / RMA',
-      size: 150, minSize: 110,
-      cell: ({ row }) => (
-        <div className="text-xs leading-tight">
-          {row.original.remito_salida && <span className="block">Remito {row.original.remito_salida}</span>}
-          {row.original.rma && <span className="block">RMA {row.original.rma}</span>}
-          {!row.original.remito_salida && !row.original.rma && '—'}
-        </div>
-      ),
-    },
-    {
-      id: 'costo',
-      header: 'Costo',
-      size: 130, minSize: 100,
-      // La garantía y el costo NO son excluyentes, aunque lo parezcan: una
-      // reparación cubierta puede igual haber costado el flete o un repuesto
-      // que la garantía no cubría. La primera versión mostraba la insignia EN
-      // LUGAR del importe, y con eso **escondía plata realmente gastada** — se
-      // vio en el navegador, con una reparación en garantía de $45.000 que la
-      // tabla mostraba como si no hubiera costado nada. La ficha del equipo,
-      // que suma los costos, sí la contaba: las dos pantallas decían cosas
-      // distintas sobre la misma fila.
-      cell: ({ row }) => (
-        <div className="flex flex-wrap items-center gap-1">
-          {row.original.en_garantia && (
-            <Badge variant="outline" className="gap-1">
-              <ShieldCheck className="size-3" />Garantía
-            </Badge>
-          )}
-          {(row.original.costo !== null || !row.original.en_garantia) && (
-            <span>{pesos(row.original.costo)}</span>
-          )}
-        </div>
-      ),
-    },
-    {
       id: 'estado',
       header: 'Estado',
       size: 120, minSize: 100,
@@ -247,13 +213,15 @@ export function Reparaciones() {
     {
       id: 'actions',
       header: () => <div className="text-right">Acciones</div>,
+      // Queda una sola acción, y es la que da sentido a la pantalla: el
+      // docstring de arriba dice que acá las reparaciones "se miran y se
+      // cierran". Mandarla al modal costaría dos clicks en el flujo diario en
+      // vez de uno.
+      //
+      // El link al ticket SÍ se fue al modal: es navegación, no la acción de
+      // esta pantalla, y un `#123` suelto en la fila no dice a dónde lleva.
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
-          {row.original.incidencia_id !== null && (
-            <Button asChild size="sm" variant="ghost" title="Ver el ticket que la originó">
-              <Link to={`/incidencias/${row.original.incidencia_id}`}>#{row.original.incidencia_id}</Link>
-            </Button>
-          )}
           {row.original.abierta && (
             <Button
               size="sm" variant="outline"
@@ -273,13 +241,16 @@ export function Reparaciones() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <TituloPantalla icono={Wrench}>
-          Reparaciones
-          {estado === 'abiertas' && abiertas > 0 && (
-            <Badge variant="secondary">{abiertas} en service</Badge>
-          )}
-        </TituloPantalla>
+      <EncabezadoDePantalla
+        titulo={
+          <TituloPantalla icono={Wrench}>
+            Reparaciones
+            {estado === 'abiertas' && abiertas > 0 && (
+              <Badge variant="secondary">{abiertas} en service</Badge>
+            )}
+          </TituloPantalla>
+        }
+      >
         {/* Donde el resto de las pantallas tiene el alta, ésta explica por qué
             no la tiene. El motivo está en el docstring de arriba y no cambia;
             lo que faltaba era decírselo al que mira la pantalla: sin este
@@ -291,11 +262,11 @@ export function Reparaciones() {
             Ir a Incidencias
           </Link>
         </p>
-      </div>
+      </EncabezadoDePantalla>
 
       <Card>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -306,7 +277,7 @@ export function Reparaciones() {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Cliente</Label>
             <SelectBuscable
               value={clienteId}
@@ -315,7 +286,7 @@ export function Reparaciones() {
               placeholder="Todos los clientes"
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Proveedor</Label>
             <SelectBuscable
               value={proveedorId}
@@ -337,6 +308,10 @@ export function Reparaciones() {
             <DataTable
               columns={columns}
               data={reparaciones}
+              // El click en la fila abre la ficha. `onRowClick` de libra-ui
+              // ignora los clicks sobre `button` y `a`, así que "Registrar
+              // vuelta" sigue funcionando sin abrir el modal de paso.
+              onRowClick={setDetalle}
               emptyMessage={
                 estado === 'abiertas'
                   ? 'No hay ningún equipo en service.'
@@ -410,6 +385,124 @@ export function Reparaciones() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* La ficha de la reparación, al click en la fila.
+       *
+       *  Pedido del humano (2026-08-14): *"en reparaciones no es necesario que
+       *  haya tanto detalle en cada fila, se debería poder hacer click y que se
+       *  abra un modal con todos los datos y el detalle de la reparación"*.
+       *
+       *  🔴 **La ficha no es sólo el mismo contenido reacomodado.** Tres campos
+       *  que el backend ya devolvía no se veían en NINGUNA pantalla del
+       *  producto: `diagnostico` —lo que el proveedor dijo que le hizo—,
+       *  `observaciones` y `usuario`. El primero se cargaba en el diálogo de
+       *  cierre y después no había forma de volver a leerlo. */}
+      <Dialog open={detalle !== null} onOpenChange={(open) => !open && setDetalle(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          {detalle && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex flex-wrap items-center gap-2">
+                  <Wrench className="size-4" />
+                  {detalle.equipo_descripcion ?? 'Equipo sin descripción'}
+                  {detalle.es_activo && <Badge variant="outline">Alquilado</Badge>}
+                </DialogTitle>
+                <DialogDescription>
+                  {detalle.equipo_serial
+                    ? `Serial ${detalle.equipo_serial}`
+                    : 'Sin serial registrado'}
+                  {' · '}
+                  {detalle.abierta
+                    ? `En service hace ${detalle.dias_afuera ?? '?'} días`
+                    : `Volvió el ${fecha(detalle.fecha_retorno)}`}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <Dato label="Cliente">{nombreCliente(detalle.cliente_id)}</Dato>
+                <Dato label="Proveedor">{detalle.proveedor_nombre ?? '—'}</Dato>
+                <Dato label="Enviado">{fecha(detalle.fecha_envio)}</Dato>
+                <Dato label="Retorno">
+                  {detalle.fecha_retorno ? fecha(detalle.fecha_retorno) : 'Sigue en service'}
+                </Dato>
+                <Dato label="Remito de salida">{detalle.remito_salida || '—'}</Dato>
+                <Dato label="RMA">{detalle.rma || '—'}</Dato>
+                {/* La garantía y el costo NO son excluyentes, aunque lo
+                    parezcan: una reparación cubierta puede igual haber costado
+                    el flete o un repuesto que la garantía no cubría. Una
+                    versión vieja de la tabla mostraba la insignia EN LUGAR del
+                    importe y **escondía plata realmente gastada** — una
+                    reparación en garantía de $45.000 se leía como si no hubiera
+                    costado nada, mientras la ficha del equipo sí la sumaba. Acá
+                    se muestran los dos, siempre y en el mismo lugar. */}
+                <Dato label="Costo">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {detalle.en_garantia && (
+                      <Badge variant="outline" className="gap-1">
+                        <ShieldCheck className="size-3" />Garantía
+                      </Badge>
+                    )}
+                    <span>{pesos(detalle.costo)}</span>
+                  </span>
+                </Dato>
+                <Dato label="Cargada por">{detalle.usuario}</Dato>
+              </div>
+
+              <div className="grid gap-3 border-t pt-3 text-sm">
+                <Dato label="Diagnóstico del proveedor">
+                  {/* `whitespace-pre-line`: el diagnóstico se escribe a mano y
+                      suele venir en renglones. Sin esto se lee como un párrafo
+                      corrido. */}
+                  <span className="whitespace-pre-line">
+                    {detalle.diagnostico || 'Todavía sin diagnóstico.'}
+                  </span>
+                </Dato>
+                {detalle.observaciones && (
+                  <Dato label="Observaciones">
+                    <span className="whitespace-pre-line">{detalle.observaciones}</span>
+                  </Dato>
+                )}
+              </div>
+
+              <DialogFooter className="sm:justify-between">
+                {/* El ticket que la originó: se fue de la fila para acá, con el
+                    texto que dice a dónde lleva. Si la reparación se abrió sin
+                    ticket, no hay nada que mostrar y el hueco lo ocupa un
+                    `<span>` para que los botones no se corran. */}
+                {detalle.incidencia_id !== null ? (
+                  <Button asChild variant="ghost" size="sm">
+                    <Link to={`/incidencias/${detalle.incidencia_id}`}>
+                      Ver el ticket #{detalle.incidencia_id}
+                    </Link>
+                  </Button>
+                ) : <span />}
+                <div className="flex gap-2">
+                  <DialogClose asChild><Button variant="outline">Cerrar</Button></DialogClose>
+                  {detalle.abierta && (
+                    <Button onClick={() => abrirCierre(detalle)}>
+                      <PackageCheck />Registrar vuelta
+                    </Button>
+                  )}
+                </div>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/** Un par etiqueta/valor de la ficha.
+ *
+ *  Local a esta pantalla, como los `Dato` de `EquipoDetalle` y `ContratoDetalle`
+ *  — que ya tienen firmas distintas entre sí. Unificar los tres es su propia
+ *  tarea, no algo para arrastrar acá de pasada. */
+function Dato({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span>{children}</span>
     </div>
   )
 }

@@ -11,6 +11,7 @@
  *  El ABM tampoco está detrás de `isAdmin` — ver el comentario de `Depositos`.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, opcionesCliente, type Cliente, type Deposito,
 } from '../api'
@@ -138,15 +139,12 @@ export function DepositosClientes() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Mismo título e ícono que la otra pestaña, a propósito: las dos son
-            "Depósitos" y quien dice en cuál estás es el conmutador de abajo.
-            Un ícono distinto con el mismo título se lee como otra pantalla. */}
-        <TituloPantalla icono={Building2}>
-          Depósitos
-        </TituloPantalla>
+      {/* Mismo título e ícono que la otra pestaña, a propósito: las dos son
+          "Depósitos" y quien dice en cuál estás es el conmutador de abajo.
+          Un ícono distinto con el mismo título se lee como otra pantalla. */}
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={Building2}>Depósitos</TituloPantalla>}>
         <Button onClick={abrirNuevo}><FilePlus />Nuevo depósito</Button>
-      </div>
+      </EncabezadoDePantalla>
 
       <ConmutadorDepositos actual="clientes" />
 
@@ -159,7 +157,7 @@ export function DepositosClientes() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Card>
-        <CardContent className="grid gap-1.5 sm:max-w-sm">
+        <CardContent className="grid gap-2 sm:max-w-sm">
           <Label>Cliente</Label>
           <SelectBuscable
             value={filtro}
@@ -203,7 +201,7 @@ export function DepositosClientes() {
           </DialogHeader>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Cliente</Label>
               {editando ? (
                 <p className="text-sm">{editando.cliente_nombre}</p>
@@ -217,7 +215,7 @@ export function DepositosClientes() {
                 />
               )}
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="depc-nombre">Nombre</Label>
               <Input
                 id="depc-nombre" value={nombre}
@@ -225,7 +223,7 @@ export function DepositosClientes() {
                 placeholder="Pañol, Sala de racks…"
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="depc-desc">Descripción</Label>
               <Input
                 id="depc-desc" value={descripcion}

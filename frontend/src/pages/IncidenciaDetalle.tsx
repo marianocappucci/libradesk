@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, COBERTURA_ABONO_LABELS, DESTINO_REEMPLAZO_LABELS, ESTADO_COLOR,
   ESTADO_LABELS, MODALIDAD_LABELS,
@@ -405,10 +406,9 @@ export function IncidenciaDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="outline"><Link to="/incidencias"><ArrowLeft />Volver</Link></Button>
-          {incidencia && (
+      <EncabezadoDePantalla
+        titulo={
+          incidencia && (
             <TituloPantalla icono={AlertCircle}>
               {incidencia.titulo}
               {/* El mismo semáforo que la grilla, adentro del badge de estado:
@@ -425,10 +425,11 @@ export function IncidenciaDetalle() {
                 {PRIORIDAD_LABELS[incidencia.prioridad]}
               </Badge>
             </TituloPantalla>
-          )}
-        </div>
+          )
+        }
+      >
         {incidencia && (
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             {/* El estado del guardado automático, a la vista. Sin esto el
                 usuario no tenía forma de saber si lo que tipeó quedó. */}
             <span className="text-xs text-muted-foreground" aria-live="polite">
@@ -483,9 +484,17 @@ export function IncidenciaDetalle() {
             <Button size="sm" onClick={guardarYVolver}>
               <Check />{guardando ? 'Guardando…' : 'Guardar y volver'}
             </Button>
-          </div>
+          </>
         )}
-      </div>
+        {/* El "Volver" queda FUERA del condicional a propósito: es el único
+            control de la pantalla mientras el ticket carga, y también si la
+            carga falla. Adentro del `{incidencia && …}` desaparecería justo
+            cuando es lo único que sirve. Va último, que es donde lo pone la
+            convención de `EncabezadoDePantalla`. */}
+        <Button asChild size="sm" variant="outline">
+          <Link to="/incidencias"><ArrowLeft />Volver</Link>
+        </Button>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -497,14 +506,14 @@ export function IncidenciaDetalle() {
             <Card>
               <CardHeader><CardTitle className="text-base">Detalle</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Título</Label>
                   <Input
                     defaultValue={incidencia.titulo}
                     onBlur={(e) => e.target.value.trim() && e.target.value !== incidencia.titulo && actualizarCampo({ titulo: e.target.value.trim() })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Descripción</Label>
                   <textarea
                     defaultValue={incidencia.descripcion ?? ''}
@@ -631,7 +640,7 @@ export function IncidenciaDetalle() {
             <Card>
               <CardHeader><CardTitle className="text-base">Notas internas y resolución</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Notas</Label>
                   <textarea
                     defaultValue={incidencia.notas ?? ''}
@@ -640,7 +649,7 @@ export function IncidenciaDetalle() {
                     onBlur={(e) => e.target.value !== (incidencia.notas ?? '') && actualizarCampo({ notas: e.target.value || null })}
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Resolución</Label>
                   <textarea
                     defaultValue={incidencia.resolucion ?? ''}
@@ -656,7 +665,7 @@ export function IncidenciaDetalle() {
           <Card className="h-fit">
             <CardHeader><CardTitle className="text-base">Propiedades</CardTitle></CardHeader>
             <CardContent className="grid gap-3">
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Estado</Label>
                 <Select value={incidencia.estado} onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}>
                   {/* El punto también en el trigger y en cada opción: al
@@ -680,7 +689,7 @@ export function IncidenciaDetalle() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Prioridad</Label>
                 <Select value={incidencia.prioridad} onValueChange={(prioridad) => actualizarCampo({ prioridad: prioridad as Incidencia['prioridad'] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -695,7 +704,7 @@ export function IncidenciaDetalle() {
                   Configuración, un select con una única opción "Sin categoría"
                   sería ruido. */}
               {categoriasElegibles.length > 0 && (
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Categoría</Label>
                   <SelectBuscable
                     value={incidencia.categoria_id ? String(incidencia.categoria_id) : NONE}
@@ -709,7 +718,7 @@ export function IncidenciaDetalle() {
                   />
                 </div>
               )}
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Cliente</Label>
                 <SelectBuscable
                   value={String(incidencia.cliente_id)}
@@ -719,7 +728,7 @@ export function IncidenciaDetalle() {
                   className="w-full"
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Equipo</Label>
                 <SelectBuscable
                   value={incidencia.equipo_id ? String(incidencia.equipo_id) : NONE}
@@ -733,7 +742,7 @@ export function IncidenciaDetalle() {
               {/* Los tres papeles (pedido 41). Cada selector ofrece sólo a
                   quien tiene ese rol: mostrar el personal entero en los tres
                   vuelve a dejar la pregunta "quién lo ejecutó" sin contestar. */}
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Recepcionó</Label>
                 <SelectBuscable
                   value={incidencia.recepcionista_id ? String(incidencia.recepcionista_id) : NONE}
@@ -744,7 +753,7 @@ export function IncidenciaDetalle() {
                   emptyMessage="Nadie tiene el rol de recepcionista."
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Técnico (ejecuta)</Label>
                 <SelectBuscable
                   value={incidencia.tecnico_id ? String(incidencia.tecnico_id) : NONE}
@@ -754,7 +763,7 @@ export function IncidenciaDetalle() {
                   className="w-full"
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Vendedor</Label>
                 <SelectBuscable
                   value={incidencia.vendedor_id ? String(incidencia.vendedor_id) : NONE}
@@ -765,7 +774,7 @@ export function IncidenciaDetalle() {
                   emptyMessage="Nadie tiene el rol de vendedor."
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Modalidad</Label>
                 <Select
                   value={incidencia.modalidad ?? NONE}
@@ -789,7 +798,7 @@ export function IncidenciaDetalle() {
                   orden porque se llenan juntos: cuándo, cuánto y quién va.
                   El vehículo NO se elige acá — sale del equipo, y se muestra
                   debajo para que quien agenda lo vea sin ir a otra pantalla. */}
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="fecha-programada">Fecha y hora del trabajo</Label>
                 <Input
                   id="fecha-programada"
@@ -800,7 +809,7 @@ export function IncidenciaDetalle() {
                   })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="duracion">Duración (minutos)</Label>
                 <Input
                   id="duracion"
@@ -814,7 +823,7 @@ export function IncidenciaDetalle() {
                   })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Equipo de trabajo</Label>
                 <SelectBuscable
                   value={
@@ -849,7 +858,7 @@ export function IncidenciaDetalle() {
                   )
                 })()}
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Sector</Label>
                 <SelectBuscable
                   value={incidencia.sector_id ? String(incidencia.sector_id) : NONE}
@@ -860,7 +869,7 @@ export function IncidenciaDetalle() {
                   emptyMessage="Ese cliente no tiene sectores."
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 {/* `htmlFor`/`id`: el label estaba suelto y no nombraba a su
                     input para un lector de pantalla. */}
                 <Label htmlFor="horas-invertidas">Horas invertidas</Label>
@@ -875,7 +884,7 @@ export function IncidenciaDetalle() {
                   }}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 {/* El N° del Comprobante de Servicios: el talonario preimpreso
                     que el técnico completa en el lugar y el cliente firma.
                     Tipearlo acá es lo que ata esa conformidad con el ticket.
@@ -892,7 +901,7 @@ export function IncidenciaDetalle() {
                   }}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="reclamante">Reclamante</Label>
                 <Input
                   id="reclamante"
@@ -910,7 +919,7 @@ export function IncidenciaDetalle() {
                   horas y al CDS, porque es el mismo momento de carga — quien
                   graba el comprobante es quien sabe qué entraba en el abono. */}
               {clienteConAbono && (
-                <div className="grid gap-1.5 rounded-md border border-dashed p-3">
+                <div className="grid gap-2 rounded-md border border-dashed p-3">
                   <Label htmlFor="cobertura-abono">Cobertura del abono</Label>
                   <Select
                     value={incidencia.cobertura_abono ?? NONE}
@@ -1030,7 +1039,7 @@ export function IncidenciaDetalle() {
           </DialogHeader>
 
           <div className="grid gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Equipo que se retira</Label>
               <Select value={reemplazo.retirado} onValueChange={(v) => setReemplazo({ ...reemplazo, retirado: v })}>
                 <SelectTrigger><SelectValue placeholder="Elegí el equipo…" /></SelectTrigger>
@@ -1044,7 +1053,7 @@ export function IncidenciaDetalle() {
               </Select>
             </div>
 
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Destino del equipo retirado</Label>
               <Select value={reemplazo.destino} onValueChange={(v) => setReemplazo({ ...reemplazo, destino: v as DestinoReemplazo })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1056,7 +1065,7 @@ export function IncidenciaDetalle() {
               </Select>
             </div>
 
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Equipo sustituto (opcional)</Label>
               <Select value={reemplazo.sustituto} onValueChange={(v) => setReemplazo({ ...reemplazo, sustituto: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1076,7 +1085,7 @@ export function IncidenciaDetalle() {
               </span>
             </div>
 
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>Motivo</Label>
               <Input
                 value={reemplazo.motivo}
@@ -1094,7 +1103,7 @@ export function IncidenciaDetalle() {
                   <Wrench className="size-4" />Datos del service
                 </span>
 
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Proveedor</Label>
                   <SelectBuscable
                     value={reemplazo.proveedor}
@@ -1115,21 +1124,21 @@ export function IncidenciaDetalle() {
                 {reemplazo.proveedor !== NONE && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="grid gap-1.5">
+                      <div className="grid gap-2">
                         <Label>Fecha de envío</Label>
                         <Input
                           type="date" value={reemplazo.fechaEnvio}
                           onChange={(e) => setReemplazo({ ...reemplazo, fechaEnvio: e.target.value })}
                         />
                       </div>
-                      <div className="grid gap-1.5">
+                      <div className="grid gap-2">
                         <Label>Remito</Label>
                         <Input
                           value={reemplazo.remito} placeholder="R-0001"
                           onChange={(e) => setReemplazo({ ...reemplazo, remito: e.target.value })}
                         />
                       </div>
-                      <div className="grid gap-1.5">
+                      <div className="grid gap-2">
                         <Label>RMA</Label>
                         <Input
                           value={reemplazo.rma} placeholder="RMA-99"
@@ -1171,21 +1180,21 @@ export function IncidenciaDetalle() {
 
                 {reemplazo.cerrarService && (
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="grid gap-1.5">
+                    <div className="grid gap-2">
                       <Label>Fecha de retorno</Label>
                       <Input
                         type="date" value={reemplazo.fechaRetorno}
                         onChange={(e) => setReemplazo({ ...reemplazo, fechaRetorno: e.target.value })}
                       />
                     </div>
-                    <div className="grid gap-1.5">
+                    <div className="grid gap-2">
                       <Label>Diagnóstico</Label>
                       <Input
                         value={reemplazo.diagnostico} placeholder="Se cambió el fusor…"
                         onChange={(e) => setReemplazo({ ...reemplazo, diagnostico: e.target.value })}
                       />
                     </div>
-                    <div className="grid gap-1.5">
+                    <div className="grid gap-2">
                       <Label>Costo</Label>
                       <Input
                         type="number" min="0" step="0.01" value={reemplazo.costo}

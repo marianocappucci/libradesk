@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { Pagina, Tabla, useDatos } from '@/components/comercial-ui'
-import { useSucursal } from '@/components/sucursal'
+import { useSucursal, useSucursalUrl } from '@/components/sucursal'
 import { pesos } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,8 +36,10 @@ export type DepositoStock = {
 }
 
 export function DepositosStock() {
-  const { datos, error, cargando, conError } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
-  const { sucursales } = useSucursal()
+  const conSucursal = useSucursalUrl()
+  const { datos, error, cargando, conError } =
+    useDatos<DepositoStock[]>(conSucursal('/api/depositos-stock'), [])
+  const { sucursales, activa } = useSucursal()
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
@@ -49,6 +51,8 @@ export function DepositosStock() {
         <strong>depósitos de equipos</strong>, que guardan una unidad serializada
         —dónde está un equipo cuando no está instalado—. Son dos cosas distintas
         que en castellano se llaman igual.
+        {/* Una lista recortada que parece completa es peor que no filtrar. */}
+        {activa && ` Se muestran sólo los de ${activa.nombre}.`}
       </p>
       <Tabla<DepositoStock>
         vacio="Todavía no hay depósitos de stock."
@@ -66,36 +70,71 @@ export function DepositosStock() {
             render: (d) => d.sucursal || <span className="text-muted-foreground">—</span> },
           { clave: 'descripcion', titulo: 'Descripción',
             render: (d) => <span className="text-muted-foreground">{d.descripcion || '—'}</span> },
+          { clave: 'acciones', titulo: '', ancho: '90px',
+            render: (d) => (
+              <FormDeposito deposito={d} sucursales={sucursales} onGuardar={conError} />
+            ) },
         ]}
       />
     </Pagina>
   )
 }
 
-function FormDeposito({ sucursales, onGuardar }: {
+/**
+ * Alta y edición de un depósito de stock.
+ *
+ * La edición existe sobre todo para **reasignar la sucursal**: mover el
+ * depósito mueve con él todas sus existencias, porque el stock cuelga del
+ * depósito y no de la sucursal. Es la forma de corregir uno mal asignado —no
+ * la forma de mover mercadería, que es la transferencia de `Stock.tsx`— y por
+ * eso el diálogo lo dice.
+ */
+function FormDeposito({ deposito, sucursales, onGuardar }: {
+  deposito?: DepositoStock
   sucursales: { id: number; nombre: string }[]
   onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
+  const editando = deposito !== undefined
   const [abierto, setAbierto] = useState(false)
-  const [nombre, setNombre] = useState('')
-  const [descripcion, setDescripcion] = useState('')
-  const [sucursalId, setSucursalId] = useState('ninguna')
+  const [nombre, setNombre] = useState(deposito?.nombre ?? '')
+  const [descripcion, setDescripcion] = useState(deposito?.descripcion ?? '')
+  const [sucursalId, setSucursalId] = useState(
+    deposito?.sucursal_id == null ? 'ninguna' : String(deposito.sucursal_id),
+  )
+
+  const cambiaDeSucursal = editando
+    && (deposito.sucursal_id ?? null) !== (sucursalId === 'ninguna' ? null : Number(sucursalId))
 
   async function guardar() {
-    const ok = await onGuardar(() => api.post('/api/depositos-stock', {
+    const cuerpo = {
       nombre: nombre.trim(), descripcion,
       sucursal_id: sucursalId === 'ninguna' ? null : Number(sucursalId),
-    }))
-    if (ok) { setAbierto(false); setNombre(''); setDescripcion('') }
+      // `es_default` no viaja: el servicio lo conserva de la fila actual, y
+      // mandarlo desde acá sería otra fuente de verdad para el mismo dato.
+      ...(editando ? { activo: deposito.activo } : {}),
+    }
+    const ok = await onGuardar(() =>
+      editando
+        ? api.put(`/api/depositos-stock/${deposito.id}`, cuerpo)
+        : api.post('/api/depositos-stock', cuerpo))
+    if (!ok) return
+    setAbierto(false)
+    if (!editando) { setNombre(''); setDescripcion('') }
   }
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo depósito</Button>
+        {editando
+          ? <Button variant="ghost" size="sm">Editar</Button>
+          : <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo depósito</Button>}
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo depósito de stock</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>
+            {editando ? deposito.nombre : 'Nuevo depósito de stock'}
+          </DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label htmlFor="d-nombre">Nombre</Label>
@@ -123,10 +162,19 @@ function FormDeposito({ sucursales, onGuardar }: {
               </Select>
             </div>
           )}
+          {cambiaDeSucursal && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              El depósito se muda con todas sus existencias. Para mover
+              mercadería de una sucursal a otra dejando el depósito donde está,
+              usá una transferencia desde Stock.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-          <Button onClick={guardar} disabled={!nombre.trim()}>Crear</Button>
+          <Button onClick={guardar} disabled={!nombre.trim()}>
+            {editando ? 'Guardar' : 'Crear'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -142,6 +190,12 @@ type Lista = {
 type Precio = {
   id: number; item_id: number; producto: string
   precio: number; costo: number; margen_pct: number | null
+  //: `true` = esta fila es un precio cargado para la sucursal que se está
+  //: mirando. `false` = es el general de la lista, que se aplica ahí porque la
+  //: sucursal no tiene uno propio.
+  propio_de_sucursal: boolean
+  sucursal_id: number | null
+  sucursal: string
 }
 
 export function ListasPrecio() {
@@ -185,14 +239,20 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
   onCerrar: () => void
   onCambio: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
+  const conSucursal = useSucursalUrl()
+  const { activa } = useSucursal()
   const { datos: precios, recargar, conError } = useDatos<Precio[]>(
-    `/api/listas-precio/${lista.id}/precios`, [],
+    conSucursal(`/api/listas-precio/${lista.id}/precios`), [],
   )
   const [pct, setPct] = useState('')
 
   async function ajustar() {
     const ok = await conError(() => api.post(`/api/listas-precio/${lista.id}/ajuste`, {
       porcentaje: Number(pct),
+      // Con una sucursal elegida, el ajuste masivo mueve **sólo** sus precios
+      // propios. Los productos que ahí cotizan por el general no se tocan:
+      // moverlos movería también el precio de la otra sucursal.
+      sucursal_id: activa?.id ?? null,
     }))
     if (ok) { setPct(''); await onCambio(async () => {}) }
   }
@@ -226,14 +286,37 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
           </Button>
           <p className="text-xs text-muted-foreground">
             Un valor negativo baja los precios.
+            {activa
+              ? ` Sólo mueve los precios propios de ${activa.nombre}.`
+              : ' Mueve todos los precios de la lista, incluidos los propios de cada sucursal.'}
           </p>
         </div>
+
+        {activa && (
+          <p className="text-xs text-muted-foreground">
+            Se muestra el precio que se aplica en {activa.nombre}: el propio de
+            la sucursal si tiene, o el general de la lista si no.
+          </p>
+        )}
 
         <Tabla<Precio>
           vacio="Esta lista todavía no tiene precios cargados."
           filas={precios}
           columnas={[
-            { clave: 'producto', titulo: 'Producto', render: (p) => p.producto },
+            { clave: 'producto', titulo: 'Producto',
+              render: (p) => (
+                <span className="flex items-center gap-2">
+                  {p.producto}
+                  {/* Mirando «Todas», la etiqueta dice de qué sucursal es la
+                      fila. Con una elegida, dice si el precio es propio o
+                      heredado del general — que es la pregunta de ahí. */}
+                  {activa
+                    ? p.propio_de_sucursal
+                      ? <Badge variant="secondary">Propio</Badge>
+                      : <Badge variant="outline">General</Badge>
+                    : p.sucursal && <Badge variant="secondary">{p.sucursal}</Badge>}
+                </span>
+              ) },
             { clave: 'costo', titulo: 'Costo', ancho: '110px', alinear: 'derecha',
               render: (p) => pesos(p.costo) },
             { clave: 'precio', titulo: 'Precio', ancho: '110px', alinear: 'derecha',
@@ -242,10 +325,22 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
               render: (p) => p.margen_pct === null
                 ? <span className="text-muted-foreground">—</span>
                 : `${p.margen_pct}%` },
-            { clave: 'acciones', titulo: '', ancho: '60px',
+            { clave: 'acciones', titulo: '', ancho: '150px',
               render: (p) => (
-                <FormPrecio listaId={lista.id} precio={p}
-                            onGuardar={async (fn) => { const ok = await conError(fn); if (ok) await recargar(); return ok }} />
+                <div className="flex justify-end gap-1">
+                  <FormPrecio listaId={lista.id} precio={p} sucursalId={activa?.id ?? null}
+                              onGuardar={async (fn) => { const ok = await conError(fn); if (ok) await recargar(); return ok }} />
+                  {activa && p.propio_de_sucursal && (
+                    <Button variant="ghost" size="sm"
+                            onClick={async () => {
+                              const ok = await conError(() => api.del(
+                                `/api/listas-precio/${lista.id}/precios/${p.item_id}?sucursal_id=${activa.id}`))
+                              if (ok) await recargar()
+                            }}>
+                      Quitar
+                    </Button>
+                  )}
+                </div>
               ) },
           ]}
         />
@@ -254,17 +349,29 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
   )
 }
 
-function FormPrecio({ listaId, precio, onGuardar }: {
+/**
+ * Edita el precio de un producto en una lista.
+ *
+ * ⚠️ **Con una sucursal elegida, guardar crea el precio DE ESA SUCURSAL**, aunque
+ * la fila que se abrió fuera el precio general heredado. Es lo que se espera al
+ * estar parado en una sucursal —"acá vale otra cosa"— pero cambia el resultado
+ * de la operación, así que el diálogo lo dice antes de guardar en vez de que se
+ * descubra viendo que el precio de la otra sucursal no se movió.
+ */
+function FormPrecio({ listaId, precio, sucursalId, onGuardar }: {
   listaId: number
   precio: Precio
+  sucursalId: number | null
   onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
   const [abierto, setAbierto] = useState(false)
   const [valor, setValor] = useState(String(precio.precio))
+  const creaUnoPropio = sucursalId !== null && !precio.propio_de_sucursal
 
   async function guardar() {
     const ok = await onGuardar(() => api.put(`/api/listas-precio/${listaId}/precios`, {
       item_id: precio.item_id, precio: Number(valor) || 0,
+      sucursal_id: sucursalId,
     }))
     if (ok) setAbierto(false)
   }
@@ -281,6 +388,13 @@ function FormPrecio({ listaId, precio, onGuardar }: {
           <Input id="pr-valor" type="number" value={valor}
                  onChange={(e) => setValor(e.target.value)} />
         </div>
+        {creaUnoPropio && (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            Hoy este producto usa el precio general de la lista. Al guardar se
+            crea un precio propio de esta sucursal; el general no cambia y las
+            demás sucursales lo siguen usando.
+          </p>
+        )}
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
           <Button onClick={guardar}>Guardar</Button>

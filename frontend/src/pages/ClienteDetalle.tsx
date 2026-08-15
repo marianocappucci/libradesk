@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, PRIORIDAD_LABELS,
   ubicacionTexto, type ClienteResumen,
@@ -92,14 +93,14 @@ function DialogoInforme({ clienteId, nombre }: { clienteId: number; nombre: stri
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label htmlFor="informe-desde">Desde</Label>
             <Input
               id="informe-desde" type="date" className="w-40" value={periodo.desde}
               onChange={(e) => setPeriodo((p) => ({ ...p, desde: e.target.value }))}
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label htmlFor="informe-hasta">Hasta</Label>
             <Input
               id="informe-hasta" type="date" className="w-40" value={periodo.hasta}
@@ -221,9 +222,8 @@ export function ClienteDetalle() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {volver}
+      <EncabezadoDePantalla
+        titulo={
           <div>
             <TituloPantalla icono={Users}>
               {cliente.nombre}
@@ -233,15 +233,15 @@ export function ClienteDetalle() {
               {[cliente.empresa, ...contacto].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {cliente.cuit && <Badge variant="outline">CUIT {cliente.cuit}</Badge>}
-          <Badge variant="secondary">
-            {cliente.tipo_facturacion === 'mensual' ? 'Abono mensual' : 'Factura por servicio'}
-          </Badge>
-          <DialogoInforme clienteId={clienteId} nombre={cliente.nombre} />
-        </div>
-      </div>
+        }
+      >
+        {cliente.cuit && <Badge variant="outline">CUIT {cliente.cuit}</Badge>}
+        <Badge variant="secondary">
+          {cliente.tipo_facturacion === 'mensual' ? 'Abono mensual' : 'Factura por servicio'}
+        </Badge>
+        <DialogoInforme clienteId={clienteId} nombre={cliente.nombre} />
+        {volver}
+      </EncabezadoDePantalla>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TarjetaConteo

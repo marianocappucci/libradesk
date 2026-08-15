@@ -8,6 +8,7 @@
 // que cambia es de donde salen los datos.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -60,28 +61,35 @@ export function ComprobanteDetalle({
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <TituloPantalla icono={Receipt}>
-            {TITULO[tipo]} <span className="font-mono">{c.number}</span>
-          </TituloPantalla>
-          {insignia}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {accionesEncabezado}
-          <Button asChild size="sm" variant="outline">
-            <a href={pdfHref} target="_blank" rel="noreferrer"><FileDown />Ver PDF</a>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link to={RUTA[tipo]}><ArrowLeft />Volver</Link>
-          </Button>
-        </div>
-      </div>
+      {/* Ésta era la pantalla que ya tenía la forma correcta —título a la
+          izquierda, acciones a la derecha, "Volver" último— y de la que se
+          copió `EncabezadoDePantalla` para los seis productos. Pasa a usar el
+          componente para que la referencia y la definición no puedan divergir:
+          mientras la forma vivía acá escrita a mano, era una más de las 20
+          copias, aunque fuera la buena. */}
+      <EncabezadoDePantalla
+        titulo={
+          <>
+            <TituloPantalla icono={Receipt}>
+              {TITULO[tipo]} <span className="font-mono">{c.number}</span>
+            </TituloPantalla>
+            {insignia}
+          </>
+        }
+      >
+        {accionesEncabezado}
+        <Button asChild size="sm" variant="outline">
+          <a href={pdfHref} target="_blank" rel="noreferrer"><FileDown />Ver PDF</a>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to={RUTA[tipo]}><ArrowLeft />Volver</Link>
+        </Button>
+      </EncabezadoDePantalla>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Datos del cliente</CardTitle></CardHeader>
-          <CardContent className="grid gap-1.5 text-sm">
+          <CardContent className="grid gap-2 text-sm">
             <p><span className="text-muted-foreground">Cliente:</span> {c.client_name}</p>
             {c.client_cuit && <p><span className="text-muted-foreground">CUIT / DNI:</span> {c.client_cuit}</p>}
             {c.client_address && <p><span className="text-muted-foreground">Domicilio:</span> {c.client_address}</p>}
@@ -93,7 +101,7 @@ export function ComprobanteDetalle({
           <CardHeader>
             <CardTitle className="text-base">Datos del {tipo}</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-1.5 text-sm">
+          <CardContent className="grid gap-2 text-sm">
             <p><span className="text-muted-foreground">Número:</span> <span className="font-mono">{c.number}</span></p>
             <p><span className="text-muted-foreground">Fecha:</span> {fecha(c.date)}</p>
             {datosExtra}

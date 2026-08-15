@@ -22,12 +22,16 @@
 // absolutos dicen que lo son.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlarmClock, CalendarClock, FileExclamationPoint as FileWarning, LayoutDashboard, ShieldCheck, UserX, Wrench } from 'lucide-react'
+import { EncabezadoDePantalla } from 'libra-ui/acciones'
+import { AlarmClock, CalendarClock, CalendarDays, FileExclamationPoint as FileWarning, LayoutDashboard, ShieldCheck, UserX, Wrench } from 'lucide-react'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
-  type DashboardOperativo, type DashboardSummary,
+  type DashboardOperativo, type DashboardSummary, type EquipoTrabajo,
 } from '../api'
+import { useAgendaRango } from '@/components/agenda/datos'
+import { Chip } from '@/components/agenda/chip'
+import { diaCorto, hoyLocal, lunesDe, sumarDias } from '@/components/agenda/fechas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -37,6 +41,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -94,7 +99,7 @@ function BloqueVencimiento({
         </CardDescription>
         <CardTitle className="text-3xl">{total}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-1.5 text-sm">
+      <CardContent className="grid gap-2 text-sm">
         {total === 0 ? (
           <p className="text-muted-foreground">Nada en el horizonte elegido.</p>
         ) : (
@@ -136,6 +141,103 @@ function Fila({ principal, secundario, dias }: {
   )
 }
 
+/** La semana de las cuadrillas, en el dashboard.
+ *
+ *  Pedido del humano (2026-08-14): que la agenda esté presente en la pantalla
+ *  principal. Es una **mirilla**, no la agenda: siete columnas con lo que hay y
+ *  el link a la pantalla de verdad, que es donde se filtra, se cambia de mes y
+ *  se imprime la hoja de ruta.
+ *
+ *  Componente aparte y no un bloque inline porque tiene su propio `useEffect` y
+ *  su propio hook de datos, y los hooks no pueden colgar de un `&&`.
+ *
+ *  ⚠️ Agrega una llamada por cuadrilla activa al abrir la pantalla que se abre
+ *  primero. Con las pocas que tiene una empresa de esto es el mismo costo que ya
+ *  paga la agenda; si algún día son decenas, el arreglo es un endpoint agregador
+ *  —no sacar el bloque—. */
+function SemanaDeCuadrillas() {
+  const [equipos, setEquipos] = useState<EquipoTrabajo[]>([])
+  const hoy = hoyLocal()
+  const lunes = lunesDe(hoy)
+
+  useEffect(() => {
+    let vigente = true
+    api.get<EquipoTrabajo[]>('/api/equipos-trabajo')
+      // Misma guarda por forma que el resto de la pantalla: un `{}` es truthy y
+      // el `.filter()` del hook tumbaría el dashboard entero.
+      .then((e) => { if (vigente) setEquipos(Array.isArray(e) ? e : []) })
+      .catch(() => { /* el bloque se muestra vacío; el error grande ya está arriba */ })
+    return () => { vigente = false }
+  }, [])
+
+  const { porDia, activos, cargando } = useAgendaRango(equipos, lunes, 7)
+  const dias = Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i))
+
+  // Sin cuadrillas no hay bloque: en una instalación que no usa equipos de
+  // trabajo, siete columnas vacías serían ruido permanente en la pantalla
+  // principal. No es lo mismo que un bloque de vencimientos en cero, que sí
+  // informa ("no vence nada").
+  if (!cargando && activos.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardDescription className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4" />
+          Las cuadrillas, esta semana
+        </CardDescription>
+        <Button asChild variant="link" size="sm" className="h-auto justify-start p-0">
+          <Link to="/agenda">Ver la agenda</Link>
+        </Button>
+      </CardHeader>
+      <CardContent className="grid gap-2 md:grid-cols-7">
+        {dias.map((dia) => {
+          const trabajos = porDia[dia] ?? []
+          const esHoy = dia === hoy
+          return (
+            <div
+              key={dia}
+              className={cn(
+                'flex flex-col gap-1 rounded-md border p-2',
+                esHoy && 'border-primary bg-primary/5',
+              )}
+            >
+              <Link
+                to={`/agenda?vista=dia&dia=${dia}`}
+                className={cn(
+                  'text-xs font-medium hover:underline',
+                  esHoy ? 'text-primary' : 'text-muted-foreground',
+                )}
+              >
+                {diaCorto(dia)}
+              </Link>
+              {trabajos.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {cargando ? '…' : '—'}
+                </p>
+              ) : (
+                <>
+                  {trabajos.slice(0, 2).map((t) => (
+                    <Chip key={`${t.equipo_id}-${t.incidencia_id}`} t={t} compacto />
+                  ))}
+                  {trabajos.length > 2 && (
+                    <Link
+                      to={`/agenda?vista=dia&dia=${dia}`}
+                      className="px-1 text-xs text-muted-foreground hover:underline"
+                    >
+                      +{trabajos.length - 2} más
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function Dashboard() {
   const [dateFrom, setDateFrom] = useState(firstOfMonthIso())
   const [dateTo, setDateTo] = useState(todayIso())
@@ -171,18 +273,26 @@ export function Dashboard() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          {/* Es el título de ESTA pantalla, no una sección adentro: el
-              Dashboard no tenía otro. Por eso sale del mismo componente que el
-              resto y no de un `<h2>` a mano — era el único que quedaba con el
-              tamaño del título pero sin su tratamiento. */}
-          <TituloPantalla icono={LayoutDashboard}>Qué hay que hacer</TituloPantalla>
-          <p className="text-sm text-muted-foreground">
-            Lo que se vence, lo que espera hace mucho y lo que está en el taller.
-          </p>
-        </div>
-        <div className="grid gap-1.5">
+      {/* `items-end` por lo mismo que la Agenda: a la derecha va un filtro con
+          etiqueta, no un botón, y su base tiene que coincidir con la del
+          párrafo del título. El `cn` del componente es `twMerge`, así que esta
+          clase le gana al `items-center` de adentro. */}
+      <EncabezadoDePantalla
+        className="items-end"
+        titulo={
+          <div>
+            {/* Es el título de ESTA pantalla, no una sección adentro: el
+                Dashboard no tenía otro. Por eso sale del mismo componente que el
+                resto y no de un `<h2>` a mano — era el único que quedaba con el
+                tamaño del título pero sin su tratamiento. */}
+            <TituloPantalla icono={LayoutDashboard}>Qué hay que hacer</TituloPantalla>
+            <p className="text-sm text-muted-foreground">
+              Lo que se vence, lo que espera hace mucho y lo que está en el taller.
+            </p>
+          </div>
+        }
+      >
+        <div className="grid gap-2">
           <Label htmlFor="horizonte">Horizonte</Label>
           <Select value={dias} onValueChange={setDias}>
             <SelectTrigger id="horizonte" className="w-40" aria-label="Horizonte de vencimientos">
@@ -195,7 +305,7 @@ export function Dashboard() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -241,7 +351,10 @@ export function Dashboard() {
               titulo="Turnos agendados" icono={CalendarClock}
               total={operativo.vencimientos.agenda.total}
               mostrados={operativo.vencimientos.agenda.items.length}
-              verMas="/incidencias"
+              // A la agenda y no al listado de tickets: éste es el link que se
+              // aprieta queriendo ver la agenda, y hasta el 2026-08-14 caía en
+              // `/incidencias`, que es otra pregunta.
+              verMas="/agenda"
             >
               {operativo.vencimientos.agenda.items.map((t) => (
                 <Fila key={t.id} principal={t.titulo} secundario={t.cliente}
@@ -302,7 +415,7 @@ export function Dashboard() {
                   )}
                 </div>
 
-                <div className="grid gap-1.5 text-sm">
+                <div className="grid gap-2 text-sm">
                   {backlog.mas_viejas.length === 0 ? (
                     <p className="text-muted-foreground">No hay incidencias abiertas.</p>
                   ) : (
@@ -333,18 +446,22 @@ export function Dashboard() {
         </>
       )}
 
+      {/* Fuera de la guarda de `operativo`: la agenda tiene su propia consulta y
+          no tiene por qué desaparecer porque el bloque operativo falle. */}
+      <SemanaDeCuadrillas />
+
       {/* Los totales, abajo: son contexto, no acción. Y con el filtro de fechas
           acá, que es el único lugar donde de verdad filtra. */}
       <div className="grid gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h3 className="text-base font-semibold">Totales</h3>
           <div className="flex items-end gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="date-from">Desde</Label>
               <Input id="date-from" type="date" value={dateFrom} className="w-40"
                      onChange={(e) => setDateFrom(e.target.value)} />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="date-to">Hasta</Label>
               <Input id="date-to" type="date" value={dateTo} className="w-40"
                      onChange={(e) => setDateTo(e.target.value)} />
