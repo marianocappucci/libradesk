@@ -29,7 +29,7 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, comercial, compras, contratos,
-    dashboard, depositos, equipos, equipos_trabajo, facturacion,
+    cuotas, dashboard, depositos, equipos, equipos_trabajo, facturacion,
     facturacion_config, health, incidencias,
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
     reportes, sectores, servicios, sucursales, tecnicos, users,
@@ -43,6 +43,7 @@ from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
+from .services.cuotas import CuotaRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
@@ -192,6 +193,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
     app.state.activos = ActivoRepository(sessions)
     app.state.contratos = ContratoRepository(sessions)
+    app.state.cuotas = CuotaRepository(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
     app.state.informes = InformeService(sessions)
@@ -303,6 +305,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     )
     app.include_router(
         contratos.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
+    )
+    # El devengado (fase 2). Mismo módulo que los contratos y por el mismo
+    # motivo: una cuota sin contrato no existe, así que gatearla aparte
+    # ofrecería una bandeja de cobros de algo que no se puede contratar.
+    app.include_router(
+        cuotas.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
     )
     # Stock de consumibles. Un solo router para el catálogo, los depósitos, los
     # movimientos Y los materiales de una incidencia: los cuatro cuelgan del

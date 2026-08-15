@@ -263,7 +263,7 @@ export const ESTADOS_ACTIVO_MANUALES = Object.keys(ESTADO_ACTIVO_LABELS)
 
 export type TipoContrato =
   | 'alquiler' | 'comodato' | 'prestamo' | 'incluido_en_servicio'
-  | 'leasing' | 'venta_financiada'
+  | 'leasing' | 'venta_financiada' | 'abono'
 
 export const TIPO_CONTRATO_LABELS: Record<TipoContrato, string> = {
   alquiler: 'Alquiler',
@@ -272,11 +272,14 @@ export const TIPO_CONTRATO_LABELS: Record<TipoContrato, string> = {
   incluido_en_servicio: 'Incluido en el servicio',
   leasing: 'Leasing',
   venta_financiada: 'Venta financiada',
+  // El unico tipo que NO necesita equipos: un abono de mantenimiento se cobra
+  // por atender, no por haber entregado algo (decision del humano, 2026-08-15).
+  abono: 'Abono de servicio',
 }
 
 /** Los que llevan cuota. Los otros tres se entregan sin cobrar por el equipo,
  *  así que el backend rechaza un importe. */
-export const TIPOS_CON_CUOTA: TipoContrato[] = ['alquiler', 'leasing', 'venta_financiada']
+export const TIPOS_CON_CUOTA: TipoContrato[] = ['alquiler', 'leasing', 'venta_financiada', 'abono']
 
 export const ESTADO_CONTRATO_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -373,6 +376,94 @@ export type Contrato = {
   // Sólo en la ficha (`GET /api/contratos/{id}`), no en el listado.
   lineas?: ContratoLinea[]
   precios?: ContratoPrecio[]
+}
+
+// ── El devengado (fase 2, 2026-08-15) ──────────────────────────────────────
+
+export const TIPO_CARGO_LABELS: Record<string, string> = {
+  alquiler: 'Alquiler',
+  proporcional: 'Proporcional',
+  mantenimiento: 'Abono',
+  instalacion: 'Instalación',
+  configuracion: 'Configuración',
+  deposito_garantia: 'Depósito en garantía',
+  reparacion: 'Reparación',
+  reposicion: 'Reposición',
+}
+
+/** Los que representan el período en sí. Los emite «Generar cuotas», y el
+ *  backend rechaza cargarlos a mano: dejarían dos cobros del mismo mes. */
+export const CARGOS_RECURRENTES = ['alquiler', 'proporcional', 'mantenimiento']
+
+export const ESTADO_CUOTA_LABELS: Record<string, string> = {
+  pendiente: 'Pendiente',
+  facturada: 'Facturada',
+  cobrada: 'Cobrada',
+  vencida: 'Vencida',
+  anulada: 'Anulada',
+}
+
+export type Cuota = {
+  id: number
+  contrato_id: number
+  contrato_numero: string | null
+  cliente_nombre: string | null
+  periodo_desde: string
+  periodo_hasta: string
+  concepto: string
+  tipo_cargo: string
+  fecha_emision: string
+  fecha_vencimiento: string | null
+  importe_base: number
+  bonificacion: number
+  impuestos: number
+  interes_mora: number
+  importe_total: number
+  moneda: string
+  estado: string
+  precio_id: number | null
+  /** El remito que la cobra. Lo escribe la pieza B. */
+  remito_id: number | null
+  factura_numero: string | null
+  comprobante_pago: string | null
+  observaciones: string | null
+  created_at: string | null
+}
+
+/** Una fila de la previsualización: lo que se generaría, sin haber escrito nada
+ *  todavía. `dias_cubiertos` contra `dias_del_periodo` es lo que explica por qué
+ *  un mes sale menos que el anterior. */
+export type CuotaPropuesta = {
+  contrato_id: number
+  contrato_numero: string
+  cliente_id: number
+  tipo_cargo: string
+  periodo_desde: string
+  periodo_hasta: string
+  concepto: string
+  fecha_emision: string
+  fecha_vencimiento: string | null
+  importe_total: number
+  moneda: string
+  precio_id: number | null
+  prorrateada: boolean
+  dias_cubiertos: number
+  dias_del_periodo: number
+}
+
+export type PreviaCuotas = {
+  ancla: string
+  a_generar: CuotaPropuesta[]
+  /** Los períodos que ya estaban emitidos. Se muestran en vez de esconderse:
+   *  una pantalla que simplemente no los lista se lee como "este contrato no
+   *  devenga". */
+  ya_generadas: CuotaPropuesta[]
+  total: number
+}
+
+export type ResultadoGenerar = {
+  generadas: Cuota[]
+  ya_generadas: CuotaPropuesta[]
 }
 
 export type ResumenActivos = {

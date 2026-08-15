@@ -45,12 +45,26 @@ TIPOS_CONTRATO = (
     "incluido_en_servicio",
     "leasing",
     "venta_financiada",
+    # 🆕 **El abono de servicio** (decision del humano, 2026-08-15, contestando
+    # la pregunta 1 de la fase 2). Es el unico tipo que **no necesita equipos**:
+    # un abono de mantenimiento se cobra por atender, no por haber entregado
+    # algo. Hasta hoy no tenia donde vivir — era la brecha 11 de las de Lagrace,
+    # y `clientes.tipo_facturacion='mensual'` era una etiqueta sin importe.
+    #
+    # No hizo falta tocar `contratos_equipos`: un contrato sin lineas ya era
+    # representable, porque los equipos se agregan con `colocar()` despues del
+    # alta. Lo que faltaba era el tipo.
+    "abono",
 )
 
 # Los que llevan una cuota periodica. Los otros tres se entregan sin cobrar por
 # el equipo —el comodato va atado a otro servicio, el prestamo es temporal—, asi
 # que un precio ahi no significa nada y se rechaza.
-TIPOS_CON_CUOTA = ("alquiler", "leasing", "venta_financiada")
+TIPOS_CON_CUOTA = ("alquiler", "leasing", "venta_financiada", "abono")
+
+# Los que pueden existir sin ningun equipo colocado. Para los demas, un contrato
+# sin lineas es uno a medio cargar; para el abono es lo normal.
+TIPOS_SIN_EQUIPOS = ("abono",)
 
 ESTADOS_CONTRATO = (
     "borrador",

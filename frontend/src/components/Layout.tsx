@@ -37,6 +37,7 @@ import {
   Package as Productos,
   PackageSearch,
   Receipt,
+  ReceiptText,
   ScrollText,
   Send,
   Settings,
@@ -150,6 +151,9 @@ export const Layout = createLayout({
         // entiende. Adentro la entidad es el contrato, que es lo que permite
         // que comodato, préstamo y leasing entren sin rehacer el módulo.
         { to: '/contratos', label: 'Equipos en alquiler', icon: FileSignature, module: 'alquileres' },
+        // El devengado. Va DESPUES de los contratos porque se lee en ese
+        // orden: primero que hay contratos, despues que devengan.
+        { to: '/cuotas', label: 'Cuotas', icon: ReceiptText, module: 'alquileres' },
         { to: '/activos', label: 'Activos', icon: Activos, module: 'alquileres' },
       ],
     },
