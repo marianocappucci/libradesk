@@ -43,7 +43,7 @@ import { DepositosStock, ListasPrecio } from './pages/Inventario'
 import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
 import { CuentaCorriente, Recibos, Ventas, VentaDetalle } from './pages/VentasComercial'
 import { Sucursales } from './pages/Sucursales'
-import { SucursalBar, SucursalProvider } from './components/sucursal'
+import { SucursalProvider } from './components/sucursal'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -58,12 +58,14 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   // El provider envuelve al Layout y no a la app entera: sólo tiene sentido con
   // sesión iniciada, y `/api/sucursales` requiere autenticación — montarlo
   // afuera dispararía un 401 en la pantalla de login.
+  //
+  // Y tiene que seguir envolviéndolo aunque el selector ya no se renderice acá:
+  // desde el 2026-08-14 vive en el menú del usuario, que lo dibuja el propio
+  // `Layout` (`userMenu` en `components/Layout.tsx`). O sea que el consumidor
+  // del contexto está **adentro** del Layout, no al lado.
   return (
     <SucursalProvider>
-      <Layout>
-        <SucursalBar />
-        {children}
-      </Layout>
+      <Layout>{children}</Layout>
     </SucursalProvider>
   )
 }

@@ -13,9 +13,12 @@
 // filtre por su cuenta sin mostrarlo deja al usuario mirando una lista
 // incompleta que parece completa.
 //
-// La barra va acá y no en la topbar de `libra-ui/Layout` porque ese componente
-// no tiene un slot para widgets, y agregárselo obligaría a versionar un paquete
-// que usan los seis productos por una pantalla de uno solo.
+// **Desde el 2026-08-14 el selector vive en el menú del usuario**, no en una
+// franja arriba del contenido. Este archivo decía que la barra iba acá "porque
+// `libra-ui/Layout` no tiene un slot para widgets, y agregárselo obligaría a
+// versionar un paquete que usan los seis productos por una pantalla de uno
+// solo". El humano pidió el cambio igual, y el razonamiento no aplicaba: el
+// slot (`userMenu`, v0.20.0) le sirve a los seis, no a uno.
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
@@ -107,19 +110,37 @@ export function useSucursalUrl() {
   )
 }
 
-/** La barra del encabezado. No se renderiza si hay menos de dos sucursales. */
-export function SucursalBar() {
+/** El selector de sucursal activa. **Vive en el menú del usuario**, en el pie
+ *  del sidebar (`userMenu` de `libra-ui/Layout` v0.20.0).
+ *
+ *  Antes era una franja arriba del contenido, en todas las pantallas. Pedido
+ *  del humano (2026-08-14): llevarlo al nombre del usuario. Y tiene sentido más
+ *  allá del gusto — la sucursal activa **no es parte de la pantalla que se está
+ *  mirando**, es una preferencia del puesto de trabajo, del mismo orden que
+ *  quién sos y cómo salís. Como franja, además, le comía un renglón a las 40
+ *  pantallas para algo que se toca una vez por turno.
+ *
+ *  > ⚠️ Lo que se pierde al esconderlo: **la sucursal activa deja de estar a la
+ *  > vista**. Una pantalla filtrada ahora parece completa. Por eso el nombre de
+ *  > la sucursal elegida se muestra en el trigger del menú y no sólo adentro —
+ *  > y por eso el default sigue siendo "todas", que no filtra nada.
+ *
+ *  No se renderiza con menos de dos sucursales: con una no ofrece nada y con
+ *  cero no hay concepto. */
+export function SelectorDeSucursal() {
   const { sucursales, activa, elegir } = useSucursal()
-  // Con una sola sucursal el selector no ofrece nada y ocupa una franja de la
-  // pantalla en todas las páginas. Con cero, directamente no hay concepto.
   if (sucursales.length < 2) return null
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-      <MapPin className="h-4 w-4 text-muted-foreground" />
-      <span className="text-muted-foreground">Sucursal activa</span>
+    <div className="grid gap-1.5">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <MapPin className="h-3.5 w-3.5" />
+        Sucursal activa
+      </span>
       <Select value={activa ? String(activa.id) : 'todas'}
               onValueChange={(v) => elegir(v === 'todas' ? null : Number(v))}>
-        <SelectTrigger className="h-8 w-56"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-8 w-full" aria-label="Sucursal activa">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           {/* "Todas" es el default y va primero: es lo que ve alguien que
               todavía no eligió, y en una empresa de dos sucursales es la vista
