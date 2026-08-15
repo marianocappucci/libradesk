@@ -307,6 +307,24 @@ class ConvertirLote(BaseModel):
     incidencia_ids: list[int] = Field(min_length=1)
 
 
+class SalidaIn(BaseModel):
+    """Una salida de cuadrilla: varios reclamos encadenados desde una hora."""
+
+    #: 🔑 **El orden es el orden del recorrido.** Quien arma la salida sabe por
+    #: dónde conviene arrancar; reordenar acá le cambiaría la ruta sin decírselo.
+    incidencia_ids: list[int] = Field(min_length=1)
+    #: La cuadrilla. Elegirla ya elige el vehículo y los técnicos: eso vive en
+    #: `vehiculos.equipo_id` y en `equipos_trabajo_integrantes`, no acá.
+    equipo_trabajo_id: int
+    #: Fecha y hora de la primera parada.
+    inicio: datetime
+    #: Cuánto dura cada parada. Sin esto, la hora que trae `agenda.py`.
+    duracion_minutos: int | None = None
+    #: Entre que termina una parada y arranca la siguiente. En cero por defecto:
+    #: una cuadrilla que atiende dos pisos del mismo edificio no viaja.
+    traslado_minutos: int = 0
+
+
 def _convertir(incidencias, ids, remitos, clientes, servicios, user):
     """El manejo de errores, que es igual para las dos rutas."""
     try:
@@ -323,6 +341,37 @@ def _convertir(incidencias, ids, remitos, clientes, servicios, user):
         # 409 y no 422: el pedido está bien formado, es el estado de los
         # reclamos el que no lo permite todavía. Es el mismo código que usa la
         # conversión de un presupuesto rechazado.
+        raise HTTPException(409, str(e))
+
+
+@router.post("/agendar-salida", status_code=200)
+def agendar_salida(
+    data: SalidaIn,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """Varios reclamos a una cuadrilla, en un solo gesto.
+
+    Antes había que abrir cada ticket y agendarlo de a uno, calculando los
+    horarios a mano. Acá se elige la cuadrilla, el día, la hora de arranque y
+    cuánto dura cada parada, y el sistema las encadena.
+
+    **Todo o nada**: si alguna parada se pisa con lo que la cuadrilla ya tiene
+    —o con otra del mismo bloque—, no se agenda ninguna. Con N llamadas sueltas,
+    un choque en la cuarta dejaría tres agendadas y dos no.
+    """
+    try:
+        return incidencias.agendar_varias(
+            data.incidencia_ids,
+            equipo_trabajo_id=data.equipo_trabajo_id,
+            inicio=data.inicio,
+            duracion_minutos=data.duracion_minutos,
+            traslado_minutos=data.traslado_minutos,
+        )
+    except KeyError as e:
+        raise HTTPException(404, f"No existe el id {e.args[0]}")
+    except ValueError as e:
+        # 409 y no 422: el pedido está bien formado — lo que no da es el estado
+        # de la agenda o de los reclamos. Mismo criterio que el resto del router.
         raise HTTPException(409, str(e))
 
 

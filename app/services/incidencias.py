@@ -7,7 +7,7 @@ estado — 31 filas reales migradas desde Postgres). `tecnico_id`/
 donde haya coincidencia."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -581,6 +581,106 @@ class IncidenciaRepository:
             session.commit()
             session.refresh(i)
             return _to_dict(i)
+
+    def agendar_varias(self, incidencia_ids: list[int], *, equipo_trabajo_id: int,
+                       inicio: datetime, duracion_minutos: int | None = None,
+                       traslado_minutos: int = 0) -> list[dict]:
+        """Arma **una salida**: varios reclamos a la misma cuadrilla, encadenados.
+
+        Sale del pedido del humano del 2026-08-15: *"que se puedan elegir varias
+        incidencias y armar agenda en una cuadrilla con determinado vehiculo con
+        tales tecnicos"*. Antes habia que abrir cada ticket y agendarlo de a uno,
+        calculando los horarios a mano.
+
+        **El vehiculo y los tecnicos NO son de la salida: son de la cuadrilla**
+        (decision del humano, 2026-08-15). Elegir la cuadrilla ya elige con que
+        sale y con quienes, porque eso ya vive en `vehiculos.equipo_id` y en
+        `equipos_trabajo_integrantes`. Modelar una salida con su propio vehiculo
+        habria sido una entidad nueva y una segunda fuente de verdad sobre lo
+        mismo.
+
+        ## Encadenadas, y por que no todas a la misma hora
+
+        Cada parada arranca cuando termina la anterior, mas `traslado_minutos`.
+        Es lo unico que **no choca contra la regla que el producto ya tiene**: la
+        cuadrilla es el recurso, y dos trabajos encimados del mismo recurso son
+        un `409`. Ponerlas todas a la misma hora obligaria a excepcionar esa
+        regla — o sea, a admitir que una cuadrilla este en tres lugares a la vez.
+
+        **El ORDEN de `incidencia_ids` es el orden del recorrido.** No se
+        reordena por prioridad ni por cercania: quien arma la salida sabe por
+        donde conviene arrancar, y adivinarlo seria cambiarle la ruta sin
+        decirselo.
+
+        ## Todo o nada
+
+        🔴 **Se valida el bloque ENTERO antes de escribir**, que es lo que este
+        metodo agrega sobre llamar N veces a `update()`. Con N llamadas sueltas,
+        un choque en la parada 4 dejaria las tres primeras agendadas y las dos
+        ultimas no — un estado a medias que nadie pidio y que hay que deshacer a
+        mano. Aca se asignan las N sobre la sesion, se validan las N, y recien
+        despues se commitea; si algo se planta, no quedo nada escrito.
+
+        Y el chequeo **ve tambien los choques internos del bloque**: al asignar
+        antes de validar, el autoflush de SQLAlchemy hace que cada parada vea a
+        las otras en la consulta de la agenda del equipo. Sin eso, una duracion
+        mas larga que el paso entre paradas se pisaria consigo misma y el 409
+        recien aparecería en el proximo alta.
+        """
+        if not incidencia_ids:
+            raise ValueError("No se eligió ninguna incidencia.")
+        # Sin esto, mandar el mismo id dos veces daria una salida con menos
+        # paradas de las que se pidieron, en silencio: el motor descarta el
+        # choque de un turno consigo mismo comparando ids.
+        if len(set(incidencia_ids)) != len(incidencia_ids):
+            raise ValueError("Hay reclamos repetidos en la salida.")
+
+        # El default sale de `agenda.py`, que es donde vive: una hora es lo que
+        # dura una visita tipica. Import local por el mismo ciclo que
+        # `_validar_agenda` — `agenda` importa `Incidencia` de este modulo.
+        from .agenda import DURACION_POR_DEFECTO
+
+        duracion = duracion_minutos or DURACION_POR_DEFECTO
+        if duracion <= 0:
+            raise ValueError("La duración de cada parada tiene que ser mayor a cero.")
+        if traslado_minutos < 0:
+            raise ValueError("El tiempo de traslado no puede ser negativo.")
+
+        with self.session_factory() as session:
+            from .equipos_trabajo import EquipoTrabajo
+
+            if session.get(EquipoTrabajo, equipo_trabajo_id) is None:
+                raise KeyError(equipo_trabajo_id)
+
+            momento = inicio
+            asignadas = []
+            for incidencia_id in incidencia_ids:
+                i = session.get(Incidencia, incidencia_id)
+                if i is None:
+                    raise KeyError(incidencia_id)
+                # Un ticket cerrado no va a una hoja de ruta: la cuadrilla no
+                # tiene nada que ir a hacer ahi, y ocuparia el horario de un
+                # trabajo real.
+                if i.estado in ("resuelta", "cerrado"):
+                    raise ValueError(
+                        f"El reclamo #{i.id} está {i.estado}: no se puede agendar "
+                        "una visita para algo que ya se resolvió."
+                    )
+                i.equipo_trabajo_id = equipo_trabajo_id
+                i.fecha_programada = momento
+                i.duracion_minutos = duracion
+                asignadas.append(i)
+                momento = momento + timedelta(minutes=duracion + traslado_minutos)
+
+            # Las N ya estan asignadas en la sesion: validarlas ahora es validar
+            # el estado que va a quedar, y cada una ve a las otras.
+            for i in asignadas:
+                _validar_agenda(session, i)
+
+            session.commit()
+            for i in asignadas:
+                session.refresh(i)
+            return [_to_dict(i) for i in asignadas]
 
     def delete(self, incidencia_id: int) -> None:
         """Borra el ticket con su actividad y su auditoria de estado, y
