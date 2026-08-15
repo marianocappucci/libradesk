@@ -21,6 +21,7 @@ import { RecepcionesEntregados, RecepcionesTaller } from './pages/Recepciones'
 import { Activos } from './pages/Activos'
 import { Stock } from './pages/Stock'
 import { Contratos } from './pages/Contratos'
+import { Cuotas } from './pages/Cuotas'
 import { ContratoDetalle } from './pages/ContratoDetalle'
 import { Tecnicos } from './pages/Tecnicos'
 import { Remitos } from './pages/Remitos'
@@ -111,6 +112,7 @@ export default function App() {
           poder linkearla desde la fila de un activo. */}
       <Route path="/contratos" element={<ProtectedRoute><Contratos /></ProtectedRoute>} />
       <Route path="/contratos/:id" element={<ProtectedRoute><ContratoDetalle /></ProtectedRoute>} />
+      <Route path="/cuotas" element={<ProtectedRoute><Cuotas /></ProtectedRoute>} />
       <Route path="/activos" element={<ProtectedRoute><Activos /></ProtectedRoute>} />
       <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
       {/* Módulo comercial. Las rutas van agrupadas igual que el sidebar. */}

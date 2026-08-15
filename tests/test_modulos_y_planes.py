@@ -43,10 +43,14 @@ RUTAS = {
 # un inventario que el cliente no contrató.
 RUTA_MATERIALES = "/api/incidencias/{incidencia_id}/materiales"
 
-# El módulo `alquileres` monta DOS routers y el de arriba cubre uno solo. Éste
-# se chequea aparte para que el segundo no quede sin cubrir: un gateo a medias
-# le mostraría el stock propio a quien no puede entregarlo bajo contrato.
+# El módulo `alquileres` monta TRES routers y el de arriba cubre uno solo. Los
+# otros dos se chequean aparte para que no queden sin cubrir: un gateo a medias
+# le mostraría el stock propio a quien no puede entregarlo bajo contrato, o —
+# peor — una bandeja de cobros de algo que no contrató.
 RUTA_ACTIVOS = "/api/activos"
+# El devengado (fase 2, 2026-08-15). Mismo módulo que los contratos: una cuota
+# sin contrato no existe.
+RUTA_CUOTAS = "/api/cuotas"
 
 
 def _existe_de_verdad(client, ruta: str) -> bool:
@@ -142,21 +146,24 @@ def test_plan_premium_habilita_todo(client, destino_base):
         assert client.get(ruta).status_code == 200, modulo
 
 
-def test_los_dos_routers_de_alquileres_van_juntos(client, destino_base):
-    """Activos y contratos cuelgan del mismo módulo, así que se habilitan y se
-    cortan a la vez. Sin este test, gatear uno solo pasaría desapercibido:
-    `RUTAS` cubre `/api/contratos` y nadie miraría `/api/activos`."""
+def test_los_tres_routers_de_alquileres_van_juntos(client, destino_base):
+    """Activos, contratos y cuotas cuelgan del mismo módulo, así que se habilitan
+    y se cortan a la vez. Sin este test, gatear uno solo pasaría desapercibido:
+    `RUTAS` cubre `/api/contratos` y nadie miraría los otros dos."""
     from plans import aplicar_plan_en_db
 
-    assert _existe_de_verdad(client, RUTA_ACTIVOS), f"{RUTA_ACTIVOS} ya no existe"
+    for ruta in (RUTA_ACTIVOS, RUTA_CUOTAS):
+        assert _existe_de_verdad(client, ruta), f"{ruta} ya no existe"
 
     aplicar_plan_en_db(destino_base, "estandar")
     _login(client)
     assert client.get(RUTA_ACTIVOS).status_code == 403
+    assert client.get(RUTA_CUOTAS).status_code == 403
     assert client.get(RUTAS["alquileres"]).status_code == 403
 
     aplicar_plan_en_db(destino_base, "premium")
     assert client.get(RUTA_ACTIVOS).status_code == 200
+    assert client.get(RUTA_CUOTAS).status_code == 200
     assert client.get(RUTAS["alquileres"]).status_code == 200
 
 
