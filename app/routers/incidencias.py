@@ -435,3 +435,55 @@ def convertir_en_remito(
     return _convertir(
         incidencias, [incidencia_id], remitos, clientes, servicios, user,
     )
+
+
+# ── Los cargos de mano de obra ────────────────────────────────────────────
+
+
+class CargoIn(BaseModel):
+    #: El item del catalogo que se cobra. **No es un enum**: hora normal, hora
+    #: fuera de horario, viatico y traslado son items del catalogo, asi que
+    #: sumar un tipo nuevo no toca este archivo ni ninguna migracion.
+    item_id: int
+    cantidad: float = Field(gt=0)
+
+
+@router.get("/{incidencia_id}/cargos")
+def listar_cargos(
+    incidencia_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """Los cargos del reclamo, con el precio **ya resuelto** por la lista de su
+    cliente: es el mismo con el que van a salir en el remito.
+
+    Resolverlo aca y no en la pantalla es lo que evita que la ficha muestre un
+    numero y el comprobante otro.
+    """
+    return incidencias.list_cargos(incidencia_id)
+
+
+@router.post("/{incidencia_id}/cargos", status_code=201)
+def agregar_cargo(
+    incidencia_id: int, payload: CargoIn,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    try:
+        return incidencias.add_cargo(
+            incidencia_id, payload.item_id, payload.cantidad,
+        )
+    except KeyError:
+        raise HTTPException(404, "La incidencia no existe.")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.delete("/{incidencia_id}/cargos/{cargo_id}", status_code=204)
+def quitar_cargo(
+    incidencia_id: int, cargo_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    try:
+        incidencias.delete_cargo(cargo_id)
+    except KeyError:
+        raise HTTPException(404, "El cargo no existe.")
+    return Response(status_code=204)
