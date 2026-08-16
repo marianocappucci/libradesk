@@ -714,6 +714,15 @@ export type Incidencia = {
    *  se elija — es la diferencia entre no cobrar por olvido y cobrar de más en
    *  silencio. En un cliente `por_servicio` queda siempre en `null`. */
   cobertura_abono: CoberturaAbono | null
+  /** El contrato del que salió, si es una visita de mantenimiento generada. */
+  contrato_id: number | null
+  /** Qué período cubre la visita. `null` en un reclamo común. */
+  periodo_visita: string | null
+  /** Si este ticket es una **visita de mantenimiento** y no un reclamo.
+   *
+   *  Lo deriva el backend a propósito: la pantalla no tiene que saber que
+   *  "tiene período" significa "es una visita". */
+  es_visita_mantenimiento: boolean
   /** Cuántas de las `horas_invertidas` cubre el abono. Sólo con `parcial`. */
   abono_horas_cubiertas: number | null
   /** Si los materiales entran al abono o se facturan. Sólo con `parcial`. */

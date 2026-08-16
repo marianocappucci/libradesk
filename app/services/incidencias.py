@@ -234,6 +234,23 @@ def _to_dict(i: Incidencia) -> dict:
         "tecnico_id": i.tecnico_id,
         "recepcionista_id": i.recepcionista_id,
         "vendedor_id": i.vendedor_id,
+        # 🔴 De qué contrato salió, si es una visita de mantenimiento. **Se
+        # guardaban desde la revisión `0027` y no se devolvían**, así que la
+        # pantalla no tenía cómo distinguir una visita preventiva de un reclamo
+        # común — y el sentido de que la visita SEA una incidencia es justamente
+        # que aparezca en la misma bandeja, distinguible.
+        #
+        # No lo agarró ningún test: los del generador leen su propia salida, y
+        # el de la cobertura mira un campo que ya estaba en este dict. Lo
+        # destapó ejercitar el circuito real en dev.
+        "contrato_id": i.contrato_id,
+        "periodo_visita": (
+            i.periodo_visita.isoformat() if i.periodo_visita else None
+        ),
+        # Derivado, para que la pantalla no tenga que saber que "tiene contrato"
+        # significa "es una visita". Si mañana un reclamo común se ata a un
+        # contrato, la regla cambia acá y no en cada vista.
+        "es_visita_mantenimiento": i.periodo_visita is not None,
         "modalidad": i.modalidad,
         "fecha_programada": (
             i.fecha_programada.isoformat() if i.fecha_programada else None

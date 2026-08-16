@@ -87,6 +87,22 @@ class IncidenciaOut(IncidenciaIn):
     #: `nro_cds` una vez—. Al no estar en el payload de entrada, `update()` ni
     #: siquiera lo recibe. Lo escribe sólo `convertir_a_remito`.
     remito_id: int | None = None
+    #: De qué contrato salió esta visita de mantenimiento, qué período cubre, y
+    #: el derivado con el que la pantalla la distingue de un reclamo.
+    #:
+    #: 🔴 **Van acá y no en `IncidenciaIn`, por el mismo motivo que
+    #: `remito_id`**: el PUT manda el objeto entero, así que un campo editable
+    #: que la pantalla no reenvíe vuelve a `null`. Las escribe sólo el generador
+    #: de visitas; editar el ticket no puede desatarlo de su contrato.
+    #:
+    #: 🔴 **Y su ausencia acá FUE el defecto.** La revisión `0027` las guardaba
+    #: y `_to_dict()` las devolvía, pero este `response_model` las descartaba
+    #: **en silencio** — FastAPI filtra la respuesta por el modelo de salida. La
+    #: suite entera pasaba mientras la pantalla no tenía cómo saber que un
+    #: ticket era una visita. Lo destapó ejercitar el circuito contra dev.
+    contrato_id: int | None = None
+    periodo_visita: str | None = None
+    es_visita_mantenimiento: bool = False
 
 
 class ActividadIn(BaseModel):
