@@ -47,6 +47,7 @@ antes, que es exactamente lo que el motor hace dentro de la suya.
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from libracommerce.db.repository import SqliteCommerceRepository
@@ -58,8 +59,11 @@ from libracommerce.usecases.inventory import (
 )
 from libracommerce.usecases.sales import confirm_sale
 from libracore.db import core as libracore_core
+from sqlalchemy import DateTime, Integer, UniqueConstraint, delete, func, select
+from sqlalchemy.orm import Mapped, mapped_column
 
-from . import comercial
+from ..database import Base, get_session_factory
+from . import comercial, iva
 
 from .fecha import ahora as _ahora
 
@@ -68,8 +72,68 @@ from .fecha import ahora as _ahora
 MEDIOS_PAGO = ("efectivo", "transferencia", "cheque", "tarjeta", "cuenta_corriente")
 
 
+class VentaRemito(Base):
+    """El vinculo entre una venta y el remito que la lleva a facturacion.
+
+    **Es la unica tabla SQLAlchemy de este modulo**, que por lo demas es todo
+    LibraCommerce por conexion cruda. La rareza es a proposito y tiene una razon
+    concreta: `sales` es del motor y la cadena de Alembic de este producto no la
+    toca nunca, asi que el `remito_id` no puede vivir como columna de la venta
+    --como si vive en `incidencias`, en `contratos_cuotas` y en los
+    presupuestos--. Ver el docstring de la revision `0026`.
+
+    Que sea SQLAlchemy y no DDL crudo la separa de `materiales`, que es cruda
+    porque **necesita** entrar en la misma transaccion que el movimiento de
+    stock. Aca no: el remito ya se emitio por la conexion de LibraCore cuando
+    esto se escribe, que es la misma no-atomicidad que documentan y aceptan las
+    otras tres conversiones.
+    """
+
+    __tablename__ = "ventas_remitos"
+    # Con nombre y en `__table_args__`, igual que `EnvioFacturacion`: un
+    # `unique=True` en la columna deja que el motor le ponga el nombre, y
+    # entonces la tabla que arma la migracion y la que arma `create_all()` no
+    # son la misma. Lo agarra `test_una_base_vacia_se_construye_entera`.
+    __table_args__ = (
+        UniqueConstraint("venta_id", name="uq_ventas_remitos_venta"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # Las dos van sin FK. Ver la revision `0026`: una apunta a LibraCommerce y
+    # la otra a LibraCore, y ninguna de las dos tablas la maneja esta cadena.
+    #
+    # `venta_id` no lleva `index=True`: el unico de arriba ya crea su indice, y
+    # pedir los dos deja un indice redundante que ademas no esta en la migracion.
+    venta_id: Mapped[int] = mapped_column(Integer)
+    remito_id: Mapped[int] = mapped_column(Integer, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(),
+    )
+
+
 def _repo(conn) -> SqliteCommerceRepository:
     return SqliteCommerceRepository(conn)
+
+
+def remito_de(venta_id: int) -> int | None:
+    """El remito que ya salio por esta venta, o `None`."""
+    with get_session_factory()() as session:
+        return session.execute(
+            select(VentaRemito.remito_id).where(VentaRemito.venta_id == venta_id)
+        ).scalar_one_or_none()
+
+
+def nacio_de_una_venta(remito_id: int) -> bool:
+    """Si este remito lo genero una venta.
+
+    Lo consulta el puente para **no** debitar en cuenta corriente: la venta ya
+    registro lo que el cliente pago o debe. Ver
+    `facturacion_externa._debitar_en_cuenta_corriente`.
+    """
+    with get_session_factory()() as session:
+        return session.execute(
+            select(VentaRemito.id).where(VentaRemito.remito_id == remito_id)
+        ).first() is not None
 
 
 def _sql_recibo_vigente(origen_id: str) -> str:
@@ -174,6 +238,11 @@ def obtener(venta_id: int) -> dict | None:
         ),
         "notas": venta.notes,
         "recibo_id": recibo["id"] if recibo else None,
+        # El remito que ya salio por esta venta, o `None`. Mismo criterio que
+        # `recibo_id`: sin este dato la pantalla no puede distinguir "generar"
+        # de "ver", y el boton termina emitiendo en silencio un comprobante que
+        # a veces ya existia.
+        "remito_id": remito_de(venta_id),
         "items": [
             {"descripcion": i.description_snapshot, "cantidad": float(i.quantity),
              "precio": float(i.unit_price), "item_id": i.item_id,
@@ -288,3 +357,163 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
 def _proximo_numero(conn) -> str:
     fila = conn.execute("SELECT COUNT(*) AS n FROM sales").fetchone()
     return f"V-{(fila['n'] or 0) + 1:08d}"
+
+
+#: Una venta en estos estados no se factura: o se anuló o volvió la mercadería.
+#: `partially_returned` **sí** se convierte — se devolvió parte y el resto se
+#: cobra, que es justo lo que el remito tiene que decir.
+ESTADOS_NO_CONVERTIBLES = (SaleStatus.CANCELLED, SaleStatus.RETURNED)
+
+
+def convertir_a_remito(venta_id: int, remitos, clientes, *,
+                       cliente_id: int | None = None,
+                       usuario_id: int | None = None) -> dict:
+    """El remito de una venta — su camino a facturación.
+
+    Pedido del humano el 2026-08-16: *"la venta de equipo por qué no genera
+    remito? debería generarlo porque lo vamos a tener cargado como stock y es una
+    venta que después va a ir a SOS Contador"*.
+
+    Es la **cuarta** conversión a remito del producto, y a propósito la misma
+    forma que las tres que ya existían (presupuesto, reclamo, cuota): la bandeja
+    acepta sólo remitos porque lo que habilita a facturar es la entrega hecha, y
+    todo lo demás llega convirtiéndose.
+
+    ## Recibe UNA venta y no una lista, al revés que reclamos y cuotas
+
+    No es un olvido. Allá el agrupado es el caso real —tres visitas del mes en un
+    remito, porque una factura sale de ahí— y acá no lo pidió nadie: una venta ya
+    es un evento de mostrador con su propio número y su propio cobro. El día que
+    haga falta agrupar, esto se convierte en el de largo 1 como se hizo con los
+    reclamos; mientras tanto, una lista de un elemento sería una API más difícil
+    de usar sin ganar nada.
+
+    Y hay una diferencia que lo justifica: el índice único de `ventas_remitos`
+    es sobre `venta_id`, no sobre `remito_id`. O sea que el modelo **ya admite**
+    varias ventas en un remito el día que se agrupe; lo que no admite es que una
+    venta salga dos veces.
+
+    ## El cliente
+
+    Una venta se puede cargar **a nombre suelto** (`customer_party_id` es
+    nullable: es el mostrador). Un remito se emite a nombre de alguien, así que
+    en ese caso hay que decir de quién — es lo que trae `cliente_id`. Con la
+    venta ya identificada, pasar un `cliente_id` distinto es un error y no una
+    corrección: la venta ya dice a quién se le vendió, y emitir el remito a otro
+    nombre desharía esa verdad sin dejar rastro.
+
+    ## La alícuota sale del catálogo, no de la venta
+
+    La línea de venta del motor **tiene** un `tax_rate`, y este producto nunca lo
+    completa: las ventas se cargan a precio final. Así que el IVA de cada línea
+    se resuelve acá, leyendo la alícuota del producto
+    (`inventario.alicuota_de`), y una línea sin `item_id` —un servicio ad-hoc del
+    mostrador— sale con la de defecto.
+
+    > ⚠️ **Esto no es un snapshot**: si mañana cambia la alícuota de un producto,
+    > el remito de una venta vieja sin convertir saldría con la nueva. Se elige
+    > así porque la alícuota que le corresponde a la factura es **la del momento
+    > de facturar**, no la del día de la venta, y porque completar `tax_rate` en
+    > la venta obligaría a tocar cómo se calcula su total — o sea, la plata de
+    > todas las ventas que ya existen. El costo de esta decisión es el párrafo
+    > que estás leyendo.
+
+    ## Lo que NO es atómico
+
+    Igual que las otras tres: el remito lo escribe la conexión de LibraCore y el
+    vínculo lo escribe SQLAlchemy, sin una transacción que cubra las dos. Se
+    emite primero el remito y se ata después, porque el error al revés —una venta
+    que dice "ya se remitió" apuntando a un remito que no existe— la dejaría sin
+    poder facturarse nunca.
+    """
+    from . import fecha, inventario
+    from .remitos_presupuestos import datos_cliente_para_comprobante
+
+    venta = obtener(venta_id)
+    if venta is None:
+        raise KeyError(venta_id)
+
+    # ── Idempotencia: el doble click ────────────────────────────────────
+    # Del dict de `obtener()`, que ya lo trae: pedirlo de nuevo sería la misma
+    # consulta dos veces en la misma llamada.
+    ya = venta["remito_id"]
+    if ya is not None:
+        existente = remitos.get(ya)
+        if existente is not None:
+            return existente
+        # El remito que se referenciaba no está: se borró por fuera. Se sigue de
+        # largo y se emite uno nuevo en vez de devolver `None`, que dejaría la
+        # venta sin camino a facturación. Mismo criterio que las otras tres.
+        _desatar(venta_id)
+
+    if venta["estado"] in ESTADOS_NO_CONVERTIBLES:
+        raise ValueError(
+            f"La venta está «{venta['estado']}» y no hay nada que facturar."
+        )
+    if not venta["items"]:
+        raise ValueError("La venta no tiene ítems, así que el remito saldría vacío.")
+
+    # ── A nombre de quién ───────────────────────────────────────────────
+    de_la_venta = (venta["cliente"] or {}).get("id")
+    if de_la_venta and cliente_id and int(cliente_id) != int(de_la_venta):
+        raise ValueError(
+            "La venta ya está a nombre de un cliente y el remito tiene que salir "
+            "al mismo. Si está mal, corregí la venta."
+        )
+    destinatario = de_la_venta or cliente_id
+    if not destinatario:
+        raise ValueError(
+            "Esta venta se cargó sin cliente y un remito se emite a nombre de "
+            "alguien. Elegí a quién antes de generarlo."
+        )
+
+    cliente = clientes.get(int(destinatario))
+    if cliente is None:
+        raise ValueError(
+            "El cliente de esta venta ya no existe, así que no hay a nombre de "
+            "quién emitir el remito."
+        )
+
+    # ── Las líneas, con la alícuota del catálogo ────────────────────────
+    alicuotas = inventario.alicuotas_de_items(
+        [i["item_id"] for i in venta["items"] if i["item_id"]]
+    )
+    items = [
+        {
+            "description": i["descripcion"],
+            "qty": i["cantidad"],
+            "unit_price": i["precio"],
+            "tax_rate": float(
+                alicuotas.get(i["item_id"], iva.DEFECTO) if i["item_id"]
+                else iva.DEFECTO
+            ),
+        }
+        for i in venta["items"]
+    ]
+
+    remito = remitos.create(
+        # `fecha.hoy()` y no la fecha de la venta: el remito se emite hoy, en
+        # hora de Argentina, igual que el de un reclamo y por el mismo motivo.
+        date=fecha.hoy(),
+        client_id=cliente["id"],
+        client_cuit=cliente["cuit"] or "",
+        items=items,
+        observations=f"Generado de la venta {venta['numero']}",
+        usuario_id=usuario_id,
+        **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
+    )
+    _atar(venta_id, remito["id"])
+    return remito
+
+
+def _atar(venta_id: int, remito_id: int) -> None:
+    with get_session_factory()() as session:
+        session.add(VentaRemito(venta_id=venta_id, remito_id=remito_id))
+        session.commit()
+
+
+def _desatar(venta_id: int) -> None:
+    """Saca el vínculo de una venta cuyo remito ya no existe."""
+    with get_session_factory()() as session:
+        session.execute(delete(VentaRemito).where(VentaRemito.venta_id == venta_id))
+        session.commit()

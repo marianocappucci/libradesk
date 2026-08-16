@@ -54,7 +54,7 @@ from libracommerce.usecases.inventory import (
 )
 from libracore.db import core as libracore_core
 
-from . import comercial
+from . import comercial, iva
 
 #: Se re-exporta para que los routers atrapen el error sin importar del motor.
 __all__ = [
@@ -196,6 +196,7 @@ def listar_items(solo_activos: bool = True,
             {"id": it.id, "nombre": it.name, "activo": it.active,
              "stock_minimo": float(it.min_stock), "costo": float(it.default_cost),
              "precio": float(it.default_sale_price),
+             "iva_rate": float(alicuota_de(it)),
              "unidad": it.unit.code, "descripcion": it.description,
              "categoria_id": it.category_id,
              "categoria": categorias.get(it.category_id, ""),
@@ -209,9 +210,88 @@ def listar_items(solo_activos: bool = True,
         ]
 
 
+# ── La alícuota de IVA de un producto ───────────────────────────────────────
+#
+# Vive en `catalog_items.tax_profile`, que es **la columna del motor** para
+# esto: existe en el schema de LibraCommerce desde siempre, el repositorio la
+# lee y la escribe, y hasta el 2026-08-16 **ningún consumidor la usaba** — se
+# verificó en los cinco repos y en el propio motor, cuyo adaptador de Contalibra
+# la deja explícitamente en `None` con el comentario *"Contalibra resolves IVA at
+# invoicing time"*.
+#
+# 🔑 **Por qué acá y no en una tabla propia de LibraDesk.** La alternativa era un
+# `productos_iva(item_id, iva_rate)` en la cadena de Alembic, y sería una segunda
+# fuente de verdad sobre un producto del motor: un item dado de baja allá dejaría
+# una fila huérfana acá, y cada lectura del catálogo necesitaría un join. Es
+# exactamente el patrón de espejado que este producto viene evitando en depósitos
+# y en el precio de los contratos.
+#
+# ⚠️ **Es TEXT y guarda el número como cadena** (`"0.21"`). El nombre de la
+# columna dice "perfil" y acá se usa como alícuota: es una decisión, no un
+# descuido. El motor no ofrece otro lugar, y las cuatro alícuotas válidas ya
+# están cerradas por `iva.ALICUOTAS`, así que el texto libre no puede entrar —
+# `_alicuota_texto()` valida antes de escribir.
+def _leer_alicuota(crudo: str | None) -> Decimal:
+    """El texto de `tax_profile` a alícuota. `iva.DEFECTO` si no dice nada.
+
+    **El default es 21% y no 0%** a propósito: un producto sin alícuota cargada
+    es un producto que nadie tocó todavía, no un producto exento. Devolver 0
+    haría que el remito saliera sin IVA y nadie lo notaría hasta la factura;
+    devolver 21 es la respuesta correcta para la enorme mayoría, y lo que no lo
+    sea se carga a mano.
+    """
+    texto = (crudo or "").strip()
+    if not texto:
+        return iva.DEFECTO
+    try:
+        return iva.validar(texto)
+    except (iva.AlicuotaInvalida, ArithmeticError, ValueError):
+        # Un valor que no es una de las cuatro llegó por fuera de este módulo
+        # —una carga vieja, una migración de datos—. Se cae al default en vez de
+        # explotar: el catálogo tiene que poder listarse igual.
+        return iva.DEFECTO
+
+
+def alicuota_de(item: CatalogItem) -> Decimal:
+    """La alícuota de un producto ya leído del catálogo."""
+    return _leer_alicuota(item.tax_profile)
+
+
+def _alicuota_texto(iva_rate) -> str:
+    """`0.21` → `"0.21"`, validando contra las cuatro que ARCA sabe mapear."""
+    return str(iva.validar(iva_rate))
+
+
+def alicuotas_de_items(item_ids) -> dict[int, Decimal]:
+    """`{item_id: alícuota}` para los ids pedidos, en **una sola** consulta.
+
+    Existe para que `ventas.convertir_a_remito()` no pida el catálogo ítem por
+    ítem: una venta de doce líneas serían doce `get_catalog_item()`. Mismo
+    motivo por el que `listar_items()` suma el stock con una agregada en vez de
+    N llamadas a `current_stock()`.
+
+    Lee `tax_profile` directo por SQL en vez de armar el `CatalogItem` entero:
+    de las catorce columnas del producto, acá hace falta una.
+
+    Los ids que no existen no aparecen en el resultado; el que llama decide con
+    qué reemplazarlos.
+    """
+    unicos = {int(i) for i in item_ids if i}
+    if not unicos:
+        return {}
+    marcadores = ", ".join("?" for _ in unicos)
+    with libracore_core.get_connection() as conn:
+        filas = conn.execute(
+            f"SELECT id, tax_profile FROM catalog_items WHERE id IN ({marcadores})",
+            tuple(unicos),
+        ).fetchall()
+    return {f["id"]: _leer_alicuota(f["tax_profile"]) for f in filas}
+
+
 def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
                precio: float = 0.0, unidad: str = "u", descripcion: str = "",
-               categoria_id: int | None = None, codigo: str = "") -> dict:
+               categoria_id: int | None = None, codigo: str = "",
+               iva_rate=None) -> dict:
     if not (nombre or "").strip():
         raise ValueError("El consumible necesita un nombre.")
     with libracore_core.get_connection() as conn:
@@ -222,6 +302,9 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
                 default_cost=Decimal(str(costo)),
                 default_sale_price=Decimal(str(precio)),
                 min_stock=Decimal(str(stock_minimo)),
+                tax_profile=_alicuota_texto(
+                    iva.DEFECTO if iva_rate is None else iva_rate
+                ),
             )
         )
         # 🔑 **Siempre queda con codigo.** Si el alta trae uno se respeta —el
@@ -236,10 +319,24 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
 def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 stock_minimo: float = 0.0, precio: float = 0.0,
                 unidad: str = "u", descripcion: str = "",
-                categoria_id: int | None = None, activo: bool = True) -> None:
+                categoria_id: int | None = None, activo: bool = True,
+                iva_rate=None) -> None:
+    """Edita un producto del catálogo.
+
+    🔴 **`iva_rate=None` conserva la alícuota que ya tenía, no la borra.**
+
+    No es una cortesía: `save_catalog_item()` recibe un `CatalogItem` **entero**
+    y pisa la fila con lo que traiga, así que todo campo que esta función no
+    ponga se pierde en silencio. La alícuota es el único campo del producto que
+    no está en el formulario de todas las pantallas que llaman acá, y sin este
+    rescate editar el precio desde cualquiera de ellas dejaría el producto sin
+    IVA — el remito saldría bien la primera vez y mal después de la primera
+    corrección, que es la peor forma de fallar que tiene esto.
+    """
     with libracore_core.get_connection() as conn:
         repo = _repo(conn)
-        if repo.get_catalog_item(item_id) is None:
+        actual = repo.get_catalog_item(item_id)
+        if actual is None:
             raise ValueError("El consumible no existe.")
         repo.save_catalog_item(
             CatalogItem(
@@ -248,6 +345,9 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 default_cost=Decimal(str(costo)),
                 default_sale_price=Decimal(str(precio)),
                 min_stock=Decimal(str(stock_minimo)),
+                tax_profile=_alicuota_texto(
+                    alicuota_de(actual) if iva_rate is None else iva_rate
+                ),
             )
         )
 
