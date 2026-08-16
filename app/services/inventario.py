@@ -427,7 +427,16 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
             raise ValueError("El consumible no existe.")
         repo.save_catalog_item(
             CatalogItem(
-                item_id, CatalogItemType.PRODUCT, nombre.strip(), _unidad(unidad),
+                # 🔴 **El tipo se conserva, no se fuerza a `PRODUCT`.** Estaba
+                # cableado, y desde que el catálogo también tiene servicios eso
+                # **convertía un servicio en producto** con sólo editarlo:
+                # aparecía en el listado de consumibles, entraba a las órdenes
+                # de compra y la mudanza de `servicios_catalogo` lo volvía a
+                # copiar porque ya no lo encontraba entre los `SERVICE`.
+                #
+                # Lo agarró `test_se_reconoce_por_el_origen_y_no_por_el_nombre`,
+                # que editaba un servicio migrado para probar otra cosa.
+                item_id, actual.item_type, nombre.strip(), _unidad(unidad),
                 category_id=categoria_id, description=descripcion, active=activo,
                 default_cost=Decimal(str(costo)),
                 default_sale_price=Decimal(str(precio)),
