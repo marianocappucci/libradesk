@@ -318,7 +318,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
 
       {/* ── Alta ─────────────────────────────────────────────────────── */}
       <Dialog open={alta !== null} onOpenChange={(o) => !o && setAlta(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Recibir equipo para reparación</DialogTitle>
             <DialogDescription>

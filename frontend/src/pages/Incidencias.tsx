@@ -8,11 +8,14 @@ import { type ColumnDef } from '@tanstack/react-table'
 import {
   api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_PILDORA, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
-  type CategoriaIncidencia, type Cliente, type Equipo, type Incidencia,
+  type CategoriaIncidencia, type Cliente, type Equipo, type EquipoTrabajo,
+  type Incidencia,
 } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -29,6 +32,7 @@ import {
 import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
+import { CalendarPlus } from 'lucide-react'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const NONE = '__none__'
@@ -77,6 +81,8 @@ export function Incidencias() {
   // abajo de la grilla).
   const [elegidos, setElegidos] = useState<number[]>([])
   const [generando, setGenerando] = useState(false)
+  // La salida de cuadrilla (pedido del humano, 2026-08-15).
+  const [salidaAbierta, setSalidaAbierta] = useState(false)
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -237,6 +243,15 @@ export function Incidencias() {
    */
   const remitable = (i: Incidencia) => i.estado === 'cerrado' && !i.remito_id
 
+  /** Un reclamo se puede agendar si todavía no se resolvió.
+   *
+   *  Es la otra mitad del tilde, y es **la regla opuesta** a `remitable`: uno
+   *  agrupa lo que ya se hizo para cobrarlo, el otro arma lo que falta hacer.
+   *  Misma regla que valida el backend, escrita también acá para no ofrecer un
+   *  tilde que siempre termina en 409.
+   */
+  const agendable = (i: Incidencia) => i.estado !== 'cerrado' && i.estado !== 'resuelta'
+
   // Si un reclamo elegido deja de estar a la vista —porque cambió un filtro—
   // sale de la selección. Sin esto la barra contaría reclamos que no están en
   // pantalla, y el remito saldría con un trabajo que el operador no ve.
@@ -255,6 +270,14 @@ export function Incidencias() {
   )
   const clientesElegidos = new Set(seleccionadas.map((i) => i.cliente_id))
   const mezclaClientes = clientesElegidos.size > 1
+
+  // 🔑 **La selección sirve para dos cosas opuestas**, y qué se puede hacer con
+  // ella lo decide su contenido: los cerrados se agrupan en un remito, los
+  // abiertos se arman como una salida de cuadrilla. Mezclar los dos no habilita
+  // ninguna de las dos acciones, y la barra dice por qué — un botón apagado sin
+  // motivo manda a adivinar.
+  const todasRemitables = seleccionadas.every(remitable)
+  const todasAgendables = seleccionadas.every(agendable)
 
   async function generarRemito() {
     setGenerando(true)
@@ -287,7 +310,11 @@ export function Incidencias() {
       enableSorting: false,
       cell: ({ row }) => {
         const i = row.original
-        if (!remitable(i)) return null
+        // Se ofrece si sirve para ALGUNA de las dos acciones. Un reclamo
+        // resuelto pero no cerrado no entra en ninguna, y ahí la celda queda
+        // vacía: dice "este no va" sin un control apagado que invite a
+        // intentarlo.
+        if (!remitable(i) && !agendable(i)) return null
         return (
           <input
             type="checkbox"
@@ -300,7 +327,7 @@ export function Incidencias() {
             onChange={() => setElegidos((prev) => prev.includes(i.id)
               ? prev.filter((x) => x !== i.id)
               : [...prev, i.id])}
-            aria-label={`Elegir el reclamo #${i.id} para el remito`}
+            aria-label={`Elegir el reclamo #${i.id}`}
           />
         )
       },
@@ -478,7 +505,7 @@ export function Incidencias() {
                   <FormItem className="w-full">
                     <FormLabel>Descripción</FormLabel>
                     <FormControl>
-                      <textarea {...field} rows={3} className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs" />
+                      <Textarea {...field} rows={3} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -650,7 +677,7 @@ export function Incidencias() {
                   ? '1 reclamo elegido'
                   : `${seleccionadas.length} reclamos elegidos`}
               </span>
-              {mezclaClientes && (
+              {todasRemitables && mezclaClientes && (
                 // El motivo al lado del botón apagado, no en un tooltip: un
                 // botón que no se puede apretar y no dice por qué manda a
                 // adivinar.
@@ -659,22 +686,216 @@ export function Incidencias() {
                   se emite a nombre de uno solo.
                 </span>
               )}
+              {!todasRemitables && !todasAgendables && (
+                <span className="ml-2 text-destructive">
+                  Hay reclamos cerrados y abiertos mezclados: los cerrados se
+                  agrupan en un remito y los abiertos se agendan, y son dos cosas
+                  distintas.
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setElegidos([])}>
                 Limpiar
               </Button>
-              <Button
-                onClick={generarRemito}
-                disabled={generando || mezclaClientes}
-              >
-                <PackageCheck />
-                {generando ? 'Generando…' : 'Generar remito'}
-              </Button>
+              {/* Se ofrece la acción que corresponde a lo elegido, y no las dos
+                  apagadas: dos botones muertos al lado de uno vivo se leen como
+                  que algo está roto. */}
+              {todasAgendables && (
+                <Button onClick={() => setSalidaAbierta(true)}>
+                  <CalendarPlus />
+                  Armar salida
+                </Button>
+              )}
+              {todasRemitables && (
+                <Button
+                  onClick={generarRemito}
+                  disabled={generando || mezclaClientes}
+                >
+                  <PackageCheck />
+                  {generando ? 'Generando…' : 'Generar remito'}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
+
+      <ArmarSalida
+        abierto={salidaAbierta}
+        onCerrar={() => setSalidaAbierta(false)}
+        reclamos={seleccionadas}
+        onListo={() => {
+          setSalidaAbierta(false)
+          setElegidos([])
+          void loadAll()
+        }}
+      />
     </div>
+  )
+}
+
+
+/**
+ * Armar una salida de cuadrilla con varios reclamos (pedido del humano,
+ * 2026-08-15).
+ *
+ * Antes había que abrir cada ticket y agendarlo de a uno, calculando los
+ * horarios a mano.
+ *
+ * 🔑 **No se elige vehículo ni técnicos acá.** Eso es de la cuadrilla, no de la
+ * salida (decisión del humano): elegirla ya elige con qué sale y con quiénes,
+ * porque vive en `vehiculos.equipo_id` y en sus integrantes. El diálogo lo
+ * muestra como confirmación de lo que se está eligiendo, no como campos.
+ */
+function ArmarSalida({ abierto, onCerrar, reclamos, onListo }: {
+  abierto: boolean
+  onCerrar: () => void
+  reclamos: Incidencia[]
+  onListo: () => void
+}) {
+  const [cuadrillas, setCuadrillas] = useState<EquipoTrabajo[]>([])
+  const [equipoId, setEquipoId] = useState('')
+  // 🔴 **ISO y no `fechaDeDate`.** El `dd-mm-aaaa` es de PRESENTACIÓN; un
+  // `<input type="date">` lee y escribe ISO, y con el formato local queda vacío
+  // y `new Date()` de la previa da `Invalid Date`. El primer intento usó el
+  // helper de presentación y lo agarró el test de la previa de horarios.
+  const [dia, setDia] = useState(() => new Date().toISOString().slice(0, 10))
+  const [hora, setHora] = useState('09:00')
+  const [duracion, setDuracion] = useState('60')
+  const [traslado, setTraslado] = useState('0')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    setError(null)
+    api.get<EquipoTrabajo[]>('/api/equipos-trabajo')
+      .then(setCuadrillas)
+      .catch(() => setError('No se pudieron cargar las cuadrillas.'))
+  }, [abierto])
+
+  const cuadrilla = cuadrillas.find((c) => String(c.id) === equipoId)
+
+  async function guardar() {
+    setGuardando(true)
+    setError(null)
+    try {
+      await api.post('/api/incidencias/agendar-salida', {
+        // 🔑 El orden de la lista es el orden del recorrido, y es el orden en
+        // que están tildados en la grilla.
+        incidencia_ids: reclamos.map((r) => r.id),
+        equipo_trabajo_id: Number(equipoId),
+        inicio: `${dia}T${hora}:00`,
+        duracion_minutos: Number(duracion),
+        traslado_minutos: Number(traslado),
+      })
+      onListo()
+    } catch (err) {
+      // El 409 del backend trae el choque con el número del trabajo que se
+      // pisa: se muestra tal cual, porque decir "no se pudo" obligaría a ir a
+      // buscar cuál era.
+      setError(err instanceof ApiError ? err.detail : 'No se pudo armar la salida.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Armar salida</DialogTitle>
+          <DialogDescription>
+            {reclamos.length === 1
+              ? '1 reclamo, en el orden en que está tildado.'
+              : `${reclamos.length} reclamos, en el orden en que están tildados.`}
+            {' '}Cada parada arranca cuando termina la anterior.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:col-span-2">
+            <Label htmlFor="salida-cuadrilla">Cuadrilla</Label>
+            <Select value={equipoId} onValueChange={setEquipoId}>
+              <SelectTrigger id="salida-cuadrilla">
+                <SelectValue placeholder="Elegí una cuadrilla" />
+              </SelectTrigger>
+              <SelectContent>
+                {cuadrillas.filter((c) => c.activo).map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Con qué sale y con quiénes, como confirmación: son datos de la
+                cuadrilla y se muestran para no tener que ir a buscarlos. */}
+            {cuadrilla && (
+              <p className="text-xs text-muted-foreground">
+                {cuadrilla.vehiculos.length > 0
+                  ? `Sale en ${cuadrilla.vehiculos.map((v) => v.patente).join(', ')}`
+                  : 'Sin vehículo asignado'}
+                {' · '}
+                {cuadrilla.responsable_nombre ?? 'sin responsable'}
+                {cuadrilla.integrantes.length > 0
+                  && ` y ${cuadrilla.integrantes.map((i) => i.nombre).join(', ')}`}
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="salida-dia">Día</Label>
+            <Input id="salida-dia" type="date" value={dia}
+                   onChange={(e) => setDia(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="salida-hora">Hora de arranque</Label>
+            <Input id="salida-hora" type="time" value={hora}
+                   onChange={(e) => setHora(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="salida-duracion">Duración de cada parada (min)</Label>
+            <Input id="salida-duracion" type="number" min={1} value={duracion}
+                   onChange={(e) => setDuracion(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="salida-traslado">Traslado entre paradas (min)</Label>
+            <Input id="salida-traslado" type="number" min={0} value={traslado}
+                   onChange={(e) => setTraslado(e.target.value)} />
+          </div>
+        </div>
+
+        {/* El recorrido con sus horarios, calculado acá para que se vea antes de
+            guardar. El backend hace la misma cuenta; ésta es la previa. */}
+        <ol className="max-h-[30vh] space-y-1 overflow-y-auto text-sm">
+          {reclamos.map((r, i) => {
+            const minutos = i * (Number(duracion || 0) + Number(traslado || 0))
+            const arranque = new Date(`${dia}T${hora}:00`)
+            arranque.setMinutes(arranque.getMinutes() + minutos)
+            const valido = !Number.isNaN(arranque.getTime())
+            return (
+              <li key={r.id} className="flex gap-3">
+                <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
+                  {valido
+                    ? arranque.toTimeString().slice(0, 5)
+                    : '--:--'}
+                </span>
+                <span className="truncate">#{r.id} · {r.titulo}</span>
+              </li>
+            )
+          })}
+        </ol>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancelar</Button>
+          </DialogClose>
+          <Button onClick={() => void guardar()} disabled={guardando || !equipoId}>
+            {guardando ? 'Agendando…' : 'Agendar la salida'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

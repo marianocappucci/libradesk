@@ -73,6 +73,67 @@ describe('el espaciado de los campos no vuelve a divergir', () => {
       + '`gap-1.5` deja el label pegado al input').toEqual([])
   })
 
+  it('🔴 ningún campo va dentro de un `<div>` sin clase', () => {
+    // La OTRA forma de no tener separación, y la que el humano reportó el
+    // 2026-08-15 en los modales de nueva venta y editar sucursal: el
+    // contenedor no diverge a 6 px, **no tiene ninguna clase**, así que el
+    // label queda pegado al input.
+    //
+    // El guard original no la veía: buscaba `gap-1.5`, y acá no hay `gap` que
+    // buscar. Eran 36 en 6 archivos, casi todas del módulo comercial —que se
+    // escribió con otra convención—, y el humano reportó 2. Las otras 34 las
+    // encontró este chequeo.
+    const culpables: string[] = []
+    for (const rel of ARCHIVOS) {
+      const lineas = readFileSync(join(process.cwd(), rel), 'utf8').split('\n')
+      lineas.forEach((linea, i) => {
+        if (!/^\s*<div>\s*$/.test(linea)) return
+        // La primera línea con contenido después del `<div>`, salteando
+        // comentarios: entre el contenedor y el label suele haber uno.
+        let j = i + 1
+        while (j < lineas.length && (!lineas[j].trim() || /^\s*(\{?\/\*|\*|\/\/)/.test(lineas[j]))) j++
+        if (/^\s*<Label\b/.test(lineas[j] ?? '')) {
+          culpables.push(`${rel.replace(/\\/g, '/')}:${i + 1}`)
+        }
+      })
+    }
+    expect(culpables, 'un campo va en `<div className="grid gap-2">`: un `<div>` '
+      + 'pelado deja el label pegado al input').toEqual([])
+  })
+
+  it('🔴 ningún campo va dentro de un `<div>` con clase pero sin separación', () => {
+    // La TERCERA forma, reportada por el humano el 2026-08-15 en «Stock de
+    // consumibles»: el contenedor **sí tiene clase** —`min-w-64`, `w-24`— pero
+    // ninguna que separe, así que el label queda pegado al input igual que en
+    // el `<div>` pelado.
+    //
+    // Los dos guards de arriba no la veían: el primero busca `gap-1.5` y acá no
+    // hay ningún `gap`; el segundo exige un `<div>` **sin ninguna clase**. Eran
+    // 4 instancias —una en Stock y tres en el bloque de materiales de una
+    // incidencia—; el humano reportó una.
+    //
+    // `space-y-*` cuenta como separación legítima: es la misma distancia escrita
+    // de otra forma, y así está en Compras y VentasComercial. Y un contenedor
+    // `flex` queda afuera porque es una FILA —label y botón al lado, como el
+    // encabezado de ítems de `comprobante-form`—, no un campo apilado.
+    const culpables: string[] = []
+    for (const rel of ARCHIVOS) {
+      const lineas = readFileSync(join(process.cwd(), rel), 'utf8').split('\n')
+      lineas.forEach((linea, i) => {
+        const m = /^\s*<div className="([^"]*)"\s*>\s*$/.exec(linea)
+        if (!m) return
+        if (/\bgap-|\bspace-y-|\bflex\b/.test(m[1])) return
+        let j = i + 1
+        while (j < lineas.length && (!lineas[j].trim() || /^\s*(\{?\/\*|\*|\/\/)/.test(lineas[j]))) j++
+        if (/^\s*<Label\b/.test(lineas[j] ?? '')) {
+          culpables.push(`${rel.replace(/\\/g, '/')}:${i + 1}`)
+        }
+      })
+    }
+    expect(culpables, 'una clase de ancho no separa: va `grid gap-2` ADEMÁS del '
+      + 'ancho, o el label queda pegado al input').toEqual([])
+  })
+
   it('y el patrón que los detecta realmente matchea las dos formas viejas', () => {
     // El control del caso de arriba. Sin esto, un regex que no matchea nada
     // daría la lista vacía y el test pasaría con las 118 instancias presentes —
@@ -85,5 +146,23 @@ describe('el espaciado de los campos no vuelve a divergir', () => {
     expect(CAMPO_APRETADO.test('<div className="mt-1 flex flex-wrap gap-1.5">')).toBe(false)
     // Y que `gap-15` o `gap-1` no se cuelen por un borde de palabra flojo.
     expect(CAMPO_APRETADO.test('<div className="grid gap-1">')).toBe(false)
+  })
+
+  it('y el criterio de la tercera forma distingue lo que tiene que distinguir', () => {
+    // Mismo control, para el caso de arriba. Sin esto, un criterio que
+    // descartara todo daría la lista vacía y el test pasaría con las 4
+    // instancias presentes.
+    const sinSeparacion = (clases: string) => !/\bgap-|\bspace-y-|\bflex\b/.test(clases)
+
+    // Las 4 que se arreglaron el 2026-08-15.
+    expect(sinSeparacion('min-w-64')).toBe(true)
+    expect(sinSeparacion('min-w-48')).toBe(true)
+    expect(sinSeparacion('w-24')).toBe(true)
+    // Ya separados, de las tres formas válidas.
+    expect(sinSeparacion('grid gap-2 min-w-64')).toBe(false)
+    expect(sinSeparacion('space-y-2')).toBe(false)
+    // Y la fila `flex` de `comprobante-form`, que es un label al lado de un
+    // botón y no un campo apilado.
+    expect(sinSeparacion('flex items-center justify-between')).toBe(false)
   })
 })

@@ -57,6 +57,21 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-md rounded-lg",
+          // El tope de alto y su scroll viven ACÁ, no en cada pantalla. Estaban
+          // divergidos en cuatro valores —80vh en Clientes, 85 en Equipos y
+          // Activos, 90 en Recepciones— porque cada uno se parcheó el día que
+          // molestó. Se convergió a `85vh`, que es el que ya usaban dos.
+          //
+          // Lo que arregla no es la divergencia: es que **33 de los 37 diálogos
+          // no tenían ningún tope** y crecían más que la ventana, con el pie
+          // —donde están Guardar y Cancelar— fuera de la pantalla y sin scroll
+          // propio para alcanzarlo.
+          //
+          // Un modal que necesite otra cosa lo sigue pudiendo pisar por
+          // `className`: `cn` es twMerge, así que el `overflow-hidden` de
+          // Activos —que arma su propio scroll interno con `grid-rows`— le gana
+          // a este `overflow-y-auto`.
+          "max-h-[85vh] overflow-y-auto",
           className
         )}
         {...props}

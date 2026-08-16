@@ -39,6 +39,16 @@ export type Consumible = {
   activo: boolean
   stock_minimo: number
   costo: number
+  // 🔑 El total y su semáforo vienen en el MISMO `GET /api/consumibles`, de una
+  // sola consulta agregada sobre `stock_movements` — no de N llamadas a
+  // `/stock`. Estaban en la respuesta desde siempre y este tipo no los
+  // declaraba, así que la pantalla los tiraba sin saber que los tenía. Por eso
+  // el listado de abajo no costó ningún endpoint nuevo ni una consulta más.
+  stock: number
+  bajo_minimo: boolean
+  unidad: string
+  categoria: string
+  codigo: string
 }
 
 export type DepositoStock = {
@@ -65,15 +75,21 @@ export function Stock() {
   const { activa } = useSucursal()
 
   const cargarBase = useCallback(async () => {
+    // 🔑 `sucursal_id` recorta **el stock, no el catálogo** — el consumible que
+    // en esta sucursal está en cero sigue apareciendo, porque si no, no se
+    // podría pedir. Va acá y no se filtra en el cliente porque el `bajo_minimo`
+    // lo calcula el backend contra ese mismo total: mirando Chivilcoy, lo que
+    // importa es si falta material en Chivilcoy.
+    const qs = activa ? `?sucursal_id=${activa.id}` : ''
     const [items, deps] = await Promise.all([
-      api.get<Consumible[]>('/api/consumibles'),
+      api.get<Consumible[]>(`/api/consumibles${qs}`),
       api.get<DepositoStock[]>('/api/depositos-stock'),
     ])
     setConsumibles(items)
     setDepositos(deps)
     setCargando(false)
     return items
-  }, [])
+  }, [activa])
 
   const cargarStock = useCallback(async (item: Consumible | null) => {
     if (!item) { setPorDeposito([]); return }
@@ -137,7 +153,7 @@ export function Stock() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-end gap-3 flex-wrap">
-              <div className="min-w-64">
+              <div className="grid gap-2 min-w-64">
                 <Label htmlFor="st-consumible">Consumible</Label>
                 {/* `''` y no `undefined`: con `undefined` el Select arranca
                     NO controlado y pasa a controlado al elegir algo, y React
@@ -158,6 +174,14 @@ export function Stock() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* La vuelta al listado. Sin esto, elegir un consumible es un
+                  camino de ida: el Select no tiene opción vacía, así que la
+                  única salida sería recargar la pantalla. */}
+              {elegido && (
+                <Button variant="outline" onClick={() => setElegido(null)}>
+                  Ver todos
+                </Button>
+              )}
               {elegido && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">
@@ -179,6 +203,60 @@ export function Stock() {
                 />
               )}
             </div>
+
+            {/* 🔴 Sin nada elegido, ANTES la pantalla quedaba en blanco: había
+                que abrir el selector y elegir a ciegas para ver un solo número.
+                Reportado por el humano el 2026-08-15. Ahora entra mostrando el
+                catálogo entero con su stock, que es la pregunta que alguien se
+                hace al abrir "Stock de consumibles" — qué hay, y de qué falta.
+
+                Elegir uno sigue existiendo y lleva al detalle por depósito, que
+                es lo único que el listado no puede contestar. Y la fila también
+                es clickeable: el selector para buscar por nombre, la fila para
+                el que ya lo está viendo. */}
+            {!elegido && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2">Consumible</th>
+                    <th className="py-2 w-28 text-right">
+                      {activa ? `En ${activa.nombre}` : 'Total'}
+                    </th>
+                    <th className="py-2 w-28 text-right">Mínimo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumibles.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="border-b last:border-0 cursor-pointer hover:bg-muted/50"
+                      onClick={() => setElegido(c)}
+                    >
+                      <td className="py-2">
+                        {c.nombre}
+                        {c.categoria && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            · {c.categoria}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {/* El semáforo lo decide `bajo_minimo`, que lo calcula
+                            el backend contra el mismo total que se muestra. */}
+                        <Badge variant={c.bajo_minimo ? 'destructive' : 'secondary'}>
+                          {c.stock}
+                        </Badge>
+                      </td>
+                      <td className="py-2 text-right tabular-nums text-muted-foreground">
+                        {/* Mínimo 0 = "no se controla", que no es lo mismo que
+                            "el mínimo es cero". */}
+                        {c.stock_minimo > 0 ? c.stock_minimo : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
             {elegido && (
               <table className="w-full text-sm">
@@ -312,7 +390,7 @@ function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="tr-destino">Hacia</Label>
             <Select value={destino} onValueChange={setDestino}>
               <SelectTrigger id="tr-destino"><SelectValue placeholder="Depósito de destino" /></SelectTrigger>
@@ -328,7 +406,7 @@ function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Cantidad</Label>
             <Input value={cantidad} onChange={(e) => setCantidad(e.target.value)}
                    inputMode="decimal" placeholder="0" />
@@ -383,12 +461,12 @@ function NuevoConsumible({ onListo }: ConAccion) {
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo consumible</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label>Nombre</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="Plug RJ45" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Stock mínimo (opcional)</Label>
             <Input value={minimo} onChange={(e) => setMinimo(e.target.value)}
                    inputMode="decimal" placeholder="0" />
@@ -431,7 +509,7 @@ function NuevoDeposito({ onListo }: ConAccion) {
           Es un lugar con existencias por cantidad —el depósito central, la
           camioneta de una cuadrilla—, distinto de los depósitos de equipos.
         </p>
-        <div>
+        <div className="grid gap-2">
           <Label>Nombre</Label>
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
                  placeholder="Camioneta Norte" />

@@ -293,7 +293,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
         <DialogHeader><DialogTitle>Nueva venta</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="v-cliente">Cliente</Label>
               <Select value={clienteId} onValueChange={setClienteId}>
                 <SelectTrigger id="v-cliente"><SelectValue placeholder="Consumidor final" /></SelectTrigger>
@@ -304,7 +304,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="v-dep">Depósito</Label>
               <Select value={depositoId} onValueChange={setDepositoId}>
                 <SelectTrigger id="v-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
@@ -355,7 +355,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
           </div>
 
           <div className="flex items-end justify-between gap-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="v-medio">Cómo se cobra</Label>
               <Select value={medio} onValueChange={setMedio}>
                 <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
@@ -646,7 +646,7 @@ function DetalleCuenta({ cliente, onCerrar, onCambio }: {
             />
           </div>
           <div className="flex items-end gap-2 rounded-md border bg-muted/40 p-3">
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="cc-monto">Registrar cobro</Label>
               <Input id="cc-monto" type="number" value={monto} className="w-36"
                      onChange={(e) => setMonto(e.target.value)} />

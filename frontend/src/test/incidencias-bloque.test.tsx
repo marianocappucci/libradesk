@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MODALIDAD_LABELS } from '../api'
 import { IncidenciaDetalle } from '../pages/IncidenciaDetalle'
 import { Incidencias } from '../pages/Incidencias'
+import { escribirEn } from './escribir'
 
 const navegado: string[] = []
 vi.mock('react-router-dom', async () => {
@@ -136,8 +137,11 @@ describe('Ficha de la incidencia — el botón que faltaba (pedido 40)', () => {
     await screen.findByText(/se guardan solos/i)
 
     const titulo = screen.getByDisplayValue('No arranca')
-    await user.clear(titulo)
-    await user.type(titulo, 'Otro')
+    // El `click` es parte del caso, no adorno: lo que dispara el guardado es el
+    // **blur** del campo, y `escribirEn` cambia el valor sin enfocar. Sin foco
+    // previo no habría blur y el PUT nunca saldría.
+    await user.click(titulo)
+    await escribirEn(titulo, 'Otro')
     await user.click(screen.getByRole('button', { name: /Guardar/ }))
 
     await waitFor(() => expect(puts).toBe(1))
@@ -154,8 +158,8 @@ describe('Ficha de la incidencia — el botón que faltaba (pedido 40)', () => {
     await screen.findByText(/se guardan solos/i)
 
     const titulo = screen.getByDisplayValue('No arranca')
-    await user.clear(titulo)
-    await user.type(titulo, 'Otro título')
+    await user.click(titulo)
+    await escribirEn(titulo, 'Otro título')
 
     await user.click(screen.getByRole('button', { name: /Guardar/ }))
 
@@ -241,7 +245,7 @@ describe('Alta de incidencia — cargar el equipo ahí mismo (pedido 38)', () =>
     const dialogo = await screen.findByRole('dialog', { name: /Nuevo equipo/ })
     // Por el placeholder: los cuatro inputs del diálogo son textboxes sin
     // label asociado, así que buscar por rol encuentra los cuatro.
-    await user.type(within(dialogo).getByPlaceholderText(/Notebook, Impresora/), 'Impresora')
+    await escribirEn(within(dialogo).getByPlaceholderText(/Notebook, Impresora/), 'Impresora')
     await user.click(within(dialogo).getByRole('button', { name: /Crear y elegir/ }))
 
     // Vuelve al alta del ticket con el equipo nuevo puesto — que es la mitad

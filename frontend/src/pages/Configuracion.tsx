@@ -725,15 +725,16 @@ function ServiciosCard() {
             </span>
           </span>
         </label>
-        <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <Button type="button" disabled={guardando} onClick={guardar}>
-            {guardando ? 'Guardando…' : 'Guardar'}
-          </Button>
+        {/* Mismo pie que el resto: Cancelar primero, a la derecha. */}
+        <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
           <Button
             type="button" variant="outline"
             onClick={() => { setNuevo(null); setEditando(null); setError(null) }}
           >
             Cancelar
+          </Button>
+          <Button type="button" disabled={guardando} onClick={guardar}>
+            {guardando ? 'Guardando…' : 'Guardar'}
           </Button>
         </div>
       </div>

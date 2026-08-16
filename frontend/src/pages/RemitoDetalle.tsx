@@ -55,20 +55,28 @@ export function RemitoDetalle() {
     <>
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+      {/* Eliminar va en el encabezado, con Editar y Ver PDF (pedido del humano,
+          2026-08-15). Estaba solo, al pie, dentro de una tarjeta "Acciones" que
+          existía nada más que para contenerlo: había que scrollear la ficha
+          entera para llegar a la única acción que la pantalla ofrece. Sin
+          `acciones`, `ComprobanteDetalle` no rinde esa tarjeta — por eso
+          desaparece sola. En Presupuestos la tarjeta se queda: ahí tiene los
+          cambios de estado y la conversión a remito, que sí son un panel de
+          trabajo. */}
       <ComprobanteDetalle
         tipo="remito"
         comprobante={r}
         accionesEncabezado={
-          <Button asChild size="sm" variant="outline">
-            <Link to={`/remitos?editar=${r.id}`}><Pencil />Editar</Link>
-          </Button>
-        }
-        acciones={
-          <Button size="sm" variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setABorrar(true)}>
-            <Trash2 />Eliminar remito
-          </Button>
+          <>
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/remitos?editar=${r.id}`}><Pencil />Editar</Link>
+            </Button>
+            <Button size="sm" variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setABorrar(true)}>
+              <Trash2 />Eliminar
+            </Button>
+          </>
         }
       />
 

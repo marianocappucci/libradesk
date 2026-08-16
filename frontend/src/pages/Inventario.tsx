@@ -136,7 +136,7 @@ function FormDeposito({ deposito, sucursales, onGuardar }: {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="d-nombre">Nombre</Label>
             {/* El placeholder es una patente a propósito: en Lagrace los
                 depósitos son las camionetas, y es el caso que hay que hacer
@@ -144,12 +144,12 @@ function FormDeposito({ deposito, sucursales, onGuardar }: {
             <Input id="d-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="DEPOSITO CENTRAL, o la patente de una camioneta" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="d-desc">Descripción</Label>
             <Input id="d-desc" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
           </div>
           {sucursales.length > 0 && (
-            <div>
+            <div className="grid gap-2">
               <Label htmlFor="d-suc">Sucursal</Label>
               <Select value={sucursalId} onValueChange={setSucursalId}>
                 <SelectTrigger id="d-suc"><SelectValue /></SelectTrigger>
@@ -273,7 +273,7 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
             operación que más se usa de esta pantalla ("subime todo un 12%") y
             es la razón por la que las listas existen como entidad. */}
         <div className="flex items-end gap-2 flex-wrap rounded-md border bg-muted/40 p-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="l-pct">Ajustar todos los precios</Label>
             <div className="flex items-center gap-2">
               <Input id="l-pct" type="number" value={pct} className="w-28"
@@ -383,7 +383,7 @@ function FormPrecio({ listaId, precio, sucursalId, onGuardar }: {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>{precio.producto}</DialogTitle></DialogHeader>
-        <div>
+        <div className="grid gap-2">
           <Label htmlFor="pr-valor">Precio</Label>
           <Input id="pr-valor" type="number" value={valor}
                  onChange={(e) => setValor(e.target.value)} />
@@ -426,12 +426,12 @@ function FormLista({ onGuardar }: {
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva lista de precios</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="li-nombre">Nombre</Label>
             <Input id="li-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
                    placeholder="Mayorista" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="li-desc">Descripción</Label>
             <Input id="li-desc" value={descripcion}
                    onChange={(e) => setDescripcion(e.target.value)} />

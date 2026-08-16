@@ -528,9 +528,14 @@ export function ComprobanteForm({
 
           {validacion && <p className="text-sm text-destructive">{validacion}</p>}
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Button>
+          {/* A la derecha y con Cancelar primero, como el pie de cualquier
+              diálogo del producto (`DialogFooter` es `sm:justify-end`). Estaban
+              a la izquierda y con Guardar primero — reporte del humano sobre
+              Nuevo presupuesto, 2026-08-15. Este pie es compartido: el mismo
+              formulario carga presupuestos y remitos. */}
+          <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Button>
           </div>
         </form>
       </CardContent>

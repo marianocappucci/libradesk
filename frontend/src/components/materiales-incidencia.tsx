@@ -127,7 +127,7 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
         )}
 
         <div className="flex items-end gap-2 flex-wrap">
-          <div className="min-w-48">
+          <div className="grid gap-2 min-w-48">
             <Label>Consumible</Label>
             <Select value={item} onValueChange={(v) => { setItem(v); setDeposito('') }}>
               <SelectTrigger><SelectValue placeholder="Elegí uno" /></SelectTrigger>
@@ -138,7 +138,7 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
               </SelectContent>
             </Select>
           </div>
-          <div className="min-w-44">
+          <div className="grid gap-2 min-w-44">
             <Label>Depósito</Label>
             <Select value={deposito} onValueChange={setDeposito} disabled={item === ''}>
               <SelectTrigger><SelectValue placeholder="De dónde sale" /></SelectTrigger>
@@ -151,7 +151,7 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
               </SelectContent>
             </Select>
           </div>
-          <div className="w-24">
+          <div className="grid gap-2 w-24">
             <Label>Cantidad</Label>
             <Input value={cantidad} onChange={(e) => setCantidad(e.target.value)}
                    inputMode="decimal" placeholder="0" />

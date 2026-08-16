@@ -10,6 +10,7 @@ from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
+from .services.cuotas import CuotaRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
@@ -99,6 +100,10 @@ def get_activo_repository(request: Request) -> ActivoRepository:
 
 def get_contrato_repository(request: Request) -> ContratoRepository:
     return request.app.state.contratos
+
+
+def get_cuota_repository(request: Request) -> CuotaRepository:
+    return request.app.state.cuotas
 
 
 def get_dashboard_service(request: Request) -> DashboardService:

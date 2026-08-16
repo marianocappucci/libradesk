@@ -75,7 +75,10 @@ async function montarEn(sucursalId: number | null) {
   )
   await waitFor(() => expect(screen.getByText(/Stock de consumibles/)).toBeTruthy())
   await userEvent.click(screen.getByRole('combobox', { name: 'Consumible' }))
-  await userEvent.click(await screen.findByText('Plug RJ45'))
+  // Por ROL y no por texto: desde que la pantalla entra mostrando el listado
+  // (2026-08-15), cada nombre aparece dos veces —en la fila y en la opción del
+  // desplegable— y un `findByText` suelto se cae con "Found multiple elements".
+  await userEvent.click(await screen.findByRole('option', { name: 'Plug RJ45' }))
   await waitFor(() => expect(screen.getByText('Central Chivilcoy')).toBeTruthy())
 }
 
