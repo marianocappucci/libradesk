@@ -163,29 +163,41 @@ export function Agenda() {
           </div>
         }
       >
-        <div className="grid gap-2">
-          <label htmlFor="filtro-cuadrilla" className="text-sm font-medium">
-            Cuadrilla
-          </label>
-          <Select
-            value={filtro}
-            onValueChange={(v) => setParams(con({ equipo: v }))}
-          >
-            <SelectTrigger id="filtro-cuadrilla" className="w-52">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODAS}>Todas las cuadrillas</SelectItem>
-              {activos.map((e) => (
-                <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Los dos controles van envueltos en UN solo hijo con `items-end`
+            propio, y no sueltos. El contenedor de los children del componente
+            es `items-center` y desde acá no se lo puede pisar (el `className`
+            de arriba va al contenedor de afuera, no a este): con el filtro
+            siendo un bloque de dos pisos —etiqueta arriba, select abajo— y el
+            botón siendo un control de un piso, centrarlos dejaba al botón a
+            media altura del bloque, alineado con nada. Lo reportó el humano
+            (2026-08-16). Con este envoltorio las bases del select y del botón
+            coinciden, que es el mismo criterio que usa el propio diálogo de
+            «Generar visitas» para su fecha + botón. */}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="grid gap-2">
+            <label htmlFor="filtro-cuadrilla" className="text-sm font-medium">
+              Cuadrilla
+            </label>
+            <Select
+              value={filtro}
+              onValueChange={(v) => setParams(con({ equipo: v }))}
+            >
+              <SelectTrigger id="filtro-cuadrilla" className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS}>Todas las cuadrillas</SelectItem>
+                {activos.map((e) => (
+                  <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Generar las visitas de mantenimiento va acá y no en una pantalla
+              propia: lo que produce **son** entradas de esta agenda, así que se
+              hace donde se ve el resultado. */}
+          <GenerarVisitas onGenerado={() => setParams(con({}))} />
         </div>
-        {/* Generar las visitas de mantenimiento va acá y no en una pantalla
-            propia: lo que produce **son** entradas de esta agenda, así que se
-            hace donde se ve el resultado. */}
-        <GenerarVisitas onGenerado={() => setParams(con({}))} />
       </EncabezadoDePantalla>
 
       {/* La barra de navegación, con la forma de Google Calendar: `Hoy`, las dos

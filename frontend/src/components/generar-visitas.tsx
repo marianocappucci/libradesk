@@ -94,7 +94,11 @@ export function GenerarVisitas({ onGenerado }: { onGenerado: () => void }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm"><CalendarDays />Generar visitas</Button>
+        {/* Alto por defecto (h-9) y no `sm`: en el encabezado de la Agenda este
+            botón va al lado del select de cuadrilla, que es h-9. Con `sm`
+            quedaban alineados por la base pero con 4 px de diferencia de alto,
+            que es la mitad de lo que se veía torcido. */}
+        <Button variant="outline"><CalendarDays />Generar visitas</Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
