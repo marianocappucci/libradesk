@@ -667,9 +667,31 @@ export function Incidencias() {
 
       {/* La barra aparece recién con algo tildado: hasta entonces no hay nada
           que decir, y una barra siempre visible con un botón apagado le come
-          lugar a la grilla todos los días para un flujo que es mensual. */}
+          lugar a la grilla todos los días para un flujo que es mensual.
+
+          Y una vez que aparece **queda flotando al pie, siempre a la vista**
+          (pedido del humano, 2026-08-16). Es el defecto que tenía al pie de la
+          grilla: se tildan reclamos de arriba, la lista es larga, y el botón
+          que hace algo con lo tildado está a un scroll de distancia — o peor,
+          se tilda algo y no pasa nada visible, porque la barra apareció fuera
+          de la pantalla.
+
+          `sticky` y no `fixed`: la barra tiene que respetar el ancho de la
+          columna de contenido, que cambia según la sidebar esté abierta,
+          cerrada o en mobile. Un `fixed` se posiciona contra el viewport y
+          quedaría cruzando por debajo del menú.
+
+          ⚠️ El contenedor de la pantalla sigue siendo `grid gap-4` **a
+          propósito**. El primer intento lo pasó a `flex flex-col` por la teoría
+          de que el bloque contenedor de un ítem de grid es su propia celda y
+          ahí el `sticky` no tendría recorrido. Medido en Chromium sobre un
+          arnés con esta misma cadena de contenedores, es falso: con el
+          contenedor en `grid`, la barra queda en 704 px de un viewport de 720
+          (o sea pegada, a los 16 px de `bottom-4`) y sin la clase `sticky` se
+          va a 1236, fuera de la pantalla. La clase alcanza sola; cambiar el
+          contenedor era una modificación sin motivo. */}
       {seleccionadas.length > 0 && (
-        <Card>
+        <Card className="sticky bottom-4 z-20 shadow-lg">
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-medium">

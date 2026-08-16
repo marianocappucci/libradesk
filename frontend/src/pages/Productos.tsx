@@ -171,8 +171,12 @@ function FormProducto({ producto, categorias, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
+        {/* `outline` y no `ghost`: es el tile gris que usan las otras ~39
+            columnas de acciones del producto (ver el `compoundVariants` de
+            `ui/button.tsx`). Era el único botón de fila sin recuadro, y se nota
+            al lado de Listas de precios, que es su vecina de menú. */}
         {editando
-          ? <Button variant="ghost" size="icon" title="Editar" aria-label="Editar producto">
+          ? <Button variant="outline" size="icon" title="Editar" aria-label="Editar producto">
               <Pencil className="h-4 w-4" />
             </Button>
           : <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo producto</Button>}
