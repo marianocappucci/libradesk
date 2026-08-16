@@ -364,7 +364,21 @@ export function Incidencias() {
         // cargó.
         : <span className="text-muted-foreground">—</span>,
     },
-    { accessorKey: 'titulo', header: sortableHeader('Título'), size: 240, minSize: 140, meta: { stretch: true }, cell: ({ row }) => <span className="block truncate font-medium" title={row.original.titulo}>{row.original.titulo}</span> },
+    // El título, con la marca de preventivo delante. La visita **es** una
+    // incidencia —para heredar agenda, hoja de ruta y cierre— así que sin algo
+    // que la distinga se lee como un reclamo más, y quien mira la bandeja no
+    // sabe si llamó el cliente o si toca por contrato.
+    { accessorKey: 'titulo', header: sortableHeader('Título'), size: 240, minSize: 140, meta: { stretch: true }, cell: ({ row }) => (
+      <span className="flex min-w-0 items-center gap-1.5">
+        {row.original.es_visita_mantenimiento && (
+          <Badge variant="outline" className="shrink-0"
+                 title="Visita de mantenimiento generada por un contrato">
+            Preventivo
+          </Badge>
+        )}
+        <span className="block truncate font-medium" title={row.original.titulo}>{row.original.titulo}</span>
+      </span>
+    ) },
     { accessorKey: 'cliente_id', header: 'Cliente', size: 150, minSize: 110, cell: ({ row }) => clienteNombre(row.original.cliente_id) },
     { accessorKey: 'equipo_id', header: 'Equipo', size: 130, minSize: 100, cell: ({ row }) => equipoNombre(row.original.equipo_id) },
     {
