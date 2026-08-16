@@ -49,6 +49,15 @@ class Cliente(Base):
     domicilio: Mapped[str | None] = mapped_column("address", String(255))
     observaciones: Mapped[str | None] = mapped_column(Text)
     tipo_facturacion: Mapped[str] = mapped_column(String(20), nullable=False, default="por_servicio")
+    # ── Con qué lista de precios cotiza este cliente ────────────────────
+    #
+    # Sin FK: `price_lists` es de LibraCommerce y la cadena de Alembic de este
+    # producto no la toca. Ver la revisión `0028`.
+    #
+    # 🔑 **NULL = la lista por defecto**, que es cómo cotizan todos hoy. La
+    # adopción es explícita: asignarle una lista a un cliente es un acto, no un
+    # efecto de la migración, y ningún precio cambia por haberla corrido.
+    price_list_id: Mapped[int | None] = mapped_column(Integer)
     # `Integer` y no `Boolean`: `libracore.db.clients` consulta `WHERE activo = 1`
     # y PostgreSQL no acepta un entero contra un BOOLEAN. Ver la revision `0017`.
     # `server_default` y no sólo `default`: la columna tiene el default EN LA
@@ -131,6 +140,7 @@ def _to_dict(c: Cliente) -> dict:
         "domicilio": c.domicilio,
         "observaciones": c.observaciones,
         "tipo_facturacion": c.tipo_facturacion,
+        "price_list_id": c.price_list_id,
         # La columna es INTEGER en la base (ver el modelo) pero la API venia
         # devolviendo booleano y el frontend lo usa como tal: se convierte acá
         # para no arrastrar el detalle del motor hasta la pantalla.

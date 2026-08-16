@@ -91,6 +91,11 @@ CAMPOS_INCIDENCIA = (
 CAMPOS_CLIENTE = (
     "nombre", "empresa", "email", "telefono", "ciudad", "cuit",
     "condicion_iva", "domicilio", "observaciones", "tipo_facturacion",
+    # Con qué lista de precios cotiza (revisión `0028`). Acá pesa lo mismo que
+    # `activo` y `tipo_facturacion`: si faltara, reenviar la ficha del cliente
+    # le **borraría la lista asignada** y pasaría a cotizar por la general, sin
+    # que falle nada. Lo agarró el guard de este archivo.
+    "price_list_id",
     "activo",
 )
 
