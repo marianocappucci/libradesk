@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Boxes as IconoDepositosStock, Tags as IconoListasPrecio } from 'lucide-react'
-import { FilePlus, Percent } from '@/components/iconos-accion'
+import { FilePlus, Pencil, Percent, Trash2 } from '@/components/iconos-accion'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────
 
@@ -125,8 +125,15 @@ function FormDeposito({ deposito, sucursales, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
+        {/* Mismo lápiz que en el resto del producto. Este no lo reportó el
+            humano —reportó el de listas de precios— pero era la MISMA palabra
+            suelta en el mismo archivo: arreglar sólo la instancia vista deja
+            la otra para que vuelva dentro de unos días. */}
         {editando
-          ? <Button variant="ghost" size="sm">Editar</Button>
+          ? <Button variant="outline" size="icon" title="Editar"
+                    aria-label={`Editar ${deposito.nombre}`}>
+              <Pencil />
+            </Button>
           : <Button><FilePlus className="mr-2 h-4 w-4" /> Nuevo depósito</Button>}
       </DialogTrigger>
       <DialogContent>
@@ -325,19 +332,29 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
               render: (p) => p.margen_pct === null
                 ? <span className="text-muted-foreground">—</span>
                 : `${p.margen_pct}%` },
-            { clave: 'acciones', titulo: 'Acciones', ancho: '150px',
+            // `alinear: 'derecha'` para que el título quede sobre los botones:
+            // la celda los manda a la derecha con `justify-end` y el
+            // encabezado se dibujaba a la izquierda, o sea la palabra
+            // "Acciones" arriba del margen vacío de la columna.
+            { clave: 'acciones', titulo: 'Acciones', ancho: '100px', alinear: 'derecha',
               render: (p) => (
                 <div className="flex justify-end gap-1">
                   <FormPrecio listaId={lista.id} precio={p} sucursalId={activa?.id ?? null}
                               onGuardar={async (fn) => { const ok = await conError(fn); if (ok) await recargar(); return ok }} />
                   {activa && p.propio_de_sucursal && (
-                    <Button variant="ghost" size="sm"
+                    // Tacho y no la palabra "Quitar", por lo mismo que el lápiz
+                    // de al lado. El `title`/`aria-label` es el que dice qué
+                    // quita: borra el precio PROPIO de la sucursal, con lo que
+                    // la fila vuelve a cotizar por el general de la lista.
+                    <Button variant="outline" size="icon"
+                            title={`Quitar el precio propio de ${activa.nombre}`}
+                            aria-label={`Quitar el precio propio de ${p.producto} en ${activa.nombre}`}
                             onClick={async () => {
                               const ok = await conError(() => api.del(
                                 `/api/listas-precio/${lista.id}/precios/${p.item_id}?sucursal_id=${activa.id}`))
                               if (ok) await recargar()
                             }}>
-                      Quitar
+                      <Trash2 />
                     </Button>
                   )}
                 </div>
@@ -379,7 +396,15 @@ function FormPrecio({ listaId, precio, sucursalId, onGuardar }: {
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">Editar</Button>
+        {/* El lápiz, como en el resto de las grillas del producto (Productos,
+            Clientes, Sucursales…). Era la palabra "Editar" y desentonaba con
+            todas: una columna de acciones se escanea por el dibujo, y la
+            leyenda va en el `title`/`aria-label`, que es lo que además leen el
+            lector de pantalla y los tests. */}
+        <Button variant="outline" size="icon" title="Editar"
+                aria-label={`Editar el precio de ${precio.producto}`}>
+          <Pencil />
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>{precio.producto}</DialogTitle></DialogHeader>

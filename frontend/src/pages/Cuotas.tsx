@@ -335,9 +335,21 @@ export function Cuotas() {
 
       {/* La barra aparece recién con algo tildado, igual que la de reclamos:
           una barra siempre visible con un botón apagado le come lugar a la
-          grilla todos los días para un flujo que es mensual. */}
+          grilla todos los días para un flujo que es mensual.
+
+          Y, también igual que la de reclamos, **queda flotando al pie** desde el
+          pedido del humano del 2026-08-16: se tildan cuotas arriba, el listado
+          es largo, y el botón que las convierte quedaba a un scroll de
+          distancia. El pedido nombró la barra de incidencias, pero es la misma
+          barra —mismo botón, mismo problema— y arreglar sólo la que se vio deja
+          la otra para dentro de unos días.
+
+          El contenedor de la pantalla no hace falta tocarlo: ni acá
+          (`space-y-4`) ni en incidencias (`grid gap-4`). Ver el comentario de
+          la barra en `Incidencias.tsx` para la medición que descarta la teoría
+          de que un `grid` anula el `sticky` de su hijo. */}
       {paraRemitir.length > 0 && (
-        <Card>
+        <Card className="sticky bottom-4 z-20 shadow-lg">
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-medium">
