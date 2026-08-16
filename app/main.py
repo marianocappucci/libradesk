@@ -60,7 +60,7 @@ from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import comercial as comercial_service
-from .services import inventario, materiales
+from .services import inventario, materiales, servicios_catalogo
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -129,6 +129,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    SELECT con anti-join), así que corre en cada arranque y así adopta
     #    también los clientes que ya existían.
     comercial_service.sincronizar_parties()
+
+    # 8. La mudanza del catálogo de servicios al del motor, para que las listas
+    #    de precios lo alcancen y la mano de obra se comporte como cualquier
+    #    otra línea. Idempotente y barato: sale por la primera consulta si
+    #    `servicios` no existe.
+    #
+    #    🔴 **Va acá y NO en una migración de Alembic**, y la diferencia no es
+    #    de estilo: `schema.ensure_schema()` corre en el paso 1, cuando
+    #    `catalog_items` todavía no existe. Una migración que insertara ahí
+    #    andaría en las instancias que ya tienen el motor y **fallaría en la
+    #    primera nueva**. Ver el docstring de `servicios_catalogo`.
+    servicios_catalogo.migrar(inventario._repo)
 
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
