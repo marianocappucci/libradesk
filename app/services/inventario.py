@@ -33,6 +33,7 @@ LibraCommerce en este producto**: escribiria un entero en una columna de texto.
 La auditoria de LibraDesk es la de `libraauth` y no cambia.
 """
 
+import json
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
@@ -197,6 +198,7 @@ def listar_items(solo_activos: bool = True,
              "stock_minimo": float(it.min_stock), "costo": float(it.default_cost),
              "precio": float(it.default_sale_price),
              "iva_rate": float(alicuota_de(it)),
+             "es_equipo": es_equipo(it),
              "unidad": it.unit.code, "descripcion": it.description,
              "categoria_id": it.category_id,
              "categoria": categorias.get(it.category_id, ""),
@@ -257,6 +259,84 @@ def alicuota_de(item: CatalogItem) -> Decimal:
     return _leer_alicuota(item.tax_profile)
 
 
+# ── «Esto es un equipo» ─────────────────────────────────────────────────────
+#
+# Lo que distingue una ficha RJ11 de una central: vender la primera no cambia
+# nada, vender la segunda **tiene que dejarla en el parque del cliente** o el
+# próximo reclamo sobre ese equipo no la encuentra.
+#
+# Vive en `catalog_items.metadata_json`, que es la bolsa de atributos propios
+# del consumidor que el motor ofrece: existe en el schema, el repositorio la
+# serializa y la lee, y nadie la usaba. Es el lugar previsto para exactamente
+# esto —a diferencia de `tax_profile`, que se usa para la alícuota con una
+# licencia de nombre que allá sí queda documentada.
+#
+# 🔑 **Es una propiedad del PRODUCTO y no de cada venta**, y esa es la decisión
+# del humano del 2026-08-16. La alternativa era tildarlo al vender, y la
+# decisión repetida es justo la que se olvida — que es el defecto que esto
+# viene a cerrar.
+CLAVE_ES_EQUIPO = "es_equipo"
+
+
+def es_equipo(item: CatalogItem) -> bool:
+    """Si vender este producto da de alta un equipo en el parque del cliente.
+
+    **El default es `False`**, al revés que la alícuota: un producto sin marcar
+    es un consumible, que es la enorme mayoría del catálogo. Equivocarse para
+    este lado deja un equipo sin registrar —se ve y se carga a mano—; para el
+    otro llenaría el parque de cada cliente con fichas y cables.
+    """
+    return (item.metadata or {}).get(CLAVE_ES_EQUIPO) == "1"
+
+
+def _metadata_con_equipo(actual, marca: bool | None) -> dict:
+    """La metadata a guardar. `marca=None` conserva lo que había.
+
+    Conservar es lo importante: `save_catalog_item()` pisa la fila entera, así
+    que una pantalla que no muestre el campo lo borraría al guardar. Es el mismo
+    pozo que ya tiene documentado la alícuota en `editar_item()`, y **el resto
+    de las claves de la metadata también se conservan** — por eso se copia el
+    dict en vez de armar uno nuevo.
+    """
+    salida = dict(actual or {})
+    if marca is None:
+        return salida
+    if marca:
+        salida[CLAVE_ES_EQUIPO] = "1"
+    else:
+        salida.pop(CLAVE_ES_EQUIPO, None)
+    return salida
+
+
+def es_equipo_de_items(item_ids) -> set[int]:
+    """Los ids que están marcados como equipo, en **una sola** consulta.
+
+    Mismo motivo que `alicuotas_de_items()`: una venta de doce líneas serían
+    doce `get_catalog_item()`. Lee `metadata_json` directo por SQL en vez de
+    armar el `CatalogItem` entero.
+    """
+    unicos = {int(i) for i in item_ids if i}
+    if not unicos:
+        return set()
+    marcadores = ", ".join("?" for _ in unicos)
+    with libracore_core.get_connection() as conn:
+        filas = conn.execute(
+            f"SELECT id, metadata_json FROM catalog_items WHERE id IN ({marcadores})",
+            tuple(unicos),
+        ).fetchall()
+    salida = set()
+    for f in filas:
+        try:
+            meta = json.loads(f["metadata_json"] or "{}")
+        except (ValueError, TypeError):
+            # Metadata ilegible: se trata como "no es equipo". El catálogo tiene
+            # que poder venderse igual, y el default seguro es no dar de alta.
+            continue
+        if meta.get(CLAVE_ES_EQUIPO) == "1":
+            salida.add(f["id"])
+    return salida
+
+
 def _alicuota_texto(iva_rate) -> str:
     """`0.21` → `"0.21"`, validando contra las cuatro que ARCA sabe mapear."""
     return str(iva.validar(iva_rate))
@@ -291,7 +371,7 @@ def alicuotas_de_items(item_ids) -> dict[int, Decimal]:
 def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
                precio: float = 0.0, unidad: str = "u", descripcion: str = "",
                categoria_id: int | None = None, codigo: str = "",
-               iva_rate=None) -> dict:
+               iva_rate=None, es_equipo: bool = False) -> dict:
     if not (nombre or "").strip():
         raise ValueError("El consumible necesita un nombre.")
     with libracore_core.get_connection() as conn:
@@ -305,6 +385,7 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
                 tax_profile=_alicuota_texto(
                     iva.DEFECTO if iva_rate is None else iva_rate
                 ),
+                metadata=_metadata_con_equipo(None, es_equipo),
             )
         )
         # 🔑 **Siempre queda con codigo.** Si el alta trae uno se respeta —el
@@ -320,18 +401,24 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 stock_minimo: float = 0.0, precio: float = 0.0,
                 unidad: str = "u", descripcion: str = "",
                 categoria_id: int | None = None, activo: bool = True,
-                iva_rate=None) -> None:
+                iva_rate=None, es_equipo: bool | None = None) -> None:
     """Edita un producto del catálogo.
 
-    🔴 **`iva_rate=None` conserva la alícuota que ya tenía, no la borra.**
+    🔴 **`iva_rate=None` y `es_equipo=None` conservan lo que ya había, no lo
+    borran.**
 
     No es una cortesía: `save_catalog_item()` recibe un `CatalogItem` **entero**
     y pisa la fila con lo que traiga, así que todo campo que esta función no
-    ponga se pierde en silencio. La alícuota es el único campo del producto que
-    no está en el formulario de todas las pantallas que llaman acá, y sin este
-    rescate editar el precio desde cualquiera de ellas dejaría el producto sin
-    IVA — el remito saldría bien la primera vez y mal después de la primera
-    corrección, que es la peor forma de fallar que tiene esto.
+    ponga se pierde en silencio. Son los dos campos del producto que no están en
+    el formulario de todas las pantallas que llaman acá, y sin este rescate
+    editar el precio desde cualquiera de ellas dejaría el producto sin IVA
+    —el remito saldría bien la primera vez y mal después de la primera
+    corrección— y sin la marca de equipo —y las ventas siguientes dejarían de
+    darlo de alta en el parque, en silencio—.
+
+    > ⚠️ `es_equipo` acá es el **parámetro**, que tapa a la función del módulo
+    > con el mismo nombre. No se llama a la función adentro de esta función; si
+    > algún día hace falta, hay que renombrar una de las dos.
     """
     with libracore_core.get_connection() as conn:
         repo = _repo(conn)
@@ -348,6 +435,7 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 tax_profile=_alicuota_texto(
                     alicuota_de(actual) if iva_rate is None else iva_rate
                 ),
+                metadata=_metadata_con_equipo(actual.metadata, es_equipo),
             )
         )
 

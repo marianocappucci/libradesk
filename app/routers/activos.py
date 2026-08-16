@@ -10,6 +10,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
+from ..auth import get_current_user
 from ..dependencies import get_activo_repository, get_contrato_repository
 from ..services.activos import ActivoRepository
 from ..services.contratos import ContratoRepository
@@ -34,6 +35,17 @@ class ActivoIn(BaseModel):
     valor_reposicion: float | None = None
     garantia_vence: date | None = None
     observaciones: str | None = None
+
+
+class ActivoDesdeStockIn(ActivoIn):
+    """Un activo que sale de una unidad que ya esta en el stock.
+
+    Hereda todos los campos del alta normal y suma **de donde sale**: el
+    producto del catalogo y el deposito de stock del que se descuenta.
+    """
+
+    item_id: int
+    deposito_stock_id: int
 
 
 class ActivoUpdate(BaseModel):
@@ -88,6 +100,33 @@ def create_activo(
 ):
     try:
         return activos.create(**data.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.post("/desde-stock", status_code=201, response_model=ActivoOut)
+def create_activo_desde_stock(
+    data: ActivoDesdeStockIn,
+    activos: ActivoRepository = Depends(get_activo_repository),
+    user: dict = Depends(get_current_user),
+):
+    """Convierte una unidad del stock en un activo serializado.
+
+    Es lo que evita el doble conteo: hasta hoy, dar de alta un activo a mano
+    dejaba la unidad **sumando en el stock del deposito** y ademas disponible
+    como activo. Ver `ActivoRepository.crear_desde_stock()`.
+
+    Se usa cuando alguien decide que esta unidad se va a **alquilar** en vez de
+    venderse. La recepcion de la compra no cambia: todo entra como stock.
+    """
+    campos = data.model_dump(exclude_none=True)
+    item_id = campos.pop("item_id")
+    deposito_stock_id = campos.pop("deposito_stock_id")
+    try:
+        return activos.crear_desde_stock(
+            item_id, deposito_stock_id,
+            usuario_id=int(user["id"]), **campos,
+        )
     except ValueError as e:
         raise HTTPException(409, str(e))
 

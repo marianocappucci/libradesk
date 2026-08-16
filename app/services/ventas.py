@@ -351,7 +351,96 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
             raise ValueError(
                 f"Stock insuficiente en el deposito (disponible: {float(e.disponible)})."
             ) from e
-    return {"id": venta.id, "numero": venta.number, "total": float(subtotal)}
+
+    dados_de_alta = _dar_de_alta_equipos(venta, cliente_id, items, usuario_id)
+    return {
+        "id": venta.id, "numero": venta.number, "total": float(subtotal),
+        # Cuántos equipos quedaron en el parque del cliente. La pantalla lo
+        # muestra: un alta automática que nadie ve es indistinguible de que no
+        # haya pasado, y este dato es lo único que dice que pasó.
+        "equipos_dados_de_alta": dados_de_alta,
+    }
+
+
+def _dar_de_alta_equipos(venta, cliente_id, items, usuario_id) -> int:
+    """Deja en el parque del cliente los equipos que esta venta le vendió.
+
+    Cierra el segundo corte de la venta (2026-08-16): *"vendés una central, la
+    cobrás, la instalás, y el próximo reclamo sobre ese equipo no la
+    encuentra"*. Hasta hoy **nadie fuera del router de equipos daba de alta un
+    `Equipo`**, así que el circuito venta → instalación → soporte estaba cortado
+    justo en la juntura.
+
+    ## Qué se da de alta, y qué no
+
+    Sólo los productos marcados **«es un equipo»** en el catálogo
+    (`inventario.es_equipo`). Una ficha RJ11 no deja rastro en el parque; una
+    central sí. Decisión del humano: es una propiedad del producto y no de cada
+    venta, porque la decisión repetida es la que se olvida.
+
+    **Uno por unidad vendida.** Vender 3 centrales deja 3 equipos, porque son 3
+    cosas distintas que después se reparan y se reclaman por separado.
+
+    ## Sin número de serie, a propósito
+
+    El stock es por cantidad y **no sabe las series**: vender 3 no dice cuáles
+    son las 3. La serie queda vacía y se completa al instalar. Decisión del
+    humano, y es la que resuelve el problema planteado: lo que importaba es que
+    el equipo **exista**, no que esté completo. Un formulario que exija las 3
+    series en el mostrador, con el cliente esperando, es lo que hace que nadie
+    lo use.
+
+    `tipo` sale del nombre del producto porque es el único dato que el catálogo
+    tiene: no hay `marca` ni `modelo` en un `catalog_item`. Queda editable.
+
+    ## Lo que NO hace
+
+    🔴 **Una venta sin cliente no da de alta nada.** Un equipo es de alguien
+    —`equipos.cliente_id` es NOT NULL— y una venta de mostrador a nombre suelto
+    no tiene a quién. **No es silencioso**: devuelve 0 y la pantalla lo dice,
+    porque un cero que nadie ve es igual a que no haya pasado.
+
+    ## Lo que NO es atómico
+
+    Los equipos los escribe SQLAlchemy y la venta la conexión de LibraCommerce:
+    dos conexiones, sin una transacción que las cubra. Es el mismo compromiso
+    que ya documentan las cuatro conversiones a remito. Se da de alta **después**
+    de que la venta quedó confirmada, porque el error al revés —equipos de una
+    venta que no existe— es peor que una venta cuyos equipos hay que cargar a
+    mano.
+    """
+    if not cliente_id:
+        return 0
+
+    from . import inventario
+    from .equipos import EquipoRepository
+
+    marcados = inventario.es_equipo_de_items([i.get("item_id") for i in items])
+    if not marcados:
+        return 0
+
+    # Se arma acá en vez de recibirlo: este módulo son funciones sueltas, no un
+    # repositorio con dependencias inyectadas, y ya usa `get_session_factory()`
+    # para `VentaRemito`. Pasarlo por parámetro obligaría a que el router lo
+    # cablee para una operación que es interna del alta.
+    repo = EquipoRepository(get_session_factory())
+    creados = 0
+    for linea in items:
+        if linea.get("item_id") not in marcados:
+            continue
+        # `int()` y no `round()`: media central no es media central. Una
+        # cantidad fraccionaria en un producto marcado como equipo es un error
+        # de carga, y de las dos formas de equivocarse conviene la que da de
+        # alta de menos.
+        for _ in range(int(linea["cantidad"])):
+            repo.create(
+                usuario_actor=str(usuario_id) if usuario_id else "Sistema",
+                cliente_id=int(cliente_id),
+                tipo=linea["descripcion"],
+                observaciones=f"Alta automática por la venta {venta.number}",
+            )
+            creados += 1
+    return creados
 
 
 def _proximo_numero(conn) -> str:
