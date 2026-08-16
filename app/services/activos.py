@@ -374,3 +374,75 @@ class ActivoRepository:
                 "total": sum(conteos.values()),
                 "por_estado": {e: conteos.get(e, 0) for e in ESTADOS_ACTIVO},
             }
+
+    def crear_desde_stock(self, item_id: int, deposito_stock_id: int, *,
+                          usuario_id: int | None = None, **data) -> dict:
+        """Saca una unidad del stock y la convierte en un activo serializado.
+
+        ## El problema que cierra
+
+        El stock es **por cantidad** y los activos son **unidades
+        serializadas**, y hasta hoy nada cruzaba de uno al otro. Dar de alta un
+        activo a mano dejaba la unidad **contada dos veces**: seguía sumando en
+        el stock del depósito *y* aparecía como activo disponible para colocar.
+        Nadie lo notaba, porque las dos pantallas dicen la verdad por separado.
+
+        Es la contraparte del alta automática de equipos que hace
+        `ventas._dar_de_alta_equipos()`: allá el cruce lo dispara la venta, acá
+        lo dispara una persona que decide que esta unidad se va a alquilar en
+        vez de venderse.
+
+        > 🔑 **Por qué acá y no en la recepción de la compra.** Decidido por el
+        > humano el 2026-08-16: *"todo entra como stock; el activo se crea
+        > aparte"*. El destino no es una propiedad del producto —la misma
+        > central se compra para vender o para alquilar según el caso— y
+        > tampoco se sabe siempre al recibirla. Lo que faltaba no era decidirlo
+        > antes, sino que decidirlo después **descuente**.
+
+        ## El orden, y la compensación
+
+        Son dos conexiones distintas contra la misma base —el activo lo escribe
+        SQLAlchemy, el movimiento de stock lo escribe LibraCommerce— así que no
+        hay una transacción que cubra las dos. Acá **sí** se compensa, a
+        diferencia de las cuatro conversiones a remito, porque los dos
+        desenlaces posibles son malos de verdad:
+
+        - Descontar y que falle el alta → la unidad **desaparece**: no está en
+          stock ni es un activo.
+        - Dar de alta y que falle el descuento → queda **contada dos veces**,
+          que es exactamente el defecto que esto viene a cerrar, y encima en
+          silencio.
+
+        Así que: se valida disponibilidad, se crea el activo, se descuenta, y
+        **si el descuento falla se borra el activo recién creado** y se propaga
+        el error. `delete()` es seguro acá porque el activo tiene un segundo de
+        vida y no puede tener historial.
+        """
+        from . import inventario
+
+        # Antes de escribir nada: sin stock no hay unidad que convertir, y el
+        # error tiene que llegar antes de crear un activo que después hay que
+        # borrar.
+        disponible = inventario.stock_actual(item_id, deposito_stock_id)
+        if disponible < 1:
+            raise ValueError(
+                f"No hay stock de ese producto en el depósito "
+                f"(disponible: {disponible}). No se puede convertir en activo."
+            )
+
+        activo = self.create(**data)
+        try:
+            inventario.ajustar(
+                item_id, deposito_stock_id, -1,
+                nota=f"Pasa a activo #{activo['id']}"
+                     + (f" ({activo['serial']})" if activo.get("serial") else ""),
+                usuario_id=usuario_id,
+            )
+        except Exception:
+            # La compensación. Sin esto, un fallo acá deja la unidad contada dos
+            # veces — el defecto original, reintroducido por la ventana entre
+            # las dos conexiones.
+            self.delete(activo["id"])
+            raise
+
+        return activo

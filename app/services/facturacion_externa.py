@@ -387,17 +387,51 @@ class PuenteFacturacion:
         deuda sin cargar, que es recuperable, en vez de un envío sin registrar,
         que no.
 
-        > ⚠️ **Doble conteo conocido, sin resolver.** Una venta en cuenta
-        > corriente ya genera su propio débito. Si el remito de ese mismo trabajo
-        > se manda a facturar, el cliente queda debiendo las dos cosas. Hace
-        > falta un vínculo venta↔remito que hoy el modelo no tiene, y **cómo
-        > llevarlo es una decisión de [[lagrace-comunicaciones]]**, no técnica.
+        ## 🔑 Un remito nacido de una venta NO debita
+
+        Decidido con el humano el 2026-08-16, al construir
+        `ventas.convertir_a_remito()`. **La venta ya registró lo que el cliente
+        pagó o debe**, así que debitar de nuevo acá está mal en los dos casos
+        posibles, y por motivos distintos:
+
+        - **Venta en cuenta corriente**: la deuda ya está cargada. `get_cc_saldo()`
+          la suma desde `ventas_pagos`, y este débito la sumaría otra vez por un
+          camino distinto (`cc_debitos`). El cliente debería el doble.
+        - **Venta cobrada** (efectivo, tarjeta, transferencia): el cliente no
+          debe nada, y este débito le **inventaría** una deuda por algo que ya
+          pagó. Es el caso peor de los dos, porque no hay ningún dato del que se
+          deduzca que está mal.
+
+        O sea que el problema nunca fue "no debitar dos veces": es que **este
+        método asume que lo que se manda está impago**. Cierto para el remito de
+        un reclamo —el trabajo se hizo y todavía no se cobró—, falso para una
+        venta, que trae su propio registro de cobro.
+
+        > Esto cierra el *"doble conteo venta↔remito"* que estuvo anotado como
+        > abierto desde el 2026-08-13. Quedaba pendiente de un vínculo
+        > venta↔remito que el modelo no tenía: hoy lo tiene (`ventas_remitos`,
+        > revisión `0026`) y es lo que se consulta acá.
         """
         cliente_id = comprobante.get("client_id")
         total = float(comprobante.get("total") or 0)
         # Sin cliente de la base no hay cuenta a la que cargar: el comprobante
         # se pudo emitir a nombre suelto (`client_name` sin `client_id`).
         if not cliente_id or total <= 0:
+            return
+
+        # Import local: `ventas` arrastra todo LibraCommerce, y este módulo lo
+        # necesita para una sola pregunta. Mismo criterio que el import de
+        # `facturacion_sos` en `esta_configurado()`.
+        from . import ventas
+
+        if origen_tipo == ORIGEN_REMITO and ventas.nacio_de_una_venta(
+            int(comprobante["id"])
+        ):
+            logger.info(
+                "El remito %s nacio de una venta: no se debita, la venta ya "
+                "registro lo que el cliente pago o debe",
+                comprobante["id"],
+            )
             return
 
         origen_id = int(comprobante["id"])

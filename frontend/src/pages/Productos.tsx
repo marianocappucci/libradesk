@@ -22,7 +22,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Package as IconoProductos } from 'lucide-react'
-import { AlertTriangle, FilePlus, Pencil } from '@/components/iconos-accion'
+import {
+  AlertTriangle, ArrowLeftRight, FilePlus, Pencil,
+} from '@/components/iconos-accion'
 
 export type Producto = {
   id: number
@@ -36,9 +38,25 @@ export type Producto = {
   categoria_id: number | null
   categoria: string
   codigo: string
+  /** La alícuota de IVA (`0.21`, `0.105`, `0.27` o `0`). Es la que lleva cada
+   *  línea del remito que sale de una venta, y de ahí la factura de SOS.
+   *  El backend nunca la devuelve vacía: sin cargar, contesta 21%. */
+  iva_rate: number
+  /** Si venderlo deja un equipo en el parque del cliente, uno por unidad.
+   *  Una central sí; una ficha o un cable, no. */
+  es_equipo: boolean
   stock: number
   bajo_minimo: boolean
 }
+
+/** Las cuatro que ARCA sabe mapear. La lista vive en `app/services/iva.py` y
+ *  acá va sólo para dibujarla — el backend valida igual. */
+const ALICUOTAS = [
+  { valor: '0.21', label: '21 %' },
+  { valor: '0.105', label: '10,5 %' },
+  { valor: '0.27', label: '27 %' },
+  { valor: '0', label: 'Exento' },
+]
 
 type Categoria = { id: number; nombre: string }
 
@@ -122,8 +140,17 @@ export function Productos() {
                 )}
               </span>
             ) },
-          { clave: 'acciones', titulo: 'Acciones', ancho: '60px',
-            render: (p) => <FormProducto producto={p} categorias={categorias} onGuardar={conError} /> },
+          { clave: 'acciones', titulo: 'Acciones', ancho: '110px',
+            render: (p) => (
+              <div className="flex items-center gap-1">
+                <FormProducto producto={p} categorias={categorias} onGuardar={conError} />
+                {/* Sólo para lo que es un equipo: convertir una ficha RJ11 en
+                    un activo alquilable no significa nada. */}
+                {p.es_equipo && (
+                  <FormActivoDesdeStock producto={p} onGuardar={conError} />
+                )}
+              </div>
+            ) },
         ]}
       />
     </Pagina>
@@ -146,6 +173,14 @@ function FormProducto({ producto, categorias, onGuardar }: {
   const [categoriaId, setCategoriaId] = useState(
     producto?.categoria_id ? String(producto.categoria_id) : 'ninguna',
   )
+  // `String(0.105)` da "0.105", que es exactamente el valor de la opción. Sin
+  // producto (el alta) arranca en 21%, que es el default del backend.
+  const [ivaRate, setIvaRate] = useState(
+    producto ? String(producto.iva_rate) : '0.21',
+  )
+  // Sin producto (el alta) arranca desmarcado: la enorme mayoría del catálogo
+  // son consumibles, y el default del backend es el mismo.
+  const [esEquipo, setEsEquipo] = useState(Boolean(producto?.es_equipo))
 
   async function guardar() {
     const cuerpo = {
@@ -156,6 +191,13 @@ function FormProducto({ producto, categorias, onGuardar }: {
       unidad,
       categoria_id: categoriaId === 'ninguna' ? null : Number(categoriaId),
       activo: producto?.activo ?? true,
+      // Siempre viaja, también al editar: el PUT reconstruye el producto
+      // entero del lado del motor, y mandarlo sólo cuando cambió dejaría la
+      // alícuota a merced del rescate del backend en vez de decirla.
+      iva_rate: Number(ivaRate),
+      // Siempre viaja, también al editar: el PUT reconstruye el producto entero
+      // del lado del motor. Mismo motivo que la alícuota.
+      es_equipo: esEquipo,
       // El código sólo viaja en el alta: cambiarlo después es otra operación
       // (un producto puede tener varios códigos) y tiene su propio endpoint.
       ...(editando ? {} : { codigo: codigo.trim() }),
@@ -210,6 +252,42 @@ function FormProducto({ producto, categorias, onGuardar }: {
                      onChange={(e) => setPrecio(e.target.value)} />
             </div>
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="p-iva">IVA</Label>
+            <Select value={ivaRate} onValueChange={setIvaRate}>
+              <SelectTrigger id="p-iva"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ALICUOTAS.map((a) => (
+                  <SelectItem key={a.valor} value={a.valor}>{a.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              La lleva cada línea del remito que sale de una venta, y de ahí la
+              factura.
+            </p>
+          </div>
+          {/* La marca que decide si vender esto deja algo en el parque del
+              cliente. Va junto al IVA y no en una pestaña aparte: son las dos
+              propiedades del producto que tienen efecto en otra pantalla.
+              `<input type="checkbox">` dentro de un `<label>`, que es la forma
+              que ya usan Configuración, Cuotas y los depósitos — no hay un
+              `Checkbox` de shadcn instalado en este producto. */}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox" className="mt-0.5" id="p-es-equipo"
+              checked={esEquipo}
+              onChange={(e) => setEsEquipo(e.target.checked)}
+            />
+            <span>
+              Es un <strong>equipo</strong>
+              <span className="block text-xs text-muted-foreground">
+                Al venderlo queda registrado en el parque del cliente, uno por
+                unidad, para que sus reclamos lo encuentren. Una central sí;
+                una ficha o un cable, no.
+              </span>
+            </span>
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="p-minimo">Stock mínimo</Label>
@@ -244,6 +322,107 @@ function FormProducto({ producto, categorias, onGuardar }: {
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
           <Button onClick={guardar} disabled={!nombre.trim()}>Guardar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Convierte una unidad del stock en un activo alquilable.
+ *
+ * 🔑 **Existe para que la unidad no quede contada dos veces.** Antes había que
+ * dar de alta el activo por su propia pantalla, y la unidad seguía sumando en
+ * el stock del depósito además de aparecer como activo disponible. Nadie lo
+ * notaba: las dos pantallas dicen la verdad por separado.
+ *
+ * Acá sí se pide el número de serie, al revés que en el alta automática de la
+ * venta: un activo propio se identifica por su serie toda su vida —se coloca,
+ * se retira, se manda a service— y quien lo convierte lo tiene en la mano.
+ */
+function FormActivoDesdeStock({ producto, onGuardar }: {
+  producto: Producto
+  onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
+}) {
+  const { datos: depositos } = useDatos<{ id: number; nombre: string }[]>(
+    '/api/depositos-stock', [],
+  )
+  const [abierto, setAbierto] = useState(false)
+  const [depositoId, setDepositoId] = useState('')
+  const [serial, setSerial] = useState('')
+  const [marca, setMarca] = useState('')
+  const [modelo, setModelo] = useState('')
+
+  async function convertir() {
+    const ok = await onGuardar(() => api.post('/api/activos/desde-stock', {
+      item_id: producto.id,
+      deposito_stock_id: Number(depositoId),
+      tipo: producto.nombre,
+      serial: serial.trim() || null,
+      marca: marca.trim() || null,
+      modelo: modelo.trim() || null,
+    }))
+    if (ok) {
+      setAbierto(false)
+      setSerial(''); setMarca(''); setModelo('')
+    }
+  }
+
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon-sm"
+                title="Convertir una unidad en activo para alquilar"
+                aria-label={`Convertir ${producto.nombre} en activo`}>
+          <ArrowLeftRight />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Convertir en activo para alquilar</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Saca <strong>una unidad</strong> de <strong>{producto.nombre}</strong>{' '}
+          del stock y la registra como activo propio. Se descuenta del depósito
+          para que no quede contada dos veces.
+        </p>
+        <div className="grid gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="a-deposito">Sale del depósito</Label>
+            <Select value={depositoId} onValueChange={setDepositoId}>
+              <SelectTrigger id="a-deposito">
+                <SelectValue placeholder="Elegí el depósito" />
+              </SelectTrigger>
+              <SelectContent>
+                {depositos.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="a-serial">Número de serie</Label>
+            <Input id="a-serial" value={serial}
+                   onChange={(e) => setSerial(e.target.value)}
+                   placeholder="El que tiene la etiqueta del equipo" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="a-marca">Marca</Label>
+              <Input id="a-marca" value={marca}
+                     onChange={(e) => setMarca(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="a-modelo">Modelo</Label>
+              <Input id="a-modelo" value={modelo}
+                     onChange={(e) => setModelo(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+          <Button onClick={convertir} disabled={!depositoId}>
+            Convertir en activo
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

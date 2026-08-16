@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
+from ..dependencies import get_cliente_repository, get_remito_service
 from ..services import recibos, ventas
+from ..services.clientes import ClienteRepository
+from ..services.remitos_presupuestos import RemitoService
 
 router = APIRouter(prefix="/api", tags=["ventas"])
 
@@ -44,6 +47,11 @@ class VentaIn(BaseModel):
 
 class AnulacionIn(BaseModel):
     motivo: str = ""
+
+
+class ConversionIn(BaseModel):
+    #: Solo para una venta cargada sin cliente. Ver el endpoint.
+    cliente_id: int | None = None
 
 
 # ── Ventas ───────────────────────────────────────────────────────────────
@@ -85,6 +93,40 @@ def crear_venta(payload: VentaIn, user: dict = Depends(get_current_user)):
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+@router.post("/ventas/{venta_id}/convertir-en-remito", status_code=201)
+def convertir_venta_en_remito(
+    venta_id: int,
+    payload: ConversionIn | None = None,
+    remitos: RemitoService = Depends(get_remito_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    user: dict = Depends(get_current_user),
+):
+    """El remito de una venta, que es su camino a facturacion.
+
+    Es el gemelo de `/api/presupuestos/{id}/convertir-en-remito` y del de
+    reclamos: la bandeja acepta solo remitos, asi que todo lo facturable llega
+    convirtiendose.
+
+    `cliente_id` en el cuerpo es **opcional y solo se usa cuando la venta se
+    cargo sin cliente** — el mostrador. Con la venta ya identificada, mandar uno
+    distinto da 409: la venta dice a quien se le vendio.
+
+    Idempotente: el segundo click devuelve el remito que ya existe, con 201
+    igual. Devolver 200 en ese caso obligaria a la pantalla a distinguir dos
+    respuestas que significan lo mismo — "el remito de esta venta es este".
+    """
+    try:
+        return ventas.convertir_a_remito(
+            venta_id, remitos, clientes,
+            cliente_id=payload.cliente_id if payload else None,
+            usuario_id=int(user["id"]),
+        )
+    except KeyError:
+        raise HTTPException(404, "La venta no existe.")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 # ── Recibos ──────────────────────────────────────────────────────────────

@@ -19,11 +19,20 @@ const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 // fueron también `@iconify-json/fluent`, `@iconify-json/fluent-color` y los dos
 // `@svgr/*`, que existían sólo para resolver los `~icons/…` virtuales.
 //
-// ⚠️ Si alguna vez se sube el pin de `libra-ui` a v0.18.0 o mayor, el plugin
-// vuelve a hacer falta: esa versión trae el módulo compartido de iconos de
-// acción, que importa `~icons/fluent/…` y viaja como TSX crudo, o sea que se
-// compila con el pipeline de ESTE producto. Hoy el pin es v0.17.0 y no lo
-// necesita.
+// Lo que lo devolvería no es subir el pin de `libra-ui`, sino importar
+// `libra-ui/iconos-accion`. Ese módulo compartido sigue importando
+// `~icons/fluent/…` —también en el pin de hoy, v0.23.0— y viaja como TSX crudo,
+// o sea que se compila con el pipeline de ESTE producto. Pero es una hoja: nada
+// dentro de `libra-ui` lo importa, y al ser un subpath de `exports` no entra al
+// build mientras nadie lo pida por nombre. LibraDesk no lo pide — usa su propio
+// `@/components/iconos-accion`, sobre lucide.
+//
+// Hasta el 2026-08-16 esta nota avisaba en función de la versión ("de v0.18.0 en
+// adelante"), y era el disparador equivocado: el pin pasó de v0.17.0 a v0.23.0 y
+// el build no se inmutó (v0.18.0 ni llegó a existir — el módulo compartido
+// apareció en v0.19.0). El disparador es el import, y cuando llegue el build
+// corta solo, con `Cannot find module '~icons/fluent/…'`. La receta para
+// reponer el plugin está en el encabezado de `libra-ui/src/iconos-accion.tsx`.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {

@@ -1,5 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Montserrat, la tipografia del nombre del producto en el login y en la
+   sidebar. Self-hosted via @fontsource y NO por CDN de Google: una fuente
+   pedida a un tercero en tiempo de ejecucion es una dependencia de red que la
+   instancia de un cliente no tiene por que tener. El woff2 lo empaqueta Vite
+   con el resto del bundle.
+
+   Subset latino y un solo peso (700) a proposito: el wordmark es lo unico que
+   la usa, y siempre en bold. Importar "@fontsource/montserrat" a secas traeria
+   nueve pesos por cada alfabeto, y ocho de ellos no se dibujan nunca.
+
+   Va arriba de todo porque @import de CSS tiene que preceder a cualquier otra
+   regla -- debajo del @source de aca abajo, el navegador lo descarta. */
+@import "@fontsource/montserrat/latin-700.css";
 
 /* Tailwind v4 no escanea node_modules por defecto -- libra-ui usa clases
    de utilidad en su propio JSX, hace falta esto para que el motor las
@@ -7,6 +20,14 @@
 @source "../node_modules/libra-ui";
 
 @custom-variant dark (&:is(.dark *));
+
+/* La utilidad `font-montserrat`. Se declara una sola vez aca para que el
+   login y la sidebar pidan la misma familia: si cada shim escribiera su
+   propio `font-["Montserrat"]`, alcanzaria con que uno se escriba distinto
+   para que las dos pantallas dejen de coincidir sin que nadie lo note. */
+@theme {
+  --font-montserrat: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+}
 
 @theme inline {
   --color-background: var(--background);

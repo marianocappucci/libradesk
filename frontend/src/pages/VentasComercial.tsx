@@ -2,8 +2,13 @@
 //
 // 🔑 **Acá no se emite ninguna factura.** El comprobante fiscal lo emite SOS
 // Contador; una venta de LibraDesk es el comprobante interno —qué se vendió, a
-// quién, a cuánto y cómo se cobró— y es lo que después se manda a facturar
-// desde «Enviar a facturar».
+// quién, a cuánto y cómo se cobró—.
+//
+// ⚠️ **Una venta NO va sola a «Enviar a facturar»**: la bandeja acepta sólo
+// remitos. El camino es generar el remito de la venta (el botón de la ficha) y
+// mandar ese. Hasta el 2026-08-16 este comentario y el texto de la pantalla
+// decían que la venta se mandaba directo, y era falso — no existía ningún
+// camino de una venta a la bandeja.
 //
 // Por eso no hay tipo A/B/C, ni CAE, ni punto de venta fiscal en ninguna de
 // estas pantallas. Si aparecen, algo se entendió mal.
@@ -52,6 +57,9 @@ type VentaDetalleData = {
    *  solo lugar. Derivarlo en la pantalla es cómo la ficha y la lista terminan
    *  diciendo cosas distintas de la misma venta. */
   recibo_id: number | null
+  /** El remito que ya salió por esta venta, o `null`. Es lo que hace que el
+   *  botón diga «Ver remito» en vez de generar un segundo comprobante. */
+  remito_id: number | null
   items: { descripcion: string; cantidad: number; precio: number; subtotal: number }[]
   pagos: { medio: string; monto: number; referencia: string }[]
   subtotal: number; total: number
@@ -98,15 +106,28 @@ export function Ventas() {
   // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
   // —el central que abastece a las dos— y el selector muestra cuál es cuál.
   const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
+  // Vive acá y no en el formulario porque el modal se cierra al guardar: el
+  // aviso tiene que sobrevivirle.
+  const [altaDeEquipos, setAltaDeEquipos] = useState(0)
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
     <Pagina titulo="Ventas" icono={ClipboardList} error={error}
             acciones={<FormVenta clientes={clientes} productos={productos}
-                                 depositos={depositos} onGuardar={conError} />}>
+                                 depositos={depositos} onGuardar={conError}
+                                 setAltaDeEquipos={setAltaDeEquipos} />}>
+      {altaDeEquipos > 0 && (
+        <p className="rounded-md border border-dashed p-3 text-sm">
+          Se {altaDeEquipos === 1 ? 'registró' : 'registraron'}{' '}
+          <strong>{altaDeEquipos} {altaDeEquipos === 1 ? 'equipo' : 'equipos'}</strong>{' '}
+          en el parque del cliente. Cargales el número de serie cuando los
+          instales.
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
-        Comprobante interno. La factura la emite SOS Contador desde{' '}
+        Comprobante interno. Para facturarla, abrí la venta y generá su{' '}
+        <strong>remito</strong>: es lo que se manda desde{' '}
         <strong>Enviar a facturar</strong>.
         {activa && ` Se muestran las ventas de ${activa.nombre}.`}
       </p>
@@ -235,9 +256,12 @@ function AccionRecibo({ venta, onEmitido }: {
   )
 }
 
-function FormVenta({ clientes, productos, depositos, onGuardar }: {
+function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos }: {
   clientes: Cliente[]; productos: Producto[]; depositos: DepositoStock[]
   onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
+  /** Cuántos equipos dejó la venta en el parque del cliente. Lo muestra la
+   *  página, no este formulario: el modal se cierra al guardar. */
+  setAltaDeEquipos: (n: number) => void
 }) {
   const { activa } = useSucursal()
   const [abierto, setAbierto] = useState(false)
@@ -271,17 +295,27 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
   }
 
   async function guardar() {
-    const ok = await onGuardar(() => api.post('/api/ventas', {
-      cliente_id: clienteId ? Number(clienteId) : null,
-      deposito_id: Number(depositoId),
-      sucursal_id: activa?.id ?? null,
-      items: lineas.map((l) => ({
-        item_id: l.item_id, descripcion: l.descripcion,
-        cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0,
-      })),
-      pagos: total > 0 ? [{ medio, monto: total }] : [],
-    }))
-    if (ok) { setAbierto(false); setLineas([]); setClienteId('') }
+    let dadosDeAlta = 0
+    const ok = await onGuardar(async () => {
+      const r = await api.post<{ equipos_dados_de_alta?: number }>('/api/ventas', {
+        cliente_id: clienteId ? Number(clienteId) : null,
+        deposito_id: Number(depositoId),
+        sucursal_id: activa?.id ?? null,
+        items: lineas.map((l) => ({
+          item_id: l.item_id, descripcion: l.descripcion,
+          cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0,
+        })),
+        pagos: total > 0 ? [{ medio, monto: total }] : [],
+      })
+      dadosDeAlta = r.equipos_dados_de_alta ?? 0
+    })
+    if (ok) {
+      setAbierto(false); setLineas([]); setClienteId('')
+      // Un alta automática que nadie ve es indistinguible de que no haya
+      // pasado. Se avisa **sólo cuando hubo algo**: un "0 equipos" en cada
+      // venta de consumibles sería ruido en la pantalla más usada.
+      setAltaDeEquipos(dadosDeAlta)
+    }
   }
 
   return (
@@ -402,11 +436,114 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
  * venta no tiene nada de eso pero sí tiene cobros. Encajarla ahí obligaba a
  * volver opcional media ficha de dos pantallas que hoy andan.
  */
+/** «Generar remito» — el camino de una venta a facturación.
+ *
+ * La bandeja de «Enviar a facturar» acepta **sólo remitos**, así que sin esto
+ * una venta no tiene ningún camino a la factura. Es el gemelo del botón de
+ * conversión de un presupuesto y del de un reclamo cerrado.
+ *
+ * Tres estados, y el del medio es el que justifica el componente:
+ *
+ * - **Ya tiene remito** → lleva a verlo. No vuelve a emitir.
+ * - **La venta no tiene cliente** (mostrador) → pide a nombre de quién, porque
+ *   un remito se emite a nombre de alguien.
+ * - **Todo listo** → genera y navega al remito.
+ */
+function AccionRemito({ venta, clientes, onGenerado }: {
+  venta: VentaDetalleData
+  clientes: Cliente[]
+  onGenerado: (accion: () => Promise<unknown>) => Promise<boolean>
+}) {
+  const navigate = useNavigate()
+  const [generando, setGenerando] = useState(false)
+  const [abierto, setAbierto] = useState(false)
+  const [elegido, setElegido] = useState('')
+
+  if (venta.remito_id) {
+    return (
+      <Button asChild size="sm" variant="outline">
+        <Link to={`/remitos/${venta.remito_id}`}>
+          <Eye />Ver remito
+        </Link>
+      </Button>
+    )
+  }
+
+  async function generar(clienteId?: number) {
+    setGenerando(true)
+    let creado: number | null = null
+    const ok = await onGenerado(async () => {
+      const r = await api.post<{ id: number }>(
+        `/api/ventas/${venta.id}/convertir-en-remito`,
+        clienteId ? { cliente_id: clienteId } : {},
+      )
+      creado = r.id
+    })
+    setGenerando(false)
+    if (ok && creado) navigate(`/remitos/${creado}`)
+  }
+
+  // Con cliente en la venta no hay nada que preguntar.
+  if (venta.cliente) {
+    return (
+      <Button size="sm" disabled={generando} onClick={() => generar()}>
+        <FilePlus />{generando ? 'Generando…' : 'Generar remito'}
+      </Button>
+    )
+  }
+
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button size="sm"><FilePlus />Generar remito</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>¿A nombre de quién?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Esta venta se cargó sin cliente y un remito se emite a nombre de
+          alguien. Elegí a quién antes de generarlo.
+        </p>
+        <div className="grid gap-2">
+          <Label htmlFor="cliente-remito">Cliente</Label>
+          <Select value={elegido} onValueChange={setElegido}>
+            <SelectTrigger id="cliente-remito">
+              <SelectValue placeholder="Elegí un cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              {clientes.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.empresa || c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" size="sm">Cancelar</Button>
+          </DialogClose>
+          <Button
+            size="sm"
+            disabled={!elegido || generando}
+            onClick={async () => {
+              await generar(Number(elegido))
+              setAbierto(false)
+            }}
+          >
+            {generando ? 'Generando…' : 'Generar remito'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function VentaDetalle() {
   const { id } = useParams<{ id: string }>()
   const { datos, error, cargando, conError } = useDatos<VentaDetalleData | null>(
     `/api/ventas/${Number(id)}`, null,
   )
+  const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
 
   if (cargando || error || !datos) return <DetalleEstado loading={cargando} error={error || null} />
 
@@ -424,6 +561,10 @@ export function VentaDetalle() {
               el PDF si ya está. Quien abre la venta para mandar el comprobante
               no tiene que volver a la lista a buscarlo. */}
           <AccionRecibo venta={datos} onEmitido={conError} />
+          {/* El camino a facturación. Va acá y no en la lista a propósito: pide
+              decidir a nombre de quién cuando la venta es de mostrador, y esa
+              decisión necesita ver la venta. */}
+          <AccionRemito venta={datos} clientes={clientes} onGenerado={conError} />
           <Button asChild size="sm" variant="outline">
             <Link to="/ventas"><ArrowLeft />Volver</Link>
           </Button>

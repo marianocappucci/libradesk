@@ -37,6 +37,22 @@ class ConsumibleIn(BaseModel):
     #: Solo en el alta. Para agregar otro codigo hay endpoint dedicado.
     codigo: str = ""
     activo: bool = True
+    #: La alicuota de IVA del producto (`0.21`, `0.105`, `0.27` o `0`). Es lo
+    #: que despues lleva cada linea del remito que sale de una venta, y de ahi
+    #: la factura de SOS.
+    #:
+    #: 🔑 **`None` en el PUT conserva la que ya tenia, no la borra.** Ver
+    #: `inventario.editar_item()`: `save_catalog_item()` pisa la fila entera,
+    #: asi que un cliente viejo de esta API —o una pantalla que no muestre el
+    #: campo— dejaria el producto sin IVA con solo guardar el precio.
+    iva_rate: float | None = None
+    #: Si vender este producto da de alta un equipo en el parque del cliente.
+    #: Una ficha RJ11 no; una central si.
+    #:
+    #: 🔑 **`None` en el PUT conserva la marca, no la borra** — misma razon que
+    #: `iva_rate`. En el POST, `None` vale como `False`: un producto nuevo sin
+    #: decir nada es un consumible, que es la enorme mayoria del catalogo.
+    es_equipo: bool | None = None
 
 
 class DepositoStockIn(BaseModel):
@@ -93,7 +109,10 @@ def crear_consumible(payload: ConsumibleIn):
             payload.nombre, payload.costo, payload.stock_minimo,
             precio=payload.precio, unidad=payload.unidad,
             descripcion=payload.descripcion, categoria_id=payload.categoria_id,
-            codigo=payload.codigo,
+            codigo=payload.codigo, iva_rate=payload.iva_rate,
+            # En el alta `None` es `False`: un producto nuevo sin decir nada es
+            # un consumible. En el PUT de abajo `None` conserva, que es otra cosa.
+            es_equipo=bool(payload.es_equipo),
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -107,6 +126,9 @@ def editar_consumible(item_id: int, payload: ConsumibleIn):
             stock_minimo=payload.stock_minimo, precio=payload.precio,
             unidad=payload.unidad, descripcion=payload.descripcion,
             categoria_id=payload.categoria_id, activo=payload.activo,
+            iva_rate=payload.iva_rate,
+            # Sin `bool()`: acá `None` significa "no lo toques".
+            es_equipo=payload.es_equipo,
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
