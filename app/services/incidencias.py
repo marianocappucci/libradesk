@@ -1075,7 +1075,11 @@ class IncidenciaRepository:
             # ticket y no todo el trabajo primero: el remito se lee como la
             # lista de visitas que es, y quien concilia contra los papeles va
             # bajando de a un CDS por vez.
-            for m in materiales.valorizados(t["id"]):
+            # Con el `cliente_id`: los materiales se valorizan por **la lista de
+            # precios de ese cliente**, no por el catálogo pelado (2026-08-16).
+            # Un reseller y un cliente de mostrador dejan de pagar lo mismo por
+            # el mismo cable. Ver `app/services/precios.py`.
+            for m in materiales.valorizados(t["id"], cliente_id=cliente_id):
                 nombre = m["descripcion"] or f"Material #{m['item_id']}"
                 items.append({
                     # El `\n` no es cosmetico: `_draw_items_table` de LibraCore

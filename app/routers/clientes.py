@@ -46,6 +46,13 @@ class ClienteIn(BaseModel):
     domicilio: str | None = None
     observaciones: str | None = None
     tipo_facturacion: str = "por_servicio"
+    #: Con que lista de precios cotiza este cliente. `None` = la lista por
+    #: defecto, que es como cotizan todos hasta que se les asigne una.
+    #:
+    #: Va en `ClienteIn` —y no solo en la salida como `remito_id` en las
+    #: incidencias— porque **si es editable**: asignarle la lista a un cliente
+    #: es justamente el acto que hace que las listas sirvan.
+    price_list_id: int | None = None
     activo: bool = True
 
 

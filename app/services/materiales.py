@@ -188,8 +188,14 @@ def listar(incidencia_id: int, incluir_devueltos: bool = False) -> list[dict]:
     ]
 
 
-def valorizados(incidencia_id: int) -> list[dict]:
-    """Lo mismo que `listar()`, mas el `precio` de venta del catalogo.
+def valorizados(incidencia_id: int, *, cliente_id: int | None = None,
+                lista_id: int | None = None) -> list[dict]:
+    """Lo mismo que `listar()`, mas el `precio` de venta **para ese cliente**.
+
+    🔑 **El precio sale de la lista que le corresponde al cliente**, no del
+    catalogo pelado (2026-08-16). Sin `cliente_id` se comporta como antes: la
+    lista por defecto, y el `default_sale_price` si esa lista no tiene el item.
+    Ver `app/services/precios.py` para la precedencia completa.
 
     Existe para armar el remito de un ticket cerrado
     (`IncidenciaRepository.convertir_a_remito`) y **no** para la orden de
@@ -198,8 +204,7 @@ def valorizados(incidencia_id: int) -> list[dict]:
     --que ademas pagaria una lectura de catalogo por fila en el camino del PDF,
     que no la usa--.
 
-    El precio sale de `default_sale_price` del item, que es el mismo que sugiere
-    la pantalla de ventas. **Un item sin precio cargado da 0**, y un item
+    **Un item sin precio cargado da 0**, y un item
     borrado del catalogo tambien: el remito se genera igual y el operador pone
     el importe antes de mandarlo a facturar. Devolver 0 es lo unico honesto que
     se puede hacer aca --inventar un precio seria peor-- y la bandeja de
@@ -213,11 +218,14 @@ def valorizados(incidencia_id: int) -> list[dict]:
     filas = listar(incidencia_id)
     if not filas:
         return []
-    with libracore_core.get_connection() as conn:
-        repo = SqliteCommerceRepository(conn)
-        for fila in filas:
-            item = repo.get_catalog_item(fila["item_id"])
-            fila["precio"] = (
-                float(item.default_sale_price) if item is not None else 0.0
-            )
+    # Import local: `precios` importa `inventario`, que importa `comercial`.
+    # Arriba armaría un ciclo por un módulo que sólo hace falta acá.
+    from . import precios
+
+    tabla = precios.precios_de(
+        [f["item_id"] for f in filas],
+        cliente_id=cliente_id, lista_id=lista_id,
+    )
+    for fila in filas:
+        fila["precio"] = tabla.get(fila["item_id"], 0.0)
     return filas
