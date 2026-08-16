@@ -32,7 +32,7 @@ from .routers import (
     cuotas, dashboard, depositos, equipos, equipos_trabajo, facturacion,
     facturacion_config, health, incidencias,
     informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
-    reportes, sectores, servicios, sucursales, tecnicos, users,
+    reportes, sectores, servicios, sucursales, tecnicos, users, visitas,
 )
 from .routers import inventario as inventario_router
 # Alias por el mismo motivo que `inventario_router`: `app.services.ventas` ya
@@ -44,6 +44,7 @@ from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
 from .services.cuotas import CuotaRepository
+from .services.visitas import VisitaService
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
@@ -194,6 +195,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.activos = ActivoRepository(sessions)
     app.state.contratos = ContratoRepository(sessions)
     app.state.cuotas = CuotaRepository(sessions)
+    app.state.visitas = VisitaService(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)
     app.state.informes = InformeService(sessions)
@@ -311,6 +313,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # ofrecería una bandeja de cobros de algo que no se puede contratar.
     app.include_router(
         cuotas.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
+    )
+    # Las visitas de mantenimiento cuelgan del mismo módulo que las cuotas, y por
+    # el mismo motivo: salen de un contrato, así que gatearlas aparte ofrecería
+    # programar el trabajo de algo que no se puede contratar.
+    app.include_router(
+        visitas.router, dependencies=staff_or_admin + [Depends(require_module("alquileres"))]
     )
     # Stock de consumibles. Un solo router para el catálogo, los depósitos, los
     # movimientos Y los materiales de una incidencia: los cuatro cuelgan del

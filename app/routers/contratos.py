@@ -28,6 +28,11 @@ class ContratoIn(BaseModel):
     fecha_fin: date | None = None
     renovacion_automatica: bool = False
     periodicidad: str = "mensual"
+    #: Cada cuanto se VISITA, que **no** es cada cuanto se cobra. `None` = no
+    #: genera visitas de mantenimiento, y es el default: los contratos que ya
+    #: existen se comportan como hoy. Ver la revision `0027`.
+    frecuencia_visita: str | None = None
+    duracion_visita_minutos: int | None = None
     dia_vencimiento: int | None = None
     moneda: str = "ARS"
     metodo_actualizacion: str = "manual"
@@ -50,6 +55,8 @@ class ContratoUpdate(BaseModel):
     fecha_fin: date | None = None
     renovacion_automatica: bool | None = None
     periodicidad: str | None = None
+    frecuencia_visita: str | None = None
+    duracion_visita_minutos: int | None = None
     dia_vencimiento: int | None = None
     moneda: str | None = None
     metodo_actualizacion: str | None = None

@@ -82,6 +82,10 @@ from .services import tecnicos as _tecnicos  # noqa: F401
 from .services import ventas as _ventas  # noqa: F401
 
 metadata = Base.metadata
+# `visitas` **no declara tablas propias** —una visita de mantenimiento ES una
+# incidencia, revision `0027`— asi que no hace falta importarlo para el
+# autogenerate. Se deja dicho para que la ausencia de la linea se lea como una
+# decision y no como el olvido que documentan los comentarios de arriba.
 
 VERSION_TABLE = "alembic_version_libradesk"
 BASELINE = "0001_baseline"
