@@ -318,3 +318,87 @@ describe('Horizonte', () => {
     expect(llamadas.some((u) => u.includes('/api/dashboard/operativo?dias=30'))).toBe(true)
   })
 })
+
+
+describe('🔴 Se puede ir desde el dashboard hasta el evento', () => {
+  // Reportado por el humano el 2026-08-16: *«la mayoría de las cosas que están
+  // en el dashboard no se pueden clickear para ir hasta el evento»*. Un
+  // dashboard que dice que hay algo y no lleva hasta eso obliga a buscarlo a
+  // mano en otra pantalla, que es la mitad del trabajo que venía a ahorrar.
+
+  it('cada fila de un vencimiento lleva a su ficha', async () => {
+    servir({
+      ...VACIO,
+      vencimientos: {
+        ...VACIO.vencimientos,
+        contratos: {
+          total: 1,
+          items: [{
+            id: 7, numero: 'CTR-0007', cliente: 'Compulibra',
+            vence: '2026-09-01', dias_restantes: 12, estado: 'activo',
+          }],
+        },
+      },
+    })
+    montar()
+
+    const fila = await screen.findByRole('link', { name: /CTR-0007/ })
+    expect(fila).toHaveAttribute('href', '/contratos/7')
+  })
+
+  it('el número grande de la tarjeta también lleva a la pantalla', async () => {
+    servir({
+      ...VACIO,
+      vencimientos: {
+        ...VACIO.vencimientos,
+        contratos: {
+          total: 47,
+          items: [{
+            id: 7, numero: 'CTR-0007', cliente: 'Compulibra',
+            vence: '2026-09-01', dias_restantes: 12, estado: 'activo',
+          }],
+        },
+      },
+    })
+    montar()
+
+    // Se busca DENTRO de la tarjeta: los totales de abajo también son links
+    // ahora, así que un `getByRole` suelto se cae con "Found multiple
+    // elements" en cuanto dos números coinciden — pasó con un total de 4.
+    const tarjeta = (await screen.findByText('Contratos por vencer'))
+      .closest('[data-slot="card"]') as HTMLElement
+    expect(within(tarjeta).getByRole('link', { name: '47' }))
+      .toHaveAttribute('href', '/contratos')
+  })
+
+  it('🔴 un total en CERO no se linkea', async () => {
+    // El control, y de paso la regla: un link a una lista vacía es un viaje al
+    // vacío. Sin este caso, linkear TODO pasaría los dos tests de arriba igual.
+    montar()
+
+    expect(await screen.findByText('Contratos por vencer')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '0' })).toBeNull()
+  })
+
+  it('los totales de abajo llevan a su listado', async () => {
+    montar()
+
+    // Los números salen de `SUMMARY`: 4 incidencias en el rango, 8 clientes,
+    // 38 equipos. Con el escenario VACÍO ninguna tarjeta de vencimientos los
+    // repite, así que la búsqueda suelta no es ambigua acá.
+    expect(await screen.findByRole('link', { name: '4' }))
+      .toHaveAttribute('href', '/incidencias')
+    expect(screen.getByRole('link', { name: '8' })).toHaveAttribute('href', '/clientes')
+    expect(screen.getByRole('link', { name: '38' })).toHaveAttribute('href', '/equipos')
+  })
+
+  it('🔴 las horas NO se linkean: son una suma, no una lista', async () => {
+    // Linkearlas mandaría a un listado que no explica el número. Es el otro
+    // control de que no se linkeó todo por las dudas.
+    montar()
+
+    await screen.findByText('Horas invertidas')
+    expect(screen.getByText('12.5')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '12.5' })).toBeNull()
+  })
+})

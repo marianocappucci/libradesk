@@ -224,9 +224,13 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
                 min_stock=Decimal(str(stock_minimo)),
             )
         )
-        if codigo.strip():
-            _guardar_codigo(conn, item.id, codigo.strip())
-        return {"id": item.id, "nombre": item.name}
+        # 🔑 **Siempre queda con codigo.** Si el alta trae uno se respeta —el
+        # del proveedor, un EAN—; si no, se genera `PRD-NNNNNNNN`. Hasta el
+        # 2026-08-16 un alta sin codigo dejaba el producto sin ninguno y la
+        # columna del listado salia vacia, que es lo que reporto el humano.
+        codigo_final = codigo.strip() or _siguiente_codigo(conn)
+        _guardar_codigo(conn, item.id, codigo_final)
+        return {"id": item.id, "nombre": item.name, "codigo": codigo_final}
 
 
 def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
@@ -486,6 +490,47 @@ def crear_categoria(nombre: str, parent_id: int | None = None) -> dict:
 
 
 # ── Codigos / SKU ────────────────────────────────────────────────────────
+
+
+#: El prefijo del codigo interno de un producto. Misma forma que el resto de los
+#: correlativos del producto —`CTR-`, `REC-`, `ENT-`— porque son la misma clase
+#: de identificador: uno que se lee en voz alta y se busca a mano.
+_PREFIJO_CODIGO = "PRD-"
+
+
+def _siguiente_codigo(conn) -> str:
+    """`PRD-00000001`, correlativo — el codigo que se genera solo.
+
+    Pedido del humano el 2026-08-16: *"los productos deberian tener un codigo
+    que se genere automaticamente"*. Hasta hoy `codigo` existia pero habia que
+    tipearlo, asi que la mayoria de los productos no tenia ninguno y la columna
+    del listado salia vacia.
+
+    **Se calcula del maximo dentro de la misma transaccion que inserta**, igual
+    que `ContratoRepository._siguiente_numero`. Es lo que evita el duplicado
+    entre dos altas simultaneas.
+
+    🔑 **Solo mira los codigos con este prefijo.** Un codigo tipeado a mano —el
+    que trae el proveedor, un EAN— no entra en la cuenta y no la corre: los dos
+    conviven, y el automatico se usa solo cuando el alta no trae ninguno.
+    """
+    fila = conn.execute(
+        "SELECT MAX(code) AS ultimo FROM item_codes WHERE code LIKE ?",
+        (f"{_PREFIJO_CODIGO}%",),
+    ).fetchone()
+    ultimo = fila["ultimo"] if fila else None
+    if not ultimo:
+        return f"{_PREFIJO_CODIGO}00000001"
+    try:
+        siguiente = int(ultimo[len(_PREFIJO_CODIGO):]) + 1
+    except ValueError:
+        # Alguien escribio "PRD-A1" a mano. No se rompe el alta por eso: se
+        # cuenta cuantos hay y se sigue, que a lo sumo deja un salto.
+        siguiente = conn.execute(
+            "SELECT COUNT(*) AS n FROM item_codes WHERE code LIKE ?",
+            (f"{_PREFIJO_CODIGO}%",),
+        ).fetchone()["n"] + 1
+    return f"{_PREFIJO_CODIGO}{siguiente:08d}"
 
 
 def _guardar_codigo(conn, item_id: int, codigo: str) -> None:

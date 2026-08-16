@@ -97,7 +97,15 @@ function BloqueVencimiento({
           <Icono className="h-4 w-4" />
           {titulo}
         </CardDescription>
-        <CardTitle className="text-3xl">{total}</CardTitle>
+        {/* El número también lleva a la pantalla, no sólo el «Ver los N» del
+            pie: es lo más grande de la tarjeta y es lo que la mano busca.
+            Cuando el total es 0 no se linkea — un link a una lista vacía es un
+            viaje al vacío. */}
+        <CardTitle className="text-3xl">
+          {total === 0
+            ? total
+            : <Link to={verMas} className="hover:underline">{total}</Link>}
+        </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-2 text-sm">
         {total === 0 ? (
@@ -118,11 +126,22 @@ function BloqueVencimiento({
 }
 
 /** Una fila de bloque: descripción a la izquierda, cuándo a la derecha. */
-function Fila({ principal, secundario, dias }: {
+function Fila({ principal, secundario, dias, a }: {
   principal: string
   secundario?: string
   dias: number
+  /** A dónde lleva la fila. Sin esto es sólo texto, que es lo que el humano
+   *  reportó el 2026-08-16: «la mayoría de las cosas que están en el dashboard
+   *  no se pueden clickear para ir hasta el evento». Un dashboard que dice que
+   *  hay algo y no lleva hasta eso obliga a buscarlo a mano en otra pantalla. */
+  a?: string
 }) {
+  const texto = (
+    <>
+      {principal}
+      {secundario && <span className="text-muted-foreground"> · {secundario}</span>}
+    </>
+  )
   return (
     // 🔴 `min-w-0` en la FILA, no sólo en el texto: estas filas son ítems de
     // un grid, y un ítem de grid no baja de su contenido (`min-width: auto`),
@@ -130,15 +149,24 @@ function Fila({ principal, secundario, dias }: {
     // aplicarse. Se veía recién con nombres largos de verdad — con los datos
     // de ejemplo cortos, no.
     <div className="flex min-w-0 items-center justify-between gap-2">
-      <span className="min-w-0 truncate">
-        {principal}
-        {secundario && <span className="text-muted-foreground"> · {secundario}</span>}
-      </span>
+      {a
+        ? <Link to={a} className="min-w-0 truncate hover:underline">{texto}</Link>
+        : <span className="min-w-0 truncate">{texto}</span>}
       <Badge variant={tono(dias)} className="shrink-0 whitespace-nowrap">
         {cuando(dias)}
       </Badge>
     </div>
   )
+}
+
+/** Un número grande que lleva a su pantalla.
+ *
+ *  El 0 NO se linkea: un link a una lista vacía es un viaje al vacío, y de paso
+ *  distingue a simple vista lo que tiene algo para mirar de lo que no.
+ */
+function Numero({ valor, a }: { valor: number | string; a?: string }) {
+  if (!a || valor === 0) return <>{valor}</>
+  return <Link to={a} className="hover:underline">{valor}</Link>
 }
 
 /** La semana de las cuadrillas, en el dashboard.
@@ -331,7 +359,7 @@ export function Dashboard() {
             >
               {operativo.vencimientos.contratos.items.map((c) => (
                 <Fila key={c.id} principal={c.numero} secundario={c.cliente}
-                      dias={c.dias_restantes} />
+                      dias={c.dias_restantes} a={`/contratos/${c.id}`} />
               ))}
             </BloqueVencimiento>
 
@@ -343,7 +371,7 @@ export function Dashboard() {
             >
               {operativo.vencimientos.garantias.items.map((g) => (
                 <Fila key={g.id} principal={g.equipo} secundario={g.cliente}
-                      dias={g.dias_restantes} />
+                      dias={g.dias_restantes} a={`/equipos/${g.id}`} />
               ))}
             </BloqueVencimiento>
 
@@ -357,8 +385,11 @@ export function Dashboard() {
               verMas="/agenda"
             >
               {operativo.vencimientos.agenda.items.map((t) => (
+                // A la ficha del ticket y no a la agenda: la agenda es a dónde
+                // lleva «Ver los N», y desde una fila lo que se quiere es el
+                // trabajo que dice esa fila.
                 <Fila key={t.id} principal={t.titulo} secundario={t.cliente}
-                      dias={t.dias_restantes} />
+                      dias={t.dias_restantes} a={`/incidencias/${t.id}`} />
               ))}
             </BloqueVencimiento>
 
@@ -373,7 +404,7 @@ export function Dashboard() {
                 // pasa en negativo para que se lea "hace N d" y se pinte con
                 // la misma escala que un vencimiento pasado.
                 <Fila key={e.id} principal={e.equipo} secundario={e.cliente}
-                      dias={-e.dias} />
+                      dias={-e.dias} a={`/equipos/${e.id}`} />
               ))}
             </BloqueVencimiento>
           </div>
@@ -385,7 +416,9 @@ export function Dashboard() {
                   <AlarmClock className="h-4 w-4" />
                   Incidencias abiertas, por cuánto llevan esperando
                 </CardDescription>
-                <CardTitle className="text-3xl">{backlog.total_abiertas}</CardTitle>
+                <CardTitle className="text-3xl">
+                  <Numero valor={backlog.total_abiertas} a="/incidencias" />
+                </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 lg:grid-cols-2">
                 <div className="grid gap-2">
@@ -476,7 +509,9 @@ export function Dashboard() {
             <Card>
               <CardHeader>
                 <CardDescription>Incidencias</CardDescription>
-                <CardTitle className="text-3xl">{summary.incidencias_en_rango}</CardTitle>
+                <CardTitle className="text-3xl">
+                  <Numero valor={summary.incidencias_en_rango} a="/incidencias" />
+                </CardTitle>
                 <CardDescription>
                   {respondenAlRango.has('incidencias_en_rango')
                     ? 'creadas en el rango elegido'
@@ -506,6 +541,9 @@ export function Dashboard() {
             <Card>
               <CardHeader>
                 <CardDescription>Horas invertidas</CardDescription>
+                {/* Las horas NO llevan a ninguna parte, a proposito: son una SUMA,
+                    no una lista de cosas que se puedan abrir. Linkearlas a
+                    /incidencias mandaria a un listado que no explica el numero. */}
                 <CardTitle className="text-3xl">{summary.horas_en_rango.toFixed(1)}</CardTitle>
                 <CardDescription>en el rango elegido</CardDescription>
               </CardHeader>
@@ -521,7 +559,9 @@ export function Dashboard() {
             <Card>
               <CardHeader>
                 <CardDescription>Clientes</CardDescription>
-                <CardTitle className="text-3xl">{summary.total_clientes_activos}</CardTitle>
+                <CardTitle className="text-3xl">
+                  <Numero valor={summary.total_clientes_activos} a="/clientes" />
+                </CardTitle>
                 <CardDescription>activos (total, no del rango)</CardDescription>
               </CardHeader>
               <CardContent>
@@ -543,7 +583,9 @@ export function Dashboard() {
             <Card>
               <CardHeader>
                 <CardDescription>Equipos</CardDescription>
-                <CardTitle className="text-3xl">{summary.total_equipos}</CardTitle>
+                <CardTitle className="text-3xl">
+                  <Numero valor={summary.total_equipos} a="/equipos" />
+                </CardTitle>
                 <CardDescription>registrados (total, no del rango)</CardDescription>
               </CardHeader>
             </Card>

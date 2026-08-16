@@ -520,18 +520,69 @@ def cambiar_estado_sucursal(sucursal_id: int, activa: bool) -> None:
         if fila is None:
             raise ValueError("La sucursal no existe.")
         if not activa:
-            depositos = conn.execute(
-                "SELECT COUNT(*) AS n FROM locations "
-                "WHERE branch_id=? AND active=1",
-                (sucursal_id,),
-            ).fetchone()["n"]
-            if depositos:
-                raise ValueError(
-                    f"La sucursal tiene {depositos} deposito(s) de stock activo(s). "
-                    "Movelos o desactivalos antes de dar de baja la sucursal."
-                )
+            _verificar_baja_de_sucursal(conn, sucursal_id)
         conn.execute(
             "UPDATE sucursales SET activa=? WHERE id=?", (int(activa), sucursal_id)
+        )
+
+
+def _verificar_baja_de_sucursal(conn, sucursal_id: int) -> None:
+    """Se planta si la sucursal todavia tiene algo vivo colgando.
+
+    ## Que se mira, y que NO
+
+    🔴 **Las EXISTENCIAS, no el envase.** La guarda original contaba
+    `locations WHERE active=1`, o sea depositos abiertos. Eso deja pasar el caso
+    que el humano reporto el 2026-08-16: un deposito **desactivado con stock
+    adentro** no lo veia, y dar de baja la sucursal volvia esas existencias
+    invisibles sin que nadie las hubiera movido — que es exactamente lo que la
+    guarda existia para impedir. Miraba el contenedor en vez del contenido.
+
+    Se cuentan los pares (item, deposito) con saldo **distinto de cero**, y no
+    la suma total: sumando todos los items juntos, un saldo negativo por un
+    error de carga taparia uno positivo de otro producto. Y el `<> 0` en vez de
+    `> 0` es a proposito — un stock negativo tampoco es "nada que mover": es un
+    dato roto que conviene ver antes de cerrar la sucursal.
+
+    **Los depositos activos se siguen mirando**, aunque esten vacios: un
+    deposito abierto es un destino que las pantallas siguen ofreciendo, y
+    dejarlo colgando de una sucursal dada de baja es la misma clase de
+    inconsistencia.
+
+    ⚠️ **La historia NO bloquea.** `sales`, `purchase_orders` e `item_prices`
+    tambien tienen `branch_id`, y una sucursal que alguna vez vendio algo los va
+    a tener para siempre: bloquear por eso haria imposible cerrar una sucursal,
+    nunca. La baja es logica justamente para conservar esa historia — ver el
+    docstring de `cambiar_estado_sucursal`.
+    """
+    problemas = []
+
+    depositos = conn.execute(
+        "SELECT COUNT(*) AS n FROM locations WHERE branch_id=? AND active=1",
+        (sucursal_id,),
+    ).fetchone()["n"]
+    if depositos:
+        problemas.append(f"{depositos} deposito(s) de stock activo(s)")
+
+    con_saldo = conn.execute(
+        "SELECT COUNT(*) AS n FROM ("
+        "  SELECT sm.item_id, sm.location_id"
+        "  FROM stock_movements sm"
+        "  JOIN locations l ON l.id = sm.location_id"
+        "  WHERE l.branch_id = ?"
+        "  GROUP BY sm.item_id, sm.location_id"
+        "  HAVING SUM(sm.quantity_delta) <> 0"
+        ") x",
+        (sucursal_id,),
+    ).fetchone()["n"]
+    if con_saldo:
+        problemas.append(f"{con_saldo} producto(s) con existencias en sus depositos")
+
+    if problemas:
+        raise ValueError(
+            "La sucursal todavia tiene " + " y ".join(problemas) + ". "
+            "Transferi el stock a otra sucursal y desactiva los depositos antes "
+            "de dar de baja la sucursal."
         )
 
 

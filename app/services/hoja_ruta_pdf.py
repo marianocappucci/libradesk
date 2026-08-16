@@ -40,7 +40,7 @@ from datetime import date, datetime
 
 from fpdf import FPDF
 from libracore.pdf_generator import (
-    _ACCENT_DARK, _CW, _INK, _LINE, _LX, _MUTED, _RX,
+    _ACCENT_DARK, _CW, _INK, _LINE, _LX, _MUTED, _RIGHT_W, _RX,
     _draw_header_block, _empresa, _TextoSeguroPDF, _wrap_text,
 )
 
@@ -50,6 +50,17 @@ from .pdf_texto import ancho_util, recortar
 # preposiciones que se le vayan a capitalizar.
 _LETRA = "HR"
 _TITULO = "Hoja de ruta"
+
+#: El ancho de la celda del VALOR en las filas meta del membrete. Sale de
+#: `_draw_header_block`, que las dibuja con `pdf.cell(vw - 35, …)` sobre
+#: `vw = _RIGHT_W`. Se deriva en vez de escribir el 31 medido: si el motor
+#: cambia el ancho de esa caja, el recorte lo acompaña.
+#:
+#: 🔸 La raíz del problema es del motor —ese `cell()` no recorta— y arreglarlo
+#: allá lo cerraría para los seis productos. No se hizo acá porque es un cambio
+#: de LibraCore con su propio release; los otros tres PDF de este repo no lo
+#: sufren porque sólo mandan valores cortos generados por el sistema.
+_ANCHO_VALOR_MEMBRETE = _RIGHT_W - 35
 
 _LINEA = 4.5
 
@@ -91,8 +102,23 @@ class _HojaRutaPDF(_TextoSeguroPDF, FPDF):
 
     def header(self) -> None:  # noqa: D102 — la firma la impone fpdf2
         if self.page_no() == 1:
+            # 🔴 **El nombre del equipo se recorta; los otros dos no lo
+            # necesitan.**
+            #
+            # `_draw_header_block` escribe cada valor con un `cell()`, que no
+            # recorta ni envuelve. En los otros tres PDF del producto eso nunca
+            # molestó porque ahí sólo van valores que genera el sistema —número
+            # de ticket, de comprobante, fechas—, todos cortos. Acá va el
+            # **nombre de la cuadrilla, que lo tipea una persona**: medido con
+            # un nombre de una frase, la celda de 31 mm dibujaba 151 y el texto
+            # llegaba a 312 mm en una hoja de 210.
+            #
+            # El recorte va con la MISMA fuente que usa el membrete para los
+            # valores (`Helvetica-Bold 7`), porque `recortar` mide con la fuente
+            # activa: con otra, el corte queda largo o corto.
+            self.set_font("Helvetica", "B", 7)
             info = [
-                ("Equipo:", self.datos["equipo"]),
+                ("Equipo:", recortar(self, self.datos["equipo"], _ANCHO_VALOR_MEMBRETE)),
                 ("Fecha:", _dia(self.datos["dia"])),
                 ("Paradas:", str(len(self.datos["paradas"]))),
             ]
@@ -251,13 +277,26 @@ def _cierre(pdf: FPDF) -> None:
 
     _titulo_seccion(pdf, "Cierre de la salida")
 
+    # 🔴 Los tres grupos se reparten `_CW`, y NO llevan medidas fijas.
+    #
+    # Estaban en `30 + 34 + 6 = 70` mm cada uno: **210 mm para un marco de
+    # 174**. El tercero —«Km recorridos»— arrancaba en 188 mm y su renglón se
+    # dibujaba de 189 a 220, o sea **fuera de la hoja A4**, que mide 210. Pasaba
+    # siempre, con cualquier dato, y por eso el humano reportó los márgenes.
+    #
+    # Derivarlos de `_CW` lo vuelve imposible por construcción: sumen lo que
+    # sumen las partes, los tres grupos entran en el ancho útil.
     pdf.set_font("Helvetica", "", 8)
-    for etiqueta in ("Km al salir", "Km al regresar", "Km recorridos"):
+    etiquetas = ("Km al salir", "Km al regresar", "Km recorridos")
+    grupo = _CW / len(etiquetas)
+    et_ancho, separacion = 27.0, 5.0
+    linea_ancho = grupo - et_ancho - separacion
+    for etiqueta in etiquetas:
         pdf.set_text_color(*_MUTED)
-        pdf.cell(30, _LINEA, f"{etiqueta}:")
-        _renglon(pdf, 34)
-        pdf.cell(34, _LINEA, "")
-        pdf.cell(6, _LINEA, "")
+        pdf.cell(et_ancho, _LINEA, f"{etiqueta}:")
+        _renglon(pdf, linea_ancho)
+        pdf.cell(linea_ancho, _LINEA, "")
+        pdf.cell(separacion, _LINEA, "")
     pdf.ln(_LINEA + 6)
 
     pdf.set_draw_color(*_LINE)
