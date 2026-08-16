@@ -51,6 +51,7 @@ import {
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 import { SelectorDeSucursal } from '@/components/sucursal'
+import { LOGO, WORDMARK } from '@/branding'
 
 /* El TILE del sidebar abarca el ítem entero —icono y texto—, y marca la sección
  * elegida. Pedido del humano el 2026-08-14, cambiando la primera versión, que le
@@ -66,6 +67,18 @@ import { SelectorDeSucursal } from '@/components/sucursal'
 export const Layout = createLayout({
   productName: 'LibraDesk',
   productInitial: 'L',
+  // El logo y el nombre en Montserrat Bold (libra-ui v0.23.0). Las clases
+  // salen de `@/branding`, el mismo archivo que usa el login: es lo que
+  // garantiza que las dos pantallas escriban "LibraDesk" igual.
+  //
+  // 36 px es eleccion del humano (2026-08-16). El override de colapsado NO es
+  // decorativo: con la sidebar en modo icono el ancho util son 32 px, y sin
+  // bajarlo el logo se sale de la barra.
+  logo: {
+    src: LOGO,
+    className: 'h-9 w-9 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8',
+  },
+  wordmarkClassName: `${WORDMARK} text-[15px]`,
   navSections: [
     // Sin label: es una sola entrada y un encabezado "General" arriba de un
     // único ítem es ruido.
