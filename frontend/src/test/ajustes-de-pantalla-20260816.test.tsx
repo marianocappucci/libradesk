@@ -150,7 +150,9 @@ describe('La barra de cuotas flota igual que la de incidencias', () => {
     const user = userEvent.setup()
     const { Cuotas } = await import('../pages/Cuotas')
     render(<Cuotas />)
-    await screen.findByText(/Alquiler agosto 2026/)
+    // Por el contrato y no por el concepto: el concepto se fue de la grilla a
+    // la ficha el 2026-08-16, y esperar por él acá se colgaba.
+    await screen.findByText('CTR-00000001')
 
     await user.click(screen.getByRole('checkbox', { name: /Elegir la cuota/ }))
 
@@ -158,6 +160,116 @@ describe('La barra de cuotas flota igual que la de incidencias', () => {
     const tarjeta = boton.closest('[data-slot="card"]') as HTMLElement
     expect(tarjeta.className).toMatch(/\bsticky\b/)
     expect(tarjeta.className).toMatch(/\bbottom-/)
+  })
+})
+
+// ── 3. Cuotas: menos columnas, y la ficha al click ─────────────────────────
+//
+// Pedido del humano (2026-08-16): *"en cuotas de contratos los datos son tantos
+// que hace que tenga que ser scrolleable horizontalmente, no quiero que sea
+// scrolleable, mostrá menos cosas y en tal caso que haciendo click en la fila me
+// muestre el detalle en un modal"*.
+//
+// ⚠️ Igual que con el `sticky`: jsdom no calcula anchos, así que **acá no se
+// prueba que la tabla entre en la pantalla**. Lo que se fija es lo que sí es
+// verificable sin layout —qué columnas quedaron, qué se fue y que la ficha lo
+// muestre—; el ancho se midió aparte, en Chromium.
+
+const CUOTA_COMPLETA = {
+  ...CUOTA,
+  concepto: 'Alquiler agosto 2026 — CTR-00000001',
+  importe_base: 50000, bonificacion: -5000, impuestos: 10500, interes_mora: 0,
+  importe_total: 55500,
+  observaciones: 'Se pactó bonificación por pago adelantado.',
+}
+
+describe('Cuotas muestra menos columnas y abre la ficha al click', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url)
+      if (u.includes('/api/cuotas')) return Promise.resolve(json([CUOTA_COMPLETA]))
+      return Promise.resolve(json([]))
+    }))
+  })
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  async function montar() {
+    const user = userEvent.setup()
+    const { Cuotas } = await import('../pages/Cuotas')
+    render(<Cuotas />)
+    await screen.findByText('CTR-00000001')
+    return user
+  }
+
+  it('la grilla queda en cinco columnas', async () => {
+    await montar()
+    const encabezados = screen.getAllByRole('columnheader')
+
+    // El número exacto, no "menos que antes": una columna que vuelva a
+    // colarse es exactamente lo que hay que ver.
+    expect(encabezados).toHaveLength(5)
+    // Y las que quedaron son éstas. Sin esta mitad, la de arriba pasaría igual
+    // habiendo borrado las columnas equivocadas.
+    for (const titulo of ['Contrato', 'Período', 'Importe', 'Estado']) {
+      expect(screen.getByRole('columnheader', { name: new RegExp(titulo) })).toBeInTheDocument()
+    }
+  })
+
+  it('🔴 concepto, cargo y vencimiento ya no están en la grilla', async () => {
+    await montar()
+    const tabla = screen.getByRole('table')
+
+    expect(within(tabla).queryByText(/Alquiler agosto 2026/)).toBeNull()
+    expect(within(tabla).queryByRole('columnheader', { name: /Concepto|Cargo|Vence|Acciones/ })).toBeNull()
+    // El control de que la grilla SÍ se dibujó: si no hubiera renderizado nada,
+    // las tres ausencias de arriba pasarían solas.
+    expect(within(tabla).getByText('CTR-00000001')).toBeInTheDocument()
+    expect(within(tabla).getByText('Estudio Contable Sur')).toBeInTheDocument()
+  })
+
+  it('el click en la fila abre la ficha con lo que se sacó de la grilla', async () => {
+    const user = await montar()
+    await user.click(screen.getByText('CTR-00000001').closest('tr')!)
+
+    const ficha = await screen.findByRole('dialog')
+    expect(within(ficha).getByText(/Alquiler agosto 2026 — CTR-00000001/)).toBeInTheDocument()
+    expect(within(ficha).getByText('Vence')).toBeInTheDocument()
+    expect(within(ficha).getByText('Tipo de cargo')).toBeInTheDocument()
+    // Y el desglose del importe, que no se veía en NINGUNA pantalla.
+    expect(within(ficha).getByText('Importe base')).toBeInTheDocument()
+    expect(within(ficha).getByText('Bonificación')).toBeInTheDocument()
+    expect(within(ficha).getByText('Impuestos')).toBeInTheDocument()
+    expect(within(ficha).getByText(/Se pactó bonificación/)).toBeInTheDocument()
+  })
+
+  it('los ajustes en cero no ocupan un renglón', async () => {
+    // El control del caso de arriba: la ficha no lista siempre los cuatro. El
+    // interés por mora es 0 en la cuota completa, así que no tiene que estar —
+    // y bonificación e impuestos, que no son 0, sí están (test anterior).
+    const user = await montar()
+    await user.click(screen.getByText('CTR-00000001').closest('tr')!)
+
+    const ficha = await screen.findByRole('dialog')
+    expect(within(ficha).queryByText('Interés por mora')).toBeNull()
+  })
+
+  it('🔴 tildar una cuota NO abre la ficha, pero el resto de la fila sí', async () => {
+    // La trampa del `onRowClick` de libra-ui: ignora `button` y `a`, pero no
+    // `input`. Sin el `stopPropagation` del casillero, elegir una cuota para el
+    // remito abriría el modal encima.
+    const user = await montar()
+    await user.click(screen.getByRole('checkbox', { name: /Elegir la cuota/ }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // Y el tilde sí hizo lo suyo: la barra del remito apareció.
+    expect(await screen.findByRole('button', { name: /Generar remito/ })).toBeInTheDocument()
+
+    // 🔑 La segunda mitad es la que hace que la ausencia de arriba signifique
+    // algo: sin ella, este test pasaría igual con el `onRowClick` sacado de
+    // cuajo — que es exactamente lo que pasaba antes de este cambio.
+    await user.click(screen.getByText('CTR-00000001').closest('tr')!)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 })
 
