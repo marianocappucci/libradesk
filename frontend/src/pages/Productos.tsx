@@ -36,9 +36,22 @@ export type Producto = {
   categoria_id: number | null
   categoria: string
   codigo: string
+  /** La alícuota de IVA (`0.21`, `0.105`, `0.27` o `0`). Es la que lleva cada
+   *  línea del remito que sale de una venta, y de ahí la factura de SOS.
+   *  El backend nunca la devuelve vacía: sin cargar, contesta 21%. */
+  iva_rate: number
   stock: number
   bajo_minimo: boolean
 }
+
+/** Las cuatro que ARCA sabe mapear. La lista vive en `app/services/iva.py` y
+ *  acá va sólo para dibujarla — el backend valida igual. */
+const ALICUOTAS = [
+  { valor: '0.21', label: '21 %' },
+  { valor: '0.105', label: '10,5 %' },
+  { valor: '0.27', label: '27 %' },
+  { valor: '0', label: 'Exento' },
+]
 
 type Categoria = { id: number; nombre: string }
 
@@ -146,6 +159,11 @@ function FormProducto({ producto, categorias, onGuardar }: {
   const [categoriaId, setCategoriaId] = useState(
     producto?.categoria_id ? String(producto.categoria_id) : 'ninguna',
   )
+  // `String(0.105)` da "0.105", que es exactamente el valor de la opción. Sin
+  // producto (el alta) arranca en 21%, que es el default del backend.
+  const [ivaRate, setIvaRate] = useState(
+    producto ? String(producto.iva_rate) : '0.21',
+  )
 
   async function guardar() {
     const cuerpo = {
@@ -156,6 +174,10 @@ function FormProducto({ producto, categorias, onGuardar }: {
       unidad,
       categoria_id: categoriaId === 'ninguna' ? null : Number(categoriaId),
       activo: producto?.activo ?? true,
+      // Siempre viaja, también al editar: el PUT reconstruye el producto
+      // entero del lado del motor, y mandarlo sólo cuando cambió dejaría la
+      // alícuota a merced del rescate del backend en vez de decirla.
+      iva_rate: Number(ivaRate),
       // El código sólo viaja en el alta: cambiarlo después es otra operación
       // (un producto puede tener varios códigos) y tiene su propio endpoint.
       ...(editando ? {} : { codigo: codigo.trim() }),
@@ -209,6 +231,21 @@ function FormProducto({ producto, categorias, onGuardar }: {
               <Input id="p-precio" type="number" value={precio}
                      onChange={(e) => setPrecio(e.target.value)} />
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="p-iva">IVA</Label>
+            <Select value={ivaRate} onValueChange={setIvaRate}>
+              <SelectTrigger id="p-iva"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ALICUOTAS.map((a) => (
+                  <SelectItem key={a.valor} value={a.valor}>{a.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              La lleva cada línea del remito que sale de una venta, y de ahí la
+              factura.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">

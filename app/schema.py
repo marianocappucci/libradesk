@@ -75,6 +75,11 @@ from .services import reparaciones as _reparaciones  # noqa: F401
 from .services import sectores as _sectores  # noqa: F401
 from .services import servicios as _servicios  # noqa: F401
 from .services import tecnicos as _tecnicos  # noqa: F401
+# `ventas` entra por `VentaRemito` (revision `0026`), que es su UNICA tabla
+# SQLAlchemy: el resto del modulo es LibraCommerce por conexion cruda. Sin esta
+# linea la tabla queda fuera de `metadata` y el autogenerate ni la ve — el mismo
+# olvido que arriba se documenta para `ingresos` y `config_facturacion`.
+from .services import ventas as _ventas  # noqa: F401
 
 metadata = Base.metadata
 
