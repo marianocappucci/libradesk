@@ -29,6 +29,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, ApiError, type EquipoTrabajo } from '../api'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 import { Conmutador, type Pestania } from '@/components/conmutador'
+import { GenerarVisitas } from '@/components/generar-visitas'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -181,6 +182,10 @@ export function Agenda() {
             </SelectContent>
           </Select>
         </div>
+        {/* Generar las visitas de mantenimiento va acá y no en una pantalla
+            propia: lo que produce **son** entradas de esta agenda, así que se
+            hace donde se ve el resultado. */}
+        <GenerarVisitas onGenerado={() => setParams(con({}))} />
       </EncabezadoDePantalla>
 
       {/* La barra de navegación, con la forma de Google Calendar: `Hoy`, las dos

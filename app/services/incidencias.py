@@ -7,12 +7,12 @@ estado — 31 filas reales migradas desde Postgres). `tecnico_id`/
 donde haya coincidencia."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func,
-    select, update,
+    Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
+    delete, func, select, text, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -50,6 +50,27 @@ MODALIDAD_LABELS = {"on_site": "On-site", "remoto": "Remoto"}
 
 class Incidencia(Base):
     __tablename__ = "incidencias"
+    __table_args__ = (
+        # Generar dos veces el mismo periodo de un contrato tiene que ser
+        # imposible en la base, no solo improbable en el codigo. Mismo criterio
+        # que `ix_cuota_periodo_recurrente` de la revision `0025`.
+        #
+        # **Parcial**: deja afuera los reclamos normales, que tienen las dos
+        # columnas en NULL y son todos. PostgreSQL es el unico motor de este
+        # producto (guarda en `app/database.py`), asi que el indice parcial esta
+        # disponible sin condiciones.
+        Index(
+            "ix_incidencia_visita_periodo",
+            "contrato_id", "periodo_visita",
+            unique=True,
+            # Con `text()` y no una expresion sobre las columnas: todavia no
+            # existen como atributos en este punto. Tiene que ser **igual,
+            # caracter por caracter**, a la de la migracion — si difieren,
+            # `alembic check` reporta el indice como cambio pendiente en cada
+            # corrida.
+            postgresql_where=text("periodo_visita IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     cliente_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -129,6 +150,26 @@ class Incidencia(Base):
     notas: Mapped[str | None] = mapped_column(Text)
     resolucion: Mapped[str | None] = mapped_column(Text)
     estado_facturacion: Mapped[str | None] = mapped_column(String(20))
+    # ── La visita de mantenimiento que generó un contrato ───────────────
+    #
+    # Las dos en NULL —que es como nacen los reclamos normales— significa que
+    # este ticket no es una visita programada. Con las dos puestas, es la visita
+    # de ESE contrato para ESE período, y el único parcial de la revisión `0027`
+    # impide generar el mismo período dos veces.
+    #
+    # 🔑 **Una visita es una incidencia y no una entidad nueva.** Decisión del
+    # humano del 2026-08-16: una incidencia ya trae agenda, hoja de ruta,
+    # cuadrilla, técnico, horas, materiales, cierre con control y camino a
+    # facturación. Una entidad propia obligaba a rehacer todo eso y le dejaba
+    # dos bandejas al técnico.
+    #
+    # Sin `ondelete`: el desenlace lo hace `ContratoRepository.delete()`, igual
+    # que el resto de las referencias de esta tabla — el pragma de FKs está
+    # apagado en las conexiones de SQLAlchemy y los `ondelete` no corren.
+    contrato_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contratos.id"), index=True,
+    )
+    periodo_visita: Mapped[date | None] = mapped_column(Date)
     # ── Qué parte de este reclamo cubre el abono del cliente ────────────
     #
     # Sólo tiene sentido si el cliente es `tipo_facturacion='mensual'`. Ver la
@@ -193,6 +234,23 @@ def _to_dict(i: Incidencia) -> dict:
         "tecnico_id": i.tecnico_id,
         "recepcionista_id": i.recepcionista_id,
         "vendedor_id": i.vendedor_id,
+        # 🔴 De qué contrato salió, si es una visita de mantenimiento. **Se
+        # guardaban desde la revisión `0027` y no se devolvían**, así que la
+        # pantalla no tenía cómo distinguir una visita preventiva de un reclamo
+        # común — y el sentido de que la visita SEA una incidencia es justamente
+        # que aparezca en la misma bandeja, distinguible.
+        #
+        # No lo agarró ningún test: los del generador leen su propia salida, y
+        # el de la cobertura mira un campo que ya estaba en este dict. Lo
+        # destapó ejercitar el circuito real en dev.
+        "contrato_id": i.contrato_id,
+        "periodo_visita": (
+            i.periodo_visita.isoformat() if i.periodo_visita else None
+        ),
+        # Derivado, para que la pantalla no tenga que saber que "tiene contrato"
+        # significa "es una visita". Si mañana un reclamo común se ata a un
+        # contrato, la regla cambia acá y no en cada vista.
+        "es_visita_mantenimiento": i.periodo_visita is not None,
         "modalidad": i.modalidad,
         "fecha_programada": (
             i.fecha_programada.isoformat() if i.fecha_programada else None

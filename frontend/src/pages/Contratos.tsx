@@ -41,6 +41,11 @@ const contratoSchema = z.object({
   fecha_fin: z.string().optional(),
   estado: z.string(),
   periodicidad: z.string(),
+  /** Cada cuánto se VISITA, que no es cada cuánto se cobra. `'ninguna'` es el
+   *  valor de pantalla para "no genera visitas"; en la API viaja como `null`.
+   *  Un `<Select>` de Radix no admite `value=""`, que es por qué hace falta el
+   *  centinela en vez de la cadena vacía. */
+  frecuencia_visita: z.string(),
   metodo_actualizacion: z.string(),
   dia_vencimiento: z.string().optional(),
   domicilio_instalacion: z.string().trim().optional(),
@@ -80,7 +85,8 @@ export function Contratos() {
     resolver: zodResolver(contratoSchema),
     defaultValues: {
       tipo_contrato: 'alquiler', cliente_id: '', fecha_inicio: '', fecha_fin: '',
-      estado: 'borrador', periodicidad: 'mensual', metodo_actualizacion: 'manual',
+      estado: 'borrador', periodicidad: 'mensual',
+      frecuencia_visita: 'ninguna', metodo_actualizacion: 'manual',
       dia_vencimiento: '', domicilio_instalacion: '', responsable: '',
       observaciones: '', importe: '',
     },
@@ -129,7 +135,8 @@ export function Contratos() {
     form.reset({
       tipo_contrato: 'alquiler', cliente_id: '',
       fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '',
-      estado: 'borrador', periodicidad: 'mensual', metodo_actualizacion: 'manual',
+      estado: 'borrador', periodicidad: 'mensual',
+      frecuencia_visita: 'ninguna', metodo_actualizacion: 'manual',
       dia_vencimiento: '', domicilio_instalacion: '', responsable: '',
       observaciones: '', importe: '',
     })
@@ -146,6 +153,10 @@ export function Contratos() {
       estado: values.estado,
       periodicidad: values.periodicidad,
       metodo_actualizacion: values.metodo_actualizacion,
+      // `'ninguna'` es el centinela de pantalla; la API espera `null`.
+      frecuencia_visita: (
+        values.frecuencia_visita === 'ninguna' ? null : values.frecuencia_visita
+      ),
     }
     if (values.fecha_fin) body.fecha_fin = values.fecha_fin
     if (values.dia_vencimiento) body.dia_vencimiento = Number(values.dia_vencimiento)
@@ -299,6 +310,27 @@ export function Contratos() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </FormItem>
+                    )} />
+                    {/* Cada cuánto se VISITA. Va justo debajo de la
+                        periodicidad de cobro porque es la distinción que hay
+                        que ver: son dos cadencias distintas y se confunden. */}
+                    <FormField control={form.control} name="frecuencia_visita" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Visita de mantenimiento</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="ninguna">No genera visitas</SelectItem>
+                            {Object.entries(PERIODICIDAD_LABELS).map(([p, label]) => (
+                              <SelectItem key={p} value={p}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Cada cuánto se visita, que no es cada cuánto se cobra.
+                          Se puede cobrar mensual y visitar trimestral.
+                        </FormDescription>
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="dia_vencimiento" render={({ field }) => (

@@ -78,7 +78,16 @@ export const Layout = createLayout({
     src: LOGO,
     className: 'h-9 w-9 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8',
   },
-  wordmarkClassName: `${WORDMARK} text-[15px]`,
+  // 🔴 El interlineado va PEGADO al tamano (`/[21px]`) y no como `leading-*`
+  // aparte. En Tailwind v4 una utilidad de tamano emite tambien `line-height`,
+  // asi que el `leading-none` que libra-ui pone por defecto pierde contra este
+  // `text-[15px]` y el nombre se queda con 22,5 px de caja. Medido en el
+  // navegador el 2026-08-16: con `leading-none` suelto el bloque daba 37,5
+  // contra los 36 del logo, y con esto da 36 exactos.
+  //
+  // 21 no es un numero magico: es 36 (el alto del logo) menos los 15 de la
+  // linea de la empresa. Si cambia cualquiera de los dos, este cambia.
+  wordmarkClassName: `${WORDMARK} text-[15px]/[21px]`,
   navSections: [
     // Sin label: es una sola entrada y un encabezado "General" arriba de un
     // único ítem es ruido.

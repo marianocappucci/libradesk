@@ -148,6 +148,23 @@ class Periodo:
 
 
 def periodo_de(contrato: Contrato, ancla: date) -> Periodo:
+    """El periodo de FACTURACION de calendario que contiene a `ancla`.
+
+    Envoltorio de `periodo_por_cadencia()` sobre la periodicidad de **cobro**.
+    Se separaron el 2026-08-16, cuando aparecio el segundo consumidor de la
+    misma aritmetica: las visitas de mantenimiento, que tienen su propia
+    cadencia (`contratos.frecuencia_visita`) porque cobrar y visitar no son lo
+    mismo — se puede cobrar mensual y visitar trimestral.
+
+    Una sola aritmetica con dos llamadores, y no dos copias que puedan
+    divergir: el recorte de dia de `_sumar_meses()` y la alineacion al anio de
+    los multi-mes son sutiles, y la segunda copia iba a ser la que se olvidara
+    de alguno.
+    """
+    return periodo_por_cadencia(contrato.periodicidad, ancla)
+
+
+def periodo_por_cadencia(cadencia: str, ancla: date) -> Periodo:
     """El periodo de CALENDARIO que **contiene** a `ancla`.
 
     🔴 **Los periodos son de calendario, no se cuentan desde `fecha_inicio`.**
@@ -166,7 +183,7 @@ def periodo_de(contrato: Contrato, ancla: date) -> Periodo:
     ene-mar, abr-jun, jul-sep, oct-dic sin importar cuando arranco el contrato,
     y el primero le sale prorrateado igual que al mensual.
     """
-    paso = _MESES_POR_PERIODICIDAD[contrato.periodicidad]
+    paso = _MESES_POR_PERIODICIDAD[cadencia]
     # En que bloque del anio cae el ancla. Para el mensual (paso 1) esto es
     # simplemente su mes.
     bloque = (ancla.month - 1) // paso

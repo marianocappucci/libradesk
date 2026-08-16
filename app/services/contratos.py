@@ -80,6 +80,16 @@ ESTADOS_CERRADOS = ("rescindido", "finalizado")
 
 PERIODICIDADES = ("mensual", "bimestral", "trimestral", "semestral", "anual")
 
+# Las cadencias de VISITA válidas. Son las mismas que las de facturación, y eso
+# no es casualidad ni pereza: las dos las resuelve `cuotas.periodo_por_cadencia()`,
+# así que ofrecer una sexta acá rompería esa función sin avisar.
+#
+# Es un alias y no una segunda tupla a propósito. `visitas.py` lo importa de acá
+# —no puede definirlo él, porque ya importa este módulo y sería un ciclo— y con
+# dos listas escritas aparte, agregar "quincenal" a una y no a la otra deja el
+# contrato aceptando algo que el generador después saltea en silencio.
+FRECUENCIAS_VISITA = PERIODICIDADES
+
 # `indice` queda declarado pero se comporta como `manual` hasta que se defina de
 # donde sale el indice — es una de las decisiones que el diseno dejo abiertas.
 # Declararlo ahora evita una migracion despues solo para agregar un valor.
@@ -166,6 +176,21 @@ class Contrato(Base):
     )
 
     periodicidad: Mapped[str] = mapped_column(String(20), nullable=False, default="mensual")
+    # ── Cada cuánto se VISITA, que no es cada cuánto se cobra ───────────
+    #
+    # `periodicidad` de arriba es la cadencia de **facturación**. Ésta es la de
+    # las visitas de mantenimiento, y son dos cosas distintas: se puede cobrar
+    # mensual y visitar trimestral (decisión del humano, 2026-08-16). Reusar
+    # una sola columna ataba los dos conceptos, y cambiar cómo se factura un
+    # contrato le habría cambiado la cadencia de visitas en silencio.
+    #
+    # 🔑 **NULL = no genera visitas**, y es el default. Un contrato que ya
+    # existe se comporta exactamente como hoy hasta que alguien le ponga una
+    # frecuencia: la adopción es explícita. Ver la revisión `0027`.
+    frecuencia_visita: Mapped[str | None] = mapped_column(String(20))
+    # Cuánto dura, para que la agenda detecte choques. Nullable: no siempre se
+    # sabe, y `agenda.validar_agenda()` tolera un turno sin duración.
+    duracion_visita_minutos: Mapped[int | None] = mapped_column(Integer)
     dia_vencimiento: Mapped[int | None] = mapped_column(Integer)
     moneda: Mapped[str] = mapped_column(String(3), nullable=False, default="ARS")
     metodo_actualizacion: Mapped[str] = mapped_column(
@@ -319,6 +344,8 @@ def _to_dict(
         "fecha_fin": c.fecha_fin.isoformat() if c.fecha_fin else None,
         "renovacion_automatica": bool(c.renovacion_automatica),
         "periodicidad": c.periodicidad,
+        "frecuencia_visita": c.frecuencia_visita,
+        "duracion_visita_minutos": c.duracion_visita_minutos,
         "dia_vencimiento": c.dia_vencimiento,
         "moneda": c.moneda,
         "metodo_actualizacion": c.metodo_actualizacion,
@@ -445,6 +472,11 @@ class ContratoRepository:
         for campo, validos, etiqueta in (
             ("estado", ESTADOS_CONTRATO, "Estado"),
             ("periodicidad", PERIODICIDADES, "Periodicidad"),
+            # Se valida acá y no sólo en la pantalla: una frecuencia que la
+            # aritmética de períodos no entiende dejaría el contrato sin generar
+            # visitas **en silencio** — `_proponer()` la saltea para no tumbar
+            # la previsualización entera, así que si entra acá no avisa nadie.
+            ("frecuencia_visita", FRECUENCIAS_VISITA, "Frecuencia de visita"),
             ("metodo_actualizacion", METODOS_ACTUALIZACION, "Método de actualización"),
             ("moneda", MONEDAS, "Moneda"),
         ):
