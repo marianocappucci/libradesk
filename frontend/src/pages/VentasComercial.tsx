@@ -106,13 +106,25 @@ export function Ventas() {
   // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
   // —el central que abastece a las dos— y el selector muestra cuál es cuál.
   const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
+  // Vive acá y no en el formulario porque el modal se cierra al guardar: el
+  // aviso tiene que sobrevivirle.
+  const [altaDeEquipos, setAltaDeEquipos] = useState(0)
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
     <Pagina titulo="Ventas" icono={ClipboardList} error={error}
             acciones={<FormVenta clientes={clientes} productos={productos}
-                                 depositos={depositos} onGuardar={conError} />}>
+                                 depositos={depositos} onGuardar={conError}
+                                 setAltaDeEquipos={setAltaDeEquipos} />}>
+      {altaDeEquipos > 0 && (
+        <p className="rounded-md border border-dashed p-3 text-sm">
+          Se {altaDeEquipos === 1 ? 'registró' : 'registraron'}{' '}
+          <strong>{altaDeEquipos} {altaDeEquipos === 1 ? 'equipo' : 'equipos'}</strong>{' '}
+          en el parque del cliente. Cargales el número de serie cuando los
+          instales.
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
         Comprobante interno. Para facturarla, abrí la venta y generá su{' '}
         <strong>remito</strong>: es lo que se manda desde{' '}
@@ -244,9 +256,12 @@ function AccionRecibo({ venta, onEmitido }: {
   )
 }
 
-function FormVenta({ clientes, productos, depositos, onGuardar }: {
+function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos }: {
   clientes: Cliente[]; productos: Producto[]; depositos: DepositoStock[]
   onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
+  /** Cuántos equipos dejó la venta en el parque del cliente. Lo muestra la
+   *  página, no este formulario: el modal se cierra al guardar. */
+  setAltaDeEquipos: (n: number) => void
 }) {
   const { activa } = useSucursal()
   const [abierto, setAbierto] = useState(false)
@@ -280,17 +295,27 @@ function FormVenta({ clientes, productos, depositos, onGuardar }: {
   }
 
   async function guardar() {
-    const ok = await onGuardar(() => api.post('/api/ventas', {
-      cliente_id: clienteId ? Number(clienteId) : null,
-      deposito_id: Number(depositoId),
-      sucursal_id: activa?.id ?? null,
-      items: lineas.map((l) => ({
-        item_id: l.item_id, descripcion: l.descripcion,
-        cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0,
-      })),
-      pagos: total > 0 ? [{ medio, monto: total }] : [],
-    }))
-    if (ok) { setAbierto(false); setLineas([]); setClienteId('') }
+    let dadosDeAlta = 0
+    const ok = await onGuardar(async () => {
+      const r = await api.post<{ equipos_dados_de_alta?: number }>('/api/ventas', {
+        cliente_id: clienteId ? Number(clienteId) : null,
+        deposito_id: Number(depositoId),
+        sucursal_id: activa?.id ?? null,
+        items: lineas.map((l) => ({
+          item_id: l.item_id, descripcion: l.descripcion,
+          cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0,
+        })),
+        pagos: total > 0 ? [{ medio, monto: total }] : [],
+      })
+      dadosDeAlta = r.equipos_dados_de_alta ?? 0
+    })
+    if (ok) {
+      setAbierto(false); setLineas([]); setClienteId('')
+      // Un alta automática que nadie ve es indistinguible de que no haya
+      // pasado. Se avisa **sólo cuando hubo algo**: un "0 equipos" en cada
+      // venta de consumibles sería ruido en la pantalla más usada.
+      setAltaDeEquipos(dadosDeAlta)
+    }
   }
 
   return (
