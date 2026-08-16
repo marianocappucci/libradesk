@@ -273,25 +273,36 @@ describe('🔴 Pieza B: el remito de una cuota', () => {
 
 
 describe('El listado', () => {
-  it('una cuota que ya salió en un remito no ofrece anular', async () => {
-    // El backend lo rechaza con 422, así que ofrecerlo sería ofrecer un error.
+  /** Abre la ficha de una cuota clickeando su fila. */
+  async function abrirFicha(contrato: string) {
+    const user = userEvent.setup()
     render(<Cuotas />)
-    await screen.findByText('CTR-00000001')
+    await screen.findByText(contrato)
+    await user.click(screen.getByText(contrato).closest('tr')!)
+    return { user, ficha: await screen.findByRole('dialog') }
+  }
 
-    const conRemito = screen.getByText('CTR-00000002').closest('tr')!
-    expect(within(conRemito).queryByRole('button', { name: 'Anular' })).toBeNull()
+  it('🔴 una cuota que ya salió en un remito no ofrece anular', async () => {
+    // El backend lo rechaza con 422, así que ofrecerlo sería ofrecer un error.
+    // Desde el 2026-08-16 el botón vive en la ficha y no en una columna, pero
+    // la regla de cuándo aparece es la misma.
+    const { ficha } = await abrirFicha('CTR-00000002')
+    expect(within(ficha).queryByRole('button', { name: /Anular/ })).toBeNull()
+  })
 
-    // Control: la que sí se puede anular lo ofrece. Sin esto, una condición que
-    // escondiera el botón SIEMPRE pasaría este test igual.
-    const normal = screen.getByText('CTR-00000001').closest('tr')!
-    expect(within(normal).getByRole('button', { name: 'Anular' })).toBeInTheDocument()
+  it('el control: la que sí se puede anular lo ofrece', async () => {
+    // Sin esto, una condición que escondiera el botón SIEMPRE pasaría el test
+    // de arriba igual.
+    const { ficha } = await abrirFicha('CTR-00000001')
+    expect(within(ficha).getByRole('button', { name: /Anular/ })).toBeInTheDocument()
   })
 
   it('el concepto lleva el período adentro, que es lo que viaja al remito', async () => {
     // El PDF de un remito sólo imprime descripción y cantidad: si el período no
-    // está en el concepto, no llega a ninguna parte.
-    render(<Cuotas />)
-    expect(await screen.findByText(/Alquiler agosto 2026 — CTR-00000001/))
+    // está en el concepto, no llega a ninguna parte. Se lee en la ficha desde
+    // que el concepto dejó de ser una columna.
+    const { ficha } = await abrirFicha('CTR-00000001')
+    expect(within(ficha).getByText(/Alquiler agosto 2026 — CTR-00000001/))
       .toBeInTheDocument()
   })
 })

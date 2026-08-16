@@ -64,6 +64,8 @@ export function Cuotas() {
   // Las cuotas tildadas para entrar juntas al mismo remito (pieza B).
   const [elegidas, setElegidas] = useState<number[]>([])
   const [generandoRemito, setGenerandoRemito] = useState(false)
+  // La cuota abierta en la ficha, al click en la fila (pedido del 2026-08-16).
+  const [detalle, setDetalle] = useState<Cuota | null>(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -144,12 +146,54 @@ export function Cuotas() {
   async function anular(cuota: Cuota) {
     try {
       await api.post(`/api/cuotas/${cuota.id}/anular`, {})
+      // La ficha se cierra sola: quedaría abierta mostrando el estado viejo, y
+      // la fila de atrás ya diría «anulada».
+      setDetalle(null)
       await cargar()
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No se pudo anular la cuota')
     }
   }
 
+  // Una cuota cobrada, anulada o ya salida en un remito no se anula: el backend
+  // lo rechaza, así que ofrecerlo sería ofrecer un 422.
+  const anulable = (c: Cuota) =>
+    c.estado !== 'anulada' && c.estado !== 'cobrada' && c.remito_id === null
+
+  /* La grilla muestra CINCO columnas y el resto vive en la ficha.
+   *
+   * Pedido del humano (2026-08-16): *"en cuotas de contratos los datos son
+   * tantos que hace que tenga que ser scrolleable horizontalmente, no quiero
+   * que sea scrolleable, mostrá menos cosas y en tal caso que haciendo click en
+   * la fila me muestre el detalle en un modal"*. Es el mismo pedido —y por eso
+   * la misma solución— que el de `Reparaciones` del 2026-08-14.
+   *
+   * Se fueron a la ficha: concepto, tipo de cargo, vencimiento y la acción de
+   * anular. Los tres primeros son legibles pero ninguno se escanea de un
+   * vistazo, que es lo que una lista tiene que dejar hacer: **de quién es,
+   * de cuándo, cuánto y en qué estado**.
+   *
+   * 🔑 El concepto sale de la vista pero **no del buscador**: se sigue pudiendo
+   * buscar por él, que es como se encuentra una cuota puntual.
+   *
+   * Los `size`/`minSize` no son decorativos: `libra-ui` suma los `size` de las
+   * columnas visibles para el `minWidth` de la tabla, y ese número es el que
+   * decide si el contenedor tiene que scrollear. Sin declararlos, la tabla
+   * queda en auto-layout y el ancho lo pone el contenido — que es exactamente
+   * lo que la hacía desbordar.
+   *
+   * Suman **636 px**, y el número no es al ojo: medido en Chromium sobre la
+   * cadena real de contenedores, la columna de contenido mide 926 px en una
+   * ventana de 1280 y **670 px en una de 1024** con la sidebar abierta, que es
+   * el caso más angosto donde la sidebar todavía ocupa lugar. 636 entra en los
+   * dos. La versión vieja pedía 1180 px y desbordaba en los dos.
+   *
+   * Debajo de 1000 px se esconde «Período» (ver su `meta.opcional`) y quedan
+   * 466, medido sin scroll en una ventana de 900. Lo que **no** está medido en
+   * un viewport de verdad es el teléfono: ahí la columna de contenido ronda los
+   * 330 px y ninguna versión de esta grilla entra en 466, así que va a seguir
+   * scrolleando. Esconder también el importe o el estado dejaría una lista que
+   * no dice nada, y el caso reportado es el de escritorio. */
   const columnas = useMemo<ColumnDef<Cuota>[]>(() => [
     {
       // El tilde para agrupar en un remito. Sólo en las que se pueden convertir;
@@ -157,7 +201,7 @@ export function Cuotas() {
       // apagado que invite a intentarlo.
       id: 'elegir',
       header: () => null,
-      size: 36,
+      size: 36, minSize: 36,
       enableSorting: false,
       cell: ({ row }) => {
         const c = row.original
@@ -166,6 +210,11 @@ export function Cuotas() {
           <input
             type="checkbox"
             checked={elegidas.includes(c.id)}
+            // 🔴 `stopPropagation` **es imprescindible desde que la fila abre la
+            // ficha**: el `onRowClick` de libra-ui sólo ignora los clicks que
+            // caen en un `button` o un `a` (`closest('button, a')`), y un
+            // `input` no está en esa lista. Sin esto, tildar una cuota abriría
+            // el modal encima.
             onClick={(e) => e.stopPropagation()}
             onChange={() => setElegidas((prev) => prev.includes(c.id)
               ? prev.filter((x) => x !== c.id)
@@ -178,17 +227,43 @@ export function Cuotas() {
     {
       accessorKey: 'contrato_numero',
       header: sortableHeader('Contrato'),
-    },
-    {
-      accessorKey: 'concepto',
-      header: sortableHeader('Concepto'),
-      // El concepto lleva el período adentro, que es lo único que viaja al
-      // remito: el PDF sólo imprime descripción y cantidad.
-      cell: ({ row }) => <span className="text-sm">{row.original.concepto}</span>,
+      size: 180, minSize: 140, meta: { stretch: true },
+      // El cliente va DEBAJO del número y no en una columna propia: es el dato
+      // que más se busca —"¿de quién es esta cuota?"— y en dos renglones no
+      // cuesta ancho. La columna «Cliente» aparte era parte de lo que empujaba
+      // la tabla fuera de la pantalla.
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <span className="block truncate font-medium">
+            {row.original.contrato_numero ?? `#${row.original.contrato_id}`}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {row.original.cliente_nombre ?? 'Sin cliente'}
+          </span>
+        </div>
+      ),
     },
     {
       accessorKey: 'periodo_desde',
       header: sortableHeader('Período'),
+      size: 170, minSize: 150,
+      // La única secundaria de las cinco, y por eso la que se esconde cuando no
+      // hay ancho: `opcional` la saca del `minWidth` además de ocultarla, que
+      // es lo que evita que la tabla siga pidiendo scroll por una columna que
+      // ni se ve. Sin las otras cuatro la pantalla no se entiende; sin ésta sí,
+      // porque el período está en el concepto y en la ficha.
+      //
+      // El corte en 1000 px sale de la medición, no del ojo: con la sidebar
+      // abierta la columna de contenido es la ventana menos 352 px, así que a
+      // partir de 1000 hay 648 y las cinco entran en sus 636. Por debajo quedan
+      // cuatro, que piden 466.
+      meta: {
+        opcional: true,
+        className: 'hidden min-[1000px]:table-cell',
+        // ⚠️ Un `<col>` NO puede llevar `table-cell` —lo convierte en celda
+        // anónima y descoloca el colgroup entero—: va `table-column`.
+        colClassName: 'hidden min-[1000px]:table-column',
+      },
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-sm">
           {fecha(row.original.periodo_desde)} – {fecha(row.original.periodo_hasta)}
@@ -196,27 +271,9 @@ export function Cuotas() {
       ),
     },
     {
-      accessorKey: 'tipo_cargo',
-      header: 'Cargo',
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {TIPO_CARGO_LABELS[row.original.tipo_cargo] ?? row.original.tipo_cargo}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'fecha_vencimiento',
-      header: sortableHeader('Vence'),
-      cell: ({ row }) => (
-        row.original.fecha_vencimiento
-          ? fecha(row.original.fecha_vencimiento)
-          // No se inventa un vencimiento cuando el contrato no lo pactó.
-          : <span className="text-muted-foreground">—</span>
-      ),
-    },
-    {
       accessorKey: 'importe_total',
       header: sortableHeader('Importe'),
+      size: 110, minSize: 90,
       cell: ({ row }) => (
         <span className="tabular-nums">{pesos(row.original.importe_total)}</span>
       ),
@@ -224,6 +281,7 @@ export function Cuotas() {
     {
       accessorKey: 'estado',
       header: 'Estado',
+      size: 140, minSize: 120,
       cell: ({ row }) => {
         const c = row.original
         return (
@@ -244,23 +302,6 @@ export function Cuotas() {
               </Link>
             )}
           </div>
-        )
-      },
-    },
-    {
-      id: 'acciones',
-      header: 'Acciones',
-      cell: ({ row }) => {
-        const c = row.original
-        // Una cuota cobrada o ya salida en un remito no se anula: el backend lo
-        // rechaza, así que ofrecerlo sería ofrecer un 422.
-        if (c.estado === 'anulada' || c.estado === 'cobrada' || c.remito_id !== null) {
-          return null
-        }
-        return (
-          <Button variant="ghost" size="sm" onClick={() => void anular(c)}>
-            Anular
-          </Button>
         )
       },
     },
@@ -321,8 +362,16 @@ export function Cuotas() {
             <DataTable
               columns={columnas}
               data={cuotas}
+              // El click en la fila abre la ficha con todo lo que se sacó de la
+              // grilla. `onRowClick` de libra-ui ignora `button` y `a`, así que
+              // el link «remitada» sigue llevando al remito sin abrir el modal
+              // de paso; el tilde se protege solo, con su `stopPropagation`.
+              onRowClick={setDetalle}
               emptyMessage="Todavía no se devengó ningún período."
               search={{
+                // `concepto` sigue acá aunque ya no sea una columna: se busca
+                // por él —"alquiler agosto"— y sacarlo del buscador al sacarlo
+                // de la vista habría roto una búsqueda que hoy funciona.
                 campos: (c) => [
                   c.contrato_numero ?? '', c.concepto, c.cliente_nombre ?? '',
                 ],
@@ -465,6 +514,153 @@ export function Cuotas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* La ficha de la cuota, al click en la fila.
+       *
+       *  Es la otra mitad del pedido del 2026-08-16: la grilla muestra menos y
+       *  lo que se fue de ahí tiene que estar en algún lado. Misma forma que la
+       *  ficha de `Reparaciones`, que salió del mismo pedido.
+       *
+       *  🔴 **No es la fila reacomodada: acá aparecen datos que no se veían en
+       *  NINGUNA pantalla del producto.** El desglose del importe —base,
+       *  bonificación, impuestos, interés por mora—, la fecha de emisión, la
+       *  moneda, el número de factura, el comprobante de pago y las
+       *  observaciones los devuelve el backend desde que existe la tabla y
+       *  ninguna vista los mostraba. */}
+      <Dialog open={detalle !== null} onOpenChange={(open) => !open && setDetalle(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          {detalle && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex flex-wrap items-center gap-2">
+                  <ReceiptText className="size-4" />
+                  {detalle.contrato_numero ?? `Contrato #${detalle.contrato_id}`}
+                  <Badge variant={detalle.estado === 'anulada' ? 'outline' : 'secondary'}>
+                    {ESTADO_CUOTA_LABELS[detalle.estado] ?? detalle.estado}
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription>
+                  {/* El concepto se fue de la grilla y su lugar es éste: es la
+                      línea que viaja al remito, o sea lo que el cliente va a
+                      leer en el comprobante. */}
+                  {detalle.concepto}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <Dato label="Cliente">{detalle.cliente_nombre ?? '—'}</Dato>
+                <Dato label="Tipo de cargo">
+                  <Badge variant="outline">
+                    {TIPO_CARGO_LABELS[detalle.tipo_cargo] ?? detalle.tipo_cargo}
+                  </Badge>
+                </Dato>
+                <Dato label="Período">
+                  {fecha(detalle.periodo_desde)} – {fecha(detalle.periodo_hasta)}
+                </Dato>
+                <Dato label="Emitida">{fecha(detalle.fecha_emision)}</Dato>
+                <Dato label="Vence">
+                  {/* No se inventa un vencimiento cuando el contrato no lo
+                      pactó: el dato es "no hay", no una fecha calculada. */}
+                  {detalle.fecha_vencimiento
+                    ? fecha(detalle.fecha_vencimiento)
+                    : <span className="text-muted-foreground">Sin vencimiento pactado</span>}
+                </Dato>
+                <Dato label="Moneda">{detalle.moneda}</Dato>
+              </div>
+
+              <div className="grid gap-3 border-t pt-3 text-sm sm:grid-cols-2">
+                <Dato label="Importe base">
+                  <span className="tabular-nums">{pesos(detalle.importe_base, detalle.moneda)}</span>
+                </Dato>
+                {/* Los tres ajustes se muestran SÓLO si mueven la aguja. En cero
+                    son tres renglones que dicen $0,00 y esconden los que sí
+                    importan; distintos de cero son la explicación de por qué el
+                    total no es la base. */}
+                {detalle.bonificacion !== 0 && (
+                  <Dato label="Bonificación">
+                    <span className="tabular-nums">{pesos(detalle.bonificacion, detalle.moneda)}</span>
+                  </Dato>
+                )}
+                {detalle.impuestos !== 0 && (
+                  <Dato label="Impuestos">
+                    <span className="tabular-nums">{pesos(detalle.impuestos, detalle.moneda)}</span>
+                  </Dato>
+                )}
+                {detalle.interes_mora !== 0 && (
+                  <Dato label="Interés por mora">
+                    <span className="tabular-nums">{pesos(detalle.interes_mora, detalle.moneda)}</span>
+                  </Dato>
+                )}
+                <Dato label="Total">
+                  <span className="font-medium tabular-nums">
+                    {pesos(detalle.importe_total, detalle.moneda)}
+                  </span>
+                </Dato>
+              </div>
+
+              <div className="grid gap-3 border-t pt-3 text-sm sm:grid-cols-2">
+                <Dato label="Remito">
+                  {detalle.remito_id !== null
+                    ? (
+                      <Link
+                        to={`/remitos/${detalle.remito_id}`}
+                        className="underline underline-offset-4"
+                      >
+                        Ver el remito #{detalle.remito_id}
+                      </Link>
+                    )
+                    : <span className="text-muted-foreground">Todavía no salió en un remito</span>}
+                </Dato>
+                <Dato label="Factura">
+                  {detalle.factura_numero
+                    // La factura la emite SOS Contador desde la bandeja, así que
+                    // este campo vacío es lo normal hasta que allá se facture.
+                    ?? <span className="text-muted-foreground">Sin facturar</span>}
+                </Dato>
+                {detalle.comprobante_pago && (
+                  <Dato label="Comprobante de pago">{detalle.comprobante_pago}</Dato>
+                )}
+              </div>
+
+              {detalle.observaciones && (
+                <div className="grid gap-3 border-t pt-3 text-sm">
+                  <Dato label="Observaciones">
+                    <span className="whitespace-pre-line">{detalle.observaciones}</span>
+                  </Dato>
+                </div>
+              )}
+
+              <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Cerrar</Button></DialogClose>
+                {/* «Anular» se fue de la columna de acciones para acá: era una
+                    columna entera para un botón que aparece en pocas filas, y
+                    es justo el tipo de acción que conviene apretar mirando la
+                    cuota entera y no de paso en la grilla. */}
+                {anulable(detalle) && (
+                  <Button variant="destructive" onClick={() => void anular(detalle)}>
+                    Anular la cuota
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/** Un par etiqueta/valor de la ficha.
+ *
+ *  Local a esta pantalla, igual que los `Dato` de `Reparaciones`,
+ *  `EquipoDetalle` y `ContratoDetalle` — que ya tienen firmas distintas entre
+ *  sí. Unificar los cuatro es su propia tarea, no algo para arrastrar acá de
+ *  pasada. */
+function Dato({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span>{children}</span>
     </div>
   )
 }
