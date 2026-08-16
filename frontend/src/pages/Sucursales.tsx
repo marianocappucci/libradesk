@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { MapPin } from 'lucide-react'
-import { FilePlus } from '@/components/iconos-accion'
+import { FilePlus, Pencil, Trash2, Undo2 } from '@/components/iconos-accion'
 
 //: La respuesta trae además cuántos depósitos de stock activos cuelgan de cada
 //: sucursal. Se muestra en la grilla porque es exactamente lo que impide darla
@@ -67,14 +67,26 @@ export function Sucursales() {
             render: (s) => <span className="text-muted-foreground">{s.direccion || '—'}</span> },
           { clave: 'depositos', titulo: 'Depósitos', ancho: '110px',
             render: (s) => <span className="tabular-nums">{s.depositos}</span> },
-          { clave: 'acciones', titulo: '', ancho: '220px',
+          // Con encabezado y con iconos, como VentasComercial. Era la única
+          // pantalla que decía las acciones con palabras, y una de las cinco
+          // que dejaban la columna sin nombre — medido el 2026-08-16: 1 con
+          // encabezado contra 5 sin él, o sea divergencia, no convención.
+          //
+          // El tacho **no borra**: da de baja. Es el mismo verbo visible que usa
+          // Contalibra para clientes, con `Undo2` para la vuelta — lo que el
+          // usuario entiende es «eliminar», lo que el sistema hace es una baja
+          // lógica reversible.
+          { clave: 'acciones', titulo: 'Acciones', ancho: '110px', alinear: 'derecha',
             render: (s) => (
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-1">
                 <FormSucursal sucursal={s} onGuardar={guardarYRefrescar} />
-                <Button variant="outline" size="sm"
+                <Button variant="outline" size="icon-sm"
+                        title={s.activa ? 'Dar de baja la sucursal' : 'Reactivar la sucursal'}
+                        aria-label={s.activa
+                          ? `Dar de baja ${s.nombre}` : `Reactivar ${s.nombre}`}
                         onClick={() => guardarYRefrescar(() =>
                           api.post(`/api/sucursales/${s.id}/estado`, { activa: !s.activa }))}>
-                  {s.activa ? 'Dar de baja' : 'Reactivar'}
+                  {s.activa ? <Trash2 /> : <Undo2 />}
                 </Button>
               </div>
             ) },
@@ -109,7 +121,12 @@ function FormSucursal({ sucursal, onGuardar }: {
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
         {editando
-          ? <Button variant="outline" size="sm">Editar</Button>
+          ? (
+            <Button variant="outline" size="icon-sm" title="Editar la sucursal"
+                    aria-label={`Editar ${sucursal.nombre}`}>
+              <Pencil />
+            </Button>
+          )
           : <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva sucursal</Button>}
       </DialogTrigger>
       <DialogContent>

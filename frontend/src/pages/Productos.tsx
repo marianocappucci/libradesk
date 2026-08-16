@@ -122,7 +122,7 @@ export function Productos() {
                 )}
               </span>
             ) },
-          { clave: 'acciones', titulo: '', ancho: '60px',
+          { clave: 'acciones', titulo: 'Acciones', ancho: '60px',
             render: (p) => <FormProducto producto={p} categorias={categorias} onGuardar={conError} /> },
         ]}
       />

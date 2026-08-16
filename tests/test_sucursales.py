@@ -103,6 +103,54 @@ def test_no_se_puede_dar_de_baja_una_sucursal_con_depositos_activos(client, esce
     assert any(s["id"] == escenario["chi"] for s in client.get("/api/sucursales").json())
 
 
+def test_un_deposito_DESACTIVADO_con_stock_tampoco_deja_dar_de_baja(client, escenario):
+    """🔴 El caso que la guarda vieja dejaba pasar, reportado el 2026-08-16.
+
+    Contaba `locations WHERE active=1` — o sea el **envase**, no el contenido.
+    Desactivando el depósito, la sucursal se podía dar de baja con las
+    existencias adentro, que es exactamente lo que la guarda existía para
+    impedir: 120 plugs que dejan de aparecer en toda pantalla filtrada sin que
+    nadie los haya movido.
+    """
+    r = client.put(f"/api/depositos-stock/{escenario['dep_chi']}", json={
+        "nombre": "Central Chivilcoy", "sucursal_id": escenario["chi"],
+        "activo": False,
+    })
+    assert r.status_code == 200, r.text
+
+    r = client.post(f"/api/sucursales/{escenario['chi']}/estado",
+                    json={"activa": False})
+
+    assert r.status_code == 422, r.text
+    assert "existencias" in r.json()["detail"].lower()
+    # Y sigue activa: la guarda no puede dejarla a medio camino.
+    assert escenario["chi"] in [s["id"] for s in client.get("/api/sucursales").json()]
+
+
+def test_sin_existencias_y_sin_depositos_activos_la_baja_pasa(client, escenario):
+    """El control de las dos guardas juntas.
+
+    Sin esto, una guarda que rechazara SIEMPRE pasaría los dos casos de arriba
+    igual de bien — y dejaría una sucursal imposible de cerrar.
+    """
+    # Se saca el stock y se desactiva el depósito, que es el camino que el
+    # mensaje de error indica.
+    r = client.post(f"/api/consumibles/{escenario['item']}/ajuste", json={
+        "deposito_id": escenario["dep_chi"], "cantidad": -120, "nota": "Cierre",
+    })
+    assert r.status_code == 200, r.text
+    client.put(f"/api/depositos-stock/{escenario['dep_chi']}", json={
+        "nombre": "Central Chivilcoy", "sucursal_id": escenario["chi"],
+        "activo": False,
+    })
+
+    r = client.post(f"/api/sucursales/{escenario['chi']}/estado",
+                    json={"activa": False})
+
+    assert r.status_code == 200, r.text
+    assert escenario["chi"] not in [s["id"] for s in client.get("/api/sucursales").json()]
+
+
 def test_la_baja_logica_la_saca_del_listado_pero_conserva_la_fila(client, dos_sucursales):
     _, mer = dos_sucursales
 

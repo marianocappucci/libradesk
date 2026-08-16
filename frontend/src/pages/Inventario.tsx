@@ -70,7 +70,7 @@ export function DepositosStock() {
             render: (d) => d.sucursal || <span className="text-muted-foreground">—</span> },
           { clave: 'descripcion', titulo: 'Descripción',
             render: (d) => <span className="text-muted-foreground">{d.descripcion || '—'}</span> },
-          { clave: 'acciones', titulo: '', ancho: '90px',
+          { clave: 'acciones', titulo: 'Acciones', ancho: '90px',
             render: (d) => (
               <FormDeposito deposito={d} sucursales={sucursales} onGuardar={conError} />
             ) },
@@ -325,7 +325,7 @@ function DetalleLista({ lista, onCerrar, onCambio }: {
               render: (p) => p.margen_pct === null
                 ? <span className="text-muted-foreground">—</span>
                 : `${p.margen_pct}%` },
-            { clave: 'acciones', titulo: '', ancho: '150px',
+            { clave: 'acciones', titulo: 'Acciones', ancho: '150px',
               render: (p) => (
                 <div className="flex justify-end gap-1">
                   <FormPrecio listaId={lista.id} precio={p} sucursalId={activa?.id ?? null}

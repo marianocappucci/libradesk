@@ -249,7 +249,7 @@ export function Cuotas() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const c = row.original
         // Una cuota cobrada o ya salida en un remito no se anula: el backend lo

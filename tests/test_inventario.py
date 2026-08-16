@@ -170,3 +170,56 @@ def test_depositos_del_producto_y_del_motor_son_cosas_distintas(client, escenari
 
     assert del_motor == 2, "los dos depositos de consumibles del escenario"
     assert propios != del_motor or propios == 0
+
+
+# ── El código automático (pedido del humano, 2026-08-16) ─────────────────────
+
+
+def _codigo_de(client, item_id: int) -> str:
+    fila = next(c for c in client.get('/api/consumibles').json() if c['id'] == item_id)
+    return fila['codigo']
+
+
+def test_un_producto_nuevo_sale_con_codigo(client):
+    """🔴 El pedido: *«los productos deberían tener un código que se genere
+    automáticamente»*. Antes el campo `codigo` existía pero había que tipearlo,
+    así que la mayoría de los productos no tenía ninguno y la columna del
+    listado salía vacía."""
+    item = client.post('/api/consumibles', json={'nombre': 'Plug RJ45'}).json()
+
+    assert _codigo_de(client, item['id']) == 'PRD-00000001'
+
+
+def test_los_codigos_son_correlativos(client):
+    uno = client.post('/api/consumibles', json={'nombre': 'Plug RJ45'}).json()
+    dos = client.post('/api/consumibles', json={'nombre': 'Cable UTP'}).json()
+    tres = client.post('/api/consumibles', json={'nombre': 'Ficha RJ11'}).json()
+
+    assert [_codigo_de(client, x['id']) for x in (uno, dos, tres)] == [
+        'PRD-00000001', 'PRD-00000002', 'PRD-00000003',
+    ]
+
+
+def test_un_codigo_tipeado_a_mano_se_respeta(client):
+    """El del proveedor, un EAN. El automático es el default, no una
+    imposición."""
+    item = client.post('/api/consumibles', json={
+        'nombre': 'Plug RJ45', 'codigo': '7791234567890',
+    }).json()
+
+    assert _codigo_de(client, item['id']) == '7791234567890'
+
+
+def test_un_codigo_a_mano_NO_corre_la_numeracion_automatica(client):
+    """🔑 El control de la regla de arriba, y la razón por la que el máximo se
+    busca filtrando por el prefijo `PRD-`.
+
+    Si la cuenta mirara todos los códigos, un EAN de 13 dígitos escrito a mano
+    la dispararía a un número enorme — o la rompería, según cómo compare.
+    """
+    client.post('/api/consumibles', json={
+        'nombre': 'Con EAN', 'codigo': '7791234567890',
+    })
+    despues = client.post('/api/consumibles', json={'nombre': 'Sin código'}).json()
+
+    assert _codigo_de(client, despues['id']) == 'PRD-00000001'
