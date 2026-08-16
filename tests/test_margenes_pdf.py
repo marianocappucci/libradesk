@@ -30,7 +30,9 @@ from libracore import pdf_generator as pg
 from pypdf import PdfReader
 from pypdf.generic import ByteStringObject, ContentStream
 
-from app.services import incidencia_pdf, informe_pdf, ingreso_pdf, pdf_texto
+from app.services import (
+    hoja_ruta_pdf, incidencia_pdf, informe_pdf, ingreso_pdf, pdf_texto,
+)
 
 MM = 72 / 25.4
 
@@ -63,7 +65,7 @@ _FUENTES = {
 def empresa(monkeypatch):
     """El membrete sin tocar la config de disco. Se parchea en los tres módulos
     porque cada uno importó `_empresa` por nombre."""
-    for modulo in (pg, incidencia_pdf, ingreso_pdf, informe_pdf):
+    for modulo in (pg, incidencia_pdf, ingreso_pdf, informe_pdf, hoja_ruta_pdf):
         if hasattr(modulo, "_empresa"):
             monkeypatch.setattr(modulo, "_empresa", lambda: dict(EMPRESA))
 
@@ -214,11 +216,44 @@ def _informe(texto: str) -> bytes:
     })
 
 
+def _hoja_ruta(texto: str) -> bytes:
+    """La hoja de ruta de una cuadrilla — el CUARTO generador del producto.
+
+    Estuvo fuera de este archivo desde que se escribio (2026-08-14) y por eso se
+    le pasaron dos defectos, los dos medidos ac谩 el 2026-08-16:
+
+    1. El bloque de kilometraje eran tres grupos de 70 mm en un marco de 174:
+       el tercero se dibujaba **fuera de la hoja A4**. Pasaba siempre, con
+       cualquier dato.
+    2. El nombre del equipo va al membrete, y a diferencia de los otros tres
+       documentos **lo tipea una persona**: un nombre de una frase llegaba a
+       312 mm en una hoja de 210.
+    """
+    return hoja_ruta_pdf.generar_pdf_hoja_ruta({
+        "equipo": texto, "responsable": texto, "integrantes": [texto, texto],
+        "vehiculos": [{"patente": "AB123CD", "marca": texto, "modelo": texto}],
+        "dia": "2026-08-17",
+        "paradas": [
+            {
+                "incidencia_id": 40 + n, "titulo": texto,
+                "cliente_id": 1, "cliente_nombre": texto,
+                "cliente_domicilio": texto, "cliente_ciudad": texto,
+                "estado": "abierto", "modalidad": "on_site",
+                "desde": f"2026-08-17T0{9 + n}:00:00",
+                "hasta": f"2026-08-17T1{n}:00:00",
+                "duracion_minutos": 60, "vehiculos": "AB123CD",
+            }
+            for n in range(3)
+        ],
+    })
+
+
 DOCUMENTOS = [
     ("orden de trabajo", _incidencia),
     ("comprobante de recepción", lambda t: _ingreso(t, "recepcion")),
     ("comprobante de entrega", lambda t: _ingreso(t, "entrega")),
     ("informe de servicio", _informe),
+    ("hoja de ruta", _hoja_ruta),
 ]
 IDS = [d[0] for d in DOCUMENTOS]
 
