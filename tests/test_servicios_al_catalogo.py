@@ -42,27 +42,33 @@ def client(client):
 
 @pytest.fixture
 def servicios(client):
-    """Tres servicios en la tabla vieja: el valor hora, uno normal y uno de baja.
+    """Tres servicios **en la tabla vieja**: el valor hora, uno normal y uno de baja.
 
     Los tres juntos son el punto: con uno solo no se ve si la marca de valor
     hora viaja al que corresponde ni si el inactivo se conserva inactivo.
+
+    🔑 **Se escriben por SQL directo y no por `POST /api/servicios`**, y eso es
+    la segunda release del expand/contract: desde el 2026-08-16 la API escribe
+    en el **catálogo**, así que crear por ahí ya no deja nada que migrar — el
+    test pasaba a medir cero.
+
+    Escribir la tabla vieja a mano es además lo más fiel a lo que esto prueba:
+    una instancia que **viene de antes** y arranca con el código nuevo. Es el
+    único escenario en que la mudanza tiene algo que hacer.
     """
-    hora = client.post("/api/servicios", json={
-        "nombre": "Hora de servicio técnico", "precio": 15000, "iva_rate": 0.21,
-        "es_valor_hora": True,
-    }).json()
-    inst = client.post("/api/servicios", json={
-        "nombre": "Instalación de central", "descripcion": "Incluye pruebas",
-        "precio": 80000, "iva_rate": 0.105,
-    }).json()
-    viejo = client.post("/api/servicios", json={
-        "nombre": "Servicio discontinuado", "precio": 500, "iva_rate": 0.21,
-    }).json()
-    client.put(f"/api/servicios/{viejo['id']}", json={
-        "nombre": "Servicio discontinuado", "precio": 500, "iva_rate": 0.21,
-        "activo": False,
-    })
-    return hora, inst, viejo
+    filas = [
+        ("Hora de servicio técnico", "", 15000, "0.21", True, True),
+        ("Instalación de central", "Incluye pruebas", 80000, "0.105", False, True),
+        ("Servicio discontinuado", "", 500, "0.21", False, False),
+    ]
+    with libracore_core.get_connection() as conn:
+        for nombre, desc, precio, alic, es_hora, activo in filas:
+            conn.execute(
+                "INSERT INTO servicios (nombre, descripcion, precio, iva_rate, "
+                "es_valor_hora, activo) VALUES (?,?,?,?,?,?)",
+                (nombre, desc, precio, alic, es_hora, activo),
+            )
+    return filas
 
 
 def _del_catalogo() -> list[dict]:

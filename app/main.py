@@ -55,7 +55,8 @@ from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
-from .services.servicios import ServicioRepository
+from .services.servicios import ServicioRepository  # noqa: F401  (vuelta atrás)
+from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
@@ -200,7 +201,19 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.sectores = SectorRepository(sessions)
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
-    app.state.servicios = ServicioRepository(sessions)
+    # 🔑 **El catálogo de servicios se lee del CATÁLOGO DEL MOTOR** desde el
+    # 2026-08-16 (segunda release del expand/contract). El contrato es idéntico
+    # —los ocho métodos devuelven los mismos dicts— así que el router, la
+    # pantalla de configuración y el formulario de comprobantes no se tocan.
+    #
+    # Es seguro porque **el comprobante nunca guardó un `servicio_id`**: el
+    # catálogo sugiere y el comprobante copia texto y precio, así que los ids
+    # nuevos no los referencia nada ya emitido.
+    #
+    # `ServicioRepository` —el de la tabla vieja— queda importado a propósito:
+    # volver atrás es cambiar esta línea, y la tabla conserva sus datos hasta
+    # que una tercera release la dropee.
+    app.state.servicios = ServicioCatalogoRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
