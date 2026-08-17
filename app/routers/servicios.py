@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_servicio_repository
+from ..services import precios
 from ..services.iva import ALICUOTAS, AlicuotaInvalida
 from ..services.servicios import ServicioRepository
 
@@ -68,14 +69,32 @@ def listar(
 
 
 @router.get("/buscar", response_model=list[ServicioOut])
-def buscar(q: str = "", servicios: ServicioRepository = Depends(get_servicio_repository)):
+def buscar(q: str = "", cliente_id: int | None = None,
+           lista_id: int | None = None,
+           servicios: ServicioRepository = Depends(get_servicio_repository)):
     """Las sugerencias del formulario de comprobante.
 
     Ruta literal declarada ANTES de `/{servicio_id}` a proposito: las dos
     tienen la misma forma y FastAPI matchea en orden de registro, asi que al
     reves "buscar" caeria en la otra y fallaria al convertirlo a int.
+
+    🔑 **Con `cliente_id` los precios salen de SU lista.** Sin el, de la lista
+    por defecto — que es como cotizaba todo antes del 2026-08-16. `lista_id`
+    pisa al del cliente, que es la precedencia decidida por el humano.
+
+    Los precios se resuelven **de a lote y no de a uno por sugerencia**: el
+    desplegable muestra hasta ocho, y una consulta por cada una serian ocho por
+    cada letra que se tipea.
     """
-    return servicios.buscar(q)
+    filas = servicios.buscar(q)
+    if not filas:
+        return filas
+    tabla = precios.precios_de(
+        [f["id"] for f in filas], cliente_id=cliente_id, lista_id=lista_id,
+    )
+    for f in filas:
+        f["precio"] = tabla.get(f["id"], f["precio"])
+    return filas
 
 
 @router.get("/{servicio_id}", response_model=ServicioOut)
