@@ -250,6 +250,20 @@ export function ContratoDetalle() {
               <Dato label="Actualización" valor={METODO_ACTUALIZACION_LABELS[contrato.metodo_actualizacion]} />
             </>
           )}
+          {/* 🔑 La cadencia de VISITA, aparte de la de cobro y no adentro de
+              `lleva_cuota`: son dos cosas distintas y la ficha mostraba sólo la
+              del cobro, que era justamente la confusión. Un abono puede cobrar
+              mensual y visitar trimestral. */}
+          {contrato.frecuencia_visita && (
+            <>
+              <Dato label="Visita de mantenimiento"
+                    valor={PERIODICIDAD_LABELS[contrato.frecuencia_visita]} />
+              <Dato label="Primera visita"
+                    valor={contrato.primera_visita
+                      ? fecha(contrato.primera_visita)
+                      : `${fecha(contrato.fecha_inicio)} (arranca con el contrato)`} />
+            </>
+          )}
           <Dato label="Responsable" valor={contrato.responsable} />
           <Dato label="Observaciones" valor={contrato.observaciones} />
         </CardContent>

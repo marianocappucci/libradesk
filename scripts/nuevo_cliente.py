@@ -11,9 +11,14 @@ Agregado el 2026-08-02 al normalizar los seis productos: LibraDesk desplegaba
 instancias con `scripts/deploy_cliente.sh` y era el único que su backoffice no
 podía administrar igual que al resto.
 
-> `deploy_cliente.sh` **no se borra**: sigue siendo la vía para repinear la
-> imagen de una instancia existente, que es lo que hace y que este script no
-> reemplaza. Lo que agrega esto es el alta, el plan y el ciclo de vida.
+Ese día quedó escrito acá que `deploy_cliente.sh` **no se borraba**, porque
+"seguía siendo la vía para repinear la imagen de una instancia existente".
+**Eso dejó de ser cierto el 2026-08-17**: `panel_admin.py actualizar` hace
+exactamente eso —y de más: rollback, revertir el pin si el arranque falla,
+saltear instancias detenidas sin repinearlas— y desde `libracore v1.39.0`
+también construye del ref promovido en un worktree limpio, que era el único
+guard que el bash tenía y el módulo compartido no. Así que el bash se retiró y
+los seis productos despliegan igual.
 """
 from pathlib import Path
 

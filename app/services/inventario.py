@@ -397,6 +397,66 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
         return {"id": item.id, "nombre": item.name, "codigo": codigo_final}
 
 
+def crear_servicio(nombre: str, *, precio: float = 0.0, descripcion: str = "",
+                   iva_rate=None) -> dict:
+    """Un ítem de catálogo de tipo **servicio**: mano de obra, viático, traslado.
+
+    Es lo que hace que los tipos de cargo sean **datos y no un enum**: agregar
+    «hora nocturna» o «feriado» es llamar a esto, sin tocar código ni migrar.
+
+    Tres diferencias con `crear_item()`, y las tres distinguen un servicio de un
+    consumible:
+
+    - **`item_type=SERVICE`**: no mueve stock. `confirm_sale()` del motor saltea
+      el movimiento para lo que no sea `PRODUCT`.
+    - **No es comprable**: la mano de obra se vende, no se compra. Sin esto
+      aparecería en las órdenes de compra al lado de los cables.
+    - **No lleva código ni stock mínimo**: no hay nada que contar.
+    """
+    if not (nombre or "").strip():
+        raise ValueError("El servicio necesita un nombre.")
+    with libracore_core.get_connection() as conn:
+        item = _repo(conn).save_catalog_item(
+            CatalogItem(
+                None, CatalogItemType.SERVICE, nombre.strip(), _unidad("u"),
+                description=descripcion,
+                active=True,
+                purchasable=False,
+                default_sale_price=Decimal(str(precio)),
+                tax_profile=_alicuota_texto(
+                    iva.DEFECTO if iva_rate is None else iva_rate
+                ),
+            )
+        )
+    return {"id": item.id, "nombre": item.name,
+            "precio": float(item.default_sale_price)}
+
+
+def listar_servicios(solo_activos: bool = True) -> list[dict]:
+    """Los servicios del catálogo — lo que se puede cargar como mano de obra.
+
+    Separado de `listar_items()` porque ése filtra por `PRODUCT` y suma stock:
+    un servicio no tiene stock que sumar, y mezclarlos haría que la pantalla de
+    consumibles ofreciera viáticos.
+
+    > ⚠️ **No es lo mismo que `GET /api/servicios`**, que sigue sirviendo la
+    > tabla vieja: la mudanza al catálogo va en dos releases y ésta sólo copia.
+    > Hasta que las lecturas se cambien, los dos espacios de id **conviven** —
+    > un `servicios.id` NO es un `catalog_items.id`, y confundirlos cotiza el
+    > ítem equivocado. Lo agarró `test_el_viatico_se_suma_a_las_horas`.
+    """
+    with libracore_core.get_connection() as conn:
+        items = _repo(conn).list_catalog_items(
+            active_only=solo_activos, item_type=CatalogItemType.SERVICE,
+        )
+    return [
+        {"id": it.id, "nombre": it.name, "descripcion": it.description,
+         "precio": float(it.default_sale_price),
+         "iva_rate": float(alicuota_de(it)), "activo": it.active}
+        for it in items
+    ]
+
+
 def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 stock_minimo: float = 0.0, precio: float = 0.0,
                 unidad: str = "u", descripcion: str = "",
@@ -427,7 +487,16 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
             raise ValueError("El consumible no existe.")
         repo.save_catalog_item(
             CatalogItem(
-                item_id, CatalogItemType.PRODUCT, nombre.strip(), _unidad(unidad),
+                # 🔴 **El tipo se conserva, no se fuerza a `PRODUCT`.** Estaba
+                # cableado, y desde que el catálogo también tiene servicios eso
+                # **convertía un servicio en producto** con sólo editarlo:
+                # aparecía en el listado de consumibles, entraba a las órdenes
+                # de compra y la mudanza de `servicios_catalogo` lo volvía a
+                # copiar porque ya no lo encontraba entre los `SERVICE`.
+                #
+                # Lo agarró `test_se_reconoce_por_el_origen_y_no_por_el_nombre`,
+                # que editaba un servicio migrado para probar otra cosa.
+                item_id, actual.item_type, nombre.strip(), _unidad(unidad),
                 category_id=categoria_id, description=descripcion, active=activo,
                 default_cost=Decimal(str(costo)),
                 default_sale_price=Decimal(str(precio)),

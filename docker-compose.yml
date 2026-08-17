@@ -3,7 +3,7 @@
 # Las instancias de cliente NO se declaran aca: cada una vive en su propio
 # `clientes/<slug>/docker-compose.yml` (gitignored, solo en el VPS), corriendo
 # una imagen ya construida y pineada por version — ver `clientes.example.yml`
-# y `scripts/deploy_cliente.sh`.
+# y `scripts/panel_admin.py actualizar <slug>`.
 #
 # Por que: mientras dev y el cliente compartian este archivo y el mismo
 # `build:`, un `git pull` movia el codigo de los dos a la vez y un

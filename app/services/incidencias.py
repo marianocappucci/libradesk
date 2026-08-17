@@ -214,6 +214,36 @@ class ActividadIncidencia(Base):
     usuario: Mapped[str | None] = mapped_column(String(100))
 
 
+class IncidenciaCargo(Base):
+    """Un cargo de mano de obra del reclamo: qué se cobra y cuánto.
+
+    🔑 **El tipo es un ítem del catálogo, no un enum.** `item_id` apunta a un
+    `catalog_items` de tipo `SERVICE`, así que «hora normal», «viático» y
+    «traslado» son **datos y no constantes**: agregar «hora nocturna» mañana es
+    cargar un ítem, sin código ni migración. Y de arrastre el precio sale de la
+    lista del cliente (revisión `0028`), la alícuota del `tax_profile` y la
+    descripción del nombre — todo lo resuelve el catálogo.
+
+    **Sin cargos, el remito sale como hoy**: las `horas_invertidas` al valor
+    hora. Estas filas son para lo que antes no se podía expresar —dos horas de
+    trabajo *más* un viático, que no se reemplazan sino que se suman—, no para
+    reemplazar el camino que ya funciona.
+
+    Ver la revisión `0029`.
+    """
+
+    __tablename__ = "incidencias_cargos"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incidencia_id: Mapped[int] = mapped_column(
+        ForeignKey("incidencias.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    # Sin FK: `catalog_items` es de LibraCommerce y esta cadena no la toca.
+    item_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    cantidad: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class IncidenciaEstadoLog(Base):
     __tablename__ = "incidencias_estados_log"
 
@@ -464,6 +494,72 @@ def _observaciones_del_lote(trabajos: list[dict]) -> str:
     if cubiertos:
         texto += f". Cubiertos por el abono, sin cargo: {', '.join(cubiertos)}"
     return texto
+
+
+def _lineas_de_cargos(trabajo: dict, cliente_id: int | None) -> list[dict]:
+    """Las líneas del remito que salen de los cargos de mano de obra.
+
+    Una por cargo, encabezada por el **N° CDS** igual que la línea de trabajo
+    que reemplaza: con tres cargos en el mismo remito hay que poder leer, renglón
+    por renglón, a qué visita corresponde cada uno. Es el mismo motivo por el que
+    el CDS va en la descripción y no en un campo aparte.
+
+    El nombre, el precio y la alícuota salen del **catálogo**: por eso agregar un
+    tipo de cargo nuevo no toca esta función.
+    """
+    datos = _datos_de_items([c["item_id"] for c in trabajo["cargos"]], cliente_id)
+    salida = []
+    for cargo in trabajo["cargos"]:
+        info = datos.get(cargo["item_id"], {})
+        nombre = info.get("nombre") or f"Ítem #{cargo['item_id']}"
+        salida.append({
+            "description": _descripcion_del_trabajo(
+                trabajo["id"], f"{nombre} — {trabajo['titulo']}",
+                trabajo["nro_cds"],
+            ),
+            "qty": cargo["cantidad"],
+            "unit_price": info.get("precio", 0.0),
+            "tax_rate": info.get("iva_rate", 0.0),
+        })
+    return salida
+
+
+def _datos_de_items(item_ids, cliente_id: int | None) -> dict:
+    """`{item_id: {nombre, precio, iva_rate}}` para los ítems del catálogo.
+
+    El precio sale de **la lista que le corresponde al cliente** y la alícuota
+    del `tax_profile` del ítem: los dos vienen del catálogo, que es lo que hace
+    que agregar un tipo de cargo nuevo no toque una línea de código.
+
+    Una sola conexión para todos los ítems: un reclamo con cuatro cargos abriría
+    cuatro llamando a `precios.precio_de()` una por una.
+    """
+    from libracore.db import core as _core
+
+    from . import inventario, iva as _iva, precios
+
+    unicos = {int(i) for i in item_ids if i}
+    if not unicos:
+        return {}
+
+    salida = {}
+    with _core.get_connection() as conn:
+        repo = inventario._repo(conn)
+        for item_id in unicos:
+            item = repo.get_catalog_item(item_id)
+            if item is None:
+                # Un ítem borrado del catálogo. Se devuelve en cero, mismo
+                # criterio que `materiales.valorizados()`: inventar un precio
+                # sería peor y la bandeja se niega a mandar un total 0.
+                salida[item_id] = {"nombre": "", "precio": 0.0,
+                                   "iva_rate": float(_iva.DEFECTO)}
+                continue
+            salida[item_id] = {
+                "nombre": item.name,
+                "precio": precios._precio_con(conn, item_id, cliente_id=cliente_id),
+                "iva_rate": float(inventario.alicuota_de(item)),
+            }
+    return salida
 
 
 class IncidenciaRepository:
@@ -837,6 +933,69 @@ class IncidenciaRepository:
             )
             return [_estado_log_to_dict(e) for e in session.execute(stmt).scalars()]
 
+    # ── Los cargos de mano de obra ──────────────────────────────────────
+
+    def list_cargos(self, incidencia_id: int) -> list[dict]:
+        """Los cargos del reclamo, con el nombre y el precio ya resueltos.
+
+        El precio sale de **la lista del cliente de ese reclamo**, no del
+        catálogo pelado: es el mismo precio con el que después va a salir en el
+        remito, y verlo distinto en la pantalla que en el comprobante es cómo
+        este producto ya se contradijo antes.
+        """
+        from . import precios
+
+        with self.session_factory() as session:
+            filas = list(session.execute(
+                select(IncidenciaCargo)
+                .where(IncidenciaCargo.incidencia_id == incidencia_id)
+                .order_by(IncidenciaCargo.id)
+            ).scalars())
+            if not filas:
+                return []
+            inc = session.get(Incidencia, incidencia_id)
+            cliente_id = inc.cliente_id if inc else None
+
+        datos = _datos_de_items([f.item_id for f in filas], cliente_id)
+        return [
+            {
+                "id": f.id,
+                "item_id": f.item_id,
+                "cantidad": float(f.cantidad),
+                "nombre": datos.get(f.item_id, {}).get("nombre", f"Ítem #{f.item_id}"),
+                "precio": datos.get(f.item_id, {}).get("precio", 0.0),
+                "iva_rate": datos.get(f.item_id, {}).get("iva_rate", 0.0),
+                "subtotal": round(
+                    float(f.cantidad) * datos.get(f.item_id, {}).get("precio", 0.0), 2
+                ),
+            }
+            for f in filas
+        ]
+
+    def add_cargo(self, incidencia_id: int, item_id: int, cantidad: float) -> dict:
+        """Agrega un cargo. `cantidad` en cero o negativa no es un cargo."""
+        if cantidad <= 0:
+            raise ValueError("La cantidad del cargo tiene que ser mayor que cero.")
+        with self.session_factory() as session:
+            if session.get(Incidencia, incidencia_id) is None:
+                raise KeyError(incidencia_id)
+            cargo = IncidenciaCargo(
+                incidencia_id=incidencia_id, item_id=int(item_id),
+                cantidad=Decimal(str(cantidad)),
+            )
+            session.add(cargo)
+            session.commit()
+            cargo_id = cargo.id
+        return next(c for c in self.list_cargos(incidencia_id) if c["id"] == cargo_id)
+
+    def delete_cargo(self, cargo_id: int) -> None:
+        with self.session_factory() as session:
+            cargo = session.get(IncidenciaCargo, cargo_id)
+            if cargo is None:
+                raise KeyError(cargo_id)
+            session.delete(cargo)
+            session.commit()
+
     def convertir_a_remito(self, incidencia_ids: list[int], remitos, clientes,
                            servicios, usuario_id: int | None = None) -> dict:
         """Genera **un** remito por los reclamos **cerrados** que se le pasen.
@@ -1030,6 +1189,19 @@ class IncidenciaRepository:
                 }
                 for x in ids
             ]
+            # Los cargos de mano de obra declarados, por reclamo. Se leen dentro
+            # de la misma sesión que ya está abierta.
+            cargos_por_ticket = {x: [] for x in ids}
+            for c in session.execute(
+                select(IncidenciaCargo)
+                .where(IncidenciaCargo.incidencia_id.in_(ids))
+                .order_by(IncidenciaCargo.id)
+            ).scalars():
+                cargos_por_ticket[c.incidencia_id].append(
+                    {"item_id": c.item_id, "cantidad": float(c.cantidad)}
+                )
+            for t in trabajos:
+                t["cargos"] = cargos_por_ticket.get(t["id"], [])
 
         # El valor hora del catalogo, o `None` si nadie lo marco todavia. Se
         # pide UNA vez para todo el lote: no puede pasar que dos lineas del
@@ -1053,21 +1225,34 @@ class IncidenciaRepository:
             # exactamente el doble cobro que esta guarda viene a impedir.
             visita_cubierta = t["cobertura"] == "parcial" and horas_facturables <= 0
             if not visita_cubierta:
-                linea = {
-                    "description": _descripcion_del_trabajo(
-                        t["id"], t["titulo"], t["nro_cds"],
-                    ),
-                    # Sin horas cargadas la linea vale 1: es una visita, no cero
-                    # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
-                    # trabajo aunque le pongan precio.
-                    "qty": horas_facturables if horas_facturables > 0 else 1,
-                    "unit_price": float(valor_hora["precio"]) if valor_hora else 0,
-                }
-                if valor_hora:
-                    # La alicuota del servicio, no la del documento: el valor hora
-                    # es una linea del catalogo y trae la suya.
-                    linea["tax_rate"] = float(valor_hora["iva_rate"])
-                items.append(linea)
+                # ── Los cargos declarados mandan sobre el valor hora ──────
+                #
+                # Un reclamo con cargos cobra **lo que dicen sus cargos**: dos
+                # horas de trabajo, un viatico y el traslado son tres lineas
+                # distintas, y el viatico no reemplaza a las horas — se suma.
+                #
+                # 🔑 **Sin cargos sale exactamente como salia**: las
+                # `horas_invertidas` al valor hora, en una sola linea. Es lo que
+                # hace que ningun ticket existente cambie de precio y que la
+                # visita normal siga siendo un click.
+                if t["cargos"]:
+                    items.extend(_lineas_de_cargos(t, cliente_id))
+                else:
+                    linea = {
+                        "description": _descripcion_del_trabajo(
+                            t["id"], t["titulo"], t["nro_cds"],
+                        ),
+                        # Sin horas cargadas la linea vale 1: es una visita, no cero
+                        # trabajo. Un `qty` en 0 haria un remito que no cobra nada por el
+                        # trabajo aunque le pongan precio.
+                        "qty": horas_facturables if horas_facturables > 0 else 1,
+                        "unit_price": float(valor_hora["precio"]) if valor_hora else 0,
+                    }
+                    if valor_hora:
+                        # La alicuota del servicio, no la del documento: el valor hora
+                        # es una linea del catalogo y trae la suya.
+                        linea["tax_rate"] = float(valor_hora["iva_rate"])
+                    items.append(linea)
             # Los materiales del reclamo, salvo que el abono los cubra.
             if t["cobertura"] == "parcial" and t["materiales_al_abono"]:
                 continue
@@ -1075,7 +1260,11 @@ class IncidenciaRepository:
             # ticket y no todo el trabajo primero: el remito se lee como la
             # lista de visitas que es, y quien concilia contra los papeles va
             # bajando de a un CDS por vez.
-            for m in materiales.valorizados(t["id"]):
+            # Con el `cliente_id`: los materiales se valorizan por **la lista de
+            # precios de ese cliente**, no por el catálogo pelado (2026-08-16).
+            # Un reseller y un cliente de mostrador dejan de pagar lo mismo por
+            # el mismo cable. Ver `app/services/precios.py`.
+            for m in materiales.valorizados(t["id"], cliente_id=cliente_id):
                 nombre = m["descripcion"] or f"Material #{m['item_id']}"
                 items.append({
                     # El `\n` no es cosmetico: `_draw_items_table` de LibraCore

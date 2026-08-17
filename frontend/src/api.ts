@@ -360,6 +360,12 @@ export type Contrato = {
   renovacion_automatica: boolean
   periodicidad: string
   dia_vencimiento: number | null
+  /** Cada cuánto se VISITA. `null` = el contrato no genera visitas, que es el
+   *  default y el comportamiento de todo lo anterior a la revisión `0027`. */
+  frecuencia_visita: string | null
+  /** Ancla de la cadencia de visita **y** día en que se visita — una sola fecha
+   *  resuelve las dos cosas. `null` cae a `fecha_inicio`. Revisión `0030`. */
+  primera_visita: string | null
   moneda: string
   metodo_actualizacion: string
   estado: string

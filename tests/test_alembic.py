@@ -141,6 +141,33 @@ def _heads() -> list[str]:
     return list(ScriptDirectory.from_config(alembic_config(None)).get_heads())
 
 
+#: El largo de `alembic_version.version_num`. Lo fija Alembic, no este producto.
+_LARGO_MAXIMO_REVISION = 32
+
+
+def test_ningun_id_de_revision_pasa_el_largo_que_acepta_la_base():
+    """🔴 Un id de más de 32 caracteres rompe el arranque, y tarde.
+
+    Lo destapó `0028_lista_de_precios_del_cliente` —33 caracteres— el
+    2026-08-16: la migración **corre bien** y falla recién al escribir la
+    versión, con `value too long for type character varying(32)`. La instancia
+    queda con el schema nuevo y la versión vieja, que es el peor estado
+    posible: la próxima corrida vuelve a aplicar una migración ya aplicada.
+
+    Es la familia que este producto ya tiene anotada —lo que SQLite no valida y
+    PostgreSQL sí— y por eso la guarda mira **los nombres**: no necesita una
+    base para correr, así que falla en el archivo y no en el despliegue.
+    """
+    largos = {
+        rev.revision: len(rev.revision)
+        for rev in ScriptDirectory.from_config(alembic_config(None)).walk_revisions()
+    }
+    pasados = {r: n for r, n in largos.items() if n > _LARGO_MAXIMO_REVISION}
+    assert not pasados, (
+        f"estos ids no entran en varchar({_LARGO_MAXIMO_REVISION}): {pasados}"
+    )
+
+
 def _ejecutar(engine, sentencias) -> None:
     with engine.begin() as conn:
         for sql in sentencias:
@@ -563,3 +590,4 @@ def test_el_render_postgres_realmente_mira_la_cadena(monkeypatch):
     assert _BOOLEANO_CON_DEFAULT_ENTERO.findall(
         "ALTER TABLE tecnicos ADD COLUMN es_tecnico BOOLEAN DEFAULT 1 NOT NULL;"
     ) == [("es_tecnico", "1")]
+

@@ -46,6 +46,9 @@ const contratoSchema = z.object({
    *  Un `<Select>` de Radix no admite `value=""`, que es por qué hace falta el
    *  centinela en vez de la cadena vacía. */
   frecuencia_visita: z.string(),
+  /** Desde cuándo corre la cadencia de visita **y** qué día se visita: una sola
+   *  fecha resuelve las dos cosas. Vacío = se ancla a `fecha_inicio`. */
+  primera_visita: z.string().optional(),
   metodo_actualizacion: z.string(),
   dia_vencimiento: z.string().optional(),
   domicilio_instalacion: z.string().trim().optional(),
@@ -86,7 +89,8 @@ export function Contratos() {
     defaultValues: {
       tipo_contrato: 'alquiler', cliente_id: '', fecha_inicio: '', fecha_fin: '',
       estado: 'borrador', periodicidad: 'mensual',
-      frecuencia_visita: 'ninguna', metodo_actualizacion: 'manual',
+      frecuencia_visita: 'ninguna', primera_visita: '',
+      metodo_actualizacion: 'manual',
       dia_vencimiento: '', domicilio_instalacion: '', responsable: '',
       observaciones: '', importe: '',
     },
@@ -96,6 +100,8 @@ export function Contratos() {
   // importe es un 409 del backend, así que ni se ofrece.
   const tipoElegido = form.watch('tipo_contrato') as TipoContrato
   const llevaCuota = TIPOS_CON_CUOTA.includes(tipoElegido)
+  // El ancla de la visita sólo tiene sentido si el contrato visita.
+  const visitaElegida = form.watch('frecuencia_visita')
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -136,7 +142,8 @@ export function Contratos() {
       tipo_contrato: 'alquiler', cliente_id: '',
       fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '',
       estado: 'borrador', periodicidad: 'mensual',
-      frecuencia_visita: 'ninguna', metodo_actualizacion: 'manual',
+      frecuencia_visita: 'ninguna', primera_visita: '',
+      metodo_actualizacion: 'manual',
       dia_vencimiento: '', domicilio_instalacion: '', responsable: '',
       observaciones: '', importe: '',
     })
@@ -159,6 +166,11 @@ export function Contratos() {
       ),
     }
     if (values.fecha_fin) body.fecha_fin = values.fecha_fin
+    // Sólo si hay frecuencia: mandar un ancla en un contrato que no visita
+    // guarda un dato que nada lee, y después confunde al que abra la ficha.
+    if (values.primera_visita && values.frecuencia_visita !== 'ninguna') {
+      body.primera_visita = values.primera_visita
+    }
     if (values.dia_vencimiento) body.dia_vencimiento = Number(values.dia_vencimiento)
     if (values.domicilio_instalacion) body.domicilio_instalacion = values.domicilio_instalacion
     if (values.responsable) body.responsable = values.responsable
@@ -333,6 +345,23 @@ export function Contratos() {
                         </FormDescription>
                       </FormItem>
                     )} />
+                    {/* El ancla sólo aparece si hay algo que anclar. Sin
+                        frecuencia no se generan visitas y el campo no tendría
+                        qué significar. */}
+                    {visitaElegida !== 'ninguna' && (
+                      <FormField control={form.control} name="primera_visita" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Primera visita</FormLabel>
+                          <FormControl><Input type="date" {...field} /></FormControl>
+                          <FormDescription>
+                            Desde acá corre la cadencia y de acá sale el día que
+                            se visita — un trimestral que arranca en febrero
+                            visita febrero, mayo, agosto y noviembre. Vacío:
+                            arranca con el contrato.
+                          </FormDescription>
+                        </FormItem>
+                      )} />
+                    )}
                     <FormField control={form.control} name="dia_vencimiento" render={({ field }) => (
                       <FormItem><FormLabel>Día de vencimiento</FormLabel><FormControl><Input type="number" min="1" max="31" {...field} /></FormControl></FormItem>
                     )} />

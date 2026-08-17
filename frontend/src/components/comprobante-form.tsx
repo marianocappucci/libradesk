@@ -65,10 +65,14 @@ export const ITEM_VACIO: ItemDraft = {
  *  entera — mismo criterio que `description_snapshot` en LibraCommerce.
  */
 function DescripcionConSugerencias({
-  valor, indice, onCambiar, onElegir,
+  valor, indice, clienteId, onCambiar, onElegir,
 }: {
   valor: string
   indice: number
+  /** El cliente del comprobante. Las sugerencias vienen con **su** precio: un
+   *  reseller y un cliente de mostrador no ven el mismo número por el mismo
+   *  servicio. Vacío = la lista por defecto, que es como cotizaba todo antes. */
+  clienteId: string
   onCambiar: (v: string) => void
   onElegir: (s: Servicio) => void
 }) {
@@ -93,9 +97,11 @@ function DescripcionConSugerencias({
     const mio = ++pedido.current
     debounce.current = setTimeout(async () => {
       try {
-        const res = await api.get<Servicio[]>(
-          `/api/servicios/buscar?q=${encodeURIComponent(texto)}`,
-        )
+        const q = new URLSearchParams({ q: texto })
+        // Con el cliente, los precios salen de SU lista. Sin él, de la de
+        // defecto — que es como cotizaba todo antes del 2026-08-16.
+        if (clienteId) q.set('cliente_id', clienteId)
+        const res = await api.get<Servicio[]>(`/api/servicios/buscar?${q}`)
         if (mio !== pedido.current) return
         setSugerencias(res)
         setAbierto(res.length > 0)
@@ -438,6 +444,9 @@ export function ComprobanteForm({
                     <DescripcionConSugerencias
                       valor={item.description}
                       indice={i}
+                      // El cliente del comprobante, para que las sugerencias
+                      // lleguen con SU precio y no con el de la lista general.
+                      clienteId={draft.client_id}
                       onCambiar={(v) => setItem(i, 'description', v)}
                       onElegir={(s) => elegirServicio(i, s)}
                     />

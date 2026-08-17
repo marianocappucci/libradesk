@@ -55,12 +55,13 @@ from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
-from .services.servicios import ServicioRepository
+from .services.servicios import ServicioRepository  # noqa: F401  (vuelta atrás)
+from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import comercial as comercial_service
-from .services import inventario, materiales
+from .services import inventario, materiales, servicios_catalogo
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -130,6 +131,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    también los clientes que ya existían.
     comercial_service.sincronizar_parties()
 
+    # 8. La mudanza del catálogo de servicios al del motor, para que las listas
+    #    de precios lo alcancen y la mano de obra se comporte como cualquier
+    #    otra línea. Idempotente y barato: sale por la primera consulta si
+    #    `servicios` no existe.
+    #
+    #    🔴 **Va acá y NO en una migración de Alembic**, y la diferencia no es
+    #    de estilo: `schema.ensure_schema()` corre en el paso 1, cuando
+    #    `catalog_items` todavía no existe. Una migración que insertara ahí
+    #    andaría en las instancias que ya tienen el motor y **fallaría en la
+    #    primera nueva**. Ver el docstring de `servicios_catalogo`.
+    servicios_catalogo.migrar(inventario._repo)
+
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
     ensure_default_admin(user_repository)
@@ -188,7 +201,19 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.sectores = SectorRepository(sessions)
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
-    app.state.servicios = ServicioRepository(sessions)
+    # 🔑 **El catálogo de servicios se lee del CATÁLOGO DEL MOTOR** desde el
+    # 2026-08-16 (segunda release del expand/contract). El contrato es idéntico
+    # —los ocho métodos devuelven los mismos dicts— así que el router, la
+    # pantalla de configuración y el formulario de comprobantes no se tocan.
+    #
+    # Es seguro porque **el comprobante nunca guardó un `servicio_id`**: el
+    # catálogo sugiere y el comprobante copia texto y precio, así que los ids
+    # nuevos no los referencia nada ya emitido.
+    #
+    # `ServicioRepository` —el de la tabla vieja— queda importado a propósito:
+    # volver atrás es cambiar esta línea, y la tabla conserva sus datos hasta
+    # que una tercera release la dropee.
+    app.state.servicios = ServicioCatalogoRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
