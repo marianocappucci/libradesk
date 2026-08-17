@@ -197,12 +197,67 @@ def test_una_frecuencia_que_la_aritmetica_no_entiende_se_rechaza(client, cliente
     assert "quincenal" in r.text
 
 
-def test_el_dia_de_la_visita_sale_del_dia_de_vencimiento(client, cliente):
-    _contrato(client, cliente, frecuencia_visita="mensual", dia_vencimiento=10)
-    assert _previsualizar(client)["visitas"][0]["fecha_programada"] == "2026-09-10"
+def test_el_dia_de_la_visita_sale_de_primera_visita_y_no_del_cobro(client, cliente):
+    """🔴 **Visitar y cobrar dejaron de estar atados** (revisión `0030`).
+
+    Antes el día salía del `dia_vencimiento`, que es cuándo se **cobra**. Este
+    contrato cobra el 10 y visita el 25 — justo lo que no se podía expresar.
+    """
+    _contrato(client, cliente, frecuencia_visita="mensual",
+              dia_vencimiento=10, primera_visita=f(date(2026, 3, 25)))
+    # El ancla es el 15-09, y con arranque el 25 el período vigente **empezó el
+    # 25 de agosto** (25-08 al 24-09). El día es el 25, que es lo que importa
+    # acá; el mes lo decide en qué período cae el ancla.
+    assert _previsualizar(client)["visitas"][0]["fecha_programada"] == "2026-08-25"
+
+
+def test_la_ficha_devuelve_el_ancla_que_se_guardo(client, cliente):
+    """🔴 **El campo no está terminado hasta que un test lo lee como lo lee la
+    pantalla.** Un `response_model` que no lo declare lo deja entrar a la base y
+    no salir nunca — pasó con `IncidenciaOut` en la revisión `0027` y la suite
+    entera quedó en verde igual.
+    """
+    contrato = _contrato(client, cliente, frecuencia_visita="trimestral",
+                         primera_visita=f(date(2026, 2, 10)))
+
+    ficha = client.get(f"/api/contratos/{contrato['id']}").json()
+    assert ficha["primera_visita"] == "2026-02-10"
+    assert ficha["frecuencia_visita"] == "trimestral", (
+        "la ficha muestra las DOS cadencias, y la de visita también tiene que salir"
+    )
+
+
+def test_sin_primera_visita_se_ancla_a_la_fecha_de_inicio(client, cliente):
+    """El default, y por qué no cae a los bloques de calendario: el contrato
+    siempre tiene `fecha_inicio`, y es lo que mejor aproxima el acuerdo."""
+    _contrato(client, cliente, frecuencia_visita="mensual",
+              fecha_inicio=f(date(2026, 2, 12)))
+    assert _previsualizar(client)["visitas"][0]["fecha_programada"] == "2026-09-12"
+
+
+def test_un_trimestral_cae_en_los_meses_del_acuerdo(client, cliente):
+    """🔴 Lo que la aritmética de calendario hacía imposible.
+
+    Arrancando en **febrero**, un trimestral visita feb/may/ago/nov. Antes caía
+    siempre ene/abr/jul/oct sin importar lo que se hubiera pactado con el
+    cliente.
+    """
+    _contrato(client, cliente, frecuencia_visita="trimestral",
+              primera_visita=f(date(2026, 2, 10)))
+
+    visita = _previsualizar(client, date(2026, 9, 15))["visitas"][0]
+    assert visita["periodo_desde"] == "2026-08-10", "ago-nov, no jul-sep"
+    assert visita["fecha_programada"] == "2026-08-10"
 
 
 def test_un_dia_31_no_revienta_en_un_mes_de_30(client, cliente):
-    """Recorta al último del mes, misma regla que la aritmética de períodos."""
-    _contrato(client, cliente, frecuencia_visita="mensual", dia_vencimiento=31)
-    assert _previsualizar(client)["visitas"][0]["fecha_programada"] == "2026-09-30"
+    """Recorta al último del mes, misma regla que la aritmética de períodos.
+
+    El ancla es **octubre** a propósito: así el período vigente arranca en
+    septiembre, que tiene 30 días. Con el ancla en un mes de 31 el recorte no se
+    ejercita y el test pasaría igual sin él.
+    """
+    _contrato(client, cliente, frecuencia_visita="mensual",
+              primera_visita=f(date(2026, 1, 31)))
+    visita = _previsualizar(client, date(2026, 10, 15))["visitas"][0]
+    assert visita["fecha_programada"] == "2026-09-30"

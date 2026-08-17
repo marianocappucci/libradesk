@@ -32,6 +32,10 @@ class ContratoIn(BaseModel):
     #: genera visitas de mantenimiento, y es el default: los contratos que ya
     #: existen se comportan como hoy. Ver la revision `0027`.
     frecuencia_visita: str | None = None
+    #: Desde cuando corre la cadencia **y** que dia se visita: una sola fecha
+    #: resuelve las dos cosas -su mes ancla, su dia es el dia de la visita-.
+    #: `None` cae a `fecha_inicio`. Ver la revision `0030`.
+    primera_visita: date | None = None
     duracion_visita_minutos: int | None = None
     dia_vencimiento: int | None = None
     moneda: str = "ARS"
@@ -56,6 +60,7 @@ class ContratoUpdate(BaseModel):
     renovacion_automatica: bool | None = None
     periodicidad: str | None = None
     frecuencia_visita: str | None = None
+    primera_visita: date | None = None
     duracion_visita_minutos: int | None = None
     dia_vencimiento: int | None = None
     moneda: str | None = None

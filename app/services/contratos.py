@@ -81,8 +81,13 @@ ESTADOS_CERRADOS = ("rescindido", "finalizado")
 PERIODICIDADES = ("mensual", "bimestral", "trimestral", "semestral", "anual")
 
 # Las cadencias de VISITA válidas. Son las mismas que las de facturación, y eso
-# no es casualidad ni pereza: las dos las resuelve `cuotas.periodo_por_cadencia()`,
-# así que ofrecer una sexta acá rompería esa función sin avisar.
+# no es casualidad ni pereza: las dos aritméticas —`cuotas.periodo_por_cadencia()`
+# y `visitas.periodo_anclado()`— traducen la cadencia con el mismo diccionario de
+# meses, así que ofrecer una sexta acá rompería las dos sin avisar.
+#
+# ⚠️ Que la LISTA sea la misma no quiere decir que el cálculo lo sea: desde la
+# revisión `0030` las visitas se anclan al acuerdo con el cliente y las cuotas
+# siguen alineadas al año calendario, porque allá el prorrateo lo exige.
 #
 # Es un alias y no una segunda tupla a propósito. `visitas.py` lo importa de acá
 # —no puede definirlo él, porque ya importa este módulo y sería un ciclo— y con
@@ -188,6 +193,20 @@ class Contrato(Base):
     # existe se comporta exactamente como hoy hasta que alguien le ponga una
     # frecuencia: la adopción es explícita. Ver la revisión `0027`.
     frecuencia_visita: Mapped[str | None] = mapped_column(String(20))
+    # ── Desde cuándo corre la cadencia, y qué día se visita ─────────────
+    #
+    # **Una fecha resuelve las dos cosas**: su mes ancla la cadencia —un
+    # trimestral que arranca el 15-02 devenga feb-abr, may-jul, ago-oct— y su
+    # día es el día de la visita, independiente del `dia_vencimiento`, que es
+    # cuándo se **cobra**.
+    #
+    # Dos columnas —un ancla y un `dia_visita` aparte— podrían contradecirse y
+    # habría que inventar cuál gana. Ver la revisión `0030`.
+    #
+    # 🔑 **NULL cae a `fecha_inicio`**, que es el dato que siempre está y el que
+    # mejor aproxima el acuerdo. **No** cae a los bloques de calendario: ésos
+    # eran el defecto que esto viene a arreglar.
+    primera_visita: Mapped[date | None] = mapped_column(Date)
     # Cuánto dura, para que la agenda detecte choques. Nullable: no siempre se
     # sabe, y `agenda.validar_agenda()` tolera un turno sin duración.
     duracion_visita_minutos: Mapped[int | None] = mapped_column(Integer)
@@ -345,6 +364,7 @@ def _to_dict(
         "renovacion_automatica": bool(c.renovacion_automatica),
         "periodicidad": c.periodicidad,
         "frecuencia_visita": c.frecuencia_visita,
+        "primera_visita": c.primera_visita.isoformat() if c.primera_visita else None,
         "duracion_visita_minutos": c.duracion_visita_minutos,
         "dia_vencimiento": c.dia_vencimiento,
         "moneda": c.moneda,
