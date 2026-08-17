@@ -232,3 +232,85 @@ def test_el_staff_puede_buscar(client):
     assert r.status_code == 200, r.text
 
     assert staff.get("/api/servicios/buscar?q=manten").status_code == 200
+
+
+# ── Un servicio es un ítem del catálogo, y tiene que seguir siéndolo ───────
+#
+# 🔑 Estos dos venían de `test_servicios_al_catalogo.py`, que se fue con la
+# revisión `0031` junto a la copia de arranque que probaba. **No eran tests de
+# la copia**: son propiedades del servicio como ítem del catálogo, y se
+# quedaron sin cobertura al borrar aquel archivo. Se rescatan acá, escritos
+# contra la API —que es como nace un servicio hoy— en vez de contra la tabla
+# vieja.
+
+def test_editar_por_la_pantalla_de_servicios_no_lo_vuelve_producto(client):
+    """El camino del `PUT /api/servicios/{id}`, que pasa por
+    `ServicioCatalogoRepository.actualizar`."""
+    s = _servicio(client, "Instalación de central", precio=60000)
+
+    r = client.put(f"/api/servicios/{s['id']}", json={
+        "nombre": "Instalación (renombrada)", "descripcion": "", "precio": 80000,
+    })
+    assert r.status_code == 200, r.text
+
+    assert s["id"] in [i["id"] for i in client.get("/api/servicios").json()], (
+        "editarlo no puede sacarlo de los servicios"
+    )
+    # `GET /api/consumibles` filtra por `PRODUCT`: si el tipo se hubiera pisado,
+    # el ítem aparecería acá.
+    assert s["id"] not in [p["id"] for p in client.get("/api/consumibles").json()], (
+        "y tampoco puede aparecer entre los consumibles"
+    )
+
+
+def test_editar_item_no_vuelve_producto_a_un_servicio(client):
+    """🔴 **El defecto que esto fija ya ocurrió**, y el test de arriba NO lo
+    cubre — se comprobó por mutación.
+
+    `inventario.editar_item()` forzaba `CatalogItemType.PRODUCT`, así que editar
+    un servicio por ahí lo convertía en producto: desaparecía de los servicios,
+    aparecía entre los consumibles y entraba a las órdenes de compra.
+
+    Se llama a `editar_item()` directamente y no por el `PUT` de servicios
+    porque **ése no pasa por acá**: `actualizar()` guarda con
+    `save_catalog_item()` por su cuenta. Poner la mutación y ver que la suite
+    seguía en verde fue lo que lo mostró; sin eso, este archivo habría quedado
+    con un test que parecía cubrir el defecto y no lo tocaba.
+    """
+    from app.services import inventario
+
+    s = _servicio(client, "Instalación de central", precio=60000)
+
+    inventario.editar_item(s["id"], nombre="Instalación (renombrada)",
+                           precio=80000.0)
+
+    assert s["id"] in [i["id"] for i in client.get("/api/servicios").json()], (
+        "editarlo no puede sacarlo de los servicios"
+    )
+    assert s["id"] not in [p["id"] for p in client.get("/api/consumibles").json()], (
+        "y tampoco puede aparecer entre los consumibles"
+    )
+
+
+def test_un_servicio_no_es_comprable(client):
+    """Se vende, no se compra. Sin esto aparecería en las órdenes de compra al
+    lado de los cables.
+
+    Se lee de la base y no de la API porque `purchasable` **no se expone**: es
+    una propiedad del ítem que ninguna pantalla muestra y por eso mismo nada la
+    defendería si se cayera.
+    """
+    from libracommerce.domain.catalog import CatalogItemType
+    from libracore.db import core as libracore_core
+
+    s = _servicio(client, "Hora de servicio técnico", precio=25000)
+
+    with libracore_core.get_connection() as conn:
+        fila = conn.execute(
+            "SELECT purchasable, item_type FROM catalog_items WHERE id = ?",
+            (s["id"],),
+        ).fetchone()
+
+    assert fila is not None, "el servicio tiene que estar en el catálogo del motor"
+    assert fila["item_type"] == str(CatalogItemType.SERVICE)
+    assert not fila["purchasable"]

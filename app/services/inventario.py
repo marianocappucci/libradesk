@@ -439,11 +439,13 @@ def listar_servicios(solo_activos: bool = True) -> list[dict]:
     un servicio no tiene stock que sumar, y mezclarlos haría que la pantalla de
     consumibles ofreciera viáticos.
 
-    > ⚠️ **No es lo mismo que `GET /api/servicios`**, que sigue sirviendo la
-    > tabla vieja: la mudanza al catálogo va en dos releases y ésta sólo copia.
-    > Hasta que las lecturas se cambien, los dos espacios de id **conviven** —
-    > un `servicios.id` NO es un `catalog_items.id`, y confundirlos cotiza el
-    > ítem equivocado. Lo agarró `test_el_viatico_se_suma_a_las_horas`.
+    > ✅ **`GET /api/servicios` sirve esto mismo**, desde la revisión `0031`.
+    > Este comentario decía lo contrario —que ese endpoint servía la tabla vieja
+    > y que los dos espacios de id convivían, porque un `servicios.id` no era un
+    > `catalog_items.id`—, y era cierto **durante la fase 1**. La fase 2 cambió
+    > las lecturas y la fase 3 dropeó la tabla: hoy hay un solo espacio de id y
+    > la advertencia sobraba. El riesgo que describía —cotizar el ítem
+    > equivocado por confundir los ids— dejó de existir con el segundo espacio.
     """
     with libracore_core.get_connection() as conn:
         items = _repo(conn).list_catalog_items(
@@ -490,12 +492,21 @@ def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
                 # 🔴 **El tipo se conserva, no se fuerza a `PRODUCT`.** Estaba
                 # cableado, y desde que el catálogo también tiene servicios eso
                 # **convertía un servicio en producto** con sólo editarlo:
-                # aparecía en el listado de consumibles, entraba a las órdenes
-                # de compra y la mudanza de `servicios_catalogo` lo volvía a
-                # copiar porque ya no lo encontraba entre los `SERVICE`.
+                # aparecía en el listado de consumibles y entraba a las órdenes
+                # de compra. Mientras existió la copia de arranque
+                # (`servicios_catalogo`, retirada con la revisión `0031`) además
+                # lo volvía a copiar en cada arranque, porque ya no lo
+                # encontraba entre los `SERVICE`. **Ese síntoma se fue con la
+                # copia; el defecto de fondo es el mismo y la guarda queda.**
                 #
-                # Lo agarró `test_se_reconoce_por_el_origen_y_no_por_el_nombre`,
-                # que editaba un servicio migrado para probar otra cosa.
+                # Lo agarró un test de la copia que editaba un servicio migrado
+                # para probar otra cosa; ese test se fue con ella. Hoy lo
+                # sostiene `test_editar_item_no_vuelve_producto_a_un_servicio`,
+                # que llama a ESTA función **directamente**: el `PUT` de
+                # servicios no pasa por acá —`actualizar()` guarda con
+                # `save_catalog_item()` por su cuenta—, así que un test por esa
+                # API no defiende nada. Se vio poniendo la mutación y
+                # encontrando la suite en verde.
                 item_id, actual.item_type, nombre.strip(), _unidad(unidad),
                 category_id=categoria_id, description=descripcion, active=activo,
                 default_cost=Decimal(str(costo)),

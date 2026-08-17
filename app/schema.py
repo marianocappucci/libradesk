@@ -73,7 +73,11 @@ from .services import modules as _modules  # noqa: F401
 from .services import proveedores as _proveedores  # noqa: F401
 from .services import reparaciones as _reparaciones  # noqa: F401
 from .services import sectores as _sectores  # noqa: F401
-from .services import servicios as _servicios  # noqa: F401
+# `servicios` **ya no se importa, y no es un olvido de los que documenta el
+# comentario de arriba**: la revision `0031` dropeo la tabla y borro el modulo.
+# El catalogo de servicios vive ahora en `catalog_items`, que es de
+# LibraCommerce y por eso NO va en `metadata` — es justo lo que `include_name()`
+# filtra para que el autogenerate no proponga dropear las tablas del motor.
 from .services import tecnicos as _tecnicos  # noqa: F401
 # `ventas` entra por `VentaRemito` (revision `0026`), que es su UNICA tabla
 # SQLAlchemy: el resto del modulo es LibraCommerce por conexion cruda. Sin esta
