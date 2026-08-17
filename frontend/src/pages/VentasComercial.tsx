@@ -277,12 +277,27 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
     (acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precio) || 0), 0,
   )
 
-  function agregar() {
+  async function agregar() {
     const p = productos.find((x) => x.id === Number(productoId))
     if (!p) return
+    // 🔑 **El precio se le pide al backend, no se lee del catálogo.** Tiene que
+    // ser el de la lista de ESTE cliente, que es el mismo con el que después
+    // sale el comprobante. Resolverlo acá duplicaría la precedencia —operación
+    // > cliente > defecto > catálogo— y es así como este producto ya terminó
+    // con la misma regla escrita distinto en dos vistas.
+    //
+    // Si la consulta falla se usa el del catálogo: que no responda no puede
+    // impedir cargar una venta, y el número queda editable igual.
+    let precio = p.precio || p.costo || 0
+    try {
+      const q = new URLSearchParams({ item_id: String(p.id) })
+      if (clienteId) q.set('cliente_id', clienteId)
+      const r = await api.get<{ precio: number }>(`/api/precios/resolver?${q}`)
+      precio = r.precio
+    } catch { /* se usa el del catálogo */ }
     setLineas([...lineas, {
       item_id: p.id, descripcion: p.nombre, cantidad: '1',
-      precio: String(p.precio || p.costo || 0),
+      precio: String(precio),
     }])
     setProductoId('')
   }
@@ -364,7 +379,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={agregar} disabled={!productoId}>Agregar</Button>
+              <Button variant="outline" onClick={() => void agregar()} disabled={!productoId}>Agregar</Button>
               <Button variant="outline" onClick={agregarServicio}>Servicio</Button>
             </div>
             {lineas.map((l, i) => (

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
-from ..services import cuenta_corriente, listas_precio
+from ..services import cuenta_corriente, listas_precio, precios
 
 router = APIRouter(prefix="/api", tags=["comercial"])
 
@@ -75,6 +75,33 @@ def editar_lista(lista_id: int, payload: ListaIn):
 @router.delete("/listas-precio/{lista_id}", status_code=204)
 def eliminar_lista(lista_id: int):
     listas_precio.eliminar(lista_id)
+
+
+@router.get("/precios/resolver")
+def resolver_precio(item_id: int, cliente_id: int | None = None,
+                    lista_id: int | None = None, sucursal_id: int | None = None,
+                    cantidad: float = 1.0):
+    """Cuanto vale un item **para este cliente**, con la precedencia completa.
+
+    Lo llama la pantalla de ventas al agregar una linea: el precio que prellena
+    tiene que ser el mismo con el que despues sale el comprobante.
+
+    Se resuelve aca y no en el front porque la precedencia —operacion > cliente
+    > lista por defecto > catalogo— vive en un solo lugar
+    (`app/services/precios.py`). Derivarla en la pantalla es como este producto
+    ya termino con la misma regla escrita distinto en dos vistas.
+
+    Devuelve el `default_sale_price` del catalogo si ninguna lista tiene el
+    item, que es lo que hace que enchufar las listas no mueva ningun precio
+    hasta que alguien cargue uno.
+    """
+    return {
+        "item_id": item_id,
+        "precio": precios.precio_de(
+            item_id, cliente_id=cliente_id, lista_id=lista_id,
+            sucursal_id=sucursal_id, cantidad=cantidad,
+        ),
+    }
 
 
 @router.get("/listas-precio/{lista_id}/precios")
