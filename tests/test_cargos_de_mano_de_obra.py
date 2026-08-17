@@ -25,7 +25,7 @@ import os
 
 import pytest
 
-from app.services import inventario, listas_precio
+from app.services import listas_precio
 
 
 @pytest.fixture
@@ -38,29 +38,42 @@ def client(client):
     return client
 
 
+def _servicio(client, nombre, precio, *, es_valor_hora=False):
+    """Da de alta un servicio **por el camino real**: `POST /api/servicios`.
+
+    Que el fixture use el mismo alta que la pantalla es lo que hace que estos
+    tests defiendan algo. Mientras armaban el `CatalogItem` por su cuenta —con
+    una `inventario.crear_servicio()` que no llamaba ninguna pantalla— una
+    mutación sobre la receta del alta, `purchasable=True`, no mataba ninguno.
+    """
+    r = client.post("/api/servicios", json={
+        "nombre": nombre, "precio": precio, "iva_rate": 0.21,
+        "es_valor_hora": es_valor_hora,
+    })
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 @pytest.fixture
 def escenario(client):
     """Un cliente, el valor hora, y los tres tipos de cargo en el catálogo.
 
-    ⚠️ **Los cargos son ítems del CATÁLOGO, no de `/api/servicios`.** Los dos
-    espacios de id conviven mientras la mudanza está en su primera release, y
-    confundirlos cotiza el ítem equivocado: la primera versión de este test
-    usaba un `servicios.id` como `item_id` y el remito salió $29.000 en vez de
-    $43.000, sin fallar nada.
+    🔑 **El valor hora y el cargo «hora» son el MISMO ítem**, dado de alta una
+    sola vez. Hasta el 2026-08-17 acá se daban de alta dos «Hora de servicio
+    técnico»: una por `POST /api/servicios` y otra por `crear_servicio()`. Tenía
+    sentido durante la fase 1 de la mudanza del catálogo, cuando eran dos
+    espacios de id distintos y confundirlos cotizaba el ítem equivocado —una
+    versión de este test usó un `servicios.id` como `item_id` y el remito salió
+    $29.000 en vez de $43.000, sin fallar nada.
 
-    El `POST /api/servicios` de acá abajo es para la tabla vieja **a propósito**:
-    es de donde sale el valor hora del camino sin cargos, que es el que tiene
-    que seguir funcionando igual.
+    La fase 3 dropeó la tabla vieja, así que hay **un solo espacio de id** y las
+    dos altas caían en `catalog_items`: el catálogo terminaba con el servicio
+    duplicado, invisible porque las dos copias valían 15.000.
     """
     cliente = client.post("/api/clientes", json={"nombre": "Medici Neumatec"}).json()
-    client.post("/api/servicios", json={
-        "nombre": "Hora de servicio técnico", "precio": 15000, "iva_rate": 0.21,
-        "es_valor_hora": True,
-    })
-    hora = inventario.crear_servicio("Hora de servicio técnico", precio=15000.0,
-                                     iva_rate=0.21)
-    viatico = inventario.crear_servicio("Viático", precio=8000.0, iva_rate=0.21)
-    traslado = inventario.crear_servicio("Traslado", precio=5000.0, iva_rate=0.21)
+    hora = _servicio(client, "Hora de servicio técnico", 15000, es_valor_hora=True)
+    viatico = _servicio(client, "Viático", 8000)
+    traslado = _servicio(client, "Traslado", 5000)
     return client, cliente, hora, viatico, traslado
 
 
@@ -191,7 +204,7 @@ def test_un_tipo_de_cargo_nuevo_no_necesita_tocar_nada(escenario):
     «especialista senior», es lo mismo.
     """
     client, cliente, _h, _v, _t = escenario
-    nocturna = inventario.crear_servicio("Hora nocturna", precio=22000.0, iva_rate=0.21)
+    nocturna = _servicio(client, "Hora nocturna", 22000)
 
     inc = _reclamo_cerrado(client, cliente)
     r = client.post(f"/api/incidencias/{inc['id']}/cargos",
