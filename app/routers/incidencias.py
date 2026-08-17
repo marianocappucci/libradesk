@@ -17,7 +17,7 @@ from ..services.reemplazo import (
     DESTINOS, CierreService, DatosService, ReemplazoService,
 )
 from ..services.remitos_presupuestos import RemitoService
-from ..services.servicios import ServicioRepository
+from ..services.servicios_repo_catalogo import ServicioCatalogoRepository
 
 router = APIRouter(prefix="/api/incidencias", tags=["incidencias"])
 
@@ -401,7 +401,7 @@ def convertir_lote_en_remito(
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
     remitos: RemitoService = Depends(get_remito_service),
     clientes: ClienteRepository = Depends(get_cliente_repository),
-    servicios: ServicioRepository = Depends(get_servicio_repository),
+    servicios: ServicioCatalogoRepository = Depends(get_servicio_repository),
     user: dict = Depends(get_current_user),
 ):
     """**Un** remito por los reclamos elegidos, para facturarlos juntos.
@@ -422,7 +422,7 @@ def convertir_en_remito(
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
     remitos: RemitoService = Depends(get_remito_service),
     clientes: ClienteRepository = Depends(get_cliente_repository),
-    servicios: ServicioRepository = Depends(get_servicio_repository),
+    servicios: ServicioCatalogoRepository = Depends(get_servicio_repository),
     user: dict = Depends(get_current_user),
 ):
     """El remito del trabajo hecho. Idempotente: devuelve el que ya existe.

@@ -21,7 +21,7 @@ from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.proveedores import ProveedorRepository
-from .services.servicios import ServicioRepository
+from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
@@ -79,7 +79,16 @@ def get_proveedor_repository(request: Request) -> ProveedorRepository:
     return request.app.state.proveedores
 
 
-def get_servicio_repository(request: Request) -> ServicioRepository:
+def get_servicio_repository(request: Request) -> ServicioCatalogoRepository:
+    """El catálogo de servicios, que desde la revisión `0031` es **el del
+    motor** y no una tabla propia.
+
+    🔑 **La anotación decía `ServicioRepository` y estaba mintiendo.** Desde la
+    fase 2, `main.py` inyecta acá un `ServicioCatalogoRepository`; como los dos
+    exponen el mismo contrato de 8 métodos, nada se rompía y nadie lo notaba. Una
+    anotación que nombra la clase equivocada es peor que ninguna: el que la lee
+    se va a buscar el comportamiento al archivo que no corre.
+    """
     return request.app.state.servicios
 
 

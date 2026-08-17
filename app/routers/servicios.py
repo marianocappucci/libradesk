@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from ..dependencies import get_servicio_repository
 from ..services import precios
 from ..services.iva import ALICUOTAS, AlicuotaInvalida
-from ..services.servicios import ServicioRepository
+from ..services.servicios_repo_catalogo import ServicioCatalogoRepository
 
 router = APIRouter(prefix="/api/servicios", tags=["servicios"])
 
@@ -63,7 +63,7 @@ class ServicioOut(BaseModel):
 @router.get("", response_model=list[ServicioOut])
 def listar(
     incluir_inactivos: bool = False,
-    servicios: ServicioRepository = Depends(get_servicio_repository),
+    servicios: ServicioCatalogoRepository = Depends(get_servicio_repository),
 ):
     return servicios.listar(incluir_inactivos=incluir_inactivos)
 
@@ -71,7 +71,7 @@ def listar(
 @router.get("/buscar", response_model=list[ServicioOut])
 def buscar(q: str = "", cliente_id: int | None = None,
            lista_id: int | None = None,
-           servicios: ServicioRepository = Depends(get_servicio_repository)):
+           servicios: ServicioCatalogoRepository = Depends(get_servicio_repository)):
     """Las sugerencias del formulario de comprobante.
 
     Ruta literal declarada ANTES de `/{servicio_id}` a proposito: las dos
@@ -98,7 +98,7 @@ def buscar(q: str = "", cliente_id: int | None = None,
 
 
 @router.get("/{servicio_id}", response_model=ServicioOut)
-def obtener(servicio_id: int, servicios: ServicioRepository = Depends(get_servicio_repository)):
+def obtener(servicio_id: int, servicios: ServicioCatalogoRepository = Depends(get_servicio_repository)):
     s = servicios.get(servicio_id)
     if s is None:
         raise HTTPException(404, "servicio not found")
@@ -106,7 +106,7 @@ def obtener(servicio_id: int, servicios: ServicioRepository = Depends(get_servic
 
 
 @router.post("", status_code=201, response_model=ServicioOut)
-def crear(data: ServicioIn, servicios: ServicioRepository = Depends(get_servicio_repository)):
+def crear(data: ServicioIn, servicios: ServicioCatalogoRepository = Depends(get_servicio_repository)):
     try:
         return servicios.crear(
             data.nombre, data.descripcion, data.precio, data.iva_rate,
@@ -120,7 +120,7 @@ def crear(data: ServicioIn, servicios: ServicioRepository = Depends(get_servicio
 def actualizar(
     servicio_id: int,
     data: ServicioUpdate,
-    servicios: ServicioRepository = Depends(get_servicio_repository),
+    servicios: ServicioCatalogoRepository = Depends(get_servicio_repository),
 ):
     try:
         s = servicios.actualizar(
@@ -135,7 +135,7 @@ def actualizar(
 
 
 @router.delete("/{servicio_id}", status_code=204)
-def borrar(servicio_id: int, servicios: ServicioRepository = Depends(get_servicio_repository)):
+def borrar(servicio_id: int, servicios: ServicioCatalogoRepository = Depends(get_servicio_repository)):
     """Borra de verdad: ningun comprobante lo referencia. Aun asi la pantalla
     ofrece desactivar primero."""
     if not servicios.borrar(servicio_id):
