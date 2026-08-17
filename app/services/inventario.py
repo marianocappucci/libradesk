@@ -397,39 +397,18 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
         return {"id": item.id, "nombre": item.name, "codigo": codigo_final}
 
 
-def crear_servicio(nombre: str, *, precio: float = 0.0, descripcion: str = "",
-                   iva_rate=None) -> dict:
-    """Un ítem de catálogo de tipo **servicio**: mano de obra, viático, traslado.
-
-    Es lo que hace que los tipos de cargo sean **datos y no un enum**: agregar
-    «hora nocturna» o «feriado» es llamar a esto, sin tocar código ni migrar.
-
-    Tres diferencias con `crear_item()`, y las tres distinguen un servicio de un
-    consumible:
-
-    - **`item_type=SERVICE`**: no mueve stock. `confirm_sale()` del motor saltea
-      el movimiento para lo que no sea `PRODUCT`.
-    - **No es comprable**: la mano de obra se vende, no se compra. Sin esto
-      aparecería en las órdenes de compra al lado de los cables.
-    - **No lleva código ni stock mínimo**: no hay nada que contar.
-    """
-    if not (nombre or "").strip():
-        raise ValueError("El servicio necesita un nombre.")
-    with libracore_core.get_connection() as conn:
-        item = _repo(conn).save_catalog_item(
-            CatalogItem(
-                None, CatalogItemType.SERVICE, nombre.strip(), _unidad("u"),
-                description=descripcion,
-                active=True,
-                purchasable=False,
-                default_sale_price=Decimal(str(precio)),
-                tax_profile=_alicuota_texto(
-                    iva.DEFECTO if iva_rate is None else iva_rate
-                ),
-            )
-        )
-    return {"id": item.id, "nombre": item.name,
-            "precio": float(item.default_sale_price)}
+# 🔑 **El alta de un servicio vive en UN solo lugar**:
+# `ServicioCatalogoRepository._guardar()`, detrás de `POST /api/servicios`. Acá
+# hubo hasta el 2026-08-17 una `crear_servicio()` que armaba su propio
+# `CatalogItem` con la misma receta —`item_type=SERVICE`, `purchasable=False`,
+# unidad "u", alícuota— y a la que no llamaba ninguna pantalla: sus únicos
+# cuatro usos estaban en `tests/test_cargos_de_mano_de_obra.py`. Una mutación
+# (`purchasable=True`) no mataba ningún test, porque el camino real de alta
+# nunca pasaba por ella. Peor: el fixture de ese archivo daba de alta la hora de
+# trabajo por los dos caminos y dejaba el catálogo con **dos** «Hora de servicio
+# técnico», invisible porque las dos valían lo mismo. Si hace falta crear un
+# servicio desde Python, es el repositorio — no una segunda definición de qué es
+# un servicio del catálogo.
 
 
 def listar_servicios(solo_activos: bool = True) -> list[dict]:
