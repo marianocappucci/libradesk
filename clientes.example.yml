@@ -2,8 +2,12 @@
 #
 # Copiar a `clientes/<slug>/docker-compose.yml` en el VPS (ese directorio esta
 # gitignored: tiene los datos del cliente y su `.env` con secretos) y ajustar
-# slug, puerto y version de imagen. `scripts/deploy_cliente.sh` se encarga
-# despues de construir la imagen y repinear la linea `image:`.
+# slug, puerto y version de imagen. `scripts/panel_admin.py actualizar <slug>`
+# se encarga despues de construir la imagen y repinear la linea `image:`.
+#
+# (Hasta el 2026-08-17 eso lo hacia `scripts/deploy_cliente.sh`, un bash propio
+# de este producto. Se retiro: el panel compartido hace lo mismo y de mas, y
+# desde libracore v1.39.0 tambien construye del ref promovido.)
 #
 # Las tres diferencias con el compose de dev, y por que:
 #
