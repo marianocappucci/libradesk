@@ -144,6 +144,10 @@ beforeEach(() => {
       return Promise.resolve(json([ACTIVO_COLOCADO, ACTIVO_LIBRE]))
     }
     if (u.includes('/api/proveedores')) return Promise.resolve(json([PROVEEDOR]))
+    // Antes que `/api/contratos/1`, que la contiene: desde la fase 3 la ficha
+    // carga también sus actas, y sin esta rama el listado recibía el contrato
+    // entero y la tarjeta rompía al mapearlo.
+    if (u.includes('/actas')) return Promise.resolve(json([]))
     if (u.includes('/api/contratos/1')) return Promise.resolve(json(CONTRATO))
     return Promise.resolve(json([]))
   }))
@@ -209,6 +213,7 @@ describe('Ficha del contrato', () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       const u = String(url)
       if (u.includes('/api/activos')) return Promise.resolve(json([]))
+      if (u.includes('/actas')) return Promise.resolve(json([]))
       if (u.includes('/api/contratos/1')) {
         return Promise.resolve(json({ ...CONTRATO, estado: 'finalizado' }))
       }

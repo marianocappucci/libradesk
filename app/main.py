@@ -39,6 +39,7 @@ from .routers import inventario as inventario_router
 # ocupa el nombre en este módulo.
 from .routers import ventas as ventas_router
 from .auditoria import AUDITABLES
+from .services.actas import ActaRepository
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
@@ -222,6 +223,9 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.activos = ActivoRepository(sessions)
     app.state.contratos = ContratoRepository(sessions)
     app.state.cuotas = CuotaRepository(sessions)
+    # Las actas cuelgan del contrato y salen por su router, con el mismo gate
+    # de módulo: son el papel de la entrega, no una entidad aparte.
+    app.state.actas = ActaRepository(sessions)
     app.state.visitas = VisitaService(sessions)
     app.state.dashboard = DashboardService(sessions)
     app.state.reportes = ReportesService(sessions)

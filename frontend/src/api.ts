@@ -384,6 +384,64 @@ export type Contrato = {
   precios?: ContratoPrecio[]
 }
 
+// ── Las actas de entrega y devolución (fase 3, 2026-08-17) ─────────────────
+
+export type TipoActa = 'entrega' | 'devolucion'
+
+export const TIPO_ACTA_LABELS: Record<string, string> = {
+  entrega: 'Entrega',
+  devolucion: 'Devolución',
+}
+
+/** Un equipo dentro del acta, con **su** estado.
+ *
+ *  Los campos son de la línea y no del acta: un acta cubre varios equipos a la
+ *  vez y un solo «estado físico» no puede contestar por todos. `faltantes`,
+ *  `danios` y `cargo_reposicion` sólo existen en una devolución — en una
+ *  entrega el backend los rechaza. */
+export type ActaLinea = {
+  id: number
+  acta_id: number
+  /** La **colocación** (`contratos_equipos`), no el activo: un mismo equipo
+   *  puede haber estado puesto, retirado y vuelto a poner en el mismo
+   *  contrato. */
+  contrato_equipo_id: number
+  activo_id: number | null
+  activo_descripcion: string | null
+  activo_serial: string | null
+  activo_codigo_interno: string | null
+  estado_fisico: string | null
+  accesorios: string | null
+  faltantes: string | null
+  danios: string | null
+  cargo_reposicion: number | null
+  observaciones: string | null
+}
+
+export type Acta = {
+  id: number
+  numero: string
+  contrato_id: number
+  contrato_numero: string | null
+  cliente_nombre: string | null
+  tipo: TipoActa
+  fecha: string | null
+  /** Aclaraciones **tipeadas**, no firmas: el acta se firma en papel. */
+  entrega_nombre: string | null
+  recibe_nombre: string | null
+  observaciones: string | null
+  estado: string
+  anulada: boolean
+  /** La cuota de reposición que emitió, cuando la devolución cobró faltantes. */
+  cuota_id: number | null
+  usuario: string
+  created_at: string | null
+  lineas: ActaLinea[]
+  equipos: number
+  /** Suma de los cargos de las líneas. Derivado, nunca almacenado. */
+  cargo_total: number
+}
+
 // ── El devengado (fase 2, 2026-08-15) ──────────────────────────────────────
 
 export const TIPO_CARGO_LABELS: Record<string, string> = {

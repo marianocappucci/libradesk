@@ -164,6 +164,28 @@ def periodo_de(contrato: Contrato, ancla: date) -> Periodo:
     return periodo_por_cadencia(contrato.periodicidad, ancla)
 
 
+def vencimiento_de(contrato: Contrato, periodo: Periodo) -> date | None:
+    """El `dia_vencimiento` del contrato, dentro del mes en que se emite.
+
+    Se recorta al ultimo dia del mes: un contrato con vencimiento el 31 no
+    puede vencer el 31 de febrero. Sin `dia_vencimiento` no se inventa
+    ninguno — queda `NULL`, que significa "no pactado".
+
+    Es una funcion del modulo y no un metodo del repositorio por el mismo
+    motivo por el que `periodo_de` lo es desde el 2026-08-16: aparecio un
+    segundo consumidor —las actas de devolucion, que emiten su cargo de
+    reposicion dentro de SU transaccion— y una segunda copia de este recorte
+    seria la que se olvidara de febrero.
+    """
+    if contrato.dia_vencimiento is None:
+        return None
+    base = periodo.desde
+    return date(
+        base.year, base.month,
+        min(contrato.dia_vencimiento, _ultimo_dia(base.year, base.month)),
+    )
+
+
 def periodo_por_cadencia(cadencia: str, ancla: date) -> Periodo:
     """El periodo de CALENDARIO que **contiene** a `ancla`.
 
@@ -472,19 +494,7 @@ class CuotaRepository:
         )
 
     def _vencimiento(self, contrato: Contrato, periodo: Periodo) -> date | None:
-        """El `dia_vencimiento` del contrato, dentro del mes en que se emite.
-
-        Se recorta al ultimo dia del mes: un contrato con vencimiento el 31 no
-        puede vencer el 31 de febrero. Sin `dia_vencimiento` no se inventa
-        ninguno — queda `NULL`, que significa "no pactado".
-        """
-        if contrato.dia_vencimiento is None:
-            return None
-        base = periodo.desde
-        return date(
-            base.year, base.month,
-            min(contrato.dia_vencimiento, _ultimo_dia(base.year, base.month)),
-        )
+        return vencimiento_de(contrato, periodo)
 
     def _ya_tiene_recurrente(self, session, contrato_id: int, periodo_desde: date) -> bool:
         """La otra mitad de la idempotencia: el indice unico impide el

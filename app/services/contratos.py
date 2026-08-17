@@ -57,6 +57,21 @@ TIPOS_CONTRATO = (
     "abono",
 )
 
+# Como se lee cada modalidad en un papel que firma el cliente. Vive del lado del
+# backend —y no solo en el `TIPO_CONTRATO_LABELS` del frontend— porque el PDF del
+# acta la imprime, y un generador que dibuja "venta_financiada" en un comprobante
+# delata el nombre interno de la columna. Mismo criterio que `ESTADO_LABELS` en
+# `incidencias.py`.
+TIPO_CONTRATO_ETIQUETAS = {
+    "alquiler": "Alquiler",
+    "comodato": "Comodato",
+    "prestamo": "Préstamo temporal",
+    "incluido_en_servicio": "Incluido en el servicio",
+    "leasing": "Leasing",
+    "venta_financiada": "Venta financiada",
+    "abono": "Abono de servicio",
+}
+
 # Los que llevan una cuota periodica. Los otros tres se entregan sin cobrar por
 # el equipo —el comodato va atado a otro servicio, el prestamo es temporal—, asi
 # que un precio ahi no significa nada y se rechaza.
