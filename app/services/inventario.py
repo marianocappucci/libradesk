@@ -432,33 +432,17 @@ def crear_item(nombre: str, costo: float = 0.0, stock_minimo: float = 0.0, *,
 # técnico», invisible porque las dos valían lo mismo. Si hace falta crear un
 # servicio desde Python, es el repositorio — no una segunda definición de qué es
 # un servicio del catálogo.
-
-
-def listar_servicios(solo_activos: bool = True) -> list[dict]:
-    """Los servicios del catálogo — lo que se puede cargar como mano de obra.
-
-    Separado de `listar_items()` porque ése filtra por `PRODUCT` y suma stock:
-    un servicio no tiene stock que sumar, y mezclarlos haría que la pantalla de
-    consumibles ofreciera viáticos.
-
-    > ✅ **`GET /api/servicios` sirve esto mismo**, desde la revisión `0031`.
-    > Este comentario decía lo contrario —que ese endpoint servía la tabla vieja
-    > y que los dos espacios de id convivían, porque un `servicios.id` no era un
-    > `catalog_items.id`—, y era cierto **durante la fase 1**. La fase 2 cambió
-    > las lecturas y la fase 3 dropeó la tabla: hoy hay un solo espacio de id y
-    > la advertencia sobraba. El riesgo que describía —cotizar el ítem
-    > equivocado por confundir los ids— dejó de existir con el segundo espacio.
-    """
-    with libracore_core.get_connection() as conn:
-        items = _repo(conn).list_catalog_items(
-            active_only=solo_activos, item_type=CatalogItemType.SERVICE,
-        )
-    return [
-        {"id": it.id, "nombre": it.name, "descripcion": it.description,
-         "precio": float(it.default_sale_price),
-         "iva_rate": float(alicuota_de(it)), "activo": it.active}
-        for it in items
-    ]
+#
+# 🔑 **Y la LECTURA también**: `ServicioCatalogoRepository.listar()`, detrás de
+# `GET /api/servicios`. Al lado de aquella `crear_servicio()` vivía una
+# `listar_servicios()` con la misma forma del problema, retirada el 2026-08-17:
+# a ésa no la llamaba **nadie**, ni un test —cero referencias en las 212 refs
+# del repo—, así que ni siquiera tenía los cuatro usos que al menos justificaban
+# mirar a la otra. Su docstring se había actualizado en la fase 3 del
+# expand/contract para avisar que `GET /api/servicios` ya servía lo mismo: se
+# mantuvo la nota al día sin notar que la función debajo estaba muerta. Es la
+# advertencia útil de las dos — una función muerta no se delata sola, y
+# actualizarle el comentario la hace parecer más viva.
 
 
 def editar_item(item_id: int, *, nombre: str, costo: float = 0.0,
