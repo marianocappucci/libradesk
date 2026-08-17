@@ -40,7 +40,17 @@ _LETRA = "OT"
 _TITULO = "Orden de trabajo"
 
 _LINEA = 4.5
-_ALTO_AVISO = 14
+# 🔴 **18 y no 14, y el número está medido, no copiado.** Ver el comentario
+# gemelo en `ingreso_pdf.py`: lo que el cierre dibuja por debajo de la `y` que
+# se chequea son 18 mm —4 del `ln(4)`, 4 de aire y 10 de recuadro—, así que con
+# 14 quedaba una franja de 4 mm donde el chequeo pasaba y el dibujo no entraba.
+#
+# **Acá el defecto no era teórico: salía con datos de todos los días.** Una
+# orden con una nota de un renglón y dos entradas de actividad deja la `y` en
+# 261,8 y el aviso salía partido —el recuadro en la carilla 1 y su texto en la
+# 2—. Medido el 2026-08-17 sobre el PDF generado, barriendo la cantidad de
+# entradas de actividad: 31 combinaciones partidas de las que caen en la franja.
+_ALTO_AVISO = 18
 
 
 class _IncidenciaPDF(_TextoSeguroPDF, FPDF):

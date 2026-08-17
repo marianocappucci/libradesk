@@ -236,6 +236,14 @@ _LINEA = 4.6      # alto de una linea de texto dentro de una fila
 _PAD_FILA = 2.9   # aire arriba + abajo de la fila
 
 # Lo que ocupa `_draw_no_fiscal_notice`: 4 mm de aire + recuadro de 10.
+#
+# ⚠️ **Acá 14 es el numero correcto; en los comprobantes del taller es 18.** No
+# es una inconsistencia a emparejar: la cuenta depende del cierre de cada
+# documento. `ingreso_pdf` e `incidencia_pdf` hacen un `ln(4)` antes de dibujar
+# y chequean contra `h - 20`, asi que tienen que reservar 4 mm mas; aca no hay
+# `ln(4)` y `_asegurar_espacio` corta en `h - 24`, que deja 6,5 mm de sobra
+# sobre lo que el aviso llega a escribir. Subirlo a 18 mueve `_RESERVA_CIERRE`
+# a 24 y **repagina todos los informes** sin arreglar nada.
 _ALTO_AVISO = 14
 
 # Lo que la ULTIMA seccion tiene que dejar libre para que el aviso entre en su
