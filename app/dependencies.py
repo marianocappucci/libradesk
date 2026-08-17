@@ -6,6 +6,7 @@ from libraauth.auditoria import AuditoriaRepository
 from libraauth.auth_events import AuthEventRepository
 from libraauth.repository import UserRepository
 
+from .services.actas import ActaRepository
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
@@ -114,6 +115,10 @@ def get_contrato_repository(request: Request) -> ContratoRepository:
 
 def get_cuota_repository(request: Request) -> CuotaRepository:
     return request.app.state.cuotas
+
+
+def get_acta_repository(request: Request) -> ActaRepository:
+    return request.app.state.actas
 
 
 def get_visita_service(request: Request) -> VisitaService:

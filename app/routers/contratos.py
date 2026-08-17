@@ -1,16 +1,25 @@
-"""Contratos de equipos — la ficha, sus precios con vigencia y sus equipos.
+"""Contratos de equipos — la ficha, sus precios con vigencia, sus equipos y sus
+actas de entrega y devolución.
 
 **El importe no se edita por `PUT /api/contratos/{id}`**: se actualiza con
 `POST /api/contratos/{id}/precios`, que cierra el vigente y abre el nuevo. Son
 dos endpoints y no uno porque son dos cosas distintas — corregir un dato del
 contrato no es lo mismo que cambiar cuánto se cobra a partir de una fecha.
+
+**Las actas viven acá y no en un router propio** (fase 3): son un documento
+*del contrato*, salen de su ficha y comparten su gate de módulo. Un router
+aparte con el mismo prefijo habría dejado el orden de registro decidiendo cuál
+ruta atiende `/api/contratos/actas/5`, que es la clase de detalle que se
+descubre en producción.
 """
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from ..dependencies import get_contrato_repository
+from ..dependencies import get_acta_repository, get_contrato_repository
+from ..services import acta_pdf
+from ..services.actas import ActaRepository
 from ..services.contratos import (
     CierreServiceActivo, ContratoRepository, DatosServiceActivo,
 )
@@ -124,6 +133,36 @@ class RetirarIn(BaseModel):
     # que no pasó.
     service: ServiceIn | None = None
     incidencia_id: int | None = None
+
+
+class ActaLineaIn(BaseModel):
+    """Un equipo dentro del acta. `contrato_equipo_id` es la **colocación**, no
+    el activo: ver el docstring de `ContratoActaLinea`."""
+
+    contrato_equipo_id: int
+    estado_fisico: str | None = None
+    accesorios: str | None = None
+    # Los tres de devolución. En una entrega el servicio los rechaza: el equipo
+    # sale de acá, no hay nada que falte ni que cobrar.
+    faltantes: str | None = None
+    danios: str | None = None
+    cargo_reposicion: float | None = None
+    observaciones: str | None = None
+
+
+class ActaIn(BaseModel):
+    tipo: str
+    fecha: date
+    lineas: list[ActaLineaIn]
+    # Aclaraciones **tipeadas**, no firmas. El acta se imprime y se firma a
+    # mano; ver el docstring de `app/services/actas.py`.
+    entrega_nombre: str | None = None
+    recibe_nombre: str | None = None
+    observaciones: str | None = None
+
+
+class AnularActaIn(BaseModel):
+    motivo: str | None = None
 
 
 class ReemplazarIn(BaseModel):
@@ -334,5 +373,86 @@ def reemplazar_equipo(
     except KeyError as e:
         que, _id = e.args[0]
         raise HTTPException(404, f"{que} not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+# --- actas de entrega y devolución (fase 3) ----------------------------------
+#
+# ⚠️ **Van después de las rutas del contrato y el orden importa.** FastAPI
+# resuelve por orden de registro, así que `/actas/{acta_id}` tiene que quedar
+# donde ninguna ruta anterior con la misma cantidad de segmentos la capture. Las
+# de arriba tienen un literal en la segunda posición (`precios`, `equipos`,
+# `precio-en`), así que no chocan — pero una ruta nueva de dos segmentos con un
+# parámetro ahí sí lo haría, y se rompería en silencio.
+
+@router.get("/{contrato_id}/actas")
+def list_actas(
+    contrato_id: int,
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+    actas: ActaRepository = Depends(get_acta_repository),
+):
+    if contratos.get(contrato_id) is None:
+        raise HTTPException(404, "contrato not found")
+    return actas.list(contrato_id)
+
+
+@router.post("/{contrato_id}/actas", status_code=201)
+def emitir_acta(
+    contrato_id: int, data: ActaIn, request: Request,
+    actas: ActaRepository = Depends(get_acta_repository),
+):
+    """Emite el acta con sus equipos y, si la devolución cobra faltantes, su
+    cuota de reposición — todo en la misma transacción."""
+    campos = data.model_dump(exclude={"lineas"})
+    try:
+        return actas.create(
+            contrato_id, usuario=_usuario(request),
+            lineas=[le.model_dump() for le in data.lineas], **campos,
+        )
+    except KeyError as e:
+        que, _id = e.args[0]
+        raise HTTPException(404, f"{que} not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.get("/actas/{acta_id}")
+def get_acta(acta_id: int, actas: ActaRepository = Depends(get_acta_repository)):
+    a = actas.get(acta_id)
+    if a is None:
+        raise HTTPException(404, "acta not found")
+    return a
+
+
+@router.get("/actas/{acta_id}/pdf")
+def acta_en_pdf(acta_id: int, actas: ActaRepository = Depends(get_acta_repository)):
+    """El acta en PDF, para imprimirla y firmarla.
+
+    `inline` y no `attachment`, igual que el comprobante del taller: lo normal
+    es mirarla y mandarla a la impresora antes de salir a la instalación.
+    """
+    datos = actas.datos_para_pdf(acta_id)
+    if datos is None:
+        raise HTTPException(404, "acta not found")
+    return Response(
+        content=acta_pdf.generar_pdf_acta(datos),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{datos["numero"]}.pdf"'},
+    )
+
+
+@router.post("/actas/{acta_id}/anular")
+def anular_acta(
+    acta_id: int, data: AnularActaIn,
+    actas: ActaRepository = Depends(get_acta_repository),
+):
+    """Anula en vez de borrar, y **libera la colocación** para poder emitir la
+    correcta. Si el acta cobró y esa cuota ya salió en un remito, no se anula
+    ninguna de las dos."""
+    try:
+        return actas.anular(acta_id, motivo=data.motivo)
+    except KeyError:
+        raise HTTPException(404, "acta not found")
     except ValueError as e:
         raise HTTPException(409, str(e))
