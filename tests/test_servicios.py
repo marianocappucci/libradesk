@@ -186,8 +186,20 @@ def test_alta_edicion_y_baja(client):
     assert editado["precio"] == 250
     assert editado["texto"] == "con detalle"
 
+    # 🔑 **Desde el 2026-08-16 la baja es LÓGICA, no física**, y el motivo es
+    # que el servicio se mudó al catálogo del motor: allá **sí** puede estar
+    # referenciado —una línea de venta lo apunta por `item_id`, y desde ese
+    # mismo día también un cargo de mano de obra—. Borrarlo de verdad dejaría
+    # esas filas apuntando a un id que no existe.
+    #
+    # El gesto del usuario no cambia: la pantalla ya ofrecía desactivar antes
+    # que borrar, y el servicio **desaparece del listado** igual. Lo que cambia
+    # es que ya no hay forma de romper una venta vieja sin querer.
     assert client.delete(f"/api/servicios/{s['id']}").status_code == 204
-    assert client.get(f"/api/servicios/{s['id']}").status_code == 404
+    assert client.get(f"/api/servicios/{s['id']}").json()["activo"] is False
+    assert not [
+        x for x in client.get("/api/servicios").json() if x["id"] == s["id"]
+    ], "y no se ofrece más: el listado sólo trae los activos"
 
 
 def test_un_servicio_que_no_existe_da_404_y_no_500(client):
