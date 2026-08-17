@@ -55,13 +55,12 @@ from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
-from .services.servicios import ServicioRepository  # noqa: F401  (vuelta atrás)
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import comercial as comercial_service
-from .services import inventario, materiales, servicios_catalogo
+from .services import inventario, materiales
 from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
@@ -131,17 +130,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    también los clientes que ya existían.
     comercial_service.sincronizar_parties()
 
-    # 8. La mudanza del catálogo de servicios al del motor, para que las listas
-    #    de precios lo alcancen y la mano de obra se comporte como cualquier
-    #    otra línea. Idempotente y barato: sale por la primera consulta si
-    #    `servicios` no existe.
+    # 🔑 **Acá había un paso 8** —`servicios_catalogo.migrar()`, la copia de la
+    #    tabla propia de servicios al catálogo del motor— y se fue con la
+    #    revisión `0031`, que dropea el origen. Una copia sin origen no tiene
+    #    nada que hacer, y dejarla puesta la convertiría en una consulta por
+    #    arranque que siempre da cero.
     #
-    #    🔴 **Va acá y NO en una migración de Alembic**, y la diferencia no es
-    #    de estilo: `schema.ensure_schema()` corre en el paso 1, cuando
-    #    `catalog_items` todavía no existe. Una migración que insertara ahí
-    #    andaría en las instancias que ya tienen el motor y **fallaría en la
-    #    primera nueva**. Ver el docstring de `servicios_catalogo`.
-    servicios_catalogo.migrar(inventario._repo)
+    #    Se deja dicho porque el paso existió por un motivo que sigue siendo
+    #    cierto y que la próxima mudanza va a volver a necesitar: **no podía ser
+    #    una migración de Alembic**, porque `ensure_schema()` corre en el paso 1
+    #    y `catalog_items` recién existe después del paso 6. Una migración que
+    #    insertara ahí andaría en toda instancia que ya tuviera el motor y
+    #    fallaría en la primera nueva.
 
     sessions = get_session_factory()
     user_repository = UserRepository(sessions)
@@ -210,9 +210,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # catálogo sugiere y el comprobante copia texto y precio, así que los ids
     # nuevos no los referencia nada ya emitido.
     #
-    # `ServicioRepository` —el de la tabla vieja— queda importado a propósito:
-    # volver atrás es cambiar esta línea, y la tabla conserva sus datos hasta
-    # que una tercera release la dropee.
+    # La tercera release llegó: la revisión `0031` dropeó `servicios` y con ella
+    # se fue `ServicioRepository`. **Ya no hay vuelta atrás por esta línea**, y
+    # es la consecuencia querida de haber partido la mudanza en tres — la red
+    # existió las dos releases en que hubo algo que pudiera salir mal, y se
+    # levantó recién cuando las cuatro instancias quedaron verificadas.
     app.state.servicios = ServicioCatalogoRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)

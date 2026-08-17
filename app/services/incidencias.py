@@ -1045,7 +1045,7 @@ class IncidenciaRepository:
         cantidad. Por eso el CDS va en la descripcion y no en un campo aparte.
 
         🔴 **Los precios pueden salir en cero, y esta bien.** El valor hora sale
-        del catalogo de servicios (`ServicioRepository.valor_hora`) y puede no
+        del catalogo de servicios (`ServicioCatalogoRepository.valor_hora`) y puede
         estar marcado todavia; un material sin `default_sale_price` tampoco
         tiene precio. El remito nace con los importes que el sistema **sabe**, y
         el operador completa el resto editandolo; inventar un numero seria peor.
