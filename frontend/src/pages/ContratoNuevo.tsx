@@ -50,6 +50,10 @@ type ContratoFormValues = z.infer<typeof contratoSchema>
 
 const HOY = () => new Date().toISOString().slice(0, 10)
 
+/** El `id` del `<form>`, para que el botón del encabezado —que vive fuera— lo
+ *  pueda enviar con `form={ID_FORM}`. */
+const ID_FORM = 'form-contrato-nuevo'
+
 /**
  * Alta de contrato — **una pantalla, no un modal** (pedido del humano,
  * 2026-08-17).
@@ -149,13 +153,26 @@ export function ContratoNuevo() {
           </div>
         }
       >
+        {/* La acción principal va **arriba a la derecha** (pedido del humano,
+            2026-08-17), donde está la de todas las demás pantallas del producto
+            — «Nuevo contrato», «Colocar equipo», «Nueva acta»—. Con el
+            formulario largo, un botón al pie obliga a bajar hasta el final para
+            confirmar algo que ya se terminó de cargar arriba.
+
+            🔑 **Vive fuera del `<form>`, así que necesita `form={ID_FORM}`.**
+            Es el atributo que ata un `type="submit"` a un formulario que no lo
+            contiene; sin él el botón queda inerte y la pantalla no da ningún
+            error — sólo no pasa nada. */}
         <Button size="sm" variant="outline" onClick={() => navigate('/contratos')}>
           <ArrowLeft />Volver
+        </Button>
+        <Button type="submit" form={ID_FORM} disabled={saving}>
+          {saving ? 'Guardando…' : 'Crear contrato'}
         </Button>
       </EncabezadoDePantalla>
 
       <Form {...form}>
-        <form className="grid gap-4" onSubmit={form.handleSubmit(handleSubmit)}>
+        <form id={ID_FORM} className="grid gap-4" onSubmit={form.handleSubmit(handleSubmit)}>
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <Card>
@@ -322,14 +339,9 @@ export function ContratoNuevo() {
             </Card>
           )}
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate('/contratos')}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Guardando…' : 'Crear contrato'}
-            </Button>
-          </div>
+          {/* Sin fila de botones al pie: la de confirmar se fue al encabezado y
+              «Cancelar» sería un segundo «Volver» a dos centímetros del
+              primero. */}
         </form>
       </Form>
     </div>
