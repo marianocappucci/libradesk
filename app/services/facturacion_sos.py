@@ -85,6 +85,8 @@ from datetime import date, datetime
 
 import httpx
 
+from .facturacion_config import leer_efectiva
+
 logger = logging.getLogger(__name__)
 
 BASE_URL_ENV = "SOS_BASE_URL"
@@ -165,16 +167,93 @@ def configuracion() -> dict:
     La contraseña **no se devuelve en ningún log ni por la API**: vive acá y en
     el header de la request, y en ningún otro lado.
     """
+    datos = leer_efectiva("sos")
+
+    def _v(campo, env, default=""):
+        """La base primero, el entorno después, el default al final.
+
+        Se mira campo por campo y no "la base o el entorno" en bloque: una
+        instancia que abrió la pantalla para cambiar el punto de venta no tiene
+        por qué haber recargado el usuario y la contraseña que ya venían del
+        compose. `leer()` ya arrastra el entorno al CREAR la fila, pero esto
+        cubre además al campo agregado después.
+        """
+        de_la_base = str(datos.get(campo) or "").strip()
+        if de_la_base:
+            return de_la_base
+        return (os.environ.get(env) or "").strip() or default
+
     return {
-        "base_url": (os.environ.get(BASE_URL_ENV) or BASE_URL_DEFAULT).strip().rstrip("/"),
-        "usuario": (os.environ.get(USUARIO_ENV) or "").strip(),
-        "password": os.environ.get(PASSWORD_ENV) or "",
-        "idcuit": (os.environ.get(IDCUIT_ENV) or "").strip(),
-        "puntoventa": (os.environ.get(PUNTOVENTA_ENV) or "").strip(),
-        "letra": (os.environ.get(LETRA_ENV) or "C").strip().upper(),
-        "idtipo_operacion": (os.environ.get(TIPO_OPERACION_ENV) or "").strip(),
-        "idproducto_fijo": (os.environ.get(PRODUCTO_FIJO_ENV) or "").strip(),
+        "base_url": _v("base_url", BASE_URL_ENV, BASE_URL_DEFAULT).rstrip("/"),
+        "usuario": _v("usuario", USUARIO_ENV),
+        # La contraseña no se `strip`ea: un espacio al final puede ser parte de
+        # la clave, y recortarlo daría un 401 que no se parece a su causa.
+        "password": (datos.get("password") or os.environ.get(PASSWORD_ENV) or ""),
+        "idcuit": _v("idcuit", IDCUIT_ENV),
+        "puntoventa": _v("puntoventa", PUNTOVENTA_ENV),
+        "letra": _v("letra", LETRA_ENV, "C").upper(),
+        "idtipo_operacion": _v("idtipo_operacion", TIPO_OPERACION_ENV),
+        "idproducto_fijo": _v("idproducto", PRODUCTO_FIJO_ENV),
     }
+
+
+def listar_cuits(usuario: str = "", password: str = "") -> list[dict]:
+    """Las CUITs que ve un usuario de SOS: `[{idcuit, cuit, razonsocial}]`.
+
+    Es lo que hace que el `idcuit` no haya que ir a buscarlo a mano. **No es el
+    número de CUIT**: es el id interno con el que SOS identifica esa CUIT, y no
+    aparece en ninguna pantalla de SOS — sale de la API y nada más. Se pidió
+    después de tener que sacárselo a un cliente con un script.
+
+    Las credenciales llegan por parámetro cuando la pantalla las tiene tipeadas
+    y todavía sin guardar —que es el momento natural para apretar el botón— y
+    salen de la configuración guardada cuando no. Sin ninguna de las dos, lista
+    vacía: este listado no es un lugar para descubrir si una cuenta existe.
+
+    Sólo el primer paso del login: `POST /login` da el JWT del **usuario**, que
+    es justamente el que ve todas sus CUITs. El segundo paso
+    (`GET /cuit/credentials/:idcuit`) necesita el id que todavía no se tiene.
+    """
+    cfg = configuracion()
+    usuario = (usuario or "").strip() or cfg["usuario"]
+    password = password or cfg["password"]
+    if not (usuario and password):
+        return []
+
+    with httpx.Client(timeout=TIMEOUT) as cliente:
+        r = cliente.post(f"{cfg['base_url']}/login",
+                         json={"usuario": usuario, "password": password})
+        datos = interpretar(r.json() if r.content else {}, "login de usuario")
+        jwt = datos.get("jwt")
+        if not jwt:
+            raise ErrorSOS("el login no devolvió un JWT")
+
+        r = cliente.get(f"{cfg['base_url']}/cuit/listado",
+                        headers={"Authorization": f"Bearer {jwt}"})
+        cuerpo = interpretar(r.json() if r.content else {}, "listado de CUITs")
+
+    # Medido el 2026-08-18 contra la API real: la respuesta viene envuelta en
+    # `items`. Se acepta también la lista pelada porque la colección Postman
+    # —publicada en 2021— muestra esa forma, y no hay forma de saber cuál sirve
+    # la instancia de cada cliente.
+    filas = cuerpo.get("items") if isinstance(cuerpo, dict) else cuerpo
+    if not isinstance(filas, list):
+        return []
+
+    salida = []
+    for fila in filas:
+        if not isinstance(fila, dict):
+            continue
+        salida.append({
+            "idcuit": str(fila.get("id") or fila.get("idcuit") or "").strip(),
+            "cuit": str(fila.get("cuit") or "").strip(),
+            "razonsocial": str(fila.get("razonsocial") or "").strip(),
+            # `habilitado` viene como 1/0 y `owner` como booleano. Los dos se
+            # devuelven para que la pantalla pueda mostrar una CUIT deshabilitada
+            # sin dejar elegirla a ciegas.
+            "habilitado": bool(fila.get("habilitado", 1)),
+        })
+    return salida
 
 
 def esta_configurado() -> bool:
