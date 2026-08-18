@@ -100,6 +100,12 @@ TIPO_OPERACION_ENV = "SOS_IDTIPO_OPERACION"
 # de crear uno por descripción. Para el contador que no quiere que LibraDesk le
 # llene el catálogo.
 PRODUCTO_FIJO_ENV = "SOS_IDPRODUCTO"
+# La condición del EMISOR ante ARCA. Es lo que define qué letras puede emitir:
+# un Responsable Inscripto emite A o B según a quién le venda, y un
+# monotributista emite siempre C. Cuando no está puesta se deduce de `letra`
+# (ver `condicion_emisor`), así que ninguna instancia configurada necesita
+# tocar nada.
+CONDICION_EMISOR_ENV = "SOS_CONDICION_EMISOR"
 
 # La unidad "Unidad" de la tabla de AFIP, que es la que usan los productos ya
 # cargados. Sólo se usa al crear un producto nuevo.
@@ -112,6 +118,11 @@ BASE_URL_DEFAULT = "https://api.sos-contador.com/api-comunidad"
 TIPO_OPERACION_DEFAULT = 2
 
 TIMEOUT = 20.0
+
+# Tope de páginas al buscar un cliente. 100 páginas son 5.000 clientes, holgado
+# para las cuentas del parque (la de Lagrace tiene 35) y un freno para que una
+# cuenta enorme no convierta un envío en cientos de requests.
+MAX_PAGINAS_CLIENTES = 100
 
 # El JWT de la CUIT se reusa mientras dure, pero no se guarda para siempre: la
 # API no documenta la expiración, así que se renueva por tiempo y ante el
@@ -192,6 +203,7 @@ def configuracion() -> dict:
         "idcuit": _v("idcuit", IDCUIT_ENV),
         "puntoventa": _v("puntoventa", PUNTOVENTA_ENV),
         "letra": _v("letra", LETRA_ENV, "C").upper(),
+        "condicion_emisor": _v("condicion_emisor", CONDICION_EMISOR_ENV).lower(),
         "idtipo_operacion": _v("idtipo_operacion", TIPO_OPERACION_ENV),
         "idproducto_fijo": _v("idproducto", PRODUCTO_FIJO_ENV),
     }
@@ -303,6 +315,48 @@ def uniqueid_de(origen_tipo: str, origen_id: int, instancia: str) -> str:
     return str(uuid.uuid5(NAMESPACE_UNIQUEID, semilla))
 
 
+#: Qué condición de emisor implica cada letra configurada. Una A o una B sólo
+#: las emite un Responsable Inscripto; una C, un monotributista o un exento. Es
+#: la deducción que permite que las instancias ya configuradas —que tienen
+#: `letra` y no `condicion_emisor`— empiecen a derivar sin tocarles nada.
+CONDICION_EMISOR_POR_LETRA = {"A": "ri", "B": "ri", "C": "monotributo"}
+
+#: Las condiciones de receptor a las que un Responsable Inscripto les emite A.
+#: El resto —consumidor final, monotributista, exento, no alcanzado— recibe B.
+RECEPTORES_DE_LETRA_A = {"responsable_inscripto", "responsable inscripto", "ri"}
+
+
+def condicion_emisor(cfg: dict | None = None) -> str:
+    """`ri` o `monotributo`. De la config si está; si no, deducida de la letra."""
+    cfg = cfg if cfg is not None else configuracion()
+    explicita = (cfg.get("condicion_emisor") or "").strip().lower()
+    if explicita in ("ri", "responsable_inscripto", "responsable inscripto"):
+        return "ri"
+    if explicita in ("monotributo", "monotributista", "exento"):
+        return "monotributo"
+    return CONDICION_EMISOR_POR_LETRA.get((cfg.get("letra") or "").upper(), "monotributo")
+
+
+def letra_para(condicion_receptor: str | None, cfg: dict | None = None) -> str:
+    """La letra que le corresponde a ESTE comprobante.
+
+    🔴 **La letra la determina el receptor, no la instancia.** Antes salía de
+    `cfg["letra"]`, un valor fijo para todos los comprobantes, así que una
+    instancia con `letra = A` le mandaba una A a un consumidor final — que es
+    un comprobante que ARCA no emite. Se vio el 2026-08-18 en el primer envío
+    real de Lagrace: letra A, condición "consumidor final" y CUIT 0, los tres
+    campos contradiciéndose.
+
+    Un monotributista emite **siempre C**, así que para esas instancias
+    —`compulibra` entre ellas— esto no cambia nada.
+    """
+    cfg = cfg if cfg is not None else configuracion()
+    if condicion_emisor(cfg) != "ri":
+        return "C"
+    clave = (condicion_receptor or "").strip().lower().replace("-", "_")
+    return "A" if clave in RECEPTORES_DE_LETRA_A else "B"
+
+
 def condicion_iva_sos(valor: str | None) -> int:
     """El id de condición de IVA en SOS a partir de lo que guarda LibraDesk."""
     clave = (valor or "").strip().lower().replace("-", "_")
@@ -402,14 +456,9 @@ class AdaptadorSOS:
         cuit_limpio = "".join(ch for ch in str(cuit or "") if ch.isdigit())
 
         if cuit_limpio:
-            listado = self._request(
-                "GET", "/cliente/listado?cliente=true&proveedor=false&pagina=1&registros=500",
-                token=token,
-            )
-            datos = interpretar(listado, "listado de clientes")
-            for fila in (datos.get("items") or []) if isinstance(datos, dict) else []:
-                if str(fila.get("cuit") or "") == cuit_limpio:
-                    return int(fila["id"])
+            encontrado = self.buscar_cliente_por_cuit(cuit_limpio, token)
+            if encontrado is not None:
+                return encontrado
 
         # Al **crear** el campo se llama `idtipocondicioniva`; al **leer** viene
         # como `idcondicioniva`. La asimetría es de la API, no un typo.
@@ -422,6 +471,56 @@ class AdaptadorSOS:
             "domicilio": (domicilio or "").strip()[:200],
         })
         return id_creado(nuevo, "alta de cliente")
+
+    def buscar_cliente_por_cuit(self, cuit: str, token: str | None = None) -> int | None:
+        """El `idclipro` de un CUIT, recorriendo **todas** las páginas.
+
+        🔴 **`registros` no se respeta: SOS tapa en 50 por página.** El código
+        pedía `pagina=1&registros=500` y daba por hecho que traía todo, así que
+        buscaba entre los primeros 50 de —en la cuenta de Lagrace— **1.737
+        clientes en 35 páginas**. Un cliente que ya existía pero caía en la
+        página 2 o más no se encontraba, y el alta de abajo le creaba un
+        **duplicado en el sistema del contador**. Medido el 2026-08-18: los seis
+        parámetros de filtro que se probaron (`cuit`, `buscar`, `filtro`,
+        `search`, `q`, `clipro`) devuelven la página 1 sin filtrar, así que no
+        hay forma de que el servidor busque por nosotros.
+
+        Se corta apenas lo encuentra, que en la práctica es lo que evita las 35
+        vueltas: los clientes activos tienden a estar entre los primeros.
+        """
+        token = token or self.token()
+        pagina = 1
+        paginas = 1
+        while pagina <= paginas and pagina <= MAX_PAGINAS_CLIENTES:
+            datos = interpretar(
+                self._request(
+                    "GET",
+                    f"/cliente/listado?cliente=true&proveedor=false&pagina={pagina}&registros=50",
+                    token=token,
+                ),
+                "listado de clientes",
+            )
+            if not isinstance(datos, dict):
+                return None
+            filas = datos.get("items") or []
+            if not filas:
+                return None
+            paginas = int(datos.get("paginas") or 1)
+            for fila in filas:
+                if str(fila.get("cuit") or "") == cuit:
+                    return int(fila["id"])
+            pagina += 1
+
+        if paginas > MAX_PAGINAS_CLIENTES:
+            # Se avisa en vez de crear un duplicado callado: con más páginas que
+            # el tope, "no lo encontré" y "no lo busqué entero" son la misma
+            # respuesta, y la de abajo da de alta un cliente repetido.
+            logger.warning(
+                "El listado de clientes de SOS tiene %d páginas y se recorrieron "
+                "%d: si el cliente estaba más allá, se va a crear duplicado.",
+                paginas, MAX_PAGINAS_CLIENTES,
+            )
+        return None
 
     # ── Productos ────────────────────────────────────────────────────────────
 
@@ -537,7 +636,7 @@ class AdaptadorSOS:
     # ── El alta ──────────────────────────────────────────────────────────────
 
     def armar_venta(self, payload: dict, idclipro: int, numero: int,
-                    productos: list[dict]) -> dict:
+                    productos: list[dict], letra: str | None = None) -> dict:
         """Del dict neutro del puente al cuerpo de `PUT /venta/0`.
 
         `productos` va **siempre**: sin él SOS crea el comprobante vacío y
@@ -561,7 +660,9 @@ class AdaptadorSOS:
             "cuitclipro": "".join(ch for ch in str(payload.get("cliente_cuit") or "") if ch.isdigit()),
             "idcuenta": None,
             "fcncnd": "F",
-            "letra": cfg["letra"],
+            # `letra` viene calculada de la condición del receptor; el default
+            # es sólo para los llamadores viejos que no la pasan.
+            "letra": letra or cfg["letra"],
             "puntoventa": int(cfg["puntoventa"]),
             "numero": numero,
             "numerohasta": None,
@@ -596,10 +697,46 @@ class AdaptadorSOS:
             payload.get("cliente_domicilio") or "",
             payload.get("cliente_condicion_iva"),
         )
-        numero = self.proximo_numero(int(cfg["puntoventa"]), cfg["letra"])
-        cuerpo = self.armar_venta(payload, idclipro, numero, productos)
+        # La letra y la numeración van juntas: cada letra lleva su propia
+        # secuencia en el punto de venta, y `proximo_numero` ya consulta la del
+        # par que se le pasa. Pedirle el número de una letra y mandar otra deja
+        # el comprobante con un número que ya existe.
+        letra = letra_para(payload.get("cliente_condicion_iva"), cfg)
+        numero = self.proximo_numero(int(cfg["puntoventa"]), letra)
+        cuerpo = self.armar_venta(payload, idclipro, numero, productos, letra)
         respuesta = self._request("PUT", "/venta/0", token=self.token(), cuerpo=cuerpo)
         return id_creado(respuesta, "alta de venta")
+
+    def estado_venta(self, idventa: int) -> dict:
+        """Cómo está el comprobante **del lado de SOS**: emitido o no.
+
+        Sale de `GET /venta/detalle`, no de `GET /cae/status`. Los dos existen,
+        pero el segundo trae un `cae_error` que **miente**: con
+        `obtienecae: false` contesta siempre *"Error indefinido obteniendo
+        CAE"*, o sea que no distingue "todavía no se pidió" de "se pidió y
+        falló". Medido el 2026-08-18 contra un comprobante recién cargado, que
+        no tenía ningún error.
+
+        Lo que sí es confiable es la cabecera: `cae` en `null` es *cargado sin
+        emitir*, y con valor es *emitido*.
+        """
+        datos = interpretar(
+            self._request("GET", f"/venta/detalle/{idventa}", token=self.token()),
+            "detalle de la venta",
+        )
+        cab = datos.get("cabecera") if isinstance(datos, dict) else None
+        if not isinstance(cab, dict):
+            raise ErrorSOS(f"SOS no devolvió la cabecera de la venta {idventa}")
+        cae = str(cab.get("cae") or "").strip()
+        return {
+            "emitido": bool(cae),
+            "cae": cae,
+            "cae_vencimiento": cab.get("caevencimiento") or "",
+            "comprobante": f"{cab.get('fcncnd') or ''}{cab.get('letra') or ''} "
+                           f"{str(cab.get('puntoventa') or '').zfill(4)}-"
+                           f"{str(cab.get('numero') or '').zfill(8)}".strip(),
+            "total": cab.get("total") if cab.get("total") is not None else None,
+        }
 
     def estado_cae(self, idventa: int) -> dict:
         """En qué quedó el CAE. Con `obtienecae: false` devuelve

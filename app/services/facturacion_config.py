@@ -50,7 +50,7 @@ SECRETOS = {
 PARAMETROS = {
     "contalibra": ("url", "instancia"),
     "sos": ("base_url", "usuario", "idcuit", "puntoventa", "letra",
-            "idtipo_operacion", "idproducto"),
+            "condicion_emisor", "idtipo_operacion", "idproducto"),
 }
 
 # Qué variable de entorno mira cada campo cuando no hay fila en la base. Es lo
@@ -61,6 +61,7 @@ ENTORNO = {
     "sos": {"base_url": "SOS_BASE_URL", "usuario": "SOS_USUARIO",
             "password": "SOS_PASSWORD", "idcuit": "SOS_IDCUIT",
             "puntoventa": "SOS_PUNTOVENTA", "letra": "SOS_LETRA",
+            "condicion_emisor": "SOS_CONDICION_EMISOR",
             "idtipo_operacion": "SOS_IDTIPO_OPERACION",
             "idproducto": "SOS_IDPRODUCTO"},
 }

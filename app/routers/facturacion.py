@@ -25,11 +25,13 @@ uno.
 **Ninguna ruta de este módulo emite nada.** Lo peor que puede hacer es dejar una
 fila en una bandeja del otro lado, que se descarta con un click.
 """
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_puente_facturacion, get_remito_service
 from ..services.facturacion_externa import (
+    DESTINO_SOS,
     ORIGEN_REMITO,
     ORIGENES_ENVIABLES,
     EnvioNoConfigurado,
@@ -89,6 +91,50 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
         "destino_nombre": nombre_destino(),
         "envios": puente.listar(),
     }
+
+
+@router.get("/estados-sos")
+def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
+    """Cómo está cada comprobante ya mandado, **preguntándoselo a SOS**.
+
+    Contesta la pregunta que hasta ahora no se podía hacer desde adentro: si el
+    contador ya lo emitió, si sigue cargado sin CAE, o si el envío quedó
+    colgado. LibraDesk no lo guarda: ese estado vive del otro lado y cambia sin
+    avisarnos, así que una copia local sería una foto vencida.
+
+    🔑 **Se lee `GET /venta/detalle` y no `GET /cae/status`.** El segundo trae un
+    `cae_error` que dice *"Error indefinido obteniendo CAE"* aunque no haya
+    pasado nada: con `obtienecae: false` el CAE **nunca se pidió**, y ese campo
+    no distingue eso de un fallo real. Medido el 2026-08-18 contra un
+    comprobante recién cargado. La cabecera, en cambio, es inequívoca: `cae` en
+    `null` es cargado sin emitir.
+
+    Un error por fila no tumba el resto: se anota en esa fila y se sigue. Con
+    veinte comprobantes, que uno no se pueda leer no puede dejar la pantalla sin
+    los diecinueve.
+    """
+    if destino() != DESTINO_SOS:
+        raise HTTPException(
+            409, f"Esta instancia manda a {nombre_destino()}, que no expone el "
+                 f"estado de los comprobantes.")
+
+    from ..services.facturacion_sos import AdaptadorSOS, ErrorSOS
+
+    adaptador = AdaptadorSOS()
+    filas = []
+    for envio in puente.listar():
+        remoto = envio.get("comprobante_remoto_id")
+        if not remoto:
+            continue
+        fila = {"origen_tipo": envio.get("origen_tipo"),
+                "origen_id": envio.get("origen_id"),
+                "comprobante_remoto_id": remoto}
+        try:
+            fila.update(adaptador.estado_venta(int(remoto)))
+        except (ErrorSOS, httpx.HTTPError) as e:
+            fila["error"] = str(e)
+        filas.append(fila)
+    return {"items": filas}
 
 
 @router.get("/pendientes")
@@ -165,6 +211,14 @@ def enviar(
             continue
         try:
             resultados.append(puente.enviar(data.origen_tipo, comprobante))
+        except OrigenNoFacturable as e:
+            # La guarda fiscal corre adentro del puente, con el payload ya
+            # armado: es el único punto donde están juntas la letra que
+            # corresponde, la condición del receptor y el CUIT. Que corte acá
+            # —y no que el envío quede en `error`— es la diferencia entre "no se
+            # mandó, corregí esto" y "se mandó y falló".
+            resultados.append({"origen_id": origen_id, "estado": "no_facturable",
+                               "detalle": str(e)})
         except EnvioNoConfigurado as e:
             # No debería llegar acá —arriba se chequea— pero si la variable
             # desaparece entre medio, esto lo dice en vez de dar un 500.
