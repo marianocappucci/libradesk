@@ -15,7 +15,7 @@
  *  `app/services/facturacion_config.py`.
  */
 import { useEffect, useState } from 'react'
-import { Check, Send } from 'lucide-react'
+import { Check, Search, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertTriangle, KeyRound, Trash2 } from '@/components/iconos-accion'
+
+/** Una CUIT como la devuelve `POST /api/facturacion/config/sos/cuits`. */
+export type CuitDeSos = {
+  idcuit: string
+  cuit: string
+  razonsocial: string
+  habilitado: boolean
+}
 
 export type DestinoConfig = {
   destino: string
@@ -70,6 +78,11 @@ function DestinoCard({ inicial, onGuardado }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guardado, setGuardado] = useState(false)
+  // El listado de CUITs que trae el botón. `null` = todavía no se buscó, que
+  // no es lo mismo que "se buscó y no hay ninguna".
+  const [cuits, setCuits] = useState<CuitDeSos[] | null>(null)
+  const [buscandoCuits, setBuscandoCuits] = useState(false)
+  const [errorCuits, setErrorCuits] = useState<string | null>(null)
 
   useEffect(() => { setDatos(inicial) }, [inicial])
 
@@ -103,6 +116,39 @@ function DestinoCard({ inicial, onGuardado }: {
       setError(err instanceof ApiError ? err.detail : 'Error de conexión.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** Trae las CUITs que ve el usuario de SOS y completa el id.
+   *
+   *  El `idcuit` no aparece en ninguna pantalla de SOS: es un id interno que
+   *  sólo devuelve la API. Sin esto hay que ir a buscarlo con un script, que es
+   *  como se consiguió el de Lagrace.
+   *
+   *  Manda lo que está **tipeado** en la pantalla, no lo guardado: el momento
+   *  natural para apretar el botón es mientras se cargan usuario y contraseña,
+   *  antes del primer Guardar — que además no se puede completar sin el id. Si
+   *  el campo de contraseña está vacío significa "la guardada sirve", y el
+   *  backend usa esa.
+   */
+  async function buscarCuits() {
+    setBuscandoCuits(true)
+    setErrorCuits(null)
+    try {
+      const r = await api.post<{ cuits: CuitDeSos[] }>(
+        '/api/facturacion/config/sos/cuits',
+        { usuario: String(datos.usuario ?? ''), password: secreto },
+      )
+      setCuits(r.cuits)
+      // Con una sola no se hace elegir: se completa y se muestra cuál quedó.
+      // Con varias hay que decidir, y decidir por el usuario acá es mandarle
+      // los comprobantes a la razón social equivocada.
+      if (r.cuits.length === 1) set('idcuit', r.cuits[0].idcuit)
+    } catch (err) {
+      setErrorCuits(err instanceof ApiError ? err.detail : 'Error de conexión.')
+      setCuits(null)
+    } finally {
+      setBuscandoCuits(false)
     }
   }
 
@@ -162,18 +208,63 @@ function DestinoCard({ inicial, onGuardado }: {
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {CAMPOS[destino].map(({ campo, label, ayuda, ancho }) => (
+            {CAMPOS[destino].map(({ campo, label, ayuda, ancho }) => {
+              const esIdCuit = destino === 'sos' && campo === 'idcuit'
+              return (
               <div key={campo} className="grid gap-1">
                 <Label htmlFor={`${destino}-${campo}`}>{label}</Label>
-                <Input
-                  id={`${destino}-${campo}`}
-                  className={ancho}
-                  value={String(datos[campo] ?? '')}
-                  onChange={(e) => set(campo, e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id={`${destino}-${campo}`}
+                    className={ancho}
+                    value={String(datos[campo] ?? '')}
+                    onChange={(e) => set(campo, e.target.value)}
+                  />
+                  {esIdCuit && (
+                    <Button type="button" variant="outline" size="sm"
+                            onClick={buscarCuits}
+                            disabled={buscandoCuits || !String(datos.usuario ?? '').trim()}
+                            title="Consulta SOS con el usuario y la contraseña y trae las CUITs de esa cuenta">
+                      <Search className="size-4" />
+                      {buscandoCuits ? 'Buscando…' : 'Buscar en SOS'}
+                    </Button>
+                  )}
+                </div>
                 {ayuda && <p className="text-xs text-muted-foreground">{ayuda}</p>}
+                {esIdCuit && errorCuits && (
+                  <p className="text-xs text-destructive">{errorCuits}</p>
+                )}
+                {esIdCuit && cuits !== null && cuits.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Ese usuario no tiene ninguna CUIT asociada en SOS.
+                  </p>
+                )}
+                {esIdCuit && cuits !== null && cuits.length > 0 && (
+                  <div className="grid gap-1 rounded border p-2">
+                    <p className="text-xs text-muted-foreground">
+                      {cuits.length === 1
+                        ? 'La única CUIT de esa cuenta, ya cargada:'
+                        : 'Elegí a cuál se factura desde esta instancia:'}
+                    </p>
+                    {cuits.map((c) => (
+                      <button
+                        key={c.idcuit}
+                        type="button"
+                        onClick={() => set('idcuit', c.idcuit)}
+                        className={`flex flex-wrap items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent ${
+                          String(datos.idcuit ?? '') === c.idcuit ? 'bg-accent' : ''
+                        }`}
+                      >
+                        <span className="font-mono text-xs">{c.idcuit}</span>
+                        <span>{c.razonsocial}</span>
+                        <span className="text-xs text-muted-foreground">{c.cuit}</span>
+                        {!c.habilitado && <Badge variant="outline">deshabilitada en SOS</Badge>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
+            )})}
 
             <div className="grid gap-1">
               <Label htmlFor={`${destino}-secreto`} className="flex items-center gap-1.5">

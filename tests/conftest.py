@@ -330,3 +330,27 @@ def client(data_dir, url_de_base):
         # directorio real de la instancia.
         c.data_dir = data_dir
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _sin_configuracion_de_facturacion_colgada():
+    """La lectura de configuracion de facturacion no se filtra entre tests.
+
+    `configurar_lectura` es un GLOBAL del proceso, y `create_app` lo pone. Sin
+    esto, cualquier test que construya la app le deja al SIGUIENTE una
+    `ConfiguracionFacturacion` apuntando a una base que `url_de_base` ya
+    dropeo: el sintoma seria un error de conexion en un test que no tiene nada
+    que ver con facturacion, lejisimos de su causa.
+
+    El import va adentro y no arriba por lo mismo que el resto de este archivo
+    difiere los de `app`: importar el paquete antes de que las fixtures fijen el
+    entorno resuelve configuracion contra los valores equivocados.
+
+    Se resetea antes **y** despues: antes por si el orden de fixtures dejo la
+    app construida primero, despues para no ensuciar al que viene.
+    """
+    from app.services.facturacion_config import configurar_lectura
+
+    configurar_lectura(None)
+    yield
+    configurar_lectura(None)

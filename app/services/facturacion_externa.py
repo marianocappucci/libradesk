@@ -37,6 +37,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from ..database import Base
 from . import cuenta_corriente, fecha
+from .facturacion_config import destino_de_la_base, leer_efectiva
 
 logger = logging.getLogger(__name__)
 
@@ -175,19 +176,34 @@ class EnvioFacturacion(Base):
 
 
 def configuracion() -> tuple[str, str, str]:
-    """`(url, token, instancia)`. Cadenas vacías si no está configurado."""
-    url = (os.environ.get(URL_ENV) or "").strip().rstrip("/")
-    token = (os.environ.get(TOKEN_ENV) or "").strip()
-    instancia = (os.environ.get(INSTANCIA_ENV) or "").strip()
+    """`(url, token, instancia)`. Cadenas vacías si no está configurado.
+
+    Sale de `leer_efectiva`, que da la fila de la base si la pantalla guardó
+    una y el entorno si no. Antes leía `os.environ` derecho, así que una
+    instancia configurada por pantalla mandaba igual con lo del compose.
+    """
+    datos = leer_efectiva(DESTINO_CONTALIBRA)
+    url = str(datos.get("url") or "").strip().rstrip("/")
+    token = str(datos.get("token") or "").strip()
+    instancia = str(datos.get("instancia") or "").strip()
     return url, token, instancia
 
 
 def destino() -> str:
-    """A qué sistema se le manda. `contalibra` salvo que se diga lo contrario.
+    """A qué sistema se le manda.
 
-    Un valor desconocido cae en `contalibra` en vez de romper: un typo en el
-    compose no puede dejar de golpe a una instancia sin puente.
+    Manda lo tildado en `Configuración → Facturación`; si la pantalla no lo
+    decide —nadie la abrió, o dejó los dos destinos tildados— decide el
+    entorno; y si tampoco, `contalibra`.
+
+    **El default no se mueve**: una instancia que actualiza y no toca nada se
+    sigue comportando igual. Y un valor desconocido en el compose cae en
+    `contalibra` en vez de romper: un typo no puede dejar de golpe a una
+    instancia sin puente.
     """
+    de_la_base = destino_de_la_base()
+    if de_la_base in DESTINOS:
+        return de_la_base
     elegido = (os.environ.get(DESTINO_ENV) or "").strip().lower()
     return elegido if elegido in DESTINOS else DESTINO_CONTALIBRA
 
