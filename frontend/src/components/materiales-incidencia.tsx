@@ -130,7 +130,7 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
           <div className="grid gap-2 min-w-48">
             <Label>Consumible</Label>
             <Select value={item} onValueChange={(v) => { setItem(v); setDeposito('') }}>
-              <SelectTrigger><SelectValue placeholder="Elegí uno" /></SelectTrigger>
+              <SelectTrigger aria-label="Consumible"><SelectValue placeholder="Elegí uno" /></SelectTrigger>
               <SelectContent>
                 {consumibles.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
@@ -141,7 +141,7 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
           <div className="grid gap-2 min-w-44">
             <Label>Depósito</Label>
             <Select value={deposito} onValueChange={setDeposito} disabled={item === ''}>
-              <SelectTrigger><SelectValue placeholder="De dónde sale" /></SelectTrigger>
+              <SelectTrigger aria-label="Depósito del consumible"><SelectValue placeholder="De dónde sale" /></SelectTrigger>
               <SelectContent>
                 {stock.map((d) => (
                   <SelectItem key={d.id} value={String(d.id)}>
