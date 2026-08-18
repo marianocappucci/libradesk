@@ -140,6 +140,19 @@ services:
       # en el `.env`, asi que se referencia desde ahi y el compose del VPS
       # queda sin cambios locales.
       - DOCS_AUTH_SECRET=${DOCS_AUTH_SECRET:?falta DOCS_AUTH_SECRET}
+      # Token de servicio (libraauth v0.7.0). Es lo que le permite al
+      # backoffice administrar ESTA instancia por HTTP — usuarios, correo
+      # saliente y, desde v0.26.0, los codigos de acceso de una demo.
+      #
+      # 🔴 Lo valida `token_de_servicio_valido` contra el entorno de **la
+      # instancia que recibe**, no el del backoffice. Sin la variable aca, el
+      # backoffice recibe 401 por mas que el la tenga — y el sintoma es
+      # identico al de una credencial equivocada.
+      #
+      # Las tres instancias de cliente ya lo tenian escrito en su compose
+      # (el provisioning se lo pone al dar de alta). dev era la unica sin el,
+      # porque su compose es el del repo y no salio del provisioning.
+      - LIBRA_SERVICE_TOKEN=${LIBRA_SERVICE_TOKEN:?falta LIBRA_SERVICE_TOKEN}
       - ENV=production
       # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
       # igual y POST /auth/forgot-password devuelve 503: cargar estas
