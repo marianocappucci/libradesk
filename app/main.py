@@ -14,7 +14,10 @@ from libraauth.auth_events import AuthEventRepository
 from libraauth.models import Base as AuthBase
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
-from libraauth.session_auth import build_smtp_settings_router
+from libraauth.demo_codigos import DemoCodigoRepository
+from libraauth.session_auth import (
+    build_demo_codigos_router, build_smtp_settings_router, demo_username,
+)
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 from libracore.config_router import (
     build_backup_router, build_empresa_admin_router, build_empresa_router,
@@ -181,6 +184,19 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # Config SMTP editable por backoffice (libraauth v0.6.0), con la contraseña
     # cifrada en reposo. Mismo `sessions` que el resto del motor.
     app.state.smtp_settings = SmtpSettingsRepository(sessions)
+    # Codigos de acceso a la demo (libraauth v0.26.0). **Solo si esta
+    # instancia es una demo**, guiado por las mismas dos variables que
+    # siembran al visitante y registran `POST /auth/demo`: en la instancia de
+    # un cliente no hay demo que abrir, y dejar el repositorio cableado ahi
+    # publicaria un ABM que no significa nada.
+    #
+    # 🔴 Y al reves: una instancia demo que llegue hasta aca SIN el
+    # repositorio deja de dejar entrar. El endpoint falla cerrado a proposito
+    # — ver su docstring en el motor. Si un dia la demo devuelve
+    # `503 demo access codes not configured`, lo que falta es esta linea, no
+    # un codigo.
+    if demo_username():
+        app.state.demo_codigos = DemoCodigoRepository(sessions)
     app.state.password_reset = PasswordResetService(
         sessions,
         product_name="LibraDesk",
@@ -256,6 +272,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # quien pueda escribir ahí puede redirigir a dónde salen los enlaces de
     # recuperación de contraseña de todos los usuarios.
     app.include_router(build_smtp_settings_router())
+    # `GET`/`POST`/`DELETE /admin/demo-codigos`, solo en la demo. Exige rol
+    # admin o token de servicio por dentro, igual que el de SMTP: es por donde
+    # el backoffice emite los codigos que se le pasan a un cliente potencial.
+    if demo_username():
+        app.include_router(build_demo_codigos_router())
 
     # Sin `admin_only`: el unico router admin-only de LibraDesk era el de
     # usuarios, y ahora usa `require_admin_o_servicio`. Dejar la lista sin
