@@ -112,6 +112,29 @@ describe('La pantalla de alta', () => {
     await waitFor(() => expect(posts).toHaveLength(1))
   })
 
+  it('las grillas del formulario no estiran sus celdas', async () => {
+    // El defecto: sin `items-start`, la celda se estira al alto de la fila —que
+    // lo fija la que tiene `FormDescription`— y el `FormItem`, que es un grid,
+    // reparte ese alto entre sus filas. La etiqueta queda en una caja del doble
+    // de alto y `<Label>`, que es `flex items-center`, le centra el texto: se
+    // dibuja ~7 px más abajo que la de al lado.
+    //
+    // ⚠️ **Esto no mide el layout**: jsdom no calcula alturas, así que lo único
+    // que puede afirmar es que la clase está puesta. La medición de verdad se
+    // hizo en un navegador, y quedó en el commit: la caja de «Modalidad» medía
+    // 14 px y la de «Cliente (locatario)» 28; «Día de vencimiento», 38. Con el
+    // arreglo, las trece etiquetas miden 14 y cada par comparte el `top` de su
+    // etiqueta y el de su control.
+    render('/contratos/nuevo')
+    await screen.findByRole('heading', { name: 'Nuevo contrato' })
+
+    const grillas = document.querySelectorAll('[data-slot="card-content"]')
+    expect(grillas).toHaveLength(2)
+    for (const g of grillas) {
+      expect(g.className).toContain('items-start')
+    }
+  })
+
   it('crea el contrato y se va a su ficha', async () => {
     const user = userEvent.setup()
     render('/contratos/nuevo')
