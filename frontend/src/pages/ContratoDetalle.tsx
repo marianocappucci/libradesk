@@ -545,6 +545,7 @@ export function ContratoDetalle() {
                       ? 'Elegí un activo'
                       : 'No hay activos disponibles'
                   }
+                  ariaLabel={accion.tipo === 'colocar' ? 'Activo' : 'Activo de reemplazo'}
                 />
               </div>
             )}
@@ -570,7 +571,7 @@ export function ContratoDetalle() {
               <div className="grid gap-2">
                 <Label>Motivo</Label>
                 <Select value={motivoRetiro} onValueChange={setMotivoRetiro}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Motivo"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="devolucion">Devolución</SelectItem>
                     <SelectItem value="baja">Baja del equipo</SelectItem>
@@ -583,7 +584,7 @@ export function ContratoDetalle() {
               <div className="grid gap-2">
                 <Label>El equipo que sale queda</Label>
                 <Select value={estadoActivo} onValueChange={setEstadoActivo}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="El equipo que sale queda"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="retirado_a_revisar">Retirado, a revisar</SelectItem>
                     <SelectItem value="en_reparacion">En reparación</SelectItem>
@@ -615,6 +616,7 @@ export function ContratoDetalle() {
                     onChange={setProveedorId}
                     opciones={opcionesProveedor(proveedores.filter((p) => p.activo))}
                     placeholder="Elegí un proveedor"
+                    ariaLabel="Proveedor"
                   />
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">

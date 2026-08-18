@@ -600,7 +600,7 @@ export function Incidencias() {
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Estado</span>
           <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todos</SelectItem>
               {(Object.keys(ESTADO_LABELS) as (keyof typeof ESTADO_LABELS)[]).map((e) => (
@@ -612,7 +612,7 @@ export function Incidencias() {
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Prioridad</span>
           <Select value={filtroPrioridad} onValueChange={setFiltroPrioridad}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-36" aria-label="Filtrar por prioridad"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todas</SelectItem>
               {(Object.keys(PRIORIDAD_LABELS) as (keyof typeof PRIORIDAD_LABELS)[]).map((p) => (

@@ -144,7 +144,7 @@ export function Contratos() {
           <div className="grid gap-2">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={setEstado}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS}>Todos</SelectItem>
                 {Object.entries(ESTADO_CONTRATO_LABELS).map(([e, label]) => (
@@ -156,7 +156,7 @@ export function Contratos() {
           <div className="grid gap-2">
             <Label>Modalidad</Label>
             <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Filtrar por modalidad"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS}>Todas</SelectItem>
                 {Object.entries(TIPO_CONTRATO_LABELS).map(([t, label]) => (
@@ -172,6 +172,7 @@ export function Contratos() {
               onChange={setClienteId}
               opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
               placeholder="Todos los clientes"
+              ariaLabel="Filtrar por cliente"
             />
           </div>
         </CardContent>

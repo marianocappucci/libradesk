@@ -668,7 +668,7 @@ export function IncidenciaDetalle() {
                   {/* El punto también en el trigger y en cada opción: al
                       cambiar el estado se ve a qué color se está pasando, que
                       es la mitad de lo que uno decide al moverlo. */}
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Estado">
                     <span className="flex items-center gap-2">
                       <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
                       <SelectValue />
@@ -689,7 +689,7 @@ export function IncidenciaDetalle() {
               <div className="grid gap-2">
                 <Label>Prioridad</Label>
                 <Select value={incidencia.prioridad} onValueChange={(prioridad) => actualizarCampo({ prioridad: prioridad as Incidencia['prioridad'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Prioridad"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(PRIORIDAD_LABELS) as (keyof typeof PRIORIDAD_LABELS)[]).map((p) => (
                       <SelectItem key={p} value={p}>{PRIORIDAD_LABELS[p]}</SelectItem>
@@ -1039,7 +1039,7 @@ export function IncidenciaDetalle() {
             <div className="grid gap-2">
               <Label>Equipo que se retira</Label>
               <Select value={reemplazo.retirado} onValueChange={(v) => setReemplazo({ ...reemplazo, retirado: v })}>
-                <SelectTrigger><SelectValue placeholder="Elegí el equipo…" /></SelectTrigger>
+                <SelectTrigger aria-label="Equipo que se retira"><SelectValue placeholder="Elegí el equipo…" /></SelectTrigger>
                 <SelectContent>
                   {equiposDelCliente.map((e) => (
                     <SelectItem key={e.id} value={String(e.id)}>
@@ -1053,7 +1053,7 @@ export function IncidenciaDetalle() {
             <div className="grid gap-2">
               <Label>Destino del equipo retirado</Label>
               <Select value={reemplazo.destino} onValueChange={(v) => setReemplazo({ ...reemplazo, destino: v as DestinoReemplazo })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Destino del equipo retirado"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(DESTINO_REEMPLAZO_LABELS) as DestinoReemplazo[]).map((d) => (
                     <SelectItem key={d} value={d}>{DESTINO_REEMPLAZO_LABELS[d]}</SelectItem>
@@ -1065,7 +1065,7 @@ export function IncidenciaDetalle() {
             <div className="grid gap-2">
               <Label>Equipo sustituto (opcional)</Label>
               <Select value={reemplazo.sustituto} onValueChange={(v) => setReemplazo({ ...reemplazo, sustituto: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Equipo sustituto"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>Sin reemplazo</SelectItem>
                   {equiposDelCliente
@@ -1110,6 +1110,7 @@ export function IncidenciaDetalle() {
                       ...opcionesProveedor(proveedores),
                     ]}
                     placeholder="Elegí el proveedor…"
+                    ariaLabel="Proveedor"
                   />
                   <span className="text-xs text-muted-foreground">
                     {proveedores.length === 0
