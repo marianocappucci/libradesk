@@ -8,6 +8,8 @@ from libracore.db.url_de_instancia import url_de_instancia
 from pathlib import Path
 
 from fastapi.responses import FileResponse
+
+from app.spa import TIPOS_PROPIOS, archivo_publico
 from fastapi.staticfiles import StaticFiles
 
 from .main import create_app
@@ -32,5 +34,7 @@ if FRONTEND_DIST.is_dir():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
-        del full_path
+        archivo = archivo_publico(FRONTEND_DIST, full_path)
+        if archivo is not None:
+            return FileResponse(archivo, media_type=TIPOS_PROPIOS.get(archivo.suffix))
         return FileResponse(FRONTEND_DIST / "index.html")
