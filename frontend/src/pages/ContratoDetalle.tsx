@@ -22,6 +22,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FilePenLine as FileSignature } from 'lucide-react'
 import {
   ArrowLeft, PackagePlus, Printer, Repeat, TrendingUp, Undo2, XCircle,
@@ -230,6 +231,9 @@ export function ContratoDetalle() {
   const lineas = contrato.lineas ?? []
   const precios = contrato.precios ?? []
   const cerrado = contrato.estado === 'rescindido' || contrato.estado === 'finalizado'
+  // Un contrato sin equipos —el abono— no entrega nada, así que no tiene de qué
+  // hablar la pestaña de actas. Con actas viejas sí, aunque hoy no haya equipos.
+  const hayActas = lineas.length > 0 || actas.length > 0
 
   return (
     <div className="grid gap-4">
@@ -254,6 +258,27 @@ export function ContratoDetalle() {
         </Button>
       </EncabezadoDePantalla>
 
+      {/* Las cuatro secciones en pestañas (pedido del humano, 2026-08-17).
+          Antes iban una debajo de la otra: con equipos, precios y actas cargados
+          la ficha eran cuatro tablas apiladas y llegar a la de abajo era
+          scrollear el largo de las tres de arriba.
+
+          🔑 **Cada pestaña conserva su tarjeta con su título.** El título no es
+          redundante con la pestaña: la pestaña dice dónde estoy y el título dice
+          qué estoy mirando, y sin él la tabla arranca sin encabezado.
+
+          Las dos últimas aparecen sólo cuando tienen de qué hablar —un comodato
+          no cobra y un abono no entrega equipos—, que es el mismo criterio con
+          el que antes se escondían las tarjetas. */}
+      <Tabs defaultValue="contrato">
+        <TabsList>
+          <TabsTrigger value="contrato">Contrato</TabsTrigger>
+          <TabsTrigger value="equipos">Equipos</TabsTrigger>
+          {contrato.lleva_cuota && <TabsTrigger value="historial">Historial</TabsTrigger>}
+          {hayActas && <TabsTrigger value="actas">Actas</TabsTrigger>}
+        </TabsList>
+
+      <TabsContent value="contrato">
       <Card>
         <CardHeader><CardTitle>Datos del contrato</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
@@ -288,8 +313,10 @@ export function ContratoDetalle() {
           <Dato label="Observaciones" valor={contrato.observaciones} />
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* --- Equipos --------------------------------------------------- */}
+      <TabsContent value="equipos">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Equipos instalados</CardTitle>
@@ -347,9 +374,11 @@ export function ContratoDetalle() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* --- Precios --------------------------------------------------- */}
       {contrato.lleva_cuota && (
+        <TabsContent value="historial">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Historial de precios</CardTitle>
@@ -388,13 +417,16 @@ export function ContratoDetalle() {
             )}
           </CardContent>
         </Card>
+        </TabsContent>
       )}
 
       {/* --- Actas (fase 3) --------------------------------------------
-          Sólo si hay equipos (o actas viejas): un abono de mantenimiento es un
-          contrato **sin equipos**, y ofrecerle «el papel que prueba que el
-          equipo se entregó» describe algo que en ese contrato no pasa. */}
-      {(lineas.length > 0 || actas.length > 0) && (
+          La pestaña sólo existe si hay equipos (o actas viejas): un abono de
+          mantenimiento es un contrato **sin equipos**, y ofrecerle «el papel que
+          prueba que el equipo se entregó» describe algo que en ese contrato no
+          pasa. */}
+      {hayActas && (
+      <TabsContent value="actas">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Actas de entrega y devolución</CardTitle>
@@ -429,8 +461,12 @@ export function ContratoDetalle() {
                       <td className="py-2 pr-3">{a.equipos}</td>
                       <td className="py-2 pr-3">{a.recibe_nombre ?? '—'}</td>
                       <td className="py-2 pr-3">
+                        {/* Con centavos: es el único importe de la ficha que
+                            los lleva —el cargo lo tipea el técnico—, y el PDF
+                            del acta los imprime. Sin esto la pantalla decía
+                            $ 7.501 y el papel $ 7.500,50. */}
                         {a.cargo_total
-                          ? pesos(a.cargo_total, contrato.moneda)
+                          ? pesos(a.cargo_total, contrato.moneda, { centavos: true })
                           : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="py-2 text-right">
@@ -459,7 +495,9 @@ export function ContratoDetalle() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
       )}
+      </Tabs>
 
       {/* --- Diálogo de las cuatro acciones ---------------------------- */}
       <Dialog open={accion !== null} onOpenChange={(open) => !open && setAccion(null)}>
