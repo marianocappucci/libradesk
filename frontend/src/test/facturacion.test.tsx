@@ -42,7 +42,8 @@ function json(body: unknown, status = 200) {
 let posts: { url: string; body: unknown }[]
 
 function montar(items: unknown[], configurado = true, resultados: unknown[] = [],
-                destinoNombre = 'Contalibra') {
+                destinoNombre = 'Contalibra',
+                opciones: { destino?: string; estadosSos?: unknown[] } = {}) {
   posts = []
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const u = String(url)
@@ -50,10 +51,17 @@ function montar(items: unknown[], configurado = true, resultados: unknown[] = []
       posts.push({ url: u, body: JSON.parse(String(init.body)) })
       return Promise.resolve(json({ resultados }))
     }
+    if (u.includes('/api/facturacion/estados-sos')) {
+      return Promise.resolve(json({ items: opciones.estadosSos ?? [] }))
+    }
     if (u.includes('/api/facturacion/pendientes')) {
       // `destino_nombre` lo manda el backend: la pantalla no sabe a dónde
-      // apunta la instancia y no tiene por qué adivinarlo.
-      return Promise.resolve(json({ configurado, destino_nombre: destinoNombre, items }))
+      // apunta la instancia y no tiene por qué adivinarlo. `destino` es el
+      // slug, que es lo que decide si se ofrece consultar el estado.
+      return Promise.resolve(json({
+        configurado, destino: opciones.destino ?? 'contalibra',
+        destino_nombre: destinoNombre, items,
+      }))
     }
     return Promise.resolve(json({}))
   }))
@@ -249,5 +257,95 @@ describe('enviar a facturar', () => {
     expect(
       await screen.findByText(/No hay remitos para mandar/i),
     ).toBeInTheDocument()
+  })
+})
+
+// ── El estado del comprobante del lado del contador ─────────────────────────
+//
+// Lo pidió el humano el 2026-08-18, después del primer envío real: *"podemos
+// ver cuál es el estado del remito que mandamos... para saber si todavía está
+// sin CAE, si obtuvo CAE"*. Antes no había forma de saberlo sin entrar a SOS.
+
+describe('consultar el estado en el contador', () => {
+  const CON_ENVIO = {
+    ...REMITO,
+    envio: {
+      id: 1, origen_tipo: 'remito', origen_id: 1, estado: 'enviado',
+      comprobante_remoto_id: 906683730, detalle: '',
+      enviado_at: '2026-08-18', actualizado_at: '2026-08-18',
+    },
+  }
+
+  it('🔴 con Contalibra no se ofrece: esa bandeja no expone el estado', async () => {
+    montar([CON_ENVIO], true, [], 'Contalibra', { destino: 'contalibra' })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    expect(screen.queryByRole('button', { name: /Consultar estado/i }))
+      .not.toBeInTheDocument()
+  })
+
+  it('antes de consultar no dice nada, que no es lo mismo que "sin emitir"', async () => {
+    montar([CON_ENVIO], true, [], 'SOS Contador', { destino: 'sos' })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    // El botón está, pero la columna todavía no afirma nada. Sin este control,
+    // una pantalla que mostrara "Sin emitir" de arranque se vería igual —
+    // y estaría diciendo algo que no consultó.
+    expect(screen.getByRole('button', { name: /Consultar estado/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Sin emitir/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Emitido/i)).not.toBeInTheDocument()
+  })
+
+  it('un comprobante sin CAE se lee "Sin emitir", con su número', async () => {
+    montar([CON_ENVIO], true, [], 'SOS Contador', {
+      destino: 'sos',
+      estadosSos: [{ origen_id: 1, comprobante_remoto_id: 906683730,
+                     emitido: false, cae: '', comprobante: 'FA 0015-00000001' }],
+    })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    expect(await screen.findByText(/Sin emitir/i)).toBeInTheDocument()
+    expect(screen.getByText('FA 0015-00000001')).toBeInTheDocument()
+  })
+
+  it('cuando el contador emite aparece el CAE', async () => {
+    montar([CON_ENVIO], true, [], 'SOS Contador', {
+      destino: 'sos',
+      estadosSos: [{ origen_id: 1, comprobante_remoto_id: 906683730,
+                     emitido: true, cae: '71234567890123',
+                     comprobante: 'FA 0015-00000001' }],
+    })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    expect(await screen.findByText(/Emitido/i)).toBeInTheDocument()
+    expect(screen.getByText(/71234567890123/)).toBeInTheDocument()
+  })
+
+  it('una fila que no se pudo leer lo dice, y no tumba a las demás', async () => {
+    const OTRO_CON_ENVIO = { ...CON_ENVIO, id: 2, numero: 'REM-00000002' }
+    montar([CON_ENVIO, OTRO_CON_ENVIO], true, [], 'SOS Contador', {
+      destino: 'sos',
+      estadosSos: [
+        { origen_id: 1, comprobante_remoto_id: 1, error: 'SOS no devolvió la cabecera' },
+        { origen_id: 2, comprobante_remoto_id: 2, emitido: true, cae: '999' },
+      ],
+    })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    expect(await screen.findByText(/No se pudo leer/i)).toBeInTheDocument()
+    // Y la otra fila igual muestra lo suyo: con veinte comprobantes, que uno
+    // falle no puede dejar la pantalla sin los diecinueve.
+    expect(screen.getByText(/Emitido/i)).toBeInTheDocument()
   })
 })

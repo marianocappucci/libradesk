@@ -20,6 +20,18 @@ COMPROBANTE = {
     "number": "REM-00000012",
     "client_name": "Cliente de Prueba",
     "client_cuit": "20111111112",
+    # 🔴 Apareció el 2026-08-18, con la guarda de coherencia fiscal.
+    #
+    # Estos casos prueban el manejo de errores de SOS, no la validación, pero
+    # mandaban un comprobante **sin condición de IVA** — que es justo lo que la
+    # guarda ahora no deja pasar, porque sin ella no hay forma de saber si va
+    # como A, B o C. Los siete se pusieron rojos de una, y eso es la señal de
+    # que la guarda muerde en un escenario realista y no sólo en su propio test.
+    #
+    # Se completa la ficha en vez de saltear la guarda: un comprobante que no se
+    # puede facturar no es un buen punto de partida para probar qué pasa cuando
+    # SOS rechaza el alta.
+    "client_iva_condition": "Responsable Inscripto",
     "client_address": "Belgrano 448",
     "date": "2026-08-11",
     "observations": "Service de agosto",
