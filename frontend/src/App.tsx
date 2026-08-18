@@ -21,6 +21,7 @@ import { RecepcionesEntregados, RecepcionesTaller } from './pages/Recepciones'
 import { Activos } from './pages/Activos'
 import { Stock } from './pages/Stock'
 import { Contratos } from './pages/Contratos'
+import { ContratoNuevo } from './pages/ContratoNuevo'
 import { Cuotas } from './pages/Cuotas'
 import { ContratoDetalle } from './pages/ContratoDetalle'
 import { Tecnicos } from './pages/Tecnicos'
@@ -111,6 +112,11 @@ export default function App() {
           la ficha tiene acciones que cambian el estado del contrato y conviene
           poder linkearla desde la fila de un activo. */}
       <Route path="/contratos" element={<ProtectedRoute><Contratos /></ProtectedRoute>} />
+      {/* ⚠️ **Antes que `/contratos/:id`.** React Router v6 rankea y el
+          segmento estático gana igual, pero declarado después se lee como si
+          `nuevo` pudiera caer en el parámetro — y ahí la ficha pediría
+          `/api/contratos/nuevo`. El orden acá lo deja dicho. */}
+      <Route path="/contratos/nuevo" element={<ProtectedRoute><ContratoNuevo /></ProtectedRoute>} />
       <Route path="/contratos/:id" element={<ProtectedRoute><ContratoDetalle /></ProtectedRoute>} />
       <Route path="/cuotas" element={<ProtectedRoute><Cuotas /></ProtectedRoute>} />
       <Route path="/activos" element={<ProtectedRoute><Activos /></ProtectedRoute>} />

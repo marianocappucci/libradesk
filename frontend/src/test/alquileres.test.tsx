@@ -153,9 +153,70 @@ beforeEach(() => {
   }))
 })
 
+/**
+ * La ficha pasó a pestañas el 2026-08-17, así que **el contenido de una sección
+ * no está en el DOM hasta entrar a la suya** — Radix monta sólo la activa. Cada
+ * test dice a qué pestaña va, que además es lo que hace un operador.
+ */
+async function irA(user: ReturnType<typeof userEvent.setup>, pestana: string) {
+  // Se espera a que la ficha cargue antes de tocar la pestaña: sin esto el
+  // click cae sobre el "Cargando…".
+  await screen.findByRole('tab', { name: pestana })
+  await user.click(screen.getByRole('tab', { name: pestana }))
+}
+
 describe('Ficha del contrato', () => {
-  it('el equipo reemplazado sigue en la tabla, con su ventana de fechas', async () => {
+  it('las cuatro pestañas, y cada una con su título adentro', async () => {
+    // El título no es redundante con la pestaña: la pestaña dice dónde estoy y
+    // el título qué estoy mirando. Se afirma el par en cada una.
+    const user = userEvent.setup()
     render(<ContratoDetalle />)
+
+    await screen.findByRole('tab', { name: 'Contrato' })
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Contrato', 'Equipos', 'Historial', 'Actas',
+    ])
+    // La primera abre sola: entrar a la ficha y ver una pantalla vacía hasta
+    // elegir pestaña sería peor que no tenerlas.
+    expect(screen.getByText('Datos del contrato')).toBeInTheDocument()
+
+    for (const [pestana, titulo] of [
+      ['Equipos', 'Equipos instalados'],
+      ['Historial', 'Historial de precios'],
+      ['Actas', 'Actas de entrega y devolución'],
+      ['Contrato', 'Datos del contrato'],
+    ]) {
+      await irA(user, pestana)
+      expect(await screen.findByText(titulo)).toBeInTheDocument()
+    }
+  })
+
+  it('sin equipos ni cuota, sólo quedan las pestañas que tienen de qué hablar', async () => {
+    // El abono: no entrega equipos, así que la de actas no existe. Una pestaña
+    // que abre en "esto no aplica" es peor que no estar.
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url)
+      if (u.includes('/actas')) return Promise.resolve(json([]))
+      if (u.includes('/api/contratos/1')) {
+        return Promise.resolve(json({
+          ...CONTRATO, tipo_contrato: 'comodato', lleva_cuota: false,
+          lineas: [], precios: [],
+        }))
+      }
+      return Promise.resolve(json([]))
+    }))
+    render(<ContratoDetalle />)
+
+    await screen.findByRole('tab', { name: 'Contrato' })
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Contrato', 'Equipos',
+    ])
+  })
+
+  it('el equipo reemplazado sigue en la tabla, con su ventana de fechas', async () => {
+    const user = userEvent.setup()
+    render(<ContratoDetalle />)
+    await irA(user, 'Equipos')
 
     // El que está puesto hoy.
     expect(await screen.findByText('GS-B456')).toBeInTheDocument()
@@ -178,7 +239,9 @@ describe('Ficha del contrato', () => {
   })
 
   it('sólo la línea vigente ofrece retirar y reemplazar', async () => {
+    const user = userEvent.setup()
     render(<ContratoDetalle />)
+    await irA(user, 'Equipos')
     await screen.findByText('GS-B456')
 
     // Una sola de las dos filas tiene acciones: ofrecer "retirar" sobre una
@@ -188,7 +251,9 @@ describe('Ficha del contrato', () => {
   })
 
   it('el histórico de precios muestra el viejo con su importe intacto', async () => {
+    const user = userEvent.setup()
     render(<ContratoDetalle />)
+    await irA(user, 'Historial')
 
     expect(await screen.findByText('$ 55.000')).toBeInTheDocument()
     // El anterior conserva SU importe y su vigencia cerrada. Si el módulo
@@ -200,6 +265,7 @@ describe('Ficha del contrato', () => {
   it('el diálogo de reemplazo avisa que el anterior no se borra', async () => {
     const user = userEvent.setup()
     render(<ContratoDetalle />)
+    await irA(user, 'Equipos')
     await screen.findByText('GS-B456')
 
     await user.click(screen.getByRole('button', { name: 'Reemplazar equipo' }))
@@ -219,9 +285,11 @@ describe('Ficha del contrato', () => {
       }
       return Promise.resolve(json([]))
     }))
+    const user = userEvent.setup()
     render(<ContratoDetalle />)
 
     await screen.findByText('Finalizado')
+    await irA(user, 'Equipos')
     expect(screen.getByRole('button', { name: /Colocar equipo/ })).toBeDisabled()
   })
 })
@@ -230,6 +298,7 @@ describe('Ficha del contrato — service (fase 4)', () => {
   it('el bloque de service aparece sólo si el activo que sale queda en reparación', async () => {
     const user = userEvent.setup()
     render(<ContratoDetalle />)
+    await irA(user, 'Equipos')
     await screen.findByText('GS-B456')
 
     await user.click(screen.getByRole('button', { name: 'Retirar equipo' }))
@@ -242,6 +311,7 @@ describe('Ficha del contrato — service (fase 4)', () => {
   it('el activo que está en service se ofrece marcado, para poder reinstalarlo', async () => {
     const user = userEvent.setup()
     render(<ContratoDetalle />)
+    await irA(user, 'Equipos')
     await screen.findByText('GS-B456')
 
     await user.click(screen.getByRole('button', { name: /Colocar equipo/ }))

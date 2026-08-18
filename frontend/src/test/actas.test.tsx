@@ -100,9 +100,20 @@ beforeEach(() => {
   }))
 })
 
+/**
+ * Entra a la pestaña de actas. Desde el 2026-08-17 la ficha va en pestañas y
+ * Radix monta **sólo la activa**, así que la tarjeta no está en el DOM hasta
+ * entrar — que es también lo que hace un operador.
+ */
+async function irAActas(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('tab', { name: 'Actas' })
+  await user.click(screen.getByRole('tab', { name: 'Actas' }))
+  return screen.findByText('Actas de entrega y devolución')
+}
+
 /** Abre el diálogo de «Nueva acta» ya cargada la ficha. */
 async function abrirDialogo(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByText('CTR-00000001')
+  await irAActas(user)
   await user.click(screen.getByRole('button', { name: /Nueva acta/ }))
   return screen.findByRole('dialog', { name: /Acta de entrega o devolución/ })
 }
@@ -116,11 +127,13 @@ async function elegirTipo(
 
 describe('La tarjeta de actas', () => {
   it('sin actas dice para qué sirve, y no finge que falta un dato', async () => {
+    const user = userEvent.setup()
     render()
+    await irAActas(user)
     expect(await screen.findByText(/Sin actas todavía/)).toBeInTheDocument()
   })
 
-  it('un contrato sin equipos no muestra la tarjeta', async () => {
+  it('un contrato sin equipos no tiene ni la pestaña', async () => {
     // El caso es el abono de mantenimiento, que es un contrato **sin equipos**:
     // ofrecerle «el papel que prueba que el equipo se entregó» describe algo
     // que en ese contrato no pasa.
@@ -133,14 +146,29 @@ describe('La tarjeta de actas', () => {
       return Promise.resolve(json([]))
     }))
     render()
-    await screen.findByText('CTR-00000001')
+    await screen.findByRole('tab', { name: 'Contrato' })
 
+    expect(screen.queryByRole('tab', { name: 'Actas' })).not.toBeInTheDocument()
     expect(screen.queryByText('Actas de entrega y devolución')).not.toBeInTheDocument()
+  })
+
+  it('el cargo se muestra con centavos, como en el PDF', async () => {
+    // 🔴 Sin esto la pantalla dice `$ 7.501` y el acta que firma el cliente
+    // dice `$ 7.500,50`: dos números para el mismo cargo. Se encontró mirando
+    // la tabla en el navegador, no en un test.
+    actas = [{ ...ACTA_EMITIDA, cargo_total: 7500.5 }]
+    const user = userEvent.setup()
+    render()
+    await irAActas(user)
+
+    expect(await screen.findByText('$ 7.500,50')).toBeInTheDocument()
   })
 
   it('lista el acta con su número y el PDF apunta a esa acta', async () => {
     actas = [ACTA_EMITIDA]
+    const user = userEvent.setup()
     render()
+    await irAActas(user)
 
     expect(await screen.findByText('ACT-00000001')).toBeInTheDocument()
     expect(screen.getByText('Entrega')).toBeInTheDocument()
@@ -153,6 +181,7 @@ describe('La tarjeta de actas', () => {
     actas = [ACTA_EMITIDA]
     const user = userEvent.setup()
     render()
+    await irAActas(user)
     await screen.findByText('ACT-00000001')
 
     await user.click(screen.getByRole('button', { name: /Anular/ }))
@@ -162,7 +191,9 @@ describe('La tarjeta de actas', () => {
 
   it('una anulada no ofrece anular de nuevo, y se ve que lo está', async () => {
     actas = [{ ...ACTA_EMITIDA, estado: 'anulada', anulada: true }]
+    const user = userEvent.setup()
     render()
+    await irAActas(user)
     await screen.findByText('ACT-00000001')
 
     expect(screen.getByText('Anulada')).toBeInTheDocument()
