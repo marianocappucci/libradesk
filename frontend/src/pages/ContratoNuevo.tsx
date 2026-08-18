@@ -177,7 +177,17 @@ export function ContratoNuevo() {
 
           <Card>
             <CardHeader><CardTitle>Datos del contrato</CardTitle></CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
+            {/* 🔴 `items-start` no es decorativo. Sin él las celdas se estiran
+                al alto de la fila —que lo fija la más alta, la que tiene
+                `FormDescription` o `FormMessage`— y el `FormItem`, que es un
+                grid, reparte ese alto sobrante entre sus filas. La etiqueta
+                queda en una caja del doble de alto y, como `<Label>` es
+                `flex items-center`, su texto se centra ahí adentro: se dibuja
+                ~7 px más abajo que la de la columna de al lado.
+
+                Medido en el navegador: la caja de «Modalidad» medía 14 px y la
+                de «Cliente (locatario)» 28; «Día de vencimiento», 38. */}
+            <CardContent className="grid items-start gap-3 sm:grid-cols-2">
               <FormField control={form.control} name="tipo_contrato" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Modalidad</FormLabel>
@@ -259,7 +269,17 @@ export function ContratoNuevo() {
           {llevaCuota && (
             <Card>
               <CardHeader><CardTitle>Cobro y visitas</CardTitle></CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
+              {/* 🔴 `items-start` no es decorativo. Sin él las celdas se estiran
+                al alto de la fila —que lo fija la más alta, la que tiene
+                `FormDescription` o `FormMessage`— y el `FormItem`, que es un
+                grid, reparte ese alto sobrante entre sus filas. La etiqueta
+                queda en una caja del doble de alto y, como `<Label>` es
+                `flex items-center`, su texto se centra ahí adentro: se dibuja
+                ~7 px más abajo que la de la columna de al lado.
+
+                Medido en el navegador: la caja de «Modalidad» medía 14 px y la
+                de «Cliente (locatario)» 28; «Día de vencimiento», 38. */}
+            <CardContent className="grid items-start gap-3 sm:grid-cols-2">
                 <FormField control={form.control} name="importe" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Importe</FormLabel>
