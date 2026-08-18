@@ -53,7 +53,7 @@ from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
 from .services.equipos_trabajo import EquipoTrabajoRepository
-from .services.facturacion_config import ConfiguracionFacturacion
+from .services.facturacion_config import ConfiguracionFacturacion, configurar_lectura
 from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
@@ -254,6 +254,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # no puente.
     app.state.puente_facturacion = PuenteFacturacion(sessions)
     app.state.config_facturacion = ConfiguracionFacturacion(sessions)
+    # 🔴 Sin esta línea la pantalla de Configuración → Facturación es
+    # decorativa: guarda en `config_facturacion` y el camino de envío sigue
+    # leyendo el entorno. Pasó en `lagrace` — la fila `sos` habilitada y
+    # cargada, y la pantalla insistiendo con que la instancia "no está enlazada
+    # con Contalibra". Ver `facturacion_config.configurar_lectura`.
+    configurar_lectura(app.state.config_facturacion)
     app.state.modules = module_repository
     app.state.auditoria = AuditoriaRepository(sessions)
     # Log de accesos (libraauth v0.8.0). Es opt-in por ausencia en el motor:

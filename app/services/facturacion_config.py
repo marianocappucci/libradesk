@@ -281,3 +281,98 @@ class ConfiguracionFacturacion:
     def habilitados(self) -> list[str]:
         """Los destinos que se pueden usar ahora mismo, en orden estable."""
         return [d for d in ("contalibra", "sos") if self.esta_configurado(d)]
+
+    def elegidos(self) -> list[str]:
+        """Los destinos **tildados en la pantalla**, completos o no.
+
+        Distinto de `habilitados()`, que además exige que estén configurados:
+        esto contesta "cuál es el destino de esta instancia" y aquél "se puede
+        mandar". Una fila que salió del entorno no cuenta — no la tildó nadie,
+        y si contara, una instancia con `CONTALIBRA_URL` en el compose quedaría
+        eligiendo por la base sin que nadie haya abierto la pantalla.
+        """
+        salida = []
+        with self.session_factory() as session:
+            for destino in ("contalibra", "sos"):
+                fila = self._fila(session, destino)
+                if fila is not None and fila.habilitado:
+                    salida.append(destino)
+        return salida
+
+
+# ── El acceso desde el camino de envío ───────────────────────────────────────
+#
+# 🔴 **Esto es lo que hace que la pantalla sirva para algo.** Hasta el
+# 2026-08-18, `ConfiguracionFacturacion` la usaba únicamente su propio router:
+# la pantalla guardaba usuario, contraseña e `idcuit` en `config_facturacion`, y
+# el camino de envío —`facturacion_externa.destino()`, `esta_configurado()` y el
+# adaptador de SOS— seguía leyendo **sólo `os.environ`**. O sea que configurar
+# el puente por pantalla no cambiaba nada: la instancia mandaba a donde dijera
+# el compose, con las credenciales del compose.
+#
+# Se encontró en `lagrace`, con la fila `sos` habilitada y cargada en la base, y
+# la pantalla insistiendo en que la instancia "no está enlazada con Contalibra".
+#
+# El acceso va por un global y no por parámetro porque `facturacion_externa` y
+# `facturacion_sos` son módulos sin estado a los que llama el puente, que no
+# tiene la app a mano. Es el mismo patrón que `configurar_auditoria`.
+_lectura: "ConfiguracionFacturacion | None" = None
+
+
+def configurar_lectura(config: "ConfiguracionFacturacion | None") -> None:
+    """Le da al camino de envío la configuración guardada. La llama `create_app`.
+
+    Con `None` —que es como queda en los tests que no la configuran— todo el
+    módulo se comporta como antes de que existiera la pantalla: puro entorno.
+    """
+    global _lectura
+    _lectura = config
+
+
+def leer_efectiva(destino: str) -> dict:
+    """La configuración vigente de un destino. **Nunca levanta.**
+
+    La base manda y el entorno es el respaldo, que es lo que ya hacía `leer()`.
+    Lo que se agrega acá es que un secreto ilegible se lea como "no
+    configurado" en vez de romper el envío: quien llama está por mandar un
+    comprobante, no por editar la configuración, y una excepción ahí se
+    convierte en un 500 sobre una pantalla que no puede hacer nada al respecto.
+    """
+    if _lectura is None:
+        valores = _del_entorno(destino)
+        return {"habilitado": bool(valores), **valores}
+    try:
+        return _lectura.leer(destino)
+    except SecretoIlegible:
+        logger.warning(
+            "Los secretos de %s no se pueden descifrar; se trata como no "
+            "configurado. Hay que volver a cargarlos por la pantalla.", destino,
+        )
+        return {"habilitado": False}
+
+
+def destino_de_la_base() -> str | None:
+    """El destino tildado en la pantalla, o `None` si no lo decide la base.
+
+    **Alcanza con que esté habilitado; no hace falta que esté completo.** Son
+    dos preguntas distintas: cuál es el destino de esta instancia la contesta el
+    tilde, y si se puede mandar la contesta `esta_configurado()`. Atarlas
+    dejaría a quien tildó SOS pero todavía no cargó el `idcuit` viendo carteles
+    que nombran a Contalibra, que es exactamente el síntoma que trajo el humano.
+
+    Con dos destinos tildados a la vez no se elige por cuenta propia: decide el
+    entorno, y si tampoco dice nada queda el default. Adivinar acá es mandarle
+    los comprobantes de un cliente al sistema equivocado.
+    """
+    if _lectura is None:
+        return None
+    elegidos = _lectura.elegidos()
+    if len(elegidos) == 1:
+        return elegidos[0]
+    if len(elegidos) > 1:
+        logger.warning(
+            "Hay %d destinos de facturación habilitados a la vez (%s). Decide "
+            "el entorno; revisar Configuración → Facturación.",
+            len(elegidos), ", ".join(elegidos),
+        )
+    return None
