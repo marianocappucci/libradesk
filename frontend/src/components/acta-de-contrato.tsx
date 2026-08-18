@@ -288,9 +288,16 @@ export function NuevaActa(
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
           <Button onClick={() => void emitir()} disabled={guardando || elegidos.length === 0}>
+            {/* Sin ningún equipo elegido el botón dice «Emitir acta» a secas:
+                «Emitir acta de 0 equipos» está deshabilitado y no rompe nada,
+                pero nombra una cantidad donde todavía no hay ninguna y se lee
+                como un error de la máquina. La cuenta aparece recién cuando hay
+                algo que contar. */}
             {guardando
               ? 'Emitiendo…'
-              : `Emitir acta de ${elegidos.length} equipo${elegidos.length === 1 ? '' : 's'}`}
+              : elegidos.length === 0
+                ? 'Emitir acta'
+                : `Emitir acta de ${elegidos.length} equipo${elegidos.length === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -314,8 +314,28 @@ describe('Los campos son de cada equipo', () => {
     await elegirTipo(user, dialogo, /Devolución/)
 
     expect(within(dialogo).getByLabelText(/Incluir Teléfono/)).not.toBeChecked()
-    expect(within(dialogo).getByRole('button', { name: /Emitir acta de 0 equipos/ }))
+    // Sin nada elegido el botón no nombra una cantidad: dice «Emitir acta» a
+    // secas. Se afirma el nombre EXACTO —no un `/Emitir acta/` que también
+    // matchearía «…de 1 equipo»— porque lo que se está probando es justamente
+    // que la cuenta desapareció.
+    expect(within(dialogo).getByRole('button', { name: 'Emitir acta' }))
       .toBeDisabled()
+  })
+
+  it('el botón no dice «0 equipos» cuando no hay ninguno elegido', async () => {
+    // Deshabilitado no alcanza: el texto nombraba una cantidad donde todavía no
+    // hay ninguna, y eso se lee como un error de la máquina.
+    const user = userEvent.setup()
+    render()
+    const dialogo = await abrirDialogo(user)
+
+    expect(within(dialogo).getByRole('button', { name: 'Emitir acta' })).toBeDisabled()
+    expect(within(dialogo).queryByText(/0 equipos/)).not.toBeInTheDocument()
+
+    // Y con uno elegido vuelve a contar, que es cuando la cuenta sirve.
+    await user.click(within(dialogo).getByLabelText(/Incluir Central/))
+    expect(within(dialogo).getByRole('button', { name: 'Emitir acta de 1 equipo' }))
+      .toBeEnabled()
   })
 
   it('emitir abre el PDF del acta recién creada', async () => {
