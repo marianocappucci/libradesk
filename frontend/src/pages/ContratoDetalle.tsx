@@ -3,9 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_CONTRATO_LABELS, METODO_ACTUALIZACION_LABELS,
-  PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, opcionesActivo, opcionesProveedor,
-  type Activo, type Contrato, type ContratoLinea, type Proveedor,
+  PERIODICIDAD_LABELS, TIPO_ACTA_LABELS, TIPO_CONTRATO_LABELS, opcionesActivo,
+  opcionesProveedor,
+  type Acta, type Activo, type Contrato, type ContratoLinea, type Proveedor,
 } from '../api'
+import { NuevaActa } from '@/components/acta-de-contrato'
 import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,8 +22,11 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FilePenLine as FileSignature } from 'lucide-react'
-import { ArrowLeft, PackagePlus, Repeat, TrendingUp, Undo2 } from '@/components/iconos-accion'
+import {
+  ArrowLeft, PackagePlus, Printer, Repeat, TrendingUp, Undo2, XCircle,
+} from '@/components/iconos-accion'
 import { TituloPantalla } from '@/components/titulo-pantalla'
 
 const HOY = () => new Date().toISOString().slice(0, 10)
@@ -47,6 +52,7 @@ export function ContratoDetalle() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [contrato, setContrato] = useState<Contrato | null>(null)
+  const [actas, setActas] = useState<Acta[]>([])
   const [disponibles, setDisponibles] = useState<Activo[]>([])
   // Los que están en service: no se pueden colocar salvo que la misma operación
   // cierre su reparación, así que se ofrecen aparte y marcados.
@@ -93,13 +99,15 @@ export function ContratoDetalle() {
     setLoading(true)
     setError(null)
     try {
-      const [c, libres, reparando, provs] = await Promise.all([
+      const [c, libres, reparando, provs, papeles] = await Promise.all([
         api.get<Contrato>(`/api/contratos/${id}`),
         api.get<Activo[]>('/api/activos?disponibles=true'),
         api.get<Activo[]>('/api/activos?estado=en_reparacion'),
         api.get<Proveedor[]>('/api/proveedores'),
+        api.get<Acta[]>(`/api/contratos/${id}/actas`),
       ])
       setContrato(c)
+      setActas(papeles)
       setDisponibles(libres)
       setEnService(reparando)
       setProveedores(provs)
@@ -193,6 +201,19 @@ export function ContratoDetalle() {
     }
   }
 
+  /** Anular no borra: deja el acta a la vista y **libera el equipo** para poder
+   *  emitir la correcta. El backend rechaza anular una cuyo cargo ya salió en
+   *  un remito, y ese 409 se muestra tal cual. */
+  async function anularActa(acta: Acta) {
+    setError(null)
+    try {
+      await api.post(`/api/contratos/actas/${acta.id}/anular`, {})
+      await load()
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
   if (loading) {
     return <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
   }
@@ -210,6 +231,9 @@ export function ContratoDetalle() {
   const lineas = contrato.lineas ?? []
   const precios = contrato.precios ?? []
   const cerrado = contrato.estado === 'rescindido' || contrato.estado === 'finalizado'
+  // Un contrato sin equipos —el abono— no entrega nada, así que no tiene de qué
+  // hablar la pestaña de actas. Con actas viejas sí, aunque hoy no haya equipos.
+  const hayActas = lineas.length > 0 || actas.length > 0
 
   return (
     <div className="grid gap-4">
@@ -234,6 +258,27 @@ export function ContratoDetalle() {
         </Button>
       </EncabezadoDePantalla>
 
+      {/* Las cuatro secciones en pestañas (pedido del humano, 2026-08-17).
+          Antes iban una debajo de la otra: con equipos, precios y actas cargados
+          la ficha eran cuatro tablas apiladas y llegar a la de abajo era
+          scrollear el largo de las tres de arriba.
+
+          🔑 **Cada pestaña conserva su tarjeta con su título.** El título no es
+          redundante con la pestaña: la pestaña dice dónde estoy y el título dice
+          qué estoy mirando, y sin él la tabla arranca sin encabezado.
+
+          Las dos últimas aparecen sólo cuando tienen de qué hablar —un comodato
+          no cobra y un abono no entrega equipos—, que es el mismo criterio con
+          el que antes se escondían las tarjetas. */}
+      <Tabs defaultValue="contrato">
+        <TabsList>
+          <TabsTrigger value="contrato">Contrato</TabsTrigger>
+          <TabsTrigger value="equipos">Equipos</TabsTrigger>
+          {contrato.lleva_cuota && <TabsTrigger value="historial">Historial</TabsTrigger>}
+          {hayActas && <TabsTrigger value="actas">Actas</TabsTrigger>}
+        </TabsList>
+
+      <TabsContent value="contrato">
       <Card>
         <CardHeader><CardTitle>Datos del contrato</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
@@ -268,8 +313,10 @@ export function ContratoDetalle() {
           <Dato label="Observaciones" valor={contrato.observaciones} />
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* --- Equipos --------------------------------------------------- */}
+      <TabsContent value="equipos">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Equipos instalados</CardTitle>
@@ -327,9 +374,11 @@ export function ContratoDetalle() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* --- Precios --------------------------------------------------- */}
       {contrato.lleva_cuota && (
+        <TabsContent value="historial">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Historial de precios</CardTitle>
@@ -368,7 +417,87 @@ export function ContratoDetalle() {
             )}
           </CardContent>
         </Card>
+        </TabsContent>
       )}
+
+      {/* --- Actas (fase 3) --------------------------------------------
+          La pestaña sólo existe si hay equipos (o actas viejas): un abono de
+          mantenimiento es un contrato **sin equipos**, y ofrecerle «el papel que
+          prueba que el equipo se entregó» describe algo que en ese contrato no
+          pasa. */}
+      {hayActas && (
+      <TabsContent value="actas">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Actas de entrega y devolución</CardTitle>
+          <NuevaActa contrato={contrato} actas={actas} onEmitida={load} />
+        </CardHeader>
+        <CardContent>
+          {actas.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              Sin actas todavía. Es el papel que prueba que el equipo se entregó:
+              se emite acá, se imprime y se firma a mano.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-3">Número</th>
+                    <th className="py-2 pr-3">Tipo</th>
+                    <th className="py-2 pr-3">Fecha</th>
+                    <th className="py-2 pr-3">Equipos</th>
+                    <th className="py-2 pr-3">Recibe</th>
+                    <th className="py-2 pr-3">Cargo</th>
+                    <th className="py-2 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actas.map((a) => (
+                    <tr key={a.id} className="border-b last:border-0">
+                      <td className="py-2 pr-3 font-medium">{a.numero}</td>
+                      <td className="py-2 pr-3">{TIPO_ACTA_LABELS[a.tipo] ?? a.tipo}</td>
+                      <td className="py-2 pr-3">{fecha(a.fecha)}</td>
+                      <td className="py-2 pr-3">{a.equipos}</td>
+                      <td className="py-2 pr-3">{a.recibe_nombre ?? '—'}</td>
+                      <td className="py-2 pr-3">
+                        {/* Con centavos: es el único importe de la ficha que
+                            los lleva —el cargo lo tipea el técnico—, y el PDF
+                            del acta los imprime. Sin esto la pantalla decía
+                            $ 7.501 y el papel $ 7.500,50. */}
+                        {a.cargo_total
+                          ? pesos(a.cargo_total, contrato.moneda, { centavos: true })
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          {a.anulada && <Badge variant="outline">Anulada</Badge>}
+                          <Button size="sm" variant="outline" asChild title="Ver el acta en PDF">
+                            <a
+                              href={`/api/contratos/actas/${a.id}/pdf`}
+                              target="_blank" rel="noopener"
+                            ><Printer />PDF</a>
+                          </Button>
+                          {!a.anulada && (
+                            <Button
+                              size="sm" variant="outline"
+                              title="Anular el acta"
+                              onClick={() => void anularActa(a)}
+                            ><XCircle />Anular</Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      </TabsContent>
+      )}
+      </Tabs>
 
       {/* --- Diálogo de las cuatro acciones ---------------------------- */}
       <Dialog open={accion !== null} onOpenChange={(open) => !open && setAccion(null)}>
@@ -416,6 +545,7 @@ export function ContratoDetalle() {
                       ? 'Elegí un activo'
                       : 'No hay activos disponibles'
                   }
+                  ariaLabel={accion.tipo === 'colocar' ? 'Activo' : 'Activo de reemplazo'}
                 />
               </div>
             )}
@@ -441,7 +571,7 @@ export function ContratoDetalle() {
               <div className="grid gap-2">
                 <Label>Motivo</Label>
                 <Select value={motivoRetiro} onValueChange={setMotivoRetiro}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Motivo"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="devolucion">Devolución</SelectItem>
                     <SelectItem value="baja">Baja del equipo</SelectItem>
@@ -454,7 +584,7 @@ export function ContratoDetalle() {
               <div className="grid gap-2">
                 <Label>El equipo que sale queda</Label>
                 <Select value={estadoActivo} onValueChange={setEstadoActivo}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="El equipo que sale queda"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="retirado_a_revisar">Retirado, a revisar</SelectItem>
                     <SelectItem value="en_reparacion">En reparación</SelectItem>
@@ -486,6 +616,7 @@ export function ContratoDetalle() {
                     onChange={setProveedorId}
                     opciones={opcionesProveedor(proveedores.filter((p) => p.activo))}
                     placeholder="Elegí un proveedor"
+                    ariaLabel="Proveedor"
                   />
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">

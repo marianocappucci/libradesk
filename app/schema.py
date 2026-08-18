@@ -51,6 +51,7 @@ from .database import Base
 # Lo agarro `test_sin_el_filtro_si_las_dropearia`, la contraprueba que corre el
 # autogenerate SIN filtro: ahi la tabla aparecia en la lista de las que se
 # dropearian, junto a las cinco ajenas. Esa es la unica senal que hay.
+from .services import actas as _actas  # noqa: F401
 from .services import activos as _activos  # noqa: F401
 from .services import categorias as _categorias  # noqa: F401
 from .services import clientes as _clientes  # noqa: F401

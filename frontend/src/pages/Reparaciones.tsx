@@ -269,7 +269,7 @@ export function Reparaciones() {
           <div className="grid gap-2">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="abiertas">En service</SelectItem>
                 <SelectItem value="cerradas">Ya volvieron</SelectItem>
@@ -284,6 +284,7 @@ export function Reparaciones() {
               onChange={setClienteId}
               opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
               placeholder="Todos los clientes"
+              ariaLabel="Filtrar por cliente"
             />
           </div>
           <div className="grid gap-2">
@@ -293,6 +294,7 @@ export function Reparaciones() {
               onChange={setProveedorId}
               opciones={[{ value: TODOS, label: 'Todos los proveedores' }, ...opcionesProveedor(proveedores)]}
               placeholder="Todos los proveedores"
+              ariaLabel="Filtrar por proveedor"
             />
           </div>
         </CardContent>

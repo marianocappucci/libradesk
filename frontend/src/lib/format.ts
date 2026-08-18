@@ -13,10 +13,29 @@
 // cambiar cómo se muestran importes en pantallas que hoy funcionan no es parte
 // de este trabajo.
 
-export function pesos(v: number | null | undefined, moneda = 'ARS'): string {
+/**
+ * Un importe para pantalla. **Sin centavos por defecto**, que es como se
+ * muestran los alquileres y los precios de lista.
+ *
+ * 🔴 `centavos: true` **no es cosmético**: sin él, `7500.5` se dibuja
+ * `$ 7.501`. Encontrado el 2026-08-17 mirando la tabla de actas en el
+ * navegador — el cargo de reposición decía `$ 7.501` en la pantalla y
+ * `$ 7.500,50` en el PDF del acta, que es el papel que firma el cliente. Dos
+ * números distintos para el mismo cargo.
+ *
+ * El default se deja como estaba a propósito: cambiar cómo se ven los importes
+ * en pantallas que hoy funcionan no es parte de esto. Lo pide quien tiene un
+ * importe que **puede** llevar centavos.
+ */
+export function pesos(
+  v: number | null | undefined, moneda = 'ARS',
+  { centavos = false }: { centavos?: boolean } = {},
+): string {
   if (v === null || v === undefined) return '—'
   return v.toLocaleString('es-AR', {
-    style: 'currency', currency: moneda, maximumFractionDigits: 0,
+    style: 'currency', currency: moneda,
+    minimumFractionDigits: centavos ? 2 : 0,
+    maximumFractionDigits: centavos ? 2 : 0,
   })
 }
 

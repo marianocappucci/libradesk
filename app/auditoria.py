@@ -41,3 +41,8 @@ AUDITABLES: dict[str, str] = {
 # `equipos_movimientos`, `incidencias_estados_log` y `actividades_incidencia`.
 # La ficha del equipo y la de la incidencia ya las muestran, y auditarlas
 # pondria el mismo hecho dos veces en la misma pantalla.
+#
+# Por lo mismo quedan afuera `contratos_actas` y sus lineas (fase 3): un acta no
+# se edita —se emite o se anula, y la anulacion queda escrita en la propia
+# fila—, asi que auditarla registraria dos veces el unico cambio que tiene. Lo
+# que si se audita es el `Contrato`, que es lo que se corrige a mano.

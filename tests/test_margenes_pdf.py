@@ -31,7 +31,8 @@ from pypdf import PdfReader
 from pypdf.generic import ByteStringObject, ContentStream
 
 from app.services import (
-    hoja_ruta_pdf, incidencia_pdf, informe_pdf, ingreso_pdf, pdf_texto,
+    acta_pdf, hoja_ruta_pdf, incidencia_pdf, informe_pdf, ingreso_pdf,
+    pdf_texto,
 )
 
 MM = 72 / 25.4
@@ -65,7 +66,8 @@ _FUENTES = {
 def empresa(monkeypatch):
     """El membrete sin tocar la config de disco. Se parchea en los tres módulos
     porque cada uno importó `_empresa` por nombre."""
-    for modulo in (pg, incidencia_pdf, ingreso_pdf, informe_pdf, hoja_ruta_pdf):
+    for modulo in (pg, incidencia_pdf, ingreso_pdf, informe_pdf, hoja_ruta_pdf,
+                   acta_pdf):
         if hasattr(modulo, "_empresa"):
             monkeypatch.setattr(modulo, "_empresa", lambda: dict(EMPRESA))
 
@@ -248,12 +250,50 @@ def _hoja_ruta(texto: str) -> bytes:
     })
 
 
+def _acta(texto: str, tipo: str) -> bytes:
+    """El acta de entrega y la de devolución — el QUINTO generador.
+
+    Entra a este archivo el mismo día que nace, y no tres semanas después como
+    la hoja de ruta: un guard que cubre "los N documentos de entonces" deja al
+    siguiente naciendo sin cobertura, y los dos defectos que se le pasaron a la
+    hoja de ruta salieron justamente de eso.
+
+    Los campos que más riesgo tienen acá son los de la línea —estado físico,
+    accesorios, faltantes, daños—: los tipea el técnico en el domicilio del
+    cliente, sin tope de largo y a veces pegando desde el teléfono.
+    """
+    return acta_pdf.generar_pdf_acta({
+        "numero": "ACT-00000123", "tipo": tipo, "fecha": "2026-08-17",
+        "estado": "emitida", "anulada": False,
+        "entrega_nombre": texto, "recibe_nombre": texto,
+        "observaciones": texto, "cargo_total": 128500.5,
+        "contrato": {
+            "numero": "CTR-00000012", "tipo": texto,
+            "domicilio_instalacion": texto, "fecha_inicio": "2026-08-01",
+            "moneda": "ARS",
+        },
+        "cliente": {"nombre": texto, "cuit": "30-71234567-9",
+                    "domicilio": texto, "telefono": "02346-49-1200"},
+        "lineas": [
+            {
+                "id": n, "activo_descripcion": texto, "activo_serial": texto,
+                "activo_codigo_interno": texto, "estado_fisico": texto,
+                "accesorios": texto, "faltantes": texto, "danios": texto,
+                "cargo_reposicion": 64250.25, "observaciones": texto,
+            }
+            for n in range(1, 4)
+        ],
+    })
+
+
 DOCUMENTOS = [
     ("orden de trabajo", _incidencia),
     ("comprobante de recepción", lambda t: _ingreso(t, "recepcion")),
     ("comprobante de entrega", lambda t: _ingreso(t, "entrega")),
     ("informe de servicio", _informe),
     ("hoja de ruta", _hoja_ruta),
+    ("acta de entrega", lambda t: _acta(t, "entrega")),
+    ("acta de devolución", lambda t: _acta(t, "devolucion")),
 ]
 IDS = [d[0] for d in DOCUMENTOS]
 
@@ -275,6 +315,39 @@ def test_ningun_documento_se_sale_con_un_texto_sin_espacios(nombre, generar):
     assert not fuera, f"{nombre} dibuja fuera del marco:\n" + "\n".join(fuera)
 
 
+def test_el_alto_reservado_para_el_aviso_final_es_el_que_ocupa():
+    """El aviso "documento no válido como factura" entra donde se lo dibuja.
+
+    Los generadores reservan lugar antes de llamarlo —`_draw_no_fiscal_notice`
+    traza el recuadro y **después** escribe, así que un salto automático deja el
+    marco en una carilla y el texto en la otra— y esa reserva es una constante
+    escrita a mano. En `ingreso_pdf` vale 14 desde que se escribió; medido acá,
+    el aviso avanza **18 mm**, o sea que hay una franja de 4 mm de `y` en la que
+    el chequeo pasa y el dibujo no entra.
+
+    Se mide en vez de afirmar el número: una aserción del estilo
+    `_ALTO_AVISO == 18` pasaría igual el día que LibraCore cambie el aviso, que
+    es justo cuando esto tiene que avisar.
+    """
+    pdf = acta_pdf._ActaPDF(dict(EMPRESA), {
+        "numero": "ACT-1", "tipo": "entrega", "fecha": "2026-08-17",
+        "contrato": {"numero": "CTR-1"},
+    })
+    pdf.add_page()
+    # Bien arriba, para que el aviso no se lleve por delante el salto automático
+    # mientras se lo mide: lo que se mide es cuánto ocupa, no dónde entra.
+    pdf.set_y(50)
+    y0 = pdf.get_y()
+    acta_pdf._draw_no_fiscal_notice(pdf)
+    ocupa = pdf.get_y() - y0
+
+    assert ocupa <= acta_pdf._ALTO_AVISO, (
+        f"el aviso ocupa {ocupa} mm y se reservan {acta_pdf._ALTO_AVISO}: con la "
+        "`y` en esa diferencia el recuadro queda en una página y su texto en la "
+        "siguiente"
+    )
+
+
 #: Lo mínimo que `header()` necesita para dibujar el membrete.
 _DATOS_MINIMOS = {"id": 1, "fecha_creacion": "13-08-2026 04:22",
                   "estado_label": "Abierta"}
@@ -283,6 +356,10 @@ _DATOS_MINIMOS = {"id": 1, "fecha_creacion": "13-08-2026 04:22",
 @pytest.mark.parametrize("clase,args", [
     (incidencia_pdf._IncidenciaPDF, (dict(EMPRESA), _DATOS_MINIMOS)),
     (ingreso_pdf._IngresoPDF, (dict(EMPRESA), {"numero": "REC-1"}, "recepcion")),
+    (acta_pdf._ActaPDF, (dict(EMPRESA), {
+        "numero": "ACT-1", "tipo": "entrega", "fecha": "2026-08-17",
+        "contrato": {"numero": "CTR-1"},
+    })),
 ])
 def test_el_documento_arranca_en_el_margen_del_marco(clase, args):
     """La causa del desborde de la izquierda, aislada: sin esto el cuerpo

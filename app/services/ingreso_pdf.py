@@ -33,7 +33,20 @@ from libracore.pdf_generator import (
 from .pdf_texto import ancho_util, recortar
 
 _LINEA = 4.5
-_ALTO_AVISO = 14
+# 🔴 **18 y no 14, y el número está medido, no copiado.** Lo que el cierre
+# dibuja por debajo de la `y` que se chequea son 18 mm: los 4 del `ln(4)` de la
+# rama `else`, más los 4 de aire y los 10 del recuadro que traza
+# `_draw_no_fiscal_notice`. Reservando 14 quedaba una franja de 4 mm en la que
+# el chequeo pasaba y el dibujo no entraba, y adentro de esa franja
+# —`y` de 261,6 a 263,0— el recuadro se traza y **el texto se lo lleva el salto
+# automático a la carilla siguiente**, porque `_draw_no_fiscal_notice` dibuja
+# el marco primero y escribe después. Es el mismo defecto que el comentario del
+# cierre dice haber pagado ya en el informe.
+#
+# Medido el 2026-08-17 barriendo `y` de a 0,1 mm sobre el PDF generado: con 14
+# se parte, con 18 no se parte nunca. El informe reserva 14 y **está bien**: no
+# hace el `ln(4)` y corta en `h - 24` en vez de `h - 20`.
+_ALTO_AVISO = 18
 
 # La caja de la letra del membrete. `_draw_header_block` le aplica `.title()`,
 # así que los títulos van sin preposiciones.
