@@ -90,6 +90,28 @@ describe('🔴 La ruta nueva no la captura la de la ficha', () => {
 })
 
 describe('La pantalla de alta', () => {
+  it('🔴 «Crear contrato» está en el encabezado y aun así envía el formulario', async () => {
+    // Vive **fuera** del `<form>`, así que lo ata el atributo `form={id}`. Sin
+    // él el botón queda inerte y la pantalla no da ningún error: sólo no pasa
+    // nada. Por eso se afirman las dos cosas —dónde está y que envía—, y no
+    // sólo que el texto aparece en algún lado.
+    const user = userEvent.setup()
+    render('/contratos/nuevo')
+    const boton = await screen.findByRole('button', { name: /Crear contrato/ })
+
+    expect(boton.closest('form')).toBeNull()
+    expect(boton).toHaveAttribute('form')
+    // Y no quedó una segunda copia al pie.
+    expect(screen.getAllByRole('button', { name: /Crear contrato/ })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: 'Cliente (locatario)' }))
+    await user.click(await screen.findByText('Estudio Contable Sur'))
+    await user.click(boton)
+
+    await waitFor(() => expect(posts).toHaveLength(1))
+  })
+
   it('crea el contrato y se va a su ficha', async () => {
     const user = userEvent.setup()
     render('/contratos/nuevo')
