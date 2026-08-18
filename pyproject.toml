@@ -51,7 +51,7 @@ dependencies = [
     # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
     # se escribe en la misma transaccion que la operacion, asi que el KeyError
     # no perdia una linea de log, se llevaba puesta la operacion entera.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.25.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.26.1",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
