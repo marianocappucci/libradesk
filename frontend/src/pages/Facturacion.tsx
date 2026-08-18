@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BarraDeAcciones } from 'libra-ui/acciones'
+import { BarraDeAcciones, EncabezadoDePantalla } from 'libra-ui/acciones'
 import { type ColumnDef } from '@tanstack/react-table'
 // `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
 // remito se manda a facturar" borró la rama de presupuestos, que era la única
 // que los dibujaba.
-import { Send } from 'lucide-react'
+import { RefreshCw, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -46,6 +46,20 @@ type Pendiente = {
 }
 
 type Resultado = Envio | { origen_id: number; estado: string; detalle: string }
+
+/** Cómo está un comprobante **del lado de SOS**, según `/estados-sos`.
+ *
+ *  LibraDesk no lo guarda: ese estado vive del otro lado y cambia cuando el
+ *  contador emite, sin avisarnos. Una copia local sería una foto vencida, así
+ *  que se pide cuando alguien lo pregunta. */
+type EstadoSos = {
+  origen_id: number
+  comprobante_remoto_id: number
+  emitido?: boolean
+  cae?: string
+  comprobante?: string
+  error?: string
+}
 
 // Cómo se lee cada estado. El texto importa más que el color: "enviado" no
 // quiere decir facturado, y confundirlos es el malentendido caro de esta
@@ -94,6 +108,9 @@ export function Facturacion() {
   const [elegidos, setElegidos] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
   const [resultados, setResultados] = useState<Resultado[] | null>(null)
+  const [destino, setDestino] = useState('')
+  const [estadosSos, setEstadosSos] = useState<Record<number, EstadoSos>>({})
+  const [consultando, setConsultando] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -113,12 +130,16 @@ export function Facturacion() {
     setError(null)
     try {
       const data = await api.get<{
-        configurado: boolean; destino_nombre?: string; items: Pendiente[]
+        configurado: boolean; destino?: string; destino_nombre?: string; items: Pendiente[]
       }>('/api/facturacion/pendientes')
       setConfigurado(data.configurado)
       // El `??` cubre a un backend viejo que todavía no manda el campo: la
       // pantalla se degrada al nombre genérico en vez de mostrar "undefined".
       setDestinoNombre(data.destino_nombre ?? 'el sistema de facturación')
+      // El slug, no el nombre: es lo que decide si se ofrece consultar el
+      // estado, y comparar contra "SOS Contador" ataría la condición a un
+      // texto de pantalla.
+      setDestino(data.destino ?? '')
       setItems(data.items)
     } catch (err) {
       setError(describeError(err))
@@ -150,6 +171,28 @@ export function Facturacion() {
       setError(describeError(err))
     } finally {
       setEnviando(false)
+    }
+  }
+
+  /** Le pregunta a SOS por cada comprobante ya mandado.
+   *
+   *  Contesta lo que hasta ahora no se podía saber desde adentro: si el
+   *  contador ya lo emitió o sigue cargado sin CAE. Es a pedido y no
+   *  automático — son N requests contra un sistema de terceros, y nadie mira
+   *  esta pantalla esperando que se actualice sola.
+   */
+  async function consultarEstados() {
+    setConsultando(true)
+    setError(null)
+    try {
+      const r = await api.get<{ items: EstadoSos[] }>('/api/facturacion/estados-sos')
+      const porOrigen: Record<number, EstadoSos> = {}
+      for (const fila of r.items) porOrigen[fila.origen_id] = fila
+      setEstadosSos(porOrigen)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Error de conexión.')
+    } finally {
+      setConsultando(false)
     }
   }
 
@@ -244,13 +287,58 @@ export function Facturacion() {
         )
       },
     },
-  ], [elegidos])
+    {
+      id: 'sos',
+      header: 'En el contador',
+      size: 170,
+      cell: ({ row }) => {
+        const est = estadosSos[row.original.id]
+        // Sin consultar todavía no se dice nada: un "—" y un "sin emitir" se
+        // ven parecido, y son cosas distintas.
+        if (!est) return <span className="text-muted-foreground">—</span>
+        if (est.error) {
+          return (
+            <span title={est.error} className="text-xs text-destructive">
+              No se pudo leer
+            </span>
+          )
+        }
+        if (est.emitido) {
+          return (
+            <span className="flex flex-col">
+              <Badge variant="secondary">Emitido</Badge>
+              <span className="text-xs text-muted-foreground">CAE {est.cae}</span>
+            </span>
+          )
+        }
+        return (
+          <span className="flex flex-col">
+            <Badge variant="outline">Sin emitir</Badge>
+            {est.comprobante && (
+              <span className="text-xs text-muted-foreground">{est.comprobante}</span>
+            )}
+          </span>
+        )
+      },
+    },
+  ], [elegidos, estadosSos])
 
   return (
     <div className="grid gap-4">
-      <TituloPantalla icono={Send}>
-        Enviar a facturar
-      </TituloPantalla>
+      <EncabezadoDePantalla titulo={
+        <TituloPantalla icono={Send}>
+          Enviar a facturar
+        </TituloPantalla>
+      }>
+        {/* Sólo con SOS: la bandeja de Contalibra no expone el estado de los
+            comprobantes, y el endpoint contesta 409 si se lo pide. */}
+        {destino === 'sos' && (
+          <Button variant="outline" onClick={consultarEstados} disabled={consultando}>
+            <RefreshCw className="size-4" />
+            {consultando ? 'Consultando…' : 'Consultar estado en el contador'}
+          </Button>
+        )}
+      </EncabezadoDePantalla>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

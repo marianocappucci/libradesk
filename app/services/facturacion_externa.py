@@ -32,7 +32,7 @@ import os
 from datetime import datetime
 
 import httpx
-from sqlalchemy import DateTime, String, UniqueConstraint, func, select
+from sqlalchemy import DateTime, String, UniqueConstraint, func, select, text
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from ..database import Base
@@ -242,6 +242,46 @@ def _items(comprobante: dict) -> list[dict]:
     return salida
 
 
+def validar_para_facturar(payload: dict) -> None:
+    """Corta el envío si los datos fiscales no cierran entre sí.
+
+    🔴 **Los tres campos vienen de lugares distintos y pueden contradecirse.**
+    La letra salía de la configuración de la instancia, la condición de IVA de
+    la ficha del cliente —y si faltaba, de un default silencioso— y el CUIT del
+    remito. El primer envío real de Lagrace salió con letra **A**, condición
+    **Consumidor Final** y CUIT **0**: un comprobante que ARCA no puede emitir,
+    y que del otro lado nadie iba a poder arreglar sin volver acá.
+
+    No se valida "que tenga CUIT" a secas: a un consumidor final se le emite B,
+    y esa no lo necesita. Lo que se exige es **coherencia**, y por eso la
+    condición de IVA es obligatoria: sin ella no hay forma de saber qué letra
+    corresponde, y el default de consumidor final es una respuesta inventada.
+
+    Levanta `OrigenNoFacturable`, que la pantalla ya sabe mostrar por fila.
+    """
+    # Import local: el adaptador de SOS no se carga en las instancias que no lo
+    # usan, mismo criterio que en `esta_configurado`.
+    from .facturacion_sos import letra_para
+
+    quien = (payload.get("cliente_razon") or "").strip() or "El cliente"
+    condicion = (payload.get("cliente_condicion_iva") or "").strip()
+    if not condicion:
+        raise OrigenNoFacturable(
+            f"{quien} no tiene cargada la condición de IVA. Es lo que decide si "
+            f"el comprobante va como A, B o C, así que sin eso no se puede "
+            f"armar: cargásela en la ficha del cliente y volvé a mandarlo."
+        )
+
+    letra = letra_para(condicion)
+    cuit = "".join(ch for ch in str(payload.get("cliente_cuit") or "") if ch.isdigit())
+    if letra == "A" and not cuit:
+        raise OrigenNoFacturable(
+            f"{quien} es Responsable Inscripto, así que le corresponde una "
+            f"factura A — y una A lleva el CUIT del receptor. Cargale el CUIT "
+            f"en la ficha del cliente y volvé a mandarlo."
+        )
+
+
 def armar_payload(origen_tipo: str, comprobante: dict, instancia: str) -> dict:
     """El cuerpo del `POST` a la bandeja.
 
@@ -280,6 +320,28 @@ class PuenteFacturacion:
     esto se dispara a mano, de a puñados, y un cliente vivo entre requests
     obligaría a manejarle el ciclo de vida al proceso entero por nada.
     """
+
+    def _ficha_fiscal(self, client_id) -> dict:
+        """La condición de IVA y el CUIT que hoy tiene la ficha del cliente.
+
+        Se consulta la tabla directamente y no el `ClienteRepository`: son dos
+        columnas y traerse el repositorio ataría el puente al ABM entero.
+
+        Devuelve vacíos cuando el comprobante no tiene cliente asociado o la
+        ficha ya no está — un remito viejo de un cliente borrado no puede
+        romper el envío por una consulta, lo tiene que frenar la guarda con un
+        mensaje que se entienda.
+        """
+        if not client_id:
+            return {"condicion_iva": "", "cuit": ""}
+        with self.session_factory() as session:
+            fila = session.execute(
+                text("SELECT iva_condition, cuit_dni FROM clients WHERE id = :id"),
+                {"id": int(client_id)},
+            ).first()
+        if fila is None:
+            return {"condicion_iva": "", "cuit": ""}
+        return {"condicion_iva": (fila[0] or "").strip(), "cuit": (fila[1] or "").strip()}
 
     def __init__(self, session_factory: sessionmaker[Session], cliente_http=None,
                  adaptador_sos=None) -> None:
@@ -533,11 +595,27 @@ class PuenteFacturacion:
         # entiende y la bandeja de Contalibra no, y meterlo en `armar_payload`
         # le cambiaría el cuerpo a un destino que hoy funciona.
         payload["uniqueid"] = uniqueid_de(origen_tipo, origen_id, instancia or PRODUCTO)
-        # El comprobante no guarda la condición de IVA del cliente —la tiene
-        # `clientes.condicion_iva`, que acá no está a mano—. Sólo importa
-        # cuando el cliente **no existe** en SOS: se crea como Consumidor Final
-        # y el contador lo corrige. Los que ya están se reusan por CUIT.
-        payload["cliente_condicion_iva"] = comprobante.get("client_iva_condition") or ""
+        # 🔴 La ficha fiscal se busca en `clients`, no se lee del comprobante.
+        #
+        # El remito guarda un snapshot del cliente (nombre, domicilio, CUIT)
+        # pero **no su condición de IVA**, así que este campo llegaba siempre
+        # vacío y `condicion_iva_sos` lo resolvía a su default: Consumidor
+        # Final. Para todos los comprobantes, de todas las instancias,
+        # incluidos los clientes que sí tenían "Responsable Inscripto" cargado.
+        # El comentario que había acá decía que sólo importaba al crear el
+        # cliente en SOS; desde que la letra se deriva de esta condición,
+        # importa en cada envío.
+        #
+        # El CUIT sí sale del snapshot cuando lo tiene: es el dato con el que se
+        # entregó el remito. La ficha se usa de respaldo, para el caso —el común
+        # hoy— de un remito viejo emitido antes de cargarle el CUIT al cliente.
+        fiscal = self._ficha_fiscal(comprobante.get("client_id"))
+        payload["cliente_condicion_iva"] = (
+            comprobante.get("client_iva_condition") or fiscal["condicion_iva"])
+        if not payload.get("cliente_cuit"):
+            payload["cliente_cuit"] = fiscal["cuit"]
+
+        validar_para_facturar(payload)
 
         adaptador = self._adaptador_sos or AdaptadorSOS()
         try:
