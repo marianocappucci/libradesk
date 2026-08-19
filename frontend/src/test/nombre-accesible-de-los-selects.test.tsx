@@ -154,6 +154,14 @@ beforeEach(() => {
     if (u.includes('/api/equipos-trabajo')) return Promise.resolve(json([]))
     if (u.includes('/api/equipos')) return Promise.resolve(json([EQUIPO]))
     if (u.includes('/api/depositos')) return Promise.resolve(json([DEPOSITO]))
+    // 🔴 ANTES que las de incidencias, y por el mismo motivo que la nota de
+    // arriba sobre contratos: `/api/incidencias/9/tareas` **contiene**
+    // `/api/incidencias`, asi que sin esta linea caia en la rama de abajo y la
+    // grilla de tareas recibia `[INCIDENCIA]` -- una fila inventada a partir de
+    // un objeto que no es una tarea. Se noto porque el conteo de combobox daba
+    // 15 en CI y 14 local: el numero dependia de si ese render llegaba antes
+    // de la asercion, o sea que el guard habia quedado flaky.
+    if (/\/tareas$/.test(u)) return Promise.resolve(json([]))
     if (/\/api\/incidencias\/\d+$/.test(u)) return Promise.resolve(json(INCIDENCIA))
     if (u.includes('/api/incidencias')) return Promise.resolve(json([INCIDENCIA]))
     return Promise.resolve(json([]))
