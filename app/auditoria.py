@@ -32,10 +32,28 @@ AUDITABLES: dict[str, str] = {
     "Reparacion": "reparacion",
     "EquipoTrabajo": "equipo_trabajo",
     "Vehiculo": "vehiculo",
-    # El precio de lista de lo que se cotiza: lo cambia un admin a mano y se
-    # arrastra a todo presupuesto que se arme despues.
-    "Servicio": "servicio",
 }
+
+# 🔴 Aca vivia `"Servicio": "servicio"`, con el comentario "el precio de lista de
+# lo que se cotiza". Se fue el 2026-08-19: la revision `0031` dropeo la tabla
+# `servicios` y borro el modelo el 2026-08-17, y la entrada quedo dos dias
+# afirmando que ese precio se auditaba.
+#
+# **Una entrada muerta no rompe nada**, y por eso sobrevive: la lista se indexa
+# por nombre de clase justamente para no importar los modelos, asi que un nombre
+# que ya no existe simplemente nunca matchea. Lo que si hace es salir en la
+# pantalla: `build_logs_router` arma el selector de entidades con
+# `sorted(set(auditables.values()))` --y no con un `SELECT DISTINCT` sobre el
+# log, a proposito, para ofrecer entidades sin actividad todavia--, o sea que el
+# filtro "servicio" se ofrecia y no podia devolver nada nunca.
+#
+# Lo cuida `tests/test_auditables.py`, que es el guard del patron: la proxima
+# tabla que se dropee no deja el mismo resto.
+#
+# ⚠️ **Queda abierto, y es una decision de producto**: el catalogo de
+# LibraCommerce que reemplazo a `servicios` --`catalog_items`, donde hoy vive el
+# precio de lista-- **no se audita en ningun lado**. Sus modelos son del motor,
+# no de este producto, asi que sumarlo no es agregar una linea aca.
 
 # Las tablas que YA son historial quedan afuera a proposito:
 # `equipos_movimientos`, `incidencias_estados_log` y `actividades_incidencia`.

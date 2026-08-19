@@ -12,13 +12,19 @@ aparte con el mismo prefijo habría dejado el orden de registro decidiendo cuál
 ruta atiende `/api/contratos/actas/5`, que es la clase de detalle que se
 descubre en producción.
 """
+import os
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Request, Response, UploadFile,
+)
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..dependencies import get_acta_repository, get_contrato_repository
-from ..services import acta_pdf
+from ..dependencies import (
+    get_acta_repository, get_contrato_repository, get_data_dir,
+)
+from ..services import acta_pdf, archivos
 from ..services.actas import ActaRepository
 from ..services.contratos import (
     CierreServiceActivo, ContratoRepository, DatosServiceActivo,
@@ -249,6 +255,92 @@ def delete_contrato(
 
 
 # --- precios -----------------------------------------------------------------
+
+def _ruta_archivo(data_dir: str, contrato_id: int) -> str:
+    """El nombre sale del id, **no del que subio el archivo**.
+
+    Un `filename` de cliente es texto arbitrario que el que manda el request
+    elige: `../../../app/main.py` es un nombre valido. Derivarlo del id saca el
+    problema de raiz en vez de sanearlo, y de paso deja **un solo archivo por
+    contrato** — volver a subir reemplaza, que es lo que quiere el que escaneo
+    torcido la primera vez.
+    """
+    return os.path.join(data_dir, "contratos", f"contrato_{contrato_id}.pdf")
+
+
+@router.post("/{contrato_id}/archivo")
+async def subir_archivo(
+    contrato_id: int,
+    archivo: UploadFile = File(...),
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+    data_dir: str = Depends(get_data_dir),
+):
+    """El contrato firmado escaneado.
+
+    Es lo que `contratos.archivo_pdf` venia esperando desde la fase 1. El acta
+    de entrega la emite el sistema y se firma en papel; **el papel firmado no
+    tenia como volver**, asi que el vinculo entre lo que se acordo y lo que
+    dice el sistema era el numero de contrato y nada mas.
+
+    Gate: el del router (`staff_or_admin` + modulo `alquileres`). No se le pone
+    `require_admin` propio — quien carga el contrato es quien lo trae firmado
+    de la visita, y esconderselo al staff no protege nada que la API no le deje
+    hacer igual por `PUT`.
+    """
+    if contratos.get(contrato_id) is None:
+        raise HTTPException(404, "contrato not found")
+    destino = _ruta_archivo(data_dir, contrato_id)
+    bytes_escritos = await archivos.guardar_pdf(archivo, destino)
+    contratos.set_archivo(contrato_id, destino)
+    return {"archivo_pdf": destino, "bytes": bytes_escritos}
+
+
+@router.get("/{contrato_id}/archivo")
+def bajar_archivo(
+    contrato_id: int,
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+):
+    """`inline`, igual que el acta: lo normal es mirarlo, no bajarlo.
+
+    Se chequea **el disco y no solo la columna**. Un restore de backup viejo,
+    un volumen que no se monto o un borrado a mano dejan la fila apuntando a un
+    archivo que no esta, y entonces `FileResponse` revienta con un 500 que no
+    dice nada. Con el chequeo, la pantalla dice "no hay firmado cargado", que
+    es lo que el usuario necesita saber.
+    """
+    c = contratos.get(contrato_id)
+    if c is None:
+        raise HTTPException(404, "contrato not found")
+    path = c["archivo_pdf"]
+    if not path or not os.path.exists(path):
+        raise HTTPException(404, "El contrato no tiene el firmado cargado.")
+    return FileResponse(
+        path, media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="contrato-{c["numero"]}.pdf"',
+        },
+    )
+
+
+@router.delete("/{contrato_id}/archivo", status_code=204)
+def borrar_archivo(
+    contrato_id: int,
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+):
+    """Saca el archivo del disco y la referencia de la fila, en ese orden.
+
+    Al reves —limpiar la fila y despues el disco— un error en el medio deja el
+    PDF del cliente en el volumen sin nadie que sepa que esta ahi.
+    """
+    c = contratos.get(contrato_id)
+    if c is None:
+        raise HTTPException(404, "contrato not found")
+    path = c["archivo_pdf"]
+    if path and os.path.exists(path):
+        os.remove(path)
+    contratos.set_archivo(contrato_id, None)
+    return Response(status_code=204)
+
 
 @router.get("/{contrato_id}/precios")
 def list_precios(
