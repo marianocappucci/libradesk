@@ -124,6 +124,13 @@ TIMEOUT = 20.0
 # cuenta enorme no convierta un envío en cientos de requests.
 MAX_PAGINAS_CLIENTES = 100
 
+# Cuántas ventas se piden de una para calcular la numeración, y cuántas veces
+# se agranda el pedido si la respuesta llegó al tope. 5.000 cubre con holgura la
+# cuenta de un estudio (la de Lagrace tiene 815 en el año); las escaladas son el
+# seguro para el día que no alcance.
+VENTAS_POR_CONSULTA = 5000
+MAX_ESCALADAS_VENTAS = 3
+
 # El JWT de la CUIT se reusa mientras dure, pero no se guarda para siempre: la
 # API no documenta la expiración, así que se renueva por tiempo y ante el
 # primer rechazo por token. Diez minutos es corto para un token y largo para
@@ -604,14 +611,8 @@ class AdaptadorSOS:
         """
         token = self.token()
         hoy = date.today()
-        consulta = self._request("POST", "/venta/consulta?pagina=1&registros=500",
-                                 token=token, cuerpo={
-                                     "fecha_desde": f"{hoy.year}-01-01",
-                                     "fecha_hasta": f"{hoy.year}-12-31",
-                                 })
-        datos = interpretar(consulta, "consulta de ventas")
         maximo = 0
-        for fila in (datos.get("items") or []) if isinstance(datos, dict) else []:
+        for fila in self._ventas_del_ano(hoy.year, token):
             # `factura` viene armada como "FA-0003-00009001": letra, punto de
             # venta y número. Es el único lugar donde el listado trae los tres
             # juntos —`numero` y `letra` vienen en `null` en la consulta—, así
@@ -632,6 +633,73 @@ class AdaptadorSOS:
                 continue
             maximo = max(maximo, int(numero))
         return maximo + 1
+
+    def _ventas_del_ano(self, ano: int, token: str | None = None) -> list[dict]:
+        """Todas las ventas del año. **En una sola consulta, no paginando.**
+
+        🔴 Esto costó un rechazo en producción. Se pedía
+        `pagina=1&registros=500` y se daba por hecho que traía todo. La cuenta
+        de Lagrace tiene **815 ventas del año**, casi todas del estudio en sus
+        propios puntos de venta: entre las 500 primeras no había **ninguna** del
+        punto 15, que es el de LibraDesk. El máximo salía 0, se pedía el número
+        1 —que ya existía— y SOS rechazaba con *"el número de comprobante ya
+        existe en ese punto de venta y letra"*. El consejo del propio mensaje,
+        *"reintentar toma el siguiente número libre"*, **era falso**: reintentar
+        volvía a calcular 1.
+
+        🔑 **Y paginar no lo arregla, porque `pagina` no hace lo que parece.**
+        Medido el 2026-08-18 contra la API real:
+
+        | pedido | items | primera fila |
+        |---|---|---|
+        | `pagina=1&registros=500` | 500 | `FA-0013-00008168` |
+        | `pagina=2&registros=500` | 500 | `FA-0013-00008165` |
+        | `pagina=1&registros=815` | 815 | `FA-0013-00008168` |
+        | `pagina=2&registros=815` | **814** | `FA-0013-00008165` |
+        | `pagina=1&registros=5000` | 815 | `FA-0013-00008168` |
+
+        `pagina` **desplaza de a un registro**, no de a `registros`; y
+        `registros` es un tope sobre el total, no un tamaño de página. O sea que
+        un loop de páginas con `registros=500` devuelve diez veces la misma
+        ventana corrida un lugar y **nunca** llega al final — peor que el
+        defecto original, y cuarenta veces más lento.
+
+        Lo único que funciona es pedir de una con un `registros` mayor al total.
+        Si la respuesta llega justo al tope no se puede distinguir "eso es todo"
+        de "quedó cortado", así que se agranda y se vuelve a pedir.
+
+        > Ojo: esto es distinto de `/cliente/listado`, que **sí** pagina de
+        > verdad, trae un campo `paginas` y tapa en 50 ignorando `registros`. Dos
+        > endpoints del mismo producto, dos semánticas opuestas: no se puede
+        > deducir una de la otra, hay que medir cada una.
+
+        Tampoco se puede filtrar del lado del servidor: se probaron
+        `puntoventa`, `pventa`, `punto_venta`, `letra` y `fcncnd` en el cuerpo y
+        los cinco devuelven la lista **sin filtrar**.
+        """
+        token = token or self.token()
+        cuerpo = {"fecha_desde": f"{ano}-01-01", "fecha_hasta": f"{ano}-12-31"}
+        registros = VENTAS_POR_CONSULTA
+        filas: list[dict] = []
+        for _ in range(MAX_ESCALADAS_VENTAS):
+            datos = interpretar(
+                self._request(
+                    "POST", f"/venta/consulta?pagina=1&registros={registros}",
+                    token=token, cuerpo=cuerpo,
+                ),
+                "consulta de ventas",
+            )
+            filas = (datos.get("items") or []) if isinstance(datos, dict) else []
+            if len(filas) < registros:
+                return filas
+            registros *= 4
+
+        logger.warning(
+            "La consulta de ventas devolvió %d filas, justo el tope pedido: "
+            "puede haber quedado cortada y la numeración salir repetida.",
+            len(filas),
+        )
+        return filas
 
     # ── El alta ──────────────────────────────────────────────────────────────
 
