@@ -437,6 +437,98 @@ def convertir_en_remito(
     )
 
 
+# ── Las tareas del reclamo ────────────────────────────────────────────────
+
+
+class TareaIn(BaseModel):
+    """El alta de una tarea. **`orden` no entra por la API**: lo pone el
+    repositorio como el siguiente de la grilla, para que no haya dos tareas en
+    la misma posicion."""
+
+    detalle: str = Field(min_length=1)
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
+    estado: str = "pendiente"
+    observacion: str | None = None
+    #: El `catalog_items` de tipo SERVICE -- la columna `Tipo Servicio` de la
+    #: grilla. Opcional: al cargar la tarea puede no saberse todavia.
+    item_id: int | None = None
+
+
+class TareaPatch(BaseModel):
+    """La edicion. Todo opcional: la grilla se edita celda por celda, y mandar
+    el resto obligaria a la pantalla a reenviar valores que no toco."""
+
+    detalle: str | None = Field(default=None, min_length=1)
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
+    estado: str | None = None
+    observacion: str | None = None
+    item_id: int | None = None
+
+
+@router.get("/{incidencia_id}/tareas")
+def listar_tareas(
+    incidencia_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """Las tareas del reclamo, ordenadas, con el `tipo_servicio` ya resuelto.
+
+    Brecha 4 del relevamiento de Lagrace: un reclamo se resuelve en varias
+    intervenciones y cada una tiene su estado y sus fechas. Lo que habia
+    --`actividades_incidencia`-- es un log, no tareas: no hay nada que cerrar.
+    """
+    return incidencias.list_tareas(incidencia_id)
+
+
+@router.post("/{incidencia_id}/tareas", status_code=201)
+def agregar_tarea(
+    incidencia_id: int, payload: TareaIn,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    try:
+        return incidencias.add_tarea(incidencia_id, **payload.model_dump())
+    except KeyError:
+        raise HTTPException(404, "La incidencia no existe.")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.patch("/{incidencia_id}/tareas/{tarea_id}")
+def editar_tarea(
+    incidencia_id: int, tarea_id: int, payload: TareaPatch,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """`PATCH` y no `PUT`: se manda solo lo que cambia.
+
+    `exclude_unset` y no `exclude_none`: son dos cosas distintas y aca la
+    diferencia importa. Vaciar la fecha de fin de una tarea --volverla a
+    `null` porque se habia cerrado por error-- es un cambio legitimo, y con
+    `exclude_none` seria indistinguible de "no lo mande".
+    """
+    datos = payload.model_dump(exclude_unset=True)
+    if not datos:
+        raise HTTPException(422, "No se mando ningun campo para editar.")
+    try:
+        return incidencias.update_tarea(tarea_id, **datos)
+    except KeyError:
+        raise HTTPException(404, "La tarea no existe.")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.delete("/{incidencia_id}/tareas/{tarea_id}", status_code=204)
+def quitar_tarea(
+    incidencia_id: int, tarea_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    try:
+        incidencias.delete_tarea(tarea_id)
+    except KeyError:
+        raise HTTPException(404, "La tarea no existe.")
+    return Response(status_code=204)
+
+
 # ── Los cargos de mano de obra ────────────────────────────────────────────
 
 

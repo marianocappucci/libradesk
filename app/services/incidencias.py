@@ -22,6 +22,17 @@ from ..database import Base
 from . import materiales
 
 ESTADOS_VALIDOS = ("abierto", "en_progreso", "resuelta", "cerrado")
+
+#: Los estados de una TAREA, que son otros y a proposito.
+#:
+#: El reclamo distingue `resuelta` de `cerrado` por una razon concreta:
+#: `resuelta` es "el tecnico termino" y `cerrado` es "alguien controlo el
+#: comprobante de servicios contra la hoja de ruta y decidio que va a
+#: facturacion" -- por eso `convertir_a_remito()` solo convierte `cerrado`.
+#:
+#: Ese control es del reclamo entero, no de cada tarea. Heredarle el
+#: vocabulario a la tarea le dejaria un estado que nunca se usa.
+ESTADOS_TAREA = ("pendiente", "en_progreso", "terminada")
 PRIORIDADES_VALIDAS = ("alta", "media", "baja")
 # Cómo se atendió el ticket (pedido 37). `None` es un valor legítimo: los
 # tickets viejos no lo saben.
@@ -241,6 +252,56 @@ class IncidenciaCargo(Base):
     # Sin FK: `catalog_items` es de LibraCommerce y esta cadena no la toca.
     item_id: Mapped[int] = mapped_column(Integer, nullable=False)
     cantidad: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class IncidenciaTarea(Base):
+    """Una tarea del reclamo: que hay que hacer, cuando y en que estado.
+
+    Brecha 4 del relevamiento de Lagrace. La ficha de Integridad tiene una
+    grilla `Item / Detalle Tarea / F. Inicio / F. Fin / Estado / Observacion /
+    Tipo Servicio`: **N tareas por reclamo, cada una con su propio estado y sus
+    propias fechas**. Es el caso normal de ellos -- se va, se diagnostica, se
+    pide un repuesto, se vuelve.
+
+    🔑 **No reemplaza a `actividades_incidencia`.** Esa tabla es un *log*: lo
+    que paso, con su fecha, sin nada que cerrar. Una tarea es lo contrario: algo
+    que se abre, se trabaja y se termina. Las dos conviven porque contestan
+    preguntas distintas -- "que se hizo" y "que falta".
+
+    🔑 **`item_id` es el catalogo, no un enum ni una tabla propia.** Apunta a un
+    `catalog_items` de tipo `SERVICE`, igual que `IncidenciaCargo` desde la
+    revision `0029`: agregar un tipo de servicio nuevo es cargar un item. Este
+    producto ya tuvo una tabla `servicios` paralela al catalogo, con 43 precios
+    que ningun circuito aplicaba, y la dropeo en la `0031`; una tabla de "tipos
+    de tarea" seria el mismo error otra vez. Sin FK, porque `catalog_items` es
+    de LibraCommerce.
+
+    **Las fechas son `Date` y no `DateTime`** porque es lo que se vio: la grilla
+    muestra `F. Inicio / F. Fin`, y el detalle con hora aparece un nivel mas
+    abajo, al tildar un tecnico. Ese nivel es la brecha 5 y va en su propia
+    tabla.
+
+    Ver la revision `0033`.
+    """
+
+    __tablename__ = "incidencias_tareas"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incidencia_id: Mapped[int] = mapped_column(
+        ForeignKey("incidencias.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    #: La posicion en la grilla -- la columna `Item` de Integridad. No es un
+    #: identificador: el id es `id`.
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    detalle: Mapped[str] = mapped_column(Text, nullable=False)
+    fecha_inicio: Mapped[date | None] = mapped_column(Date)
+    fecha_fin: Mapped[date | None] = mapped_column(Date)
+    estado: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pendiente", index=True,
+    )
+    observacion: Mapped[str | None] = mapped_column(Text)
+    item_id: Mapped[int | None] = mapped_column(Integer, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -494,6 +555,29 @@ def _observaciones_del_lote(trabajos: list[dict]) -> str:
     if cubiertos:
         texto += f". Cubiertos por el abono, sin cargo: {', '.join(cubiertos)}"
     return texto
+
+
+def _tarea_to_dict(t, datos: dict) -> dict:
+    """La fila como la lee la grilla. `tipo_servicio` es el NOMBRE del item.
+
+    Se manda resuelto y no el `item_id` pelado porque la pantalla lo muestra en
+    la columna `Tipo Servicio`; que lo resuelva el front obligaria a un segundo
+    request por tarea.
+    """
+    return {
+        "id": t.id,
+        "incidencia_id": t.incidencia_id,
+        "orden": t.orden,
+        "detalle": t.detalle,
+        "fecha_inicio": t.fecha_inicio.isoformat() if t.fecha_inicio else None,
+        "fecha_fin": t.fecha_fin.isoformat() if t.fecha_fin else None,
+        "estado": t.estado,
+        "observacion": t.observacion,
+        "item_id": t.item_id,
+        "tipo_servicio": (
+            datos.get(t.item_id, {}).get("nombre") if t.item_id else None
+        ),
+    }
 
 
 def _lineas_de_cargos(trabajo: dict, cliente_id: int | None) -> list[dict]:
@@ -995,6 +1079,120 @@ class IncidenciaRepository:
                 raise KeyError(cargo_id)
             session.delete(cargo)
             session.commit()
+
+    # ── Las tareas del reclamo ──────────────────────────────────────────
+
+    def list_tareas(self, incidencia_id: int) -> list[dict]:
+        """Las tareas del reclamo, en el orden en que se muestran.
+
+        El nombre del tipo de servicio se resuelve aca y no en la pantalla, por
+        el mismo motivo que en `list_cargos`: que la ficha y el comprobante no
+        digan cosas distintas del mismo item.
+        """
+        with self.session_factory() as session:
+            filas = list(session.execute(
+                select(IncidenciaTarea)
+                .where(IncidenciaTarea.incidencia_id == incidencia_id)
+                .order_by(IncidenciaTarea.orden, IncidenciaTarea.id)
+            ).scalars())
+            if not filas:
+                return []
+            inc = session.get(Incidencia, incidencia_id)
+            cliente_id = inc.cliente_id if inc else None
+
+        con_item = [f.item_id for f in filas if f.item_id]
+        datos = _datos_de_items(con_item, cliente_id) if con_item else {}
+        return [_tarea_to_dict(f, datos) for f in filas]
+
+    def add_tarea(self, incidencia_id: int, **data) -> dict:
+        """Agrega una tarea al final de la grilla.
+
+        `orden` no se recibe: lo pone el repositorio como el siguiente de la
+        lista. Dejarlo entrar por la API admitiria dos tareas en la misma
+        posicion, que es justo lo que la columna existe para evitar.
+        """
+        self._validar_tarea(data)
+        with self.session_factory() as session:
+            if session.get(Incidencia, incidencia_id) is None:
+                raise KeyError(incidencia_id)
+            ultimo = session.execute(
+                select(func.max(IncidenciaTarea.orden))
+                .where(IncidenciaTarea.incidencia_id == incidencia_id)
+            ).scalar()
+            tarea = IncidenciaTarea(
+                incidencia_id=incidencia_id,
+                orden=(ultimo or 0) + 1,
+                detalle=data["detalle"],
+                fecha_inicio=data.get("fecha_inicio"),
+                fecha_fin=data.get("fecha_fin"),
+                estado=data.get("estado") or "pendiente",
+                observacion=data.get("observacion"),
+                item_id=data.get("item_id"),
+            )
+            session.add(tarea)
+            session.commit()
+            tarea_id = tarea.id
+        return next(t for t in self.list_tareas(incidencia_id) if t["id"] == tarea_id)
+
+    def update_tarea(self, tarea_id: int, **data) -> dict:
+        """Edita una tarea. Se le pasan solo los campos que cambian."""
+        with self.session_factory() as session:
+            tarea = session.get(IncidenciaTarea, tarea_id)
+            if tarea is None:
+                raise KeyError(tarea_id)
+            fusion = {
+                "detalle": tarea.detalle,
+                "estado": tarea.estado,
+                "fecha_inicio": tarea.fecha_inicio,
+                "fecha_fin": tarea.fecha_fin,
+                **data,
+            }
+            self._validar_tarea(fusion)
+            for campo, valor in data.items():
+                setattr(tarea, campo, valor)
+            session.commit()
+            incidencia_id = tarea.incidencia_id
+        return next(t for t in self.list_tareas(incidencia_id) if t["id"] == tarea_id)
+
+    def delete_tarea(self, tarea_id: int) -> None:
+        """Borra la tarea y **recompacta el orden** de las que quedan.
+
+        Sin esto la grilla queda con huecos (1, 2, 4) y la proxima que se
+        agregue toma un numero que ya se vio, porque el siguiente sale del
+        maximo. El hueco no rompe nada, pero la columna `Item` es lo que el
+        usuario lee para decir "la tres".
+        """
+        with self.session_factory() as session:
+            tarea = session.get(IncidenciaTarea, tarea_id)
+            if tarea is None:
+                raise KeyError(tarea_id)
+            incidencia_id = tarea.incidencia_id
+            session.delete(tarea)
+            session.flush()
+            quedan = session.execute(
+                select(IncidenciaTarea)
+                .where(IncidenciaTarea.incidencia_id == incidencia_id)
+                .order_by(IncidenciaTarea.orden, IncidenciaTarea.id)
+            ).scalars()
+            for posicion, t in enumerate(quedan, start=1):
+                t.orden = posicion
+            session.commit()
+
+    @staticmethod
+    def _validar_tarea(data: dict) -> None:
+        if not (data.get("detalle") or "").strip():
+            raise ValueError("La tarea necesita un detalle.")
+        estado = data.get("estado") or "pendiente"
+        if estado not in ESTADOS_TAREA:
+            raise ValueError(
+                f"Estado de tarea invalido: {estado!r}. "
+                f"Los validos son {', '.join(ESTADOS_TAREA)}."
+            )
+        desde, hasta = data.get("fecha_inicio"), data.get("fecha_fin")
+        if desde and hasta and hasta < desde:
+            raise ValueError(
+                "La fecha de fin de la tarea no puede ser anterior a la de inicio."
+            )
 
     def convertir_a_remito(self, incidencia_ids: list[int], remitos, clientes,
                            servicios, usuario_id: int | None = None) -> dict:
