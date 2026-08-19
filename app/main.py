@@ -466,7 +466,17 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
                     else [make_url(database_url).database]
                 ),
                 postgres_url=database_url if _es_postgres(database_url) else None,
-                directorios=[os.path.join(data_dir, "logos")],
+                # 🔴 `contratos` va aca junto con `logos`, y no es decorativo:
+                # los contratos firmados escaneados son **documentos del
+                # cliente que solo existen en este volumen**. Un backup que no
+                # los lleve se descarga igual, pesa parecido y al restaurar
+                # deja las fichas apuntando a archivos que no estan. Es el
+                # mismo modo de fallar que el de la base en PostgreSQL, dos
+                # comentarios mas arriba: incompleto se ve igual que completo.
+                directorios=[
+                    os.path.join(data_dir, "logos"),
+                    os.path.join(data_dir, "contratos"),
+                ],
             ),
             os.path.join(data_dir, "backups"),
             # 🔴 Sin estos dos el restore devuelve `ok` y **no tiene efecto**
