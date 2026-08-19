@@ -678,6 +678,22 @@ class ContratoRepository:
             session.refresh(c)
             return self._resolver(session, c, detalle=True)
 
+    def set_archivo(self, contrato_id: int, path: str | None) -> None:
+        """La ruta del contrato firmado escaneado.
+
+        **Fuera de `update()` a proposito.** `update` valida la ficha entera,
+        rechaza el importe y revalida el tipo contra los precios vigentes; esto
+        no es un campo que el usuario edite, lo escribe el que sube o borra el
+        archivo. Pasarlo por ahi habria hecho que subir un PDF pudiera fallar
+        por una regla de negocio que no tiene nada que ver.
+        """
+        with self.session_factory() as session:
+            c = session.get(Contrato, contrato_id)
+            if c is None:
+                raise KeyError(contrato_id)
+            c.archivo_pdf = path
+            session.commit()
+
     def delete(self, contrato_id: int) -> None:
         """Borra solo un contrato en **borrador y sin equipos** — uno cargado por
         error. Un contrato con historia se rescinde o se finaliza; el estado

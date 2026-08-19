@@ -8,6 +8,7 @@ import {
   type Acta, type Activo, type Contrato, type ContratoLinea, type Proveedor,
 } from '../api'
 import { NuevaActa } from '@/components/acta-de-contrato'
+import { ContratoFirmado } from '@/components/contrato-firmado'
 import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -313,6 +314,18 @@ export function ContratoDetalle() {
           <Dato label="Observaciones" valor={contrato.observaciones} />
         </CardContent>
       </Card>
+
+      {/* 🔑 En la pestaña del contrato y no en una propia: es un dato de la
+          ficha, no una sección. Una pestaña para un botón habría escondido lo
+          único que el usuario viene a buscar cuando hay una discusión sobre lo
+          que se firmó. */}
+      <div className="mt-4">
+        <ContratoFirmado
+          contratoId={contrato.id}
+          hayArchivo={Boolean(contrato.archivo_pdf)}
+          onCambio={() => { void load() }}
+        />
+      </div>
       </TabsContent>
 
       {/* --- Equipos --------------------------------------------------- */}
