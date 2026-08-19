@@ -263,7 +263,15 @@ const PANTALLAS: {
   },
   {
     titulo: 'Ficha de la incidencia',
-    cuantos: 13,
+    // 14 desde el 2026-08-19: la grilla de tareas sumo el select de «Tipo de
+    // servicio» del alta. Es UNO y no dos porque el escenario de este archivo
+    // monta la ficha **sin tareas cargadas**; con tareas habria ademas un
+    // select de «Estado» por fila.
+    //
+    // Subir el numero es el mantenimiento correcto cuando se agregan controles
+    // de verdad; lo que este archivo defiende no es la cuenta sino la segunda
+    // asercion --que TODOS tengan nombre accesible--, y esa no se toco.
+    cuantos: 14,
     montar: async () => {
       render(<IncidenciaDetalle />, '/incidencias/9', '/incidencias/:id')
       await screen.findByText('Propiedades')
