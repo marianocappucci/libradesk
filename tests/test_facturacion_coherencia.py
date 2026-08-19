@@ -433,3 +433,87 @@ def test_un_emisor_monotributista_manda_C_aunque_el_receptor_sea_inscripto(
     adaptador.enviar_venta(_payload("Responsable Inscripto"))
 
     assert falso.venta["letra"] == "C"
+
+
+# ── 7. La numeración mira TODAS las páginas ─────────────────────────────────
+#
+# 🔴 Este bloque salió de un rechazo en producción, el 2026-08-18, con el resto
+# ya desplegado: *"SOS rechazó el alta: el número de comprobante ya existe en
+# ese punto de venta y letra"*.
+#
+# `proximo_numero` pedía `pagina=1&registros=500` y daba por hecho que traía
+# todo. La cuenta de Lagrace tiene **815 ventas del año**, casi todas del
+# estudio en sus propios puntos de venta: entre las 500 primeras no había
+# **ninguna** del punto 15, que es el de LibraDesk. El máximo salía 0, se pedía
+# el número 1 —que ya existía— y SOS rechazaba.
+#
+# Y el consejo del mensaje, *"reintentar toma el siguiente número libre"*, era
+# **falso**: reintentar volvía a calcular 1. Es el mismo defecto que el del
+# listado de clientes, en el otro endpoint, y no se vio al arreglar aquél.
+
+
+class HttpVentasEnDosPaginas:
+    """815 ventas del año en dos páginas de 500. La del punto 15 está en la 2.
+
+    Es la forma medida contra la API real: `/venta/consulta` **no trae un campo
+    `paginas`** —a diferencia de `/cliente/listado`—, así que la única señal de
+    que se llegó al final es una página más corta que lo pedido.
+    """
+
+    TOTAL = 815
+
+    def __init__(self):
+        self.paginas_pedidas = []
+
+    def request(self, metodo, url, json=None, headers=None, timeout=None):
+        if "/login" in url or "/cuit/credentials/" in url:
+            return self._r({"jwt": "J"})
+        if "/venta/consulta" in url:
+            pagina = int(url.split("pagina=")[1].split("&")[0])
+            registros = int(url.split("registros=")[1].split("&")[0])
+            self.paginas_pedidas.append(pagina)
+            desde = (pagina - 1) * registros
+            hasta = min(desde + registros, self.TOTAL)
+            filas = []
+            for i in range(desde, max(desde, hasta)):
+                # Casi todo del punto 13, el del estudio.
+                filas.append({"factura": f"FA-0013-{i + 1:08d}"})
+            # La nuestra, la única del punto 15, cae en la segunda página.
+            if desde <= 700 < hasta:
+                filas[700 - desde] = {"factura": "FA-0015-00000001"}
+            return self._r({"items": filas})
+        return self._r({"items": []})
+
+    @staticmethod
+    def _r(cuerpo):
+        return httpx.Response(200, json=cuerpo, request=httpx.Request("GET", "https://x"))
+
+
+def test_el_numero_siguiente_ve_el_comprobante_de_la_pagina_2(sos_configurado):
+    """El caso exacto del rechazo: nuestra única venta está fuera de las 500
+    primeras."""
+    falso = HttpVentasEnDosPaginas()
+    adaptador = sos.AdaptadorSOS(cliente_http=falso)
+
+    assert adaptador.proximo_numero(15, "A") == 2
+    assert falso.paginas_pedidas == [1, 2], "se pide la segunda página"
+
+
+def test_la_pagina_corta_corta_el_recorrido(sos_configurado):
+    """No hay `paginas` que consultar: una página más corta que lo pedido es la
+    última. Sin este corte, el loop seguiría pidiendo páginas vacías hasta el
+    tope."""
+    falso = HttpVentasEnDosPaginas()
+    sos.AdaptadorSOS(cliente_http=falso).proximo_numero(15, "A")
+
+    assert falso.paginas_pedidas == [1, 2], "no se pide una tercera"
+
+
+def test_el_punto_de_venta_ajeno_no_adelanta_la_numeracion(sos_configurado):
+    """Las 814 ventas del estudio están en el punto 13 y llegan al número
+    800-y-pico. Si se contaran, el próximo número saldría por las nubes y
+    dejaría un hueco enorme en la numeración de LibraDesk."""
+    falso = HttpVentasEnDosPaginas()
+    adaptador = sos.AdaptadorSOS(cliente_http=falso)
+
+    assert adaptador.proximo_numero(15, "A") == 2, "sólo cuenta el punto 15"

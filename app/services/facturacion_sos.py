@@ -124,6 +124,12 @@ TIMEOUT = 20.0
 # cuenta enorme no convierta un envío en cientos de requests.
 MAX_PAGINAS_CLIENTES = 100
 
+# Cuántas ventas se piden por página al calcular la numeración, y el tope de
+# páginas. 500 x 40 son 20.000 ventas del año, holgado para la cuenta de un
+# estudio (la de Lagrace tiene 815).
+VENTAS_POR_PAGINA = 500
+MAX_PAGINAS_VENTAS = 40
+
 # El JWT de la CUIT se reusa mientras dure, pero no se guarda para siempre: la
 # API no documenta la expiración, así que se renueva por tiempo y ante el
 # primer rechazo por token. Diez minutos es corto para un token y largo para
@@ -604,14 +610,8 @@ class AdaptadorSOS:
         """
         token = self.token()
         hoy = date.today()
-        consulta = self._request("POST", "/venta/consulta?pagina=1&registros=500",
-                                 token=token, cuerpo={
-                                     "fecha_desde": f"{hoy.year}-01-01",
-                                     "fecha_hasta": f"{hoy.year}-12-31",
-                                 })
-        datos = interpretar(consulta, "consulta de ventas")
         maximo = 0
-        for fila in (datos.get("items") or []) if isinstance(datos, dict) else []:
+        for fila in self._ventas_del_ano(hoy.year, token):
             # `factura` viene armada como "FA-0003-00009001": letra, punto de
             # venta y número. Es el único lugar donde el listado trae los tres
             # juntos —`numero` y `letra` vienen en `null` en la consulta—, así
@@ -632,6 +632,52 @@ class AdaptadorSOS:
                 continue
             maximo = max(maximo, int(numero))
         return maximo + 1
+
+    def _ventas_del_ano(self, ano: int, token: str | None = None):
+        """Todas las ventas del año, recorriendo las páginas que hagan falta.
+
+        🔴 **Esto era la mitad del defecto de `proximo_numero`, y costó un
+        rechazo en producción.** Se pedía `pagina=1&registros=500` y se daba por
+        hecho que traía todo. La cuenta de Lagrace tiene **815 ventas del año**,
+        casi todas del estudio en sus propios puntos de venta: las 500 primeras
+        no incluían **ninguna** del punto 15, que es el de LibraDesk. El máximo
+        salía 0, se pedía el número 1 — que ya existía — y SOS rechazaba el alta
+        con *"el número de comprobante ya existe en ese punto de venta y letra"*.
+        Y el consejo del mensaje, *"reintentar toma el siguiente número libre"*,
+        **era falso**: reintentar volvía a calcular 1.
+
+        Se pagina con el largo de la respuesta y no con un campo `paginas`,
+        porque este endpoint **no lo trae** — a diferencia de
+        `/cliente/listado`, que sí. Una página más corta que lo pedido es la
+        última. Medido el 2026-08-18: con `registros=2000` devuelve las 815, o
+        sea que el `registros` acá sí se respeta; se pagina igual para no
+        depender de que la cuenta no crezca.
+
+        Tampoco se puede filtrar del lado del servidor: se probaron
+        `puntoventa`, `pventa`, `punto_venta`, `letra` y `fcncnd` en el cuerpo y
+        los cinco devuelven la lista **sin filtrar**.
+        """
+        token = token or self.token()
+        cuerpo = {"fecha_desde": f"{ano}-01-01", "fecha_hasta": f"{ano}-12-31"}
+        for pagina in range(1, MAX_PAGINAS_VENTAS + 1):
+            datos = interpretar(
+                self._request(
+                    "POST",
+                    f"/venta/consulta?pagina={pagina}&registros={VENTAS_POR_PAGINA}",
+                    token=token, cuerpo=cuerpo,
+                ),
+                "consulta de ventas",
+            )
+            filas = (datos.get("items") or []) if isinstance(datos, dict) else []
+            yield from filas
+            if len(filas) < VENTAS_POR_PAGINA:
+                return
+
+        logger.warning(
+            "Se recorrieron %d páginas de ventas sin llegar al final: la "
+            "numeración puede quedar corta y SOS rechazar el alta por número "
+            "repetido.", MAX_PAGINAS_VENTAS,
+        )
 
     # ── El alta ──────────────────────────────────────────────────────────────
 
