@@ -435,35 +435,40 @@ def test_un_emisor_monotributista_manda_C_aunque_el_receptor_sea_inscripto(
     assert falso.venta["letra"] == "C"
 
 
-# ── 7. La numeración mira TODAS las páginas ─────────────────────────────────
+
+# ── 7. La numeración pide de una, porque `pagina` no pagina ─────────────────
 #
-# 🔴 Este bloque salió de un rechazo en producción, el 2026-08-18, con el resto
-# ya desplegado: *"SOS rechazó el alta: el número de comprobante ya existe en
-# ese punto de venta y letra"*.
+# 🔴 Salió de un rechazo en producción el 2026-08-18, con el resto ya
+# desplegado: *"SOS rechazó el alta: el número de comprobante ya existe en ese
+# punto de venta y letra"*.
 #
-# `proximo_numero` pedía `pagina=1&registros=500` y daba por hecho que traía
-# todo. La cuenta de Lagrace tiene **815 ventas del año**, casi todas del
-# estudio en sus propios puntos de venta: entre las 500 primeras no había
-# **ninguna** del punto 15, que es el de LibraDesk. El máximo salía 0, se pedía
-# el número 1 —que ya existía— y SOS rechazaba.
+# `proximo_numero` pedía `pagina=1&registros=500` creyendo que traía todo. La
+# cuenta de Lagrace tiene 815 ventas del año, casi todas del estudio: entre las
+# 500 primeras no había ninguna del punto 15. El máximo salía 0, se pedía el
+# número 1 —que ya existía— y SOS rechazaba. El consejo del mensaje,
+# "reintentar toma el siguiente número libre", era falso: reintentar volvía a
+# calcular 1.
 #
-# Y el consejo del mensaje, *"reintentar toma el siguiente número libre"*, era
-# **falso**: reintentar volvía a calcular 1. Es el mismo defecto que el del
-# listado de clientes, en el otro endpoint, y no se vio al arreglar aquél.
+# 🔑 **El primer intento de arreglo fue paginar, y era peor.** Medido después:
+# `pagina` desplaza de a UN registro, no de a `registros`, y `registros` es un
+# tope sobre el total. Un loop de páginas devuelve la misma ventana corrida un
+# lugar, para siempre. Lo único que funciona es pedir de una con un `registros`
+# mayor al total.
 
 
-class HttpVentasEnDosPaginas:
-    """815 ventas del año en dos páginas de 500. La del punto 15 está en la 2.
+class HttpVentasConTope:
+    """Reproduce la semántica MEDIDA de `/venta/consulta`.
 
-    Es la forma medida contra la API real: `/venta/consulta` **no trae un campo
-    `paginas`** —a diferencia de `/cliente/listado`—, así que la única señal de
-    que se llegó al final es una página más corta que lo pedido.
+    - `registros` es un **tope sobre el total**, no un tamaño de página.
+    - `pagina` desplaza de a **un registro**: con 815 ventas,
+      `pagina=2` devuelve 814.
+    - No hay campo `paginas`.
     """
 
     TOTAL = 815
 
     def __init__(self):
-        self.paginas_pedidas = []
+        self.pedidos = []
 
     def request(self, metodo, url, json=None, headers=None, timeout=None):
         if "/login" in url or "/cuit/credentials/" in url:
@@ -471,16 +476,18 @@ class HttpVentasEnDosPaginas:
         if "/venta/consulta" in url:
             pagina = int(url.split("pagina=")[1].split("&")[0])
             registros = int(url.split("registros=")[1].split("&")[0])
-            self.paginas_pedidas.append(pagina)
-            desde = (pagina - 1) * registros
-            hasta = min(desde + registros, self.TOTAL)
+            self.pedidos.append((pagina, registros))
+            desplazamiento = pagina - 1
+            disponibles = max(0, self.TOTAL - desplazamiento)
+            cuantas = min(registros, disponibles)
             filas = []
-            for i in range(desde, max(desde, hasta)):
-                # Casi todo del punto 13, el del estudio.
-                filas.append({"factura": f"FA-0013-{i + 1:08d}"})
-            # La nuestra, la única del punto 15, cae en la segunda página.
-            if desde <= 700 < hasta:
-                filas[700 - desde] = {"factura": "FA-0015-00000001"}
+            for i in range(cuantas):
+                indice = desplazamiento + i
+                # Casi todo del punto 13, el del estudio, con numeración alta.
+                filas.append({"factura": f"FA-0013-{8000 + indice:08d}"})
+            # La nuestra, la única del punto 15, en el puesto 700.
+            if desplazamiento <= 700 < desplazamiento + cuantas:
+                filas[700 - desplazamiento] = {"factura": "FA-0015-00000001"}
             return self._r({"items": filas})
         return self._r({"items": []})
 
@@ -489,31 +496,43 @@ class HttpVentasEnDosPaginas:
         return httpx.Response(200, json=cuerpo, request=httpx.Request("GET", "https://x"))
 
 
-def test_el_numero_siguiente_ve_el_comprobante_de_la_pagina_2(sos_configurado):
-    """El caso exacto del rechazo: nuestra única venta está fuera de las 500
-    primeras."""
-    falso = HttpVentasEnDosPaginas()
-    adaptador = sos.AdaptadorSOS(cliente_http=falso)
+def test_el_numero_siguiente_ve_la_venta_que_estaba_mas_alla_de_las_500(sos_configurado):
+    """El caso exacto del rechazo."""
+    falso = HttpVentasConTope()
 
-    assert adaptador.proximo_numero(15, "A") == 2
-    assert falso.paginas_pedidas == [1, 2], "se pide la segunda página"
+    assert sos.AdaptadorSOS(cliente_http=falso).proximo_numero(15, "A") == 2
 
 
-def test_la_pagina_corta_corta_el_recorrido(sos_configurado):
-    """No hay `paginas` que consultar: una página más corta que lo pedido es la
-    última. Sin este corte, el loop seguiría pidiendo páginas vacías hasta el
-    tope."""
-    falso = HttpVentasEnDosPaginas()
+def test_se_pide_de_una_y_no_pagina_por_pagina(sos_configurado):
+    """🔴 El control que evita volver al arreglo equivocado.
+
+    Con `pagina` desplazando de a un registro, un loop de páginas nunca termina
+    de recorrer nada. Se pide **una vez**, con el tope alto.
+    """
+    falso = HttpVentasConTope()
     sos.AdaptadorSOS(cliente_http=falso).proximo_numero(15, "A")
 
-    assert falso.paginas_pedidas == [1, 2], "no se pide una tercera"
+    assert len(falso.pedidos) == 1, f"se hicieron {len(falso.pedidos)} consultas"
+    pagina, registros = falso.pedidos[0]
+    assert pagina == 1
+    assert registros >= HttpVentasConTope.TOTAL, "el tope tiene que superar al total"
 
 
-def test_el_punto_de_venta_ajeno_no_adelanta_la_numeracion(sos_configurado):
-    """Las 814 ventas del estudio están en el punto 13 y llegan al número
-    800-y-pico. Si se contaran, el próximo número saldría por las nubes y
-    dejaría un hueco enorme en la numeración de LibraDesk."""
-    falso = HttpVentasEnDosPaginas()
-    adaptador = sos.AdaptadorSOS(cliente_http=falso)
+def test_si_la_respuesta_llega_al_tope_se_vuelve_a_pedir_mas_grande(sos_configurado):
+    """Una respuesta que llega justo al tope no distingue "eso es todo" de
+    "quedó cortado". Se agranda y se vuelve a pedir."""
+    falso = HttpVentasConTope()
+    falso.TOTAL = sos.VENTAS_POR_CONSULTA * 2   # más de lo que entra en el primer pedido
 
-    assert adaptador.proximo_numero(15, "A") == 2, "sólo cuenta el punto 15"
+    sos.AdaptadorSOS(cliente_http=falso).proximo_numero(15, "A")
+
+    assert len(falso.pedidos) >= 2, "no escaló el pedido"
+    assert falso.pedidos[1][1] > falso.pedidos[0][1], "el segundo pedido es más grande"
+
+
+def test_el_punto_de_venta_del_estudio_no_adelanta_nuestra_numeracion(sos_configurado):
+    """Las 814 ventas del punto 13 llegan al número 8.800 y pico. Si se
+    contaran, el próximo número de LibraDesk saldría por las nubes."""
+    falso = HttpVentasConTope()
+
+    assert sos.AdaptadorSOS(cliente_http=falso).proximo_numero(15, "A") == 2
