@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { SelectBuscable } from '@/components/select-buscable'
 import { MaterialesIncidencia } from '@/components/materiales-incidencia'
+import { TareasDelReclamo } from '@/components/tareas-del-reclamo'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -524,6 +525,8 @@ export function IncidenciaDetalle() {
                 </div>
               </CardContent>
             </Card>
+
+            <TareasDelReclamo incidenciaId={incidencia.id} />
 
             <Card>
               <CardHeader><CardTitle className="text-base">Actividad</CardTitle></CardHeader>
