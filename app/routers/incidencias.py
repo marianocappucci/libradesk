@@ -529,6 +529,80 @@ def quitar_tarea(
     return Response(status_code=204)
 
 
+# ── Los técnicos de una tarea ─────────────────────────────────────────────
+
+
+class TecnicoDeTareaIn(BaseModel):
+    """La asignación. Las horas son opcionales: se tilda al técnico primero y
+    se le cargan después, que es como funciona la pantalla de Integridad."""
+
+    tecnico_id: int
+    desde: datetime | None = None
+    hasta: datetime | None = None
+
+
+class TramoPatch(BaseModel):
+    desde: datetime | None = None
+    hasta: datetime | None = None
+
+
+@router.post("/{incidencia_id}/tareas/{tarea_id}/tecnicos", status_code=201)
+def asignar_tecnico(
+    incidencia_id: int, tarea_id: int, payload: TecnicoDeTareaIn,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """Varios técnicos por tarea (brecha 3), cada uno con su tramo (brecha 5).
+
+    El listado no está acá: las asignaciones viajan **adentro** de cada tarea en
+    `GET /api/incidencias/{id}/tareas`, porque la grilla las muestra en la misma
+    fila y pedirlas aparte sería un request por tarea.
+    """
+    try:
+        return incidencias.add_tecnico_a_tarea(
+            tarea_id, payload.tecnico_id, payload.desde, payload.hasta,
+        )
+    except KeyError:
+        raise HTTPException(404, "La tarea no existe.")
+    except LookupError as e:
+        # 409 y no 422: el pedido está bien formado, lo que pasa es que ya
+        # existe. Un 422 mandaría al que llama a buscar un error de forma.
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.patch("/{incidencia_id}/tareas/{tarea_id}/tecnicos/{asignacion_id}")
+def cargar_tramo(
+    incidencia_id: int, tarea_id: int, asignacion_id: int, payload: TramoPatch,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """`exclude_unset`, igual que el de tareas: vaciar un tramo --volverlo a
+    `null` porque se cargó mal-- es distinto de no mandarlo."""
+    datos = payload.model_dump(exclude_unset=True)
+    if not datos:
+        raise HTTPException(422, "No se mandó ningún campo para editar.")
+    try:
+        return incidencias.update_tecnico_de_tarea(asignacion_id, **datos)
+    except KeyError:
+        raise HTTPException(404, "La asignación no existe.")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.delete(
+    "/{incidencia_id}/tareas/{tarea_id}/tecnicos/{asignacion_id}", status_code=204,
+)
+def desasignar_tecnico(
+    incidencia_id: int, tarea_id: int, asignacion_id: int,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    try:
+        incidencias.delete_tecnico_de_tarea(asignacion_id)
+    except KeyError:
+        raise HTTPException(404, "La asignación no existe.")
+    return Response(status_code=204)
+
+
 # ── Los cargos de mano de obra ────────────────────────────────────────────
 
 
