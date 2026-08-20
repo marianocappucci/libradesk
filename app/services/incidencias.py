@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
-    delete, func, select, text, update,
+    UniqueConstraint, delete, func, select, text, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -305,6 +305,54 @@ class IncidenciaTarea(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class IncidenciaTareaTecnico(Base):
+    """Un tecnico asignado a una tarea, con su ventana de trabajo.
+
+    Brechas 3 y 5 del relevamiento de Lagrace. Integridad lista 14 tecnicos con
+    checkbox y, al tildar uno, le carga `Fecha Inicio / Hora Inicio / Fecha Fin
+    / Hora Fin / Total`: varios ejecutantes por tarea, cada uno con su tramo.
+
+    🔑 **El asignado es un `tecnico`, sin polimorfismo.** El relevamiento habia
+    dejado abierto si tercerizaban --la lista mezclaba personas con lo que
+    parecian empresas-- y el humano lo cerro el 2026-08-19: **son todos
+    personal**.
+
+    🔑 **`tecnico_id` es nullable con `SET NULL`**, igual que
+    `incidencias.tecnico_id`: las horas son la base de lo que se cobra, asi que
+    borrar a una persona del catalogo no puede borrar el trabajo que hizo.
+
+    🔴 **No hay ninguna columna de plata, y es a proposito.** El importe se
+    deriva --horas por el valor hora del catalogo, resuelto por la lista del
+    cliente--. Guardarlo seria una segunda fuente de verdad al lado de
+    `IncidenciaCargo`, que ya modela la mano de obra como items del catalogo.
+    Este producto ya pago ese error con la tabla `servicios` paralela, dropeada
+    en la revision `0031`.
+
+    Ver la revision `0034`.
+    """
+
+    __tablename__ = "incidencias_tareas_tecnicos"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("incidencias_tareas.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    tecnico_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tecnicos.id", ondelete="SET NULL"), index=True,
+    )
+    desde: Mapped[datetime | None] = mapped_column(DateTime)
+    hasta: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    #: Una fila por tecnico y por tarea, que es lo que un checkbox puede
+    #: expresar. Dos tramos del mismo tecnico en la misma tarea son, en el
+    #: circuito relevado, **otra tarea** -- que es para lo que existe la grilla.
+    __table_args__ = (
+        UniqueConstraint("tarea_id", "tecnico_id", name="uq_tarea_tecnico"),
+    )
+
+
 class IncidenciaEstadoLog(Base):
     __tablename__ = "incidencias_estados_log"
 
@@ -557,6 +605,42 @@ def _observaciones_del_lote(trabajos: list[dict]) -> str:
     return texto
 
 
+def _horas_entre(desde, hasta) -> float | None:
+    """Las horas decimales de un tramo, o `None` si el tramo no esta completo.
+
+    `None` y no `0.0`: un tecnico asignado al que todavia no se le cargaron las
+    horas no trabajo cero horas, **no se sabe cuantas**. Devolver cero borraria
+    la diferencia justo donde importa, que es el total que se va a cobrar.
+
+    Se redondea a dos decimales porque es lo que muestra Integridad (se vio
+    `0.08 h`), y hacia abajo no: 3 minutos son 0.05 h.
+    """
+    if desde is None or hasta is None:
+        return None
+    return round((hasta - desde).total_seconds() / 3600.0, 2)
+
+
+def _asignacion_to_dict(a, nombres: dict, valor_hora: float | None) -> dict:
+    horas = _horas_entre(a.desde, a.hasta)
+    return {
+        "id": a.id,
+        "tarea_id": a.tarea_id,
+        "tecnico_id": a.tecnico_id,
+        # El tecnico borrado deja su tramo: la fila dice que alguien trabajo esas
+        # horas aunque ya no este en el catalogo.
+        "tecnico": nombres.get(a.tecnico_id) if a.tecnico_id else None,
+        "desde": a.desde.isoformat() if a.desde else None,
+        "hasta": a.hasta.isoformat() if a.hasta else None,
+        "horas": horas,
+        # Derivado, nunca guardado. `None` si falta el tramo o si la instancia
+        # no cargo su valor hora -- que no es lo mismo que cobrar cero.
+        "importe": (
+            round(horas * valor_hora, 2)
+            if horas is not None and valor_hora is not None else None
+        ),
+    }
+
+
 def _tarea_to_dict(t, datos: dict) -> dict:
     """La fila como la lee la grilla. `tipo_servicio` es el NOMBRE del item.
 
@@ -577,6 +661,12 @@ def _tarea_to_dict(t, datos: dict) -> dict:
         "tipo_servicio": (
             datos.get(t.item_id, {}).get("nombre") if t.item_id else None
         ),
+        # Las asignaciones viajan ADENTRO de la tarea y no en un endpoint
+        # aparte: la grilla las muestra en la misma fila, y pedirlas por
+        # separado seria un request por tarea.
+        "tecnicos": [],
+        "horas_total": None,
+        "importe_total": None,
     }
 
 
@@ -1102,7 +1192,150 @@ class IncidenciaRepository:
 
         con_item = [f.item_id for f in filas if f.item_id]
         datos = _datos_de_items(con_item, cliente_id) if con_item else {}
-        return [_tarea_to_dict(f, datos) for f in filas]
+        tareas = [_tarea_to_dict(f, datos) for f in filas]
+
+        asignaciones, nombres, valor_hora = self._asignaciones_de(
+            [f.id for f in filas], cliente_id,
+        )
+        for t in tareas:
+            suyas = asignaciones.get(t["id"], [])
+            t["tecnicos"] = [
+                _asignacion_to_dict(a, nombres, valor_hora) for a in suyas
+            ]
+            # 🔑 Los totales suman **sólo los tramos completos**, y son `None`
+            # cuando no hay ninguno. Tratar un tramo sin cargar como cero daría
+            # un total que parece cerrado y no lo está — que es exactamente el
+            # número que alguien miraría antes de facturar.
+            horas = [h["horas"] for h in t["tecnicos"] if h["horas"] is not None]
+            importes = [i["importe"] for i in t["tecnicos"] if i["importe"] is not None]
+            t["horas_total"] = round(sum(horas), 2) if horas else None
+            t["importe_total"] = round(sum(importes), 2) if importes else None
+        return tareas
+
+    def _asignaciones_de(self, tarea_ids: list[int], cliente_id: int | None):
+        """Las asignaciones de varias tareas, en una consulta y no N.
+
+        Devuelve `(por_tarea, nombres, valor_hora)`. El valor hora se resuelve
+        **una vez por lote** y por la lista del cliente del reclamo: es el mismo
+        precio con el que la mano de obra va a salir en el remito.
+        """
+        if not tarea_ids:
+            return {}, {}, None
+        from .tecnicos import Tecnico
+
+        with self.session_factory() as session:
+            filas = list(session.execute(
+                select(IncidenciaTareaTecnico)
+                .where(IncidenciaTareaTecnico.tarea_id.in_(tarea_ids))
+                .order_by(IncidenciaTareaTecnico.id)
+            ).scalars())
+            ids = {f.tecnico_id for f in filas if f.tecnico_id}
+            nombres = {}
+            if ids:
+                nombres = {
+                    t.id: t.nombre for t in session.execute(
+                        select(Tecnico).where(Tecnico.id.in_(ids))
+                    ).scalars()
+                }
+
+        por_tarea: dict[int, list] = {}
+        for f in filas:
+            por_tarea.setdefault(f.tarea_id, []).append(f)
+        return por_tarea, nombres, self._valor_hora(cliente_id)
+
+    def _valor_hora(self, cliente_id: int | None) -> float | None:
+        """El precio de la hora de trabajo para ese cliente, o `None`.
+
+        `None` es "la instancia no cargó su valor hora", que **no es cero**:
+        `convertir_a_remito` ya deja la mano de obra sin precio en ese caso para
+        que el operador lo complete, y la bandeja de facturación se niega a
+        mandar un comprobante en cero. Inventar un número acá rompería las dos
+        defensas.
+        """
+        from . import precios
+        from .servicios_repo_catalogo import ServicioCatalogoRepository
+
+        try:
+            hora = ServicioCatalogoRepository(self.session_factory).valor_hora()
+        except Exception:
+            return None
+        if not hora:
+            return None
+        return precios.precio_de(hora["id"], cliente_id=cliente_id)
+
+    # ── Los técnicos de una tarea ───────────────────────────────────────
+
+    def add_tecnico_a_tarea(self, tarea_id: int, tecnico_id: int,
+                            desde=None, hasta=None) -> dict:
+        """Asigna un técnico a la tarea. Con o sin horas: se tilda primero y se
+        cargan después, que es como funciona la pantalla de Integridad."""
+        from .tecnicos import Tecnico
+
+        self._validar_tramo(desde, hasta)
+        with self.session_factory() as session:
+            tarea = session.get(IncidenciaTarea, tarea_id)
+            if tarea is None:
+                raise KeyError(tarea_id)
+            if session.get(Tecnico, tecnico_id) is None:
+                raise ValueError(f"No existe el técnico {tecnico_id}.")
+            ya = session.execute(
+                select(IncidenciaTareaTecnico).where(
+                    IncidenciaTareaTecnico.tarea_id == tarea_id,
+                    IncidenciaTareaTecnico.tecnico_id == tecnico_id,
+                )
+            ).scalar_one_or_none()
+            if ya is not None:
+                raise LookupError(
+                    "Ese técnico ya está asignado a la tarea. Editá su tramo en "
+                    "vez de agregarlo de nuevo."
+                )
+            fila = IncidenciaTareaTecnico(
+                tarea_id=tarea_id, tecnico_id=tecnico_id, desde=desde, hasta=hasta,
+            )
+            session.add(fila)
+            session.commit()
+            incidencia_id, fila_id = tarea.incidencia_id, fila.id
+        return self._asignacion(incidencia_id, tarea_id, fila_id)
+
+    def update_tecnico_de_tarea(self, asignacion_id: int, **data) -> dict:
+        """Carga o corrige el tramo de un técnico ya asignado."""
+        with self.session_factory() as session:
+            fila = session.get(IncidenciaTareaTecnico, asignacion_id)
+            if fila is None:
+                raise KeyError(asignacion_id)
+            desde = data.get("desde", fila.desde)
+            hasta = data.get("hasta", fila.hasta)
+            self._validar_tramo(desde, hasta)
+            for campo, valor in data.items():
+                setattr(fila, campo, valor)
+            session.commit()
+            tarea = session.get(IncidenciaTarea, fila.tarea_id)
+            incidencia_id, tarea_id = tarea.incidencia_id, fila.tarea_id
+        return self._asignacion(incidencia_id, tarea_id, asignacion_id)
+
+    def delete_tecnico_de_tarea(self, asignacion_id: int) -> None:
+        with self.session_factory() as session:
+            fila = session.get(IncidenciaTareaTecnico, asignacion_id)
+            if fila is None:
+                raise KeyError(asignacion_id)
+            session.delete(fila)
+            session.commit()
+
+    def _asignacion(self, incidencia_id: int, tarea_id: int, asignacion_id: int) -> dict:
+        """Relee la asignación por el mismo camino que la lista, para que la
+        pantalla reciba exactamente la fila que va a mostrar --con el nombre del
+        técnico, las horas y el importe ya resueltos--."""
+        for t in self.list_tareas(incidencia_id):
+            if t["id"] == tarea_id:
+                return next(a for a in t["tecnicos"] if a["id"] == asignacion_id)
+        raise KeyError(asignacion_id)
+
+    @staticmethod
+    def _validar_tramo(desde, hasta) -> None:
+        if desde and hasta and hasta < desde:
+            raise ValueError(
+                "El fin del tramo no puede ser anterior a su inicio."
+            )
 
     def add_tarea(self, incidencia_id: int, **data) -> dict:
         """Agrega una tarea al final de la grilla.

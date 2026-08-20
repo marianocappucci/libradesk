@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PlusCircle, Trash2 } from '@/components/iconos-accion'
+import { TecnicosDeTarea, type AsignacionTecnico } from '@/components/tecnicos-de-tarea'
 
 export type Tarea = {
   id: number
@@ -36,9 +37,16 @@ export type Tarea = {
   observacion: string | null
   item_id: number | null
   tipo_servicio: string | null
+  /** Las asignaciones viajan ADENTRO de la tarea: la grilla las muestra en la
+   *  misma fila y pedirlas aparte seria un request por tarea. */
+  tecnicos: AsignacionTecnico[]
+  /** `null` = ningun tramo completo. **No es cero**. */
+  horas_total: number | null
+  importe_total: number | null
 }
 
 type Servicio = { id: number; nombre: string }
+type Tecnico = { id: number; nombre: string }
 
 /** El vocabulario de la TAREA, que no es el del reclamo.
  *
@@ -54,6 +62,7 @@ const ESTADOS: Record<string, string> = {
 export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
   const [tareas, setTareas] = useState<Tarea[]>([])
   const [servicios, setServicios] = useState<Servicio[]>([])
+  const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
   const [detalle, setDetalle] = useState('')
   const [tipo, setTipo] = useState('')
   const [error, setError] = useState('')
@@ -82,6 +91,9 @@ export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
     api.get<Servicio[]>('/api/servicios')
       .then((datos) => setServicios(Array.isArray(datos) ? datos : []))
       .catch(() => setServicios([]))
+    api.get<Tecnico[]>('/api/tecnicos')
+      .then((datos) => setTecnicos(Array.isArray(datos) ? datos : []))
+      .catch(() => setTecnicos([]))
   }, [])
 
   async function agregar() {
@@ -150,6 +162,7 @@ export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
                   <th className="py-2 font-medium">Fin</th>
                   <th className="py-2 font-medium">Estado</th>
                   <th className="py-2 font-medium">Tipo de servicio</th>
+                  <th className="py-2 font-medium">Técnicos</th>
                   <th className="py-2 font-medium">Observación</th>
                   <th className="w-10" />
                 </tr>
@@ -210,6 +223,18 @@ export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
                     </td>
                     <td className="py-2 pr-2 text-muted-foreground">
                       {t.tipo_servicio ?? '—'}
+                    </td>
+                    <td className="py-2 pr-2">
+                      <TecnicosDeTarea
+                        tareaId={t.id}
+                        incidenciaId={incidenciaId}
+                        orden={t.orden}
+                        asignados={t.tecnicos ?? []}
+                        horasTotal={t.horas_total ?? null}
+                        importeTotal={t.importe_total ?? null}
+                        tecnicos={tecnicos}
+                        onCambio={() => { void recargar() }}
+                      />
                     </td>
                     <td className="py-2 pr-2">
                       <Input
