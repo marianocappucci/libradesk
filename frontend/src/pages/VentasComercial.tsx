@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -85,12 +86,12 @@ const medioLabel = (valor: string) =>
   MEDIOS.find((m) => m.valor === valor)?.label ?? valor
 
 /** Los estados de `SaleStatus` de libracommerce, en castellano. */
-const ESTADOS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  draft: { label: 'Borrador', variant: 'outline' },
-  confirmed: { label: 'Confirmada', variant: 'default' },
-  cancelled: { label: 'Anulada', variant: 'destructive' },
-  partially_returned: { label: 'Devuelta en parte', variant: 'secondary' },
-  returned: { label: 'Devuelta', variant: 'secondary' },
+const ESTADOS: Record<string, { label: string; tono: TonoEstado }> = {
+  draft: { label: 'Borrador', tono: 'neutro' },
+  confirmed: { label: 'Confirmada', tono: 'ok' },
+  cancelled: { label: 'Anulada', tono: 'negativo' },
+  partially_returned: { label: 'Devuelta en parte', tono: 'atencion' },
+  returned: { label: 'Devuelta', tono: 'atencion' },
 }
 
 // ── Ventas ─────────────────────────────────────────────────────────────────
@@ -562,7 +563,7 @@ export function VentaDetalle() {
 
   if (cargando || error || !datos) return <DetalleEstado loading={cargando} error={error || null} />
 
-  const estado = ESTADOS[datos.estado] ?? { label: datos.estado, variant: 'outline' as const }
+  const estado = ESTADOS[datos.estado] ?? { label: datos.estado, tono: 'neutro' as const }
   const cobrado = datos.pagos.reduce((acc, p) => acc + p.monto, 0)
 
   return (
@@ -571,7 +572,7 @@ export function VentaDetalle() {
       icono={ClipboardList}
       acciones={
         <>
-          <Badge variant={estado.variant}>{estado.label}</Badge>
+          <BadgeEstado tono={estado.tono}>{estado.label}</BadgeEstado>
           {/* El mismo botón que la lista, no una copia: emite si falta y muestra
               el PDF si ya está. Quien abre la venta para mandar el comprobante
               no tiene que volver a la lista a buscarlo. */}
@@ -687,7 +688,7 @@ export function Recibos() {
           { clave: 'concepto', titulo: 'Concepto',
             render: (r) => <span className="text-muted-foreground">{r.concepto || '—'}</span> },
           { clave: 'estado', titulo: '', ancho: '90px',
-            render: (r) => r.anulado ? <Badge variant="destructive">Anulado</Badge> : null },
+            render: (r) => r.anulado ? <BadgeEstado tono="negativo">Anulado</BadgeEstado> : null },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (r) => pesos(r.total) },
           { clave: 'pdf', titulo: 'Acciones', ancho: '90px', alinear: 'derecha',

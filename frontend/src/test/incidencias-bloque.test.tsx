@@ -262,18 +262,23 @@ describe('Alta de incidencia — cargar el equipo ahí mismo (pedido 38)', () =>
 // contorno gris, y el color de la fila vivía sólo en el punto de la primera
 // columna, lejos de la palabra que significa lo mismo.
 //
-// 🔴 **Estos tests miran clases, no color renderizado.** En jsdom no hay hoja
+// 🔴 **Estos tests miran el TONO, no color renderizado.** En jsdom no hay hoja
 // de Tailwind: el estilo computado devolvería el default para las cuatro, así
 // que un test sobre color pasaría en verde con las cuatro píldoras iguales. Lo
-// que se puede fijar acá es que la clase LLEGA al elemento y que las cuatro son
-// distintas. El color de verdad se verificó midiendo estilo computado en el
+// que se puede fijar acá es que cada estado resuelve a SU tono y que los cuatro
+// son distintos. El color de verdad se verificó midiendo estilo computado en el
 // navegador, que es donde el CSS existe.
+//
+// Se afirma `data-tono` y no el nombre de la clase: desde el 2026-08-21 la
+// píldora la pinta `BadgeEstado` de libra-ui, y atar el test a `bg-red-50` lo
+// rompe cada vez que cambia el criterio visual sin que la grilla deje de
+// distinguir nada — que es exactamente lo que pasó.
 describe('El estado se lee por color, no sólo por texto', () => {
   const POR_ESTADO = [
-    { estado: 'abierto', label: 'Abierto', fondo: 'bg-red-50', borde: 'border-red-300' },
-    { estado: 'en_progreso', label: 'En progreso', fondo: 'bg-amber-50', borde: 'border-amber-300' },
-    { estado: 'resuelta', label: 'Resuelta', fondo: 'bg-emerald-50', borde: 'border-emerald-300' },
-    { estado: 'cerrado', label: 'Cerrado', fondo: 'bg-slate-100', borde: 'border-slate-300' },
+    { estado: 'abierto', label: 'Abierto', tono: 'negativo' },
+    { estado: 'en_progreso', label: 'En progreso', tono: 'atencion' },
+    { estado: 'resuelta', label: 'Resuelta', tono: 'ok' },
+    { estado: 'cerrado', label: 'Cerrado', tono: 'neutro' },
   ]
 
   function conCuatroEstados() {
@@ -290,34 +295,34 @@ describe('El estado se lee por color, no sólo por texto', () => {
     }))
   }
 
-  it('cada estado pinta su propia píldora: fondo suave y borde más intenso', async () => {
+  it('cada estado pinta su propia píldora, con el tono que le corresponde', async () => {
     conCuatroEstados()
     render(<Incidencias />, '/incidencias')
     await screen.findByText('Ticket 1')
 
     for (const e of POR_ESTADO) {
       const pildora = screen.getByText(e.label)
-      expect(pildora.className).toContain(e.fondo)
-      expect(pildora.className).toContain(e.borde)
-      // tailwind-merge se queda con la última clase de cada grupo. Si el orden
-      // se invirtiera, la clase igual llegaría al DOM pero perdería contra la
-      // de la variante y la píldora saldría gris como antes — o sea que
-      // afirmar sólo la presencia del color no alcanza.
+      expect(pildora).toHaveAttribute('data-tono', e.tono)
+      // tailwind-merge se queda con la última clase de cada grupo. Si el tono
+      // perdiera contra la clase base, el `data-tono` seguiría estando pero la
+      // píldora saldría gris — por eso además se afirma que el
+      // `border-transparent` de la base NO sobrevivió.
       expect(pildora.className).not.toContain('border-transparent')
       expect(pildora.className).not.toContain('bg-primary')
     }
   })
 
   it('🔴 las cuatro píldoras son distintas entre sí', async () => {
-    // El grupo de control. Sin esto, un mapa que devolviera la misma clase para
+    // El grupo de control. Sin esto, un mapa que devolviera el mismo tono para
     // los cuatro estados pasaría el test de arriba en uno de los cuatro casos y
     // la grilla volvería a no distinguir nada.
     conCuatroEstados()
     render(<Incidencias />, '/incidencias')
     await screen.findByText('Ticket 1')
 
-    const clases = POR_ESTADO.map((e) => screen.getByText(e.label).className)
-    expect(new Set(clases).size).toBe(4)
+    const tonos = POR_ESTADO.map((e) => screen.getByText(e.label).getAttribute('data-tono'))
+    expect(tonos.every(Boolean)).toBe(true)
+    expect(new Set(tonos).size).toBe(4)
   })
 
   it('el punto del semáforo sigue estando, y con el tono fuerte', async () => {

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -62,8 +63,8 @@ export function DepositosStock() {
             render: (d) => (
               <span className="flex items-center gap-2">
                 {d.nombre}
-                {d.es_default && <Badge variant="secondary">Principal</Badge>}
-                {!d.activo && <Badge variant="outline">Inactivo</Badge>}
+                {d.es_default && <BadgeEstado tono="ok">Principal</BadgeEstado>}
+                {!d.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
               </span>
             ) },
           { clave: 'sucursal', titulo: 'Sucursal', ancho: '180px',
@@ -223,8 +224,8 @@ export function ListasPrecio() {
             render: (l) => (
               <span className="flex items-center gap-2">
                 {l.nombre}
-                {l.es_default && <Badge variant="secondary">Por defecto</Badge>}
-                {!l.activa && <Badge variant="outline">Inactiva</Badge>}
+                {l.es_default && <BadgeEstado tono="ok">Por defecto</BadgeEstado>}
+                {!l.activa && <BadgeEstado tono="neutro">Inactiva</BadgeEstado>}
               </span>
             ) },
           { clave: 'descripcion', titulo: 'Descripción',

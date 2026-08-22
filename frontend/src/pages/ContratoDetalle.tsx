@@ -13,7 +13,7 @@ import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import { SelectBuscable } from '@/components/select-buscable'
 import {
@@ -248,9 +248,9 @@ export function ContratoDetalle() {
           </div>
         }
       >
-        <Badge variant={contrato.estado === 'activo' ? 'default' : 'outline'}>
+        <BadgeEstado tono={contrato.estado === 'activo' ? 'ok' : 'neutro'}>
           {ESTADO_CONTRATO_LABELS[contrato.estado] ?? contrato.estado}
-        </Badge>
+        </BadgeEstado>
         {/* Era el "Volver" que estaba del lado izquierdo, y además como botón
             de sólo icono: las dos cosas que esta pantalla hacía distinto del
             resto. Ahora es el mismo de los otros detalles. */}
@@ -364,11 +364,11 @@ export function ContratoDetalle() {
                       <td className="py-2 pr-3">{le.fecha_retiro ? fecha(le.fecha_retiro) : '—'}</td>
                       <td className="py-2 pr-3">
                         {le.vigente ? (
-                          <Badge>Instalado</Badge>
+                          <BadgeEstado tono="ok">Instalado</BadgeEstado>
                         ) : (
-                          <Badge variant="outline">
+                          <BadgeEstado tono="neutro">
                             {le.motivo_retiro === 'reemplazo' ? 'Reemplazado' : 'Retirado'}
-                          </Badge>
+                          </BadgeEstado>
                         )}
                       </td>
                       <td className="py-2 text-right">
@@ -418,7 +418,7 @@ export function ContratoDetalle() {
                       <tr key={p.id} className="border-b last:border-0">
                         <td className="py-2 pr-3">{fecha(p.vigencia_desde)}</td>
                         <td className="py-2 pr-3">
-                          {p.vigencia_hasta ? fecha(p.vigencia_hasta) : <Badge>Vigente</Badge>}
+                          {p.vigencia_hasta ? fecha(p.vigencia_hasta) : <BadgeEstado tono="ok">Vigente</BadgeEstado>}
                         </td>
                         <td className="py-2 pr-3 font-medium">{pesos(p.importe, p.moneda)}</td>
                         <td className="py-2 pr-3 text-muted-foreground">{p.motivo ?? '—'}</td>
@@ -484,7 +484,7 @@ export function ContratoDetalle() {
                       </td>
                       <td className="py-2 text-right">
                         <div className="flex justify-end gap-1">
-                          {a.anulada && <Badge variant="outline">Anulada</Badge>}
+                          {a.anulada && <BadgeEstado tono="negativo">Anulada</BadgeEstado>}
                           <Button size="sm" variant="outline" asChild title="Ver el acta en PDF">
                             <a
                               href={`/api/contratos/actas/${a.id}/pdf`}

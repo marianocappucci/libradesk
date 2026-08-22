@@ -19,6 +19,7 @@ import { Check, Search, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -173,8 +174,8 @@ function DestinoCard({ inicial, onGuardado }: {
           <Send className="size-4" />
           {NOMBRES[destino] ?? destino}
           {datos.configurado
-            ? <Badge variant="secondary">Habilitado</Badge>
-            : <Badge variant="outline">Sin usar</Badge>}
+            ? <BadgeEstado tono="ok">Habilitado</BadgeEstado>
+            : <BadgeEstado tono="neutro">Sin usar</BadgeEstado>}
           {datos.desde_entorno && (
             <Badge variant="outline" title="Todavía se lee del entorno del contenedor. Guardar acá pasa a mandar esta configuración.">
               desde el compose
@@ -258,7 +259,7 @@ function DestinoCard({ inicial, onGuardado }: {
                         <span className="font-mono text-xs">{c.idcuit}</span>
                         <span>{c.razonsocial}</span>
                         <span className="text-xs text-muted-foreground">{c.cuit}</span>
-                        {!c.habilitado && <Badge variant="outline">deshabilitada en SOS</Badge>}
+                        {!c.habilitado && <BadgeEstado tono="neutro">deshabilitada en SOS</BadgeEstado>}
                       </button>
                     ))}
                   </div>
@@ -270,7 +271,7 @@ function DestinoCard({ inicial, onGuardado }: {
               <Label htmlFor={`${destino}-secreto`} className="flex items-center gap-1.5">
                 <KeyRound className="size-3.5" />
                 {campoSecreto.label}
-                {secretoCargado && <Badge variant="secondary">cargada</Badge>}
+                {secretoCargado && <BadgeEstado tono="ok">cargada</BadgeEstado>}
               </Label>
               <div className="flex gap-2">
                 <Input

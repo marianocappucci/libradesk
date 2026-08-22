@@ -8,6 +8,7 @@
 export { api, ApiError, type User } from 'libra-ui/api-client'
 
 import type { OpcionSelect } from 'libra-ui/SelectBuscable'
+import type { TonoEstado } from 'libra-ui/badge-estado'
 
 export type Cliente = {
   id: number
@@ -671,22 +672,23 @@ export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
 }
 
 /** El mismo semáforo, pero para pintar la píldora de Estado (pedido del
- *  usuario, 2026-08-13): fondo del color en versión suave y **borde un escalón
- *  más intenso**, que es lo que hace que se lea como una píldora y no como un
- *  bloque de color.
+ *  usuario, 2026-08-13). Desde el 2026-08-21 no son clases sino un **tono**
+ *  de `libra-ui/badge-estado`: la pastilla la pinta `BadgeEstado`, con la
+ *  fuente y el borde del mismo color y el fondo de ese tono al 10%.
+ *
+ *  ⚠️ **La versión anterior tenía el borde MÁS CLARO que la fuente**
+ *  (`text-red-700` con `border-red-300`), que es exactamente lo que el
+ *  criterio nuevo vino a corregir.
  *
  *  Por qué la píldora y no sólo el punto: el punto del semáforo vive en la
  *  primera columna, a varios centímetros de la palabra "Abierto". El color y el
  *  texto que significan lo mismo estaban separados por toda la fila, así que
  *  para leer el estado había que mirar dos lugares.
  *
- *  🔴 **Clases completas y literales, igual que arriba** — un
- *  `bg-${color}-50` armado en runtime no sobrevive al purge de Tailwind y la
- *  píldora sale transparente sin que nada falle.
- *
- *  El texto va en el tono fuerte (`-700`) y no en `foreground`: sobre un fondo
- *  teñido, el gris del tema pierde contraste justo en los estados que más se
- *  miran.
+ *  🔴 **Las clases literales ahora viven en `TONOS_ESTADO` de libra-ui**, por
+ *  la misma razón de siempre: un `bg-${color}-50` armado en runtime no
+ *  sobrevive al purge de Tailwind y la píldora sale transparente sin que nada
+ *  falle.
  *
  *  ⚠️ **Sin variantes `dark:`, y no por olvido.** La primera versión las traía.
  *  `index.css` declara `@custom-variant dark (&:is(.dark *))`, o sea que el
@@ -697,13 +699,21 @@ export const ESTADO_COLOR: Record<EstadoIncidencia, string> = {
  *  que además hacían creer que el tema oscuro estaba contemplado. El día que se
  *  encienda de verdad, esto y `ESTADO_COLOR` se revisan juntos.
  */
-export const ESTADO_PILDORA: Record<EstadoIncidencia, string> = {
-  abierto: 'bg-red-50 text-red-700 border-red-300',
-  en_progreso: 'bg-amber-50 text-amber-700 border-amber-300',
-  resuelta: 'bg-emerald-50 text-emerald-700 border-emerald-300',
-  // Slate y no un color: un ticket cerrado no pide atención, y pintarlo igual
+export const ESTADO_TONO: Record<EstadoIncidencia, TonoEstado> = {
+  abierto: 'negativo',
+  en_progreso: 'atencion',
+  resuelta: 'ok',
+  // Neutro y no un color: un ticket cerrado no pide atención, y pintarlo igual
   // de fuerte que los abiertos vacía el semáforo de significado.
-  cerrado: 'bg-slate-100 text-slate-600 border-slate-300',
+  cerrado: 'neutro',
+}
+
+/** La prioridad, con el mismo criterio: `alta` es la única que pide atención.
+ *  Estaba resuelta con un ternario repetido en cinco pantallas. */
+export const PRIORIDAD_TONO: Record<PrioridadIncidencia, TonoEstado> = {
+  alta: 'negativo',
+  media: 'neutro',
+  baja: 'neutro',
 }
 
 export const PRIORIDAD_LABELS: Record<PrioridadIncidencia, string> = {

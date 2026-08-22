@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import {
@@ -286,9 +287,9 @@ export function Cuotas() {
         const c = row.original
         return (
           <div className="flex items-center gap-2">
-            <Badge variant={c.estado === 'anulada' ? 'outline' : 'secondary'}>
+            <BadgeEstado tono={c.estado === 'anulada' ? 'negativo' : 'neutro'}>
               {ESTADO_CUOTA_LABELS[c.estado] ?? c.estado}
-            </Badge>
+            </BadgeEstado>
             {/* El remito es lo que dice que la cuota ya salió. El `estado` NO se
                 toca al emitirlo: la factura la produce SOS Contador desde la
                 bandeja, y decir «facturada» acá sería afirmar algo que no pasó. */}
@@ -535,9 +536,9 @@ export function Cuotas() {
                 <DialogTitle className="flex flex-wrap items-center gap-2">
                   <ReceiptText className="size-4" />
                   {detalle.contrato_numero ?? `Contrato #${detalle.contrato_id}`}
-                  <Badge variant={detalle.estado === 'anulada' ? 'outline' : 'secondary'}>
+                  <BadgeEstado tono={detalle.estado === 'anulada' ? 'negativo' : 'neutro'}>
                     {ESTADO_CUOTA_LABELS[detalle.estado] ?? detalle.estado}
-                  </Badge>
+                  </BadgeEstado>
                 </DialogTitle>
                 <DialogDescription>
                   {/* El concepto se fue de la grilla y su lugar es éste: es la

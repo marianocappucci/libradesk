@@ -33,6 +33,7 @@ import { useAgendaRango } from '@/components/agenda/datos'
 import { Chip } from '@/components/agenda/chip'
 import { diaCorto, hoyLocal, lunesDe, sumarDias } from '@/components/agenda/fechas'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -70,10 +71,10 @@ function cuando(dias: number): string {
   return `en ${dias} d`
 }
 
-function tono(dias: number): 'destructive' | 'secondary' | 'outline' {
-  if (dias < 0) return 'destructive'
-  if (dias <= 7) return 'secondary'
-  return 'outline'
+function tono(dias: number): TonoEstado {
+  if (dias < 0) return 'negativo'
+  if (dias <= 7) return 'atencion'
+  return 'neutro'
 }
 
 /** Un bloque de "lo que se vence": el número grande, y los más próximos.
@@ -152,9 +153,9 @@ function Fila({ principal, secundario, dias, a }: {
       {a
         ? <Link to={a} className="min-w-0 truncate hover:underline">{texto}</Link>
         : <span className="min-w-0 truncate">{texto}</span>}
-      <Badge variant={tono(dias)} className="shrink-0 whitespace-nowrap">
+      <BadgeEstado tono={tono(dias)} className="shrink-0 whitespace-nowrap">
         {cuando(dias)}
-      </Badge>
+      </BadgeEstado>
     </div>
   )
 }
@@ -464,9 +465,9 @@ export function Dashboard() {
                             <Badge variant="outline">
                               {PRIORIDAD_LABELS[i.prioridad as keyof typeof PRIORIDAD_LABELS] ?? i.prioridad}
                             </Badge>
-                            <Badge variant={i.dias > 30 ? 'destructive' : 'secondary'}>
+                            <BadgeEstado tono={i.dias > 30 ? 'negativo' : 'atencion'}>
                               {i.dias} d
-                            </Badge>
+                            </BadgeEstado>
                           </span>
                         </div>
                       ))}
