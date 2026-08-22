@@ -27,7 +27,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // vocabulario de `components/iconos-accion`.
 import { Users } from 'lucide-react'
 import { Check, FilePlus, MapPin, Pencil, Trash2, Undo2, X } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),

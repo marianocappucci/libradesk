@@ -30,7 +30,7 @@ import {
 import { Wrench } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const TODOS = '__todos__'
 

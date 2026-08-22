@@ -22,7 +22,7 @@ import {
 import { fecha } from '@/lib/format'
 import { FileText } from 'lucide-react'
 import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 

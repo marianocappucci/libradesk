@@ -30,7 +30,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Monitor } from 'lucide-react'
 import { Eye, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.

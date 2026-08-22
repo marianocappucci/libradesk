@@ -29,7 +29,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Truck } from 'lucide-react'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */

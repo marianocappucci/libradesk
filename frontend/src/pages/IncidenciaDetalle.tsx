@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const NONE = '__none__'
 

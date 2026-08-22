@@ -32,7 +32,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Building2 } from 'lucide-react'
 import { Check, FilePlus } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 export function Depositos() {
   const [depositos, setDepositos] = useState<Deposito[]>([])

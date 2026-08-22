@@ -30,7 +30,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RotateCcwClock as History, Briefcase as IconoActivos } from 'lucide-react'
 import { Boxes, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const TODOS = '__todos__'
 

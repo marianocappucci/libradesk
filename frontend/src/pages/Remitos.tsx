@@ -15,7 +15,7 @@ import {
 import { fecha } from '@/lib/format'
 import { Receipt } from 'lucide-react'
 import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 export function Remitos() {
   const navigate = useNavigate()
