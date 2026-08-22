@@ -17,6 +17,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Proveedores dejó de ser pestaña y se mudó a `proveedores.test.tsx` junto con
 // la pantalla (2026-08-13).
+import { CLASES_LISTA } from '../components/conmutador'
 import { Configuracion, ConfiguracionCategorias } from '../pages/Configuracion'
 import { Depositos } from '../pages/Depositos'
 import { escribirEn } from './escribir'
@@ -186,7 +187,11 @@ describe('El conmutador es el mismo que el de depósitos', () => {
     // ya no identifica a ésta. Y la pestaña es justo lo que este test mide.
     await screen.findByRole('link', { name: 'De la empresa' })
     const claseDepositos = pestania('De la empresa').parentElement!.className
-    expect(claseDepositos).toContain('rounded-md')
+    // El ancla del test: sin esto, comparar dos `className` que resultaran
+    // vacíos daría verde. Se ancla a la constante del conmutador y no a un
+    // literal suelto ('rounded-md' era el de la caja con borde, hasta el
+    // 2026-08-22) para que siga midiendo cuando el aspecto cambie.
+    expect(claseDepositos).toBe(CLASES_LISTA)
     unmount()
 
     render(<Configuracion />, '/configuracion')
