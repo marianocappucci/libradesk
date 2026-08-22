@@ -39,7 +39,7 @@ import { PESTANIAS_RECEPCION } from './recepciones-piezas'
 import { ClipboardCheck } from 'lucide-react'
 import { fechaHora } from '@/lib/format'
 import { FilePlus, PackageCheck, Printer, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const NONE = '__none__'
 

@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { ReceiptText } from 'lucide-react'
 import { FilePlus, PackageCheck } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const TODOS = '__todos__'
 

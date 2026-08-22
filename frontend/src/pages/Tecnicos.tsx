@@ -20,7 +20,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { UserCog, Wrench } from 'lucide-react'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const tecnicoSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),

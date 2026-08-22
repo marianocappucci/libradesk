@@ -28,7 +28,7 @@ import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/impri
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
 import { fechaDeDate, fechaHora } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'

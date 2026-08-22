@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dialog'
 import { PackageSearch as IconoStock } from 'lucide-react'
 import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { useSucursal } from '@/components/sucursal'
 
 export type Consumible = {

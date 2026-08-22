@@ -41,7 +41,7 @@ import { Conmutador } from '@/components/conmutador'
 import { PESTANIAS_EQUIPOS } from './equipos-flota-piezas'
 import { Car as IconoFlota } from 'lucide-react'
 import { Car, Check, FilePlus, LinkIcon, Pencil, Trash2, Unlink } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const SIN = '__sin__'
 

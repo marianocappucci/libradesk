@@ -32,7 +32,7 @@ import { FileSpreadsheet } from 'lucide-react'
 import {
   ArrowLeft, DownloadPlano as Download, SearchPlano as Search,
 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 export function ReporteDetalle() {
   const { slug } = useParams<{ slug: string }>()

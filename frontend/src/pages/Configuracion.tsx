@@ -47,7 +47,7 @@ import {
   Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
 } from '@/components/iconos-accion'
 import { Settings } from 'lucide-react'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {

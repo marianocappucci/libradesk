@@ -29,7 +29,7 @@ import {
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { ArrowLeftRight, Building2 } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Monitor } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 // Destino "ninguno": el equipo sale del depósito y vuelve al sector del
 // cliente. Radix no admite un <SelectItem value="">.

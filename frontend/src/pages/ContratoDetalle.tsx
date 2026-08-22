@@ -28,7 +28,7 @@ import { FilePenLine as FileSignature } from 'lucide-react'
 import {
   ArrowLeft, PackagePlus, Printer, Repeat, TrendingUp, Undo2, XCircle,
 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const HOY = () => new Date().toISOString().slice(0, 10)
 

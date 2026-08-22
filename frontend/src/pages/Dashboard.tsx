@@ -24,7 +24,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { AlarmClock, CalendarClock, CalendarDays, FileExclamationPoint as FileWarning, LayoutDashboard, ShieldCheck, UserX, Wrench } from 'lucide-react'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
   type DashboardOperativo, type DashboardSummary, type EquipoTrabajo,

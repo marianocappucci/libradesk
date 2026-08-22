@@ -34,7 +34,7 @@ import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const NONE = '__none__'
 const TODOS = '__todos__'

@@ -12,7 +12,7 @@ import type { ReactNode } from 'react'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { api, ApiError } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 /** Carga datos de la API con estado de error y una forma de recargar.
  *

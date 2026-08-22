@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label'
 import { MapPin, Monitor, Users } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 function formatFecha(fecha: string | null): string {
   if (!fecha) return '—'
