@@ -16,12 +16,13 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, MOVIMIENTO_LABELS,
-  PRIORIDAD_LABELS, ubicacionTexto, type EquipoFicha,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO, MOVIMIENTO_LABELS,
+  PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto, type EquipoFicha,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
@@ -147,9 +148,9 @@ export function EquipoDetalle() {
           <div>
             <TituloPantalla icono={Monitor}>
               {equipo.descripcion}
-              <Badge variant={equipo.estado === 'activo' ? 'default' : 'outline'}>
+              <BadgeEstado tono={equipo.estado === 'activo' ? 'ok' : 'neutro'}>
                 {ESTADO_EQUIPO_LABELS[equipo.estado] ?? equipo.estado}
-              </Badge>
+              </BadgeEstado>
             </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[equipo.serial ? `Serial ${equipo.serial}` : 'Sin serial',
@@ -185,7 +186,7 @@ export function EquipoDetalle() {
                   >
                     <Building2 className="size-3.5 text-muted-foreground" />
                     {cliente.empresa || cliente.nombre}
-                    {!cliente.activo && <Badge variant="outline">Inactivo</Badge>}
+                    {!cliente.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
                   </Link>
                 ) : <span className="text-sm">—</span>}
                 {cliente && (cliente.empresa || cliente.ciudad) && (
@@ -273,10 +274,10 @@ export function EquipoDetalle() {
                     <li key={i.id} className="px-3 py-2">
                       <Link to={`/incidencias/${i.id}`} className="grid gap-0.5">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={i.prioridad === 'alta' ? 'destructive' : 'secondary'}>
+                          <BadgeEstado tono={PRIORIDAD_TONO[i.prioridad]}>
                             {PRIORIDAD_LABELS[i.prioridad]}
-                          </Badge>
-                          <Badge variant="outline">{ESTADO_LABELS[i.estado] ?? i.estado}</Badge>
+                          </BadgeEstado>
+                          <BadgeEstado tono={ESTADO_TONO[i.estado] ?? 'neutro'}>{ESTADO_LABELS[i.estado] ?? i.estado}</BadgeEstado>
                           <span className="text-sm font-medium">#{i.id} — {i.titulo}</span>
                         </div>
                         <span className="text-xs text-muted-foreground">
@@ -314,9 +315,9 @@ export function EquipoDetalle() {
                   {reparaciones.map((r) => (
                     <li key={r.id} className="grid gap-0.5 px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={r.abierta ? 'default' : 'outline'}>
+                        <BadgeEstado tono={r.abierta ? 'curso' : 'neutro'}>
                           {r.abierta ? 'En service' : 'Volvió'}
-                        </Badge>
+                        </BadgeEstado>
                         <span className="text-sm font-medium">{r.proveedor_nombre}</span>
                         {r.en_garantia && (
                           <Badge variant="outline" className="gap-1">
@@ -377,9 +378,9 @@ export function EquipoDetalle() {
                     return (
                       <li key={m.id} className="grid gap-0.5 px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={m.tipo === 'baja' ? 'destructive' : 'outline'}>
+                          <BadgeEstado tono={m.tipo === 'baja' ? 'negativo' : 'neutro'}>
                             {MOVIMIENTO_LABELS[m.tipo] ?? m.tipo}
-                          </Badge>
+                          </BadgeEstado>
                           <span className="text-sm font-medium">{m.descripcion ?? '—'}</span>
                         </div>
                         <span className="text-xs text-muted-foreground">

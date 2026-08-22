@@ -38,6 +38,7 @@ import { PESTANIAS_CONFIG } from './configuracion-piezas'
 import { FacturacionConfigCard } from './configuracion-facturacion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -792,7 +793,7 @@ function ServiciosCard() {
                 <span className={s.activo ? '' : 'text-muted-foreground line-through'}>
                   {s.nombre}
                 </span>
-                {!s.activo && <Badge variant="outline">Inactivo</Badge>}
+                {!s.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
                 {/* Sin esto no hay forma de saber, mirando la lista, con qué
                     precio se están cotizando los reclamos. */}
                 {s.es_valor_hora && <Badge>Valor hora</Badge>}

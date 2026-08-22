@@ -20,7 +20,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -187,7 +187,7 @@ export function Stock() {
                   <span className="text-sm text-muted-foreground">
                     {activa ? `Total en ${activa.nombre}:` : 'Total:'}
                   </span>
-                  <Badge variant={bajoMinimo ? 'destructive' : 'secondary'}>{total}</Badge>
+                  <BadgeEstado tono={bajoMinimo ? 'negativo' : 'ok'}>{total}</BadgeEstado>
                   {bajoMinimo && (
                     <span className="text-xs text-destructive">
                       por debajo del mínimo ({elegido.stock_minimo})
@@ -243,9 +243,9 @@ export function Stock() {
                       <td className="py-2 text-right tabular-nums">
                         {/* El semáforo lo decide `bajo_minimo`, que lo calcula
                             el backend contra el mismo total que se muestra. */}
-                        <Badge variant={c.bajo_minimo ? 'destructive' : 'secondary'}>
+                        <BadgeEstado tono={c.bajo_minimo ? 'negativo' : 'ok'}>
                           {c.stock}
-                        </Badge>
+                        </BadgeEstado>
                       </td>
                       <td className="py-2 text-right tabular-nums text-muted-foreground">
                         {/* Mínimo 0 = "no se controla", que no es lo mismo que

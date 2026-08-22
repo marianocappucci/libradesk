@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
-  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_PILDORA, PRIORIDAD_LABELS, opcionesCliente, opcionesEquipo,
+  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_TONO, PRIORIDAD_LABELS, PRIORIDAD_TONO, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
   type CategoriaIncidencia, type Cliente, type Equipo, type EquipoTrabajo,
   type Incidencia,
@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -398,9 +399,9 @@ export function Incidencias() {
       size: 100,
       minSize: 85,
       cell: ({ row }) => (
-        <Badge variant={row.original.prioridad === 'alta' ? 'destructive' : 'outline'}>
+        <BadgeEstado tono={PRIORIDAD_TONO[row.original.prioridad]}>
           {PRIORIDAD_LABELS[row.original.prioridad]}
-        </Badge>
+        </BadgeEstado>
       ),
     },
     {
@@ -419,9 +420,9 @@ export function Incidencias() {
       // así que estas clases le ganan a las de la variante dentro de su propio
       // grupo (bg, text, border) sin pelear por especificidad.
       cell: ({ row }) => (
-        <Badge variant="outline" className={ESTADO_PILDORA[row.original.estado]}>
+        <BadgeEstado tono={ESTADO_TONO[row.original.estado]}>
           {ESTADO_LABELS[row.original.estado]}
-        </Badge>
+        </BadgeEstado>
       ),
     },
     {

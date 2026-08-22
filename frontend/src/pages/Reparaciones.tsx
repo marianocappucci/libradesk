@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
@@ -206,8 +207,8 @@ export function Reparaciones() {
       size: 120, minSize: 100,
       cell: ({ row }) => (
         row.original.abierta
-          ? <Badge>En service</Badge>
-          : <Badge variant="outline">Vuelta {fecha(row.original.fecha_retorno)}</Badge>
+          ? <BadgeEstado tono="curso">En service</BadgeEstado>
+          : <BadgeEstado tono="neutro">Vuelta {fecha(row.original.fecha_retorno)}</BadgeEstado>
       ),
     },
     {

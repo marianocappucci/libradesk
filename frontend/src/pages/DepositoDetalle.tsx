@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SelectBuscable } from '@/components/select-buscable'
 import {
@@ -167,8 +167,8 @@ export function DepositoDetalle() {
           <div>
             <TituloPantalla icono={Building2}>
               {deposito.nombre}
-              {deposito.es_default && <Badge>Predeterminado</Badge>}
-              {!deposito.activo && <Badge variant="secondary">Inactivo</Badge>}
+              {deposito.es_default && <BadgeEstado tono="ok">Predeterminado</BadgeEstado>}
+              {!deposito.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
             </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[
@@ -252,9 +252,9 @@ export function DepositoDetalle() {
                       <td className="px-2 py-1.5">{e.cliente_nombre}</td>
                       <td className="px-2 py-1.5 text-muted-foreground">{e.serial ?? '—'}</td>
                       <td className="px-2 py-1.5">
-                        <Badge variant={e.estado === 'activo' ? 'default' : 'outline'}>
+                        <BadgeEstado tono={e.estado === 'activo' ? 'ok' : 'neutro'}>
                           {ESTADO_EQUIPO_LABELS[e.estado] ?? e.estado}
-                        </Badge>
+                        </BadgeEstado>
                       </td>
                     </tr>
                   ))}

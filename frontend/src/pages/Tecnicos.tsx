@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
@@ -190,13 +191,13 @@ export function Tecnicos() {
       size: 110,
       minSize: 90,
       cell: ({ row }) => (
-        <Badge
-          variant={row.original.activo ? 'default' : 'outline'}
+        <BadgeEstado
+          tono={row.original.activo ? 'ok' : 'neutro'}
           className="cursor-pointer"
           onClick={() => toggleActivo(row.original)}
         >
           {row.original.activo ? 'Activo' : 'Inactivo'}
-        </Badge>
+        </BadgeEstado>
       ),
     },
     {

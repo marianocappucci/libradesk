@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, PRIORIDAD_LABELS,
-  ubicacionTexto, type ClienteResumen,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO, PRIORIDAD_LABELS,
+  PRIORIDAD_TONO, ubicacionTexto, type ClienteResumen,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
@@ -227,7 +228,7 @@ export function ClienteDetalle() {
           <div>
             <TituloPantalla icono={Users}>
               {cliente.nombre}
-              {!cliente.activo && <Badge variant="outline">Inactivo</Badge>}
+              {!cliente.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
             </TituloPantalla>
             <p className="text-sm text-muted-foreground">
               {[cliente.empresa, ...contacto].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
@@ -306,10 +307,10 @@ export function ClienteDetalle() {
                         </p>
                       </div>
                       <div className="flex shrink-0 gap-1">
-                        <Badge variant={i.prioridad === 'alta' ? 'destructive' : 'secondary'}>
+                        <BadgeEstado tono={PRIORIDAD_TONO[i.prioridad]}>
                           {PRIORIDAD_LABELS[i.prioridad]}
-                        </Badge>
-                        <Badge variant="outline">{ESTADO_LABELS[i.estado]}</Badge>
+                        </BadgeEstado>
+                        <BadgeEstado tono={ESTADO_TONO[i.estado]}>{ESTADO_LABELS[i.estado]}</BadgeEstado>
                       </div>
                     </Link>
                   </li>

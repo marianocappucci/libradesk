@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import { SelectBuscable } from '@/components/select-buscable'
 import {
@@ -331,9 +332,9 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant={v.estado === 'asignado' ? 'default' : 'outline'}>
+                          <BadgeEstado tono={v.estado === 'asignado' ? 'ok' : 'neutro'}>
                             {ESTADO_VEHICULO_LABELS[v.estado] ?? v.estado}
-                          </Badge>
+                          </BadgeEstado>
                           {v.equipo_nombre && <span className="text-sm">{v.equipo_nombre}</span>}
                         </div>
                       </CardContent>

@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
@@ -235,9 +236,9 @@ export function Activos() {
       header: sortableHeader('Estado'),
       size: 150, minSize: 110,
       cell: ({ row }) => (
-        <Badge variant={row.original.estado === 'colocado' ? 'default' : 'outline'}>
+        <BadgeEstado tono={row.original.estado === 'colocado' ? 'ok' : 'neutro'}>
           {ESTADO_ACTIVO_LABELS[row.original.estado] ?? row.original.estado}
-        </Badge>
+        </BadgeEstado>
       ),
     },
     {
