@@ -19,7 +19,7 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { useEffect, useState } from 'react'
 import { api, ApiError, type Proveedor } from '../api'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,7 +29,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Truck } from 'lucide-react'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 /** Los cuatro campos editables de un proveedor, como strings del formulario
  *  (el backend recibe null donde acá hay cadena vacía). */
@@ -177,9 +177,9 @@ export function Proveedores() {
                   {/* El badge alterna activo/inactivo. `aria-pressed` y no sólo
                       el color: sin él es un `<span>` con onClick, invisible
                       para el teclado y para un lector de pantalla. */}
-                  <Badge
+                  <BadgeEstado
                     asChild
-                    variant={p.activo ? 'default' : 'outline'}
+                    tono={p.activo ? 'ok' : 'neutro'}
                   >
                     <button
                       type="button"
@@ -190,7 +190,7 @@ export function Proveedores() {
                     >
                       {p.activo ? 'Activo' : 'Inactivo'}
                     </button>
-                  </Badge>
+                  </BadgeEstado>
                   <Button
                     size="icon" variant="outline" className="size-8"
                     title="Editar" aria-label={`Editar ${p.nombre}`}

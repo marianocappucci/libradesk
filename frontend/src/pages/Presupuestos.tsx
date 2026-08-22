@@ -7,7 +7,7 @@ import {
   type Presupuesto,
 } from '../api'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -22,18 +22,18 @@ import {
 import { fecha } from '@/lib/format'
 import { FileText } from 'lucide-react'
 import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const ESTADOS: EstadoPresupuesto[] = ['borrador', 'enviado', 'aceptado', 'rechazado', 'vencido']
 
 // `vencido` y `rechazado` se ven distinto: son los dos estados que cierran
 // el presupuesto sin trabajo.
-const VARIANTE: Record<EstadoPresupuesto, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-  borrador: 'outline',
-  enviado: 'secondary',
-  aceptado: 'default',
-  rechazado: 'destructive',
-  vencido: 'destructive',
+const TONO: Record<EstadoPresupuesto, TonoEstado> = {
+  borrador: 'neutro',
+  enviado: 'curso',
+  aceptado: 'ok',
+  rechazado: 'negativo',
+  vencido: 'negativo',
 }
 
 const TODOS = '__todos__'
@@ -219,10 +219,10 @@ export function Presupuestos() {
         // reabrirlo hay que darle una validez nueva desde el formulario.
         if (p.status === 'vencido') {
           return (
-            <Badge variant={VARIANTE.vencido}
+            <BadgeEstado tono={TONO.vencido}
                    title="Venció por fecha. Para reabrirlo, editá la validez.">
               {ESTADO_PRESUPUESTO_LABELS.vencido}
-            </Badge>
+            </BadgeEstado>
           )
         }
         return (
@@ -322,11 +322,11 @@ export function Presupuestos() {
               asi que estos numeros ya cuentan los que acaban de vencer. */}
           <div className="flex flex-wrap gap-2">
             {ESTADOS.map((e) => (
-              <Badge key={e} variant={filtroEstado === e ? VARIANTE[e] : 'outline'}
+              <BadgeEstado key={e} tono={filtroEstado === e ? TONO[e] : 'neutro'}
                      className="cursor-pointer"
                      onClick={() => setFiltroEstado(filtroEstado === e ? TODOS : e)}>
                 {ESTADO_PRESUPUESTO_LABELS[e]}: {resumen[e] ?? 0}
-              </Badge>
+              </BadgeEstado>
             ))}
           </div>
 

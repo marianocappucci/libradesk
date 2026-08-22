@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select'
 import { FilePenLine as FileSignature } from 'lucide-react'
 import { ArrowLeft } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const contratoSchema = z.object({
   tipo_contrato: z.string().min(1),

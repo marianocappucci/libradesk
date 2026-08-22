@@ -6,6 +6,7 @@ import {
   ESTADO_LABELS, MODALIDAD_LABELS,
   MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, categoriasAsignables, describirEquipo, ubicacionTexto,
+  ESTADO_TONO, PRIORIDAD_TONO,
   opcionesCategoria, opcionesCliente, opcionesEquipo, opcionesPorNombre,
   opcionesProveedor,
   type Actividad, type CategoriaIncidencia, type Cliente, type CoberturaAbono,
@@ -22,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -34,7 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const NONE = '__none__'
 
@@ -418,14 +420,13 @@ export function IncidenciaDetalle() {
                   releer la palabra para saber dónde está parado el ticket.
                   El color va DENTRO del badge y no al lado del título para que
                   se lea como un atributo del estado y no como otra marca. */}
-              <Badge variant={incidencia.estado === 'cerrado' || incidencia.estado === 'resuelta' ? 'default' : 'outline'}
-                     className="gap-1.5">
+              <BadgeEstado tono={ESTADO_TONO[incidencia.estado]} className="gap-1.5">
                 <span className={`inline-block h-2 w-2 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
                 {ESTADO_LABELS[incidencia.estado]}
-              </Badge>
-              <Badge variant={incidencia.prioridad === 'alta' ? 'destructive' : 'outline'}>
+              </BadgeEstado>
+              <BadgeEstado tono={PRIORIDAD_TONO[incidencia.prioridad]}>
                 {PRIORIDAD_LABELS[incidencia.prioridad]}
-              </Badge>
+              </BadgeEstado>
             </TituloPantalla>
           )
         }
@@ -560,9 +561,9 @@ export function IncidenciaDetalle() {
                                   en su lugar; acá sólo se refleja en el badge
                                   de estado y en la fecha de retorno. */}
                               <span className="flex flex-wrap items-center gap-2">
-                                <Badge variant={entry.data.abierta ? 'default' : 'outline'}>
+                                <BadgeEstado tono={entry.data.abierta ? 'curso' : 'neutro'}>
                                   {entry.data.abierta ? 'En service' : 'Pasó por service'}
-                                </Badge>
+                                </BadgeEstado>
                                 <strong>{entry.data.equipo_descripcion}</strong>
                                 {entry.data.en_garantia && (
                                   <Badge variant="outline" className="gap-1">
@@ -586,9 +587,9 @@ export function IncidenciaDetalle() {
                           ) : entry.tipo === 'movimiento' ? (
                             <>
                               <span className="flex flex-wrap items-center gap-2">
-                                <Badge variant={entry.data.tipo === 'baja' ? 'destructive' : 'outline'}>
+                                <BadgeEstado tono={entry.data.tipo === 'baja' ? 'negativo' : 'neutro'}>
                                   {MOVIMIENTO_LABELS[entry.data.tipo] ?? entry.data.tipo}
-                                </Badge>
+                                </BadgeEstado>
                                 <strong>{describirEquipo(equipoPorId(entry.data.equipo_id))}</strong>
                               </span>
                               {/* Solo el traslado tiene destino: en un cambio de

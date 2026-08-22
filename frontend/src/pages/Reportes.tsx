@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FileSpreadsheet, Table2 } from 'lucide-react'
 import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
 import { ChevronRight } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 function ItemReporte({ reporte }: { reporte: Reporte }) {
   return (

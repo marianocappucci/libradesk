@@ -4,8 +4,9 @@
 //
 // `basePath` porque este producto monta toda su API bajo `/api`, a diferencia
 // de los otros tres.
+import { ScrollText } from 'lucide-react'
 import { Logs as LogsBase } from 'libra-ui/Logs'
 
 export function Logs() {
-  return <LogsBase basePath="/api/logs" />
+  return <LogsBase icono={ScrollText} basePath="/api/logs" />
 }

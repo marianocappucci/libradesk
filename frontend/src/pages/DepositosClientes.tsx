@@ -28,7 +28,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Building2, Users } from 'lucide-react'
 import { Check, FilePlus } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const TODOS = '__todos__'
 

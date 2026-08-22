@@ -9,7 +9,7 @@ import {
 import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Label } from '@/components/ui/label'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select'
 import { FilePenLine as FileSignature } from 'lucide-react'
 import { FilePlus } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const TODOS = '__todos__'
 
@@ -100,9 +100,9 @@ export function Contratos() {
       header: sortableHeader('Estado'),
       size: 120, minSize: 100,
       cell: ({ row }) => (
-        <Badge variant={row.original.estado === 'activo' ? 'default' : 'outline'}>
+        <BadgeEstado tono={row.original.estado === 'activo' ? 'ok' : 'neutro'}>
           {ESTADO_CONTRATO_LABELS[row.original.estado] ?? row.original.estado}
-        </Badge>
+        </BadgeEstado>
       ),
     },
     {

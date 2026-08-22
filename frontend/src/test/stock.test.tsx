@@ -156,21 +156,22 @@ describe('🔴 Al entrar se ve el catálogo, no una pantalla en blanco', () => {
   it('🔴 el listado marca lo que está bajo mínimo, y sólo eso', async () => {
     await montar()
 
-    // 🔴 Se busca `bg-destructive` y NO `destructive` a secas: las clases BASE
-    // del Badge —las de cualquier variante— ya traen
-    // `aria-invalid:border-destructive` y `aria-invalid:ring-destructive/20`.
-    // Con el patrón flojo, el control de abajo se caía sobre un badge sano; la
-    // palabra está siempre, lo que cambia es el fondo.
+    // 🔴 Se afirma el `data-tono` de `BadgeEstado` y no el nombre de la clase.
+    // Antes esto miraba `bg-destructive`, con la advertencia de no buscar
+    // `destructive` a secas porque las clases BASE del Badge ya traen
+    // `aria-invalid:border-destructive`: el tono no tiene ese problema, porque
+    // es un atributo propio y no una subcadena de la clase.
     //
     // El semáforo lo decide `bajo_minimo`, que calcula el backend contra el
     // mismo total que se muestra.
     const bajo = screen.getByText('Cable UTP Cat 6 (m)').closest('tr')!
-    expect(within(bajo).getByText('40').className).toMatch(/bg-destructive/)
+    expect(within(bajo).getByText('40')).toHaveAttribute('data-tono', 'negativo')
 
     // El control: el que está bien NO se marca. Sin esto, pintar todo de rojo
-    // pasaría la mitad de arriba igual.
+    // pasaría la mitad de arriba igual. Y se exige que SÍ tenga tono, para que
+    // el `not` no pase por ausencia del atributo.
     const sano = screen.getByText('Plug RJ45').closest('tr')!
-    expect(within(sano).getByText('183').className).not.toMatch(/bg-destructive/)
+    expect(within(sano).getByText('183')).toHaveAttribute('data-tono', 'ok')
   })
 
   it('sin haber elegido nada no se pide el stock por depósito', async () => {

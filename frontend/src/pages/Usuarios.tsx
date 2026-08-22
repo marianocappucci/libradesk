@@ -2,8 +2,9 @@
 // LibraDesk monta su router de usuarios en `/api/usuarios` (no `/users`
 // como Gestiolibra/MedLibra/VentaLibra), asi que pasa `basePath` explicito
 // -- ver libra-ui v0.5.0.
+import { UserCog } from 'lucide-react'
 import { Usuarios as UsuariosBase } from 'libra-ui/Usuarios'
 
 export function Usuarios() {
-  return <UsuariosBase basePath="/api/usuarios" />
+  return <UsuariosBase icono={UserCog} basePath="/api/usuarios" />
 }

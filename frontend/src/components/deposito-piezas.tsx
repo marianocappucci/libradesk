@@ -15,6 +15,7 @@ import { Conmutador, type Pestania } from '@/components/conmutador'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Link } from 'react-router-dom'
 import { Building2, Monitor, Users } from 'lucide-react'
 import { Eye, Pencil, Star, Trash2 } from '@/components/iconos-accion'
@@ -45,8 +46,8 @@ export function TarjetaDeposito({ d, onEditar, onBorrar, onPredeterminar }: {
             <Building2 className="size-4 text-primary" />{d.nombre}
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {d.es_default && <Badge>Predeterminado</Badge>}
-            {!d.activo && <Badge variant="secondary">Inactivo</Badge>}
+            {d.es_default && <BadgeEstado tono="ok">Predeterminado</BadgeEstado>}
+            {!d.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
             {d.cliente_nombre && <Badge variant="outline">{d.cliente_nombre}</Badge>}
           </div>
         </div>

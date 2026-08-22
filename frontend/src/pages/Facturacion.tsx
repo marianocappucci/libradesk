@@ -9,12 +9,12 @@ import { RefreshCw, Send } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 type Envio = {
   id: number
@@ -70,33 +70,33 @@ type EstadoSos = {
 // Mientras hubo un solo destino el nombre estaba fijo en este archivo, y al
 // aparecer el segundo la pantalla siguió diciendo "Contalibra" en una
 // instancia que mandaba a SOS Contador.
-const ESTADOS: Record<string, { label: string; ayuda: (destino: string) => string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+const ESTADOS: Record<string, { label: string; ayuda: (destino: string) => string; tono: TonoEstado }> = {
   enviado: {
     label: 'En la bandeja',
     ayuda: (d) => `Llegó a ${d} y espera que alguien lo facture ahí.`,
-    variant: 'secondary',
+    tono: 'curso',
   },
   resuelto_remoto: {
     label: 'Resuelto allá',
     ayuda: (d) => `Ya lo facturaron o lo descartaron en ${d}.`,
-    variant: 'default',
+    tono: 'ok',
   },
   error: {
     label: 'Falló',
     ayuda: () => 'No llegó. Se puede reintentar: mandarlo de nuevo no duplica nada.',
-    variant: 'destructive',
+    tono: 'negativo',
   },
   no_facturable: {
     label: 'No se puede',
     ayuda: () => 'El comprobante no está en condiciones de facturarse.',
-    variant: 'outline',
+    tono: 'neutro',
   },
 }
 
 function EstadoBadge({ estado, destino }: { estado: string; destino: string }) {
   const conf = ESTADOS[estado]
-  if (!conf) return <Badge variant="outline">{estado}</Badge>
-  return <Badge variant={conf.variant} title={conf.ayuda(destino)}>{conf.label}</Badge>
+  if (!conf) return <BadgeEstado tono="neutro">{estado}</BadgeEstado>
+  return <BadgeEstado tono={conf.tono} title={conf.ayuda(destino)}>{conf.label}</BadgeEstado>
 }
 
 export function Facturacion() {
@@ -306,14 +306,14 @@ export function Facturacion() {
         if (est.emitido) {
           return (
             <span className="flex flex-col">
-              <Badge variant="secondary">Emitido</Badge>
+              <BadgeEstado tono="ok">Emitido</BadgeEstado>
               <span className="text-xs text-muted-foreground">CAE {est.cae}</span>
             </span>
           )
         }
         return (
           <span className="flex flex-col">
-            <Badge variant="outline">Sin emitir</Badge>
+            <BadgeEstado tono="neutro">Sin emitir</BadgeEstado>
             {est.comprobante && (
               <span className="text-xs text-muted-foreground">{est.comprobante}</span>
             )}

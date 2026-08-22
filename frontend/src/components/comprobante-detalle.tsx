@@ -16,7 +16,7 @@ import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
 import type { ComprobanteItem } from '../api'
 import { ArrowLeft, FileDown } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 export type ComprobanteDetalleData = {
   id: number

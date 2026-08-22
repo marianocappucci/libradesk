@@ -17,7 +17,7 @@ import type { DepositoStock } from './Inventario'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -89,9 +89,9 @@ export function OrdenesCompra() {
             render: (o) => o.items },
           { clave: 'recibido', titulo: 'Recibido', ancho: '110px', alinear: 'derecha',
             render: (o) => (
-              <Badge variant={o.recibido_pct === 100 ? 'secondary' : 'outline'}>
+              <BadgeEstado tono={o.recibido_pct === 100 ? 'ok' : 'neutro'}>
                 {o.recibido_pct}%
-              </Badge>
+              </BadgeEstado>
             ) },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (o) => pesos(o.total) },
@@ -156,8 +156,8 @@ export function RecepcionesCompra() {
 
 // ── Egresos ────────────────────────────────────────────────────────────────
 
-const ESTADO_VARIANT: Record<string, 'secondary' | 'outline' | 'destructive'> = {
-  pagado: 'secondary', parcial: 'outline', pendiente: 'destructive',
+const ESTADO_TONO_EGRESO: Record<string, TonoEstado> = {
+  pagado: 'ok', parcial: 'atencion', pendiente: 'negativo',
 }
 
 export function Egresos() {
@@ -194,7 +194,7 @@ export function Egresos() {
           { clave: 'numero', titulo: 'Comprobante', ancho: '160px',
             render: (e) => <span className="tabular-nums text-muted-foreground">{e.numero || '—'}</span> },
           { clave: 'estado', titulo: 'Estado', ancho: '110px',
-            render: (e) => <Badge variant={ESTADO_VARIANT[e.estado] ?? 'outline'}>{e.estado}</Badge> },
+            render: (e) => <BadgeEstado tono={ESTADO_TONO_EGRESO[e.estado] ?? 'neutro'}>{e.estado}</BadgeEstado> },
           { clave: 'total', titulo: 'Total', ancho: '130px', alinear: 'derecha',
             render: (e) => pesos(e.total) },
         ]}

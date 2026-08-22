@@ -9,7 +9,7 @@ import { api, ApiError, type Cliente, type Sector } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -27,7 +27,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // vocabulario de `components/iconos-accion`.
 import { Users } from 'lucide-react'
 import { Check, FilePlus, MapPin, Pencil, Trash2, Undo2, X } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 const clienteSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
@@ -290,9 +290,9 @@ export function Clientes() {
         size: 100,
         minSize: 85,
         cell: ({ row }) => (
-          <Badge variant={row.original.activo ? 'default' : 'outline'}>
+          <BadgeEstado tono={row.original.activo ? 'ok' : 'neutro'}>
             {row.original.activo ? 'Activo' : 'Inactivo'}
-          </Badge>
+          </BadgeEstado>
         ),
       },
     ]

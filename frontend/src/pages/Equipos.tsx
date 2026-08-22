@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -29,7 +30,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Monitor } from 'lucide-react'
 import { Eye, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
-import { TituloPantalla } from '@/components/titulo-pantalla'
+import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.
@@ -274,9 +275,9 @@ export function Equipos() {
         size: 120,
         minSize: 90,
         cell: ({ row }) => (
-          <Badge variant={row.original.estado === 'activo' ? 'default' : 'outline'}>
+          <BadgeEstado tono={row.original.estado === 'activo' ? 'ok' : 'neutro'}>
             {ESTADO_EQUIPO_LABELS[row.original.estado] ?? row.original.estado}
-          </Badge>
+          </BadgeEstado>
         ),
       },
     ]
