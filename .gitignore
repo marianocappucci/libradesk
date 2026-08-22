@@ -69,3 +69,6 @@ admin/
 # Credenciales de Nginx Proxy Manager, que usa libracore.provisioning para
 # dar de alta y de baja los dominios de las instancias.
 scripts/.npm_config.json
+
+# Reporte JUnit que emite el paso de tests del CI para su gate.
+frontend/vitest.xml
