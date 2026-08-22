@@ -491,10 +491,13 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
 function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-4">
-      <TituloPantalla icono={Settings}>
-          Configuración
-        </TituloPantalla>
-      <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
+      <TituloPantalla icono={Settings}>Configuración</TituloPantalla>
+      {/* La barra separada del contenido por una línea, igual que la
+          Configuración de Contalibra. El `pb-2` es el aire entre las píldoras
+          y esa línea: sin él la barra queda apoyada sobre el borde. */}
+      <div className="border-b pb-2">
+        <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
+      </div>
       {children}
       <CreditosIconos />
     </div>
