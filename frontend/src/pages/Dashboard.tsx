@@ -29,9 +29,9 @@ import {
   api, ApiError, ESTADO_LABELS, PRIORIDAD_LABELS,
   type DashboardOperativo, type DashboardSummary, type EquipoTrabajo,
 } from '../api'
+import { ChipEvento, diaCorto, hoyLocal, lunesDe, sumarDias } from 'libra-ui/agenda'
 import { useAgendaRango } from '@/components/agenda/datos'
-import { Chip } from '@/components/agenda/chip'
-import { diaCorto, hoyLocal, lunesDe, sumarDias } from '@/components/agenda/fechas'
+import { eventoDeChip } from '@/components/agenda/eventos'
 import { Badge } from '@/components/ui/badge'
 import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { Button } from '@/components/ui/button'
@@ -247,7 +247,11 @@ function SemanaDeCuadrillas() {
               ) : (
                 <>
                   {trabajos.slice(0, 2).map((t) => (
-                    <Chip key={`${t.equipo_id}-${t.incidencia_id}`} t={t} compacto />
+                    <ChipEvento
+                      key={`${t.equipo_id}-${t.incidencia_id}`}
+                      evento={eventoDeChip(t)}
+                      compacto
+                    />
                   ))}
                   {trabajos.length > 2 && (
                     <Link
