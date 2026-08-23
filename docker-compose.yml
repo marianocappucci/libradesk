@@ -81,6 +81,7 @@ services:
   # desde afuera, tunel SSH — publicar 5432 en un VPS es publicarla a Internet.
   libradesk-postgres:
     image: postgres:16-alpine
+    command: postgres -c timezone=America/Argentina/Buenos_Aires
     container_name: libradesk-postgres
     restart: unless-stopped
     environment:
