@@ -35,6 +35,7 @@ jobs:
           POSTGRES_DB: libradesk
           POSTGRES_USER: libradesk
           POSTGRES_PASSWORD: libradesk-ci
+          TZ: America/Argentina/Buenos_Aires
         ports:
           - 5432:5432
         options: >-
@@ -43,6 +44,7 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
+      TZ: America/Argentina/Buenos_Aires
       # La suite arma UNA BASE POR TEST, copiada de una plantilla, así que esta
       # URL es la de administración: el conftest le cambia el nombre de base
       # para crear y dropear. Apunta a `postgres` —la de mantenimiento— y no a
@@ -158,6 +160,8 @@ jobs:
   # frontend del producto.
   frontend:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Argentina/Buenos_Aires
     defaults:
       run:
         working-directory: frontend
