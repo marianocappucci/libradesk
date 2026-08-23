@@ -12,6 +12,13 @@
  *  resto) y estaba enterrada detrás de un ítem de menú que se llama por el
  *  catálogo de vehículos, siendo lo que se abre todas las mañanas.
  *
+ *  🔴 **El calendario en sí ya no vive acá** (2026-08-22): la rejilla horaria,
+ *  las vistas de semana y mes, la aritmética de días, la paleta y la barra de
+ *  navegación salieron a `libra-ui/agenda` para que Gestiolibra las use también.
+ *  Lo que queda en este archivo es lo que **es** de LibraDesk: de dónde salen
+ *  los datos, el filtro por cuadrilla, generar visitas, el conmutador de vistas
+ *  y la vista de día con su hoja de ruta.
+ *
  *  **La vista y el día viven en la URL** (`/agenda?vista=semana&dia=2026-08-14`)
  *  y no en un `useState`. Es la regla del producto para las pestañas —la misma
  *  de depósitos, configuración y recepción—: así se puede mandar "mirá el
@@ -23,77 +30,37 @@
  *  `components/agenda/datos.ts`).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays } from 'lucide-react'
 import { api, ApiError, type EquipoTrabajo } from '../api'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import {
+  LABEL_VISTA, NavegadorCalendario, ReferenciaDeColores, VISTAS, VistaMes,
+  VistaSemana, clasePunto, diaDeLaUrl, hoyLocal, rangoDeVista, vistaDeLaUrl,
+} from 'libra-ui/agenda'
 import { Conmutador, type Pestania } from '@/components/conmutador'
 import { GenerarVisitas } from '@/components/generar-visitas'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
 import { useAgendaRango } from '@/components/agenda/datos'
-import { clasePunto } from '@/components/agenda/colores'
+import { eventoDeChip, eventoDeSemana, porDiaComoEventos } from '@/components/agenda/eventos'
 import { VistaDia } from '@/components/agenda/vista-dia'
-import { VistaSemana } from '@/components/agenda/vista-semana'
-import { VistaMes } from '@/components/agenda/vista-mes'
-import {
-  celdasGrillaMes, diaLargo, hoyLocal, inicioGrillaMes, lunesDe, mesLargo,
-  rangoSemana, sumarDias, sumarMeses,
-} from '@/components/agenda/fechas'
 
-type Vista = 'dia' | 'semana' | 'mes'
-
-const VISTAS: Vista[] = ['dia', 'semana', 'mes']
 const TODAS = '__todas__'
-
-/** El rango que hay que pedir para dibujar cada vista.
- *
- *  El mes pide **la grilla, no el mes**: arranca en el lunes anterior al día 1 y
- *  llega hasta el domingo que cierra la última semana. Pedir sólo el mes dejaría
- *  esas celdas de los bordes vacías aunque tengan trabajos — y son días reales.
- */
-function rango(vista: Vista, dia: string): { desde: string; dias: number } {
-  if (vista === 'semana') return { desde: lunesDe(dia), dias: 7 }
-  if (vista === 'mes') return { desde: inicioGrillaMes(dia), dias: celdasGrillaMes(dia) }
-  return { desde: dia, dias: 1 }
-}
-
-/** Cuánto se mueve la flecha en cada vista. */
-function correr(vista: Vista, dia: string, signo: 1 | -1): string {
-  if (vista === 'semana') return sumarDias(dia, 7 * signo)
-  if (vista === 'mes') return sumarMeses(dia, signo)
-  return sumarDias(dia, signo)
-}
-
-function titulo(vista: Vista, dia: string): string {
-  if (vista === 'semana') return rangoSemana(lunesDe(dia))
-  if (vista === 'mes') return mesLargo(dia)
-  return diaLargo(dia)
-}
-
-const LABEL: Record<Vista, string> = { dia: 'Día', semana: 'Semana', mes: 'Mes' }
 
 export function Agenda() {
   const [params, setParams] = useSearchParams()
   const [equipos, setEquipos] = useState<EquipoTrabajo[]>([])
   const [errorEquipos, setErrorEquipos] = useState<string | null>(null)
 
-  // La semana es el default: es lo que el pedido nombra ("no sólo el día de hoy
-  // sino los próximos también"). El día sigue a un click de distancia y es a
-  // donde llevan todos los encabezados de la grilla.
-  const crudo = params.get('vista')
-  const vista: Vista = VISTAS.includes(crudo as Vista) ? (crudo as Vista) : 'semana'
+  const vista = vistaDeLaUrl(params.get('vista'))
   // `hoyLocal()` en cada render y no en un `useState`: si alguien deja la
   // pantalla abierta pasada la medianoche, "hoy" tiene que ser el día nuevo.
   const hoy = hoyLocal()
-  const dia = /^\d{4}-\d{2}-\d{2}$/.test(params.get('dia') ?? '')
-    ? params.get('dia')!
-    : hoy
+  const dia = diaDeLaUrl(params.get('dia'), hoy)
   const filtro = params.get('equipo') ?? TODAS
 
   useEffect(() => {
@@ -111,7 +78,7 @@ export function Agenda() {
     return () => { vigente = false }
   }, [])
 
-  const { desde, dias } = rango(vista, dia)
+  const { desde, dias } = rangoDeVista(vista, dia)
   const { porDia, activos, cargando, error } = useAgendaRango(equipos, desde, dias)
 
   /** Los parámetros de la pantalla con algunos cambiados. Los demás se
@@ -130,7 +97,7 @@ export function Agenda() {
   const pestanias: readonly Pestania[] = VISTAS.map((v) => ({
     clave: v,
     to: href({ vista: v }),
-    label: LABEL[v],
+    label: LABEL_VISTA[v],
     icono: CalendarDays,
   }))
 
@@ -200,45 +167,16 @@ export function Agenda() {
         </div>
       </EncabezadoDePantalla>
 
-      {/* La barra de navegación, con la forma de Google Calendar: `Hoy`, las dos
-          flechas y el título, **en ese orden y anclados a la izquierda**.
-          🔴 El orden importa y no es cosmético. Hasta el 2026-08-14 el grupo
-          estaba pegado al borde **derecho** (`justify-between` con el
-          conmutador), así que su ancho lo fijaba el largo del título: pasar de
-          "Agosto 2026" a "10 al 16 de agosto de 2026" corría las flechas de
-          lugar, y apretar dos veces seguidas obligaba a perseguirlas con el
-          mouse. Lo reportó el humano. Anclado a la izquierda, el título crece
-          hacia la derecha y los controles no se mueven nunca. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" className="rounded-full px-4" asChild>
-            <Link to={href({ dia: hoy })}>Hoy</Link>
-          </Button>
-          <Button size="icon" variant="ghost" className="rounded-full" asChild aria-label="Anterior">
-            <Link to={href({ dia: correr(vista, dia, -1) })}><ChevronLeft /></Link>
-          </Button>
-          <Button size="icon" variant="ghost" className="rounded-full" asChild aria-label="Siguiente">
-            <Link to={href({ dia: correr(vista, dia, 1) })}><ChevronRight /></Link>
-          </Button>
-          <span className="ml-2 text-xl first-letter:uppercase">
-            {titulo(vista, dia)}
-          </span>
-        </div>
+      <NavegadorCalendario vista={vista} dia={dia} hoy={hoy} href={href}>
         <Conmutador pestanias={pestanias} actual={vista} />
-      </div>
+      </NavegadorCalendario>
 
-      {/* La referencia de colores: sin ella el color del chip no significa nada
-          hasta que se abre uno. No se muestra en la vista de día, que ya viene
-          agrupada por cuadrilla y con el nombre en cada tarjeta. */}
-      {vista !== 'dia' && activos.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {activos.map((e, i) => (
-            <span key={e.id} className="flex items-center gap-1.5">
-              <span className={cn('size-2.5 rounded-full', clasePunto(i))} />
-              {e.nombre}
-            </span>
-          ))}
-        </div>
+      {/* La referencia de colores no se muestra en la vista de día, que ya
+          viene con una columna por cuadrilla y el nombre en cada encabezado. */}
+      {vista !== 'dia' && (
+        <ReferenciaDeColores carriles={activos.map((e, i) => ({
+          clave: String(e.id), nombre: e.nombre, clasePunto: clasePunto(i),
+        }))} />
       )}
 
       {(errorEquipos || error) && (
@@ -260,12 +198,13 @@ export function Agenda() {
         />
       ) : vista === 'semana' ? (
         <VistaSemana
-          desde={desde} porDia={visibles} hoy={hoy}
+          desde={desde} porDia={porDiaComoEventos(visibles, eventoDeSemana)} hoy={hoy}
           hrefDia={(d) => href({ vista: 'dia', dia: d })}
         />
       ) : (
         <VistaMes
-          desde={desde} celdas={dias} mes={dia} porDia={visibles} hoy={hoy}
+          desde={desde} celdas={dias} mes={dia}
+          porDia={porDiaComoEventos(visibles, eventoDeChip)} hoy={hoy}
           hrefDia={(d) => href({ vista: 'dia', dia: d })}
         />
       )}
