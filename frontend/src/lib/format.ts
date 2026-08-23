@@ -103,7 +103,18 @@ export function fechaHoraDeDate(d: Date): string {
  */
 export function fecha(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return fechaDeDate(new Date(iso.includes('T') ? iso : `${iso}T00:00:00`))
+  // El `T00:00:00` solo va cuando el valor es una fecha SOLA: sin el,
+  // `new Date('2026-08-01')` se interpreta como UTC y en Argentina (UTC-3) se
+  // muestra el dia anterior.
+  //
+  // 🔴 Y solo cuando es una fecha sola. Pegarselo a un valor que ya trae hora
+  // arma `2026-08-01T10:00:00T00:00:00`, que no es una fecha: antes se veia
+  // "Invalid Date" en el historial de `Activos` y desde `formatToParts` tira
+  // `RangeError` y el dialogo no renderiza. La condicion vieja miraba si habia
+  // una `T`, asi que no cubria el `2026-08-01 10:00:00` con espacio que
+  // devuelve la misma columna por otro dialecto.
+  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+  return fechaDeDate(new Date(soloFecha ? `${iso}T00:00:00` : iso))
 }
 
 /** Un timestamp ISO completo → `dd-mm-aaaa HH:MM`. */

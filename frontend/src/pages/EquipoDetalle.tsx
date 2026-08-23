@@ -26,20 +26,13 @@ import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
-import { fechaDeDate, fechaHora } from '@/lib/format'
+import { fecha, fechaHora } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
-function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  // `new Date('2026-08-15')` (fecha sola, sin hora) se parsea como UTC, así que
-  // en Argentina (UTC-3) se mostraría el día anterior. Mismo caso que en la
-  // ficha del cliente.
-  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.exec(fecha)
-  const d = soloFecha
-    ? new Date(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10)))
-    : new Date(fecha)
-  return fechaDeDate(d)
+function formatFecha(valor: string | null): string {
+  // Ver `ClienteDetalle`: la guarda subio a `lib/format`.
+  return fecha(valor)
 }
 
 function formatFechaHora(fecha: string | null): string {

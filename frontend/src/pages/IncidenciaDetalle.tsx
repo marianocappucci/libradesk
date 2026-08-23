@@ -16,7 +16,7 @@ import {
   type ModalidadIncidencia, type Proveedor, type Reparacion, type Sector,
   type Tecnico,
 } from '../api'
-import { deIsoALocal, deLocalAIso, fechaHora } from '@/lib/format'
+import { deIsoALocal, deLocalAIso, fecha, fechaHora } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -580,8 +580,8 @@ export function IncidenciaDetalle() {
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {entry.data.abierta
-                                  ? `Enviado el ${entry.data.fecha_envio} · ${entry.data.dias_afuera} días afuera`
-                                  : `Enviado el ${entry.data.fecha_envio}, volvió el ${entry.data.fecha_retorno} · ${entry.data.dias_afuera} días${entry.data.diagnostico ? ` · ${entry.data.diagnostico}` : ''}`}
+                                  ? `Enviado el ${fecha(entry.data.fecha_envio)} · ${entry.data.dias_afuera} días afuera`
+                                  : `Enviado el ${fecha(entry.data.fecha_envio)}, volvió el ${fecha(entry.data.fecha_retorno)} · ${entry.data.dias_afuera} días${entry.data.diagnostico ? ` · ${entry.data.diagnostico}` : ''}`}
                               </span>
                             </>
                           ) : entry.tipo === 'movimiento' ? (
@@ -1175,7 +1175,7 @@ export function IncidenciaDetalle() {
                   Cerrar la reparación en {reparacionDelSustituto.proveedor_nombre}
                 </label>
                 <span className="text-xs text-muted-foreground">
-                  Salió el {reparacionDelSustituto.fecha_envio}
+                  Salió el {fecha(reparacionDelSustituto.fecha_envio)}
                   {reparacionDelSustituto.rma ? ` · RMA ${reparacionDelSustituto.rma}` : ''}
                   {' '}· {reparacionDelSustituto.dias_afuera} días afuera.
                 </span>

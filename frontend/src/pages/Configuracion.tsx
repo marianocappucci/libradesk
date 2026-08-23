@@ -48,6 +48,7 @@ import {
 } from '@/components/iconos-accion'
 import { Settings } from 'lucide-react'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { fechaHora } from '@/lib/format'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -1079,7 +1080,7 @@ function DatosCard() {
             <ul className="grid gap-2">
               {backups.map((b) => (
                 <li key={b.filename} className="flex flex-wrap items-center gap-2 text-sm">
-                  <Badge variant="outline">{b.mtime}</Badge>
+                  <Badge variant="outline">{fechaHora(b.mtime)}</Badge>
                   <span className="text-muted-foreground">{b.size_mb} MB</span>
                   <a className="underline" href={`/api/config/backups/${b.filename}`}>
                     {b.filename}
