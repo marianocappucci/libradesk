@@ -96,7 +96,7 @@ describe('ningún día del calendario sale de un toISOString', () => {
         // sacar un día: ahí el `Date` está anclado al mediodía UTC, así que el
         // recorte no puede correrse. Es la excepción que hace que la regla se
         // pueda cumplir en algún lado.
-        if (/fechas\.ts$/.test(f)) continue
+        if (f.endsWith('fechas.ts')) continue
         revisados += 1
         for (const linea of fugasEn(readFileSync(f, 'utf8'))) {
           sitios.push(`${f.replace(RAIZ, '')}:${linea}`)
