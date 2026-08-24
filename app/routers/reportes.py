@@ -373,3 +373,60 @@ def export_incidencias(
     incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
 ):
     return _excel(_vista_incidencias_planas(estado, incidencias))
+
+
+# ── Insumos por equipo (fase 2) ────────────────────────────────────
+
+def _vista_insumos(desde, hasta, cliente_id, proveedor_id, estado,
+                   reportes, clientes) -> Vista:
+    data = reportes.insumos(
+        desde=desde, hasta=hasta, cliente_id=cliente_id,
+        proveedor_id=proveedor_id, estado=estado,
+    )
+
+    filtros = [f"{fmt_fecha(desde)} a {fmt_fecha(hasta)}"]
+    if (label := _label_cliente(cliente_id, clientes)):
+        filtros.append(f"Cliente: {label}")
+    if proveedor_id:
+        # Por el nombre que ya viene resuelto en las filas: pedirlo de nuevo al
+        # repositorio de proveedores sería una consulta más para un texto que ya
+        # está en la mano. Sin filas no hay nombre, y el filtro dice el id — que
+        # es más honesto que omitirlo.
+        nombre = next(
+            (f["proveedor_nombre"] for f in data if f["proveedor_nombre"]), None
+        )
+        filtros.append(f"Proveedor: {nombre or f'#{proveedor_id}'}")
+    if estado:
+        filtros.append(f"Estado: {vistas.INSUMO_LABEL.get(estado, estado)}")
+
+    return vistas.insumos(data, filtros)
+
+
+@router.get("/insumos")
+def insumos(
+    desde: str,
+    hasta: str,
+    cliente_id: int | None = None,
+    proveedor_id: int | None = None,
+    estado: str | None = None,
+    reportes: ReportesService = Depends(get_reportes_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+):
+    return _vista_insumos(
+        desde, hasta, cliente_id, proveedor_id, estado, reportes, clientes
+    ).to_dict()
+
+
+@router.get("/insumos.xlsx")
+def insumos_xlsx(
+    desde: str,
+    hasta: str,
+    cliente_id: int | None = None,
+    proveedor_id: int | None = None,
+    estado: str | None = None,
+    reportes: ReportesService = Depends(get_reportes_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+):
+    return _excel(_vista_insumos(
+        desde, hasta, cliente_id, proveedor_id, estado, reportes, clientes
+    ))

@@ -18,8 +18,8 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO,
   INSUMO_LABELS, INSUMO_TONO, MOVIMIENTO_LABELS,
-  PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto, type EquipoFicha,
-  type Insumo,
+  PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto,
+  type ContratoProveedor, type EquipoFicha, type Insumo,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -81,6 +81,10 @@ export function EquipoDetalle() {
   // `[]` se dibuja vacía, que es la respuesta correcta a "todavía no se cargó
   // ninguno".
   const [insumos, setInsumos] = useState<Insumo[] | null>(null)
+  // El contrato de proveedor que cubre hoy esta máquina, si hay alguno. `null`
+  // vale para las dos cosas —no está cubierta, o la instancia no tiene el
+  // módulo— y en las dos la línea simplemente no se dibuja.
+  const [cobertura, setCobertura] = useState<ContratoProveedor | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,6 +107,13 @@ export function EquipoDetalle() {
     api.get<Insumo[]>(`/api/insumos?equipo_id=${equipoId}`)
       .then(setInsumos)
       .catch(() => setInsumos(null))
+    // Por el mismo camino y con el mismo criterio: gateado por `insumos`, así
+    // que un 403 apaga la línea en vez de mostrar un error.
+    api.get<ContratoProveedor | null>(
+      `/api/contratos-proveedor/equipos/${equipoId}/cobertura`,
+    )
+      .then(setCobertura)
+      .catch(() => setCobertura(null))
     try {
       setFicha(await api.get<EquipoFicha>(`/api/dashboard/equipo/${equipoId}`))
     } catch (err) {
@@ -237,6 +248,28 @@ export function EquipoDetalle() {
                   ruido en las 200 que no tienen tercero. */}
               {equipo.proveedor_nombre && (
                 <Dato label="Equipo de un tercero">{equipo.proveedor_nombre}</Dato>
+              )}
+              {/* El contrato que lo cubre hoy. Dice también QUÉ cubre: uno de
+                  service no incluye los insumos, y ésa es la diferencia entre
+                  que el tóner llegue sin cargo o con factura. */}
+              {cobertura && (
+                <Dato label="Cubierto por contrato">
+                  <Link
+                    to="/contratos-proveedor"
+                    className="underline underline-offset-2"
+                  >
+                    {cobertura.numero}
+                  </Link>
+                  <span className="block text-xs text-muted-foreground">
+                    {[
+                      cobertura.incluye_insumos ? 'insumos' : null,
+                      cobertura.incluye_service ? 'service' : null,
+                      cobertura.fecha_fin
+                        ? `hasta ${formatFecha(cobertura.fecha_fin)}`
+                        : 'sin plazo',
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </Dato>
               )}
               <Dato label="Alta">{formatFecha(equipo.fecha_adicion)}</Dato>
               {/* Los números con los que lo llaman los demás. Es el dato que se

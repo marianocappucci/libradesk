@@ -18,6 +18,7 @@ import { Incidencias } from './pages/Incidencias'
 import { IncidenciaDetalle } from './pages/IncidenciaDetalle'
 import { Reparaciones } from './pages/Reparaciones'
 import { Insumos } from './pages/Insumos'
+import { ContratosProveedor } from './pages/ContratosProveedor'
 import { RecepcionesEntregados, RecepcionesTaller } from './pages/Recepciones'
 import { Activos } from './pages/Activos'
 import { Stock } from './pages/Stock'
@@ -105,6 +106,7 @@ export default function App() {
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
       <Route path="/insumos" element={<ProtectedRoute><Insumos /></ProtectedRoute>} />
+      <Route path="/contratos-proveedor" element={<ProtectedRoute><ContratosProveedor /></ProtectedRoute>} />
       {/* Recepción de equipos (pedido 43). Dos rutas y no un `useState`, mismo
           criterio que depósitos y configuración: se puede linkear "mirá lo que
           hay en el taller" y el botón "atrás" funciona. */}

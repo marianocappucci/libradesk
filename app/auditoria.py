@@ -41,6 +41,12 @@ AUDITABLES: dict[str, str] = {
     # ficha del equipo ya lo muestra, asi que auditarlo pondria el mismo hecho
     # dos veces en la misma pantalla.
     "EquipoReferencia": "referencia_de_equipo",
+    # El contrato con el proveedor (fase 2, mismo dia). Mismo criterio que
+    # `Contrato`: es lo que se corrige a mano —una fecha de fin, un "incluye
+    # insumos"— y de eso depende si un insumo se paga o se discute. Sus LINEAS
+    # de cobertura quedan afuera, igual que las de `contratos`: son historial y
+    # la ficha del contrato ya las muestra.
+    "ContratoProveedor": "contrato_de_proveedor",
 }
 
 # 🔴 Aca vivia `"Servicio": "servicio"`, con el comentario "el precio de lista de

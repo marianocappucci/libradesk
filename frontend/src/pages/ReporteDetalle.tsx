@@ -13,7 +13,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, MARCA_CLASE,
-  type CategoriaIncidencia, type Cliente, type Sector, type VistaReporte,
+  type CategoriaIncidencia, type Cliente, type Proveedor, type Sector,
+  type VistaReporte,
 } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +47,7 @@ export function ReporteDetalle() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sectores, setSectores] = useState<Sector[]>([])
   const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [vista, setVista] = useState<VistaReporte | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -93,6 +95,12 @@ export function ReporteDetalle() {
     // Sólo si algún campo los necesita: el reporte "Por técnico" no tiene
     // ningún select y no tiene por qué pedir tres listas para no usarlas.
     const tipos = new Set(reporte?.campos.map((c) => c.tipo))
+    if (tipos.has('proveedor')) {
+      // Aparte de las tres de abajo: sólo lo pide el reporte de insumos, y
+      // sumarlo al Promise.all haría que un fallo suyo se lleve puestas las
+      // listas que sí necesitan los otros seis.
+      api.get<Proveedor[]>('/api/proveedores').then(setProveedores).catch(() => {})
+    }
     if (!tipos.has('cliente') && !tipos.has('sector') && !tipos.has('categoria')) return
     Promise.all([
       api.get<Cliente[]>('/api/clientes'),
@@ -168,6 +176,7 @@ export function ReporteDetalle() {
                 clientes={clientes}
                 sectores={sectoresVisibles}
                 categorias={categorias}
+                proveedores={proveedores}
               />
             ))}
             <Button onClick={ver}><Search />Ver reporte</Button>
@@ -198,7 +207,9 @@ export function ReporteDetalle() {
   )
 }
 
-function CampoFiltro({ campo, slug, valor, onChange, clientes, sectores, categorias }: {
+function CampoFiltro({
+  campo, slug, valor, onChange, clientes, sectores, categorias, proveedores,
+}: {
   campo: Campo
   slug: string
   valor: string
@@ -206,6 +217,7 @@ function CampoFiltro({ campo, slug, valor, onChange, clientes, sectores, categor
   clientes: Cliente[]
   sectores: Sector[]
   categorias: CategoriaIncidencia[]
+  proveedores: Proveedor[]
 }) {
   const id = `${slug}-${campo.name}`
 
@@ -227,6 +239,8 @@ function CampoFiltro({ campo, slug, valor, onChange, clientes, sectores, categor
 
   const opciones = campo.tipo === 'cliente'
     ? clientes.map((c) => [String(c.id), c.empresa || c.nombre] as const)
+    : campo.tipo === 'proveedor'
+      ? proveedores.map((p) => [String(p.id), p.nombre] as const)
     : campo.tipo === 'sector'
       ? sectores.map((s) => [String(s.id), s.nombre] as const)
       : campo.tipo === 'categoria'

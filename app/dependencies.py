@@ -11,6 +11,7 @@ from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
+from .services.contratos_proveedor import ContratoProveedorRepository
 from .services.cuotas import CuotaRepository
 from .services.visitas import VisitaService
 from .services.dashboard import DashboardService
@@ -100,6 +101,10 @@ def get_reparacion_repository(request: Request) -> ReparacionRepository:
 
 def get_insumo_repository(request: Request) -> InsumoRepository:
     return request.app.state.insumos
+
+
+def get_contrato_proveedor_repository(request: Request) -> ContratoProveedorRepository:
+    return request.app.state.contratos_proveedor
 
 
 def get_ingreso_repository(request: Request) -> IngresoRepository:

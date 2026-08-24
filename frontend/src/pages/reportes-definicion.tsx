@@ -9,7 +9,7 @@
  *  con los datos (ver `app/services/reporte_vista.py`), que es lo que
  *  garantiza que la tabla en pantalla y el .xlsx sean el mismo reporte.
  */
-import { ESTADO_LABELS, PRIORIDAD_LABELS } from '../api'
+import { ESTADO_LABELS, INSUMO_LABELS, PRIORIDAD_LABELS } from '../api'
 import { Monitor, Wallet } from 'lucide-react'
 import { Ticket } from '@/components/iconos-accion'
 import { hoyISO, primerDiaDelMesISO } from 'libra-ui/fechas'
@@ -42,6 +42,7 @@ export type Campo =
   | { tipo: 'texto'; name: string; label: string; placeholder?: string }
   | { tipo: 'opciones'; name: string; label: string; opciones: Record<string, string>; todosLabel?: string }
   | { tipo: 'cliente'; name: string; label: string }
+  | { tipo: 'proveedor'; name: string; label: string }
   | { tipo: 'sector'; name: string; label: string }
   | { tipo: 'categoria'; name: string; label: string; todosLabel?: string }
 
@@ -153,6 +154,21 @@ export const REPORTES: Reporte[] = [
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
     ],
   },
+  {
+    slug: 'insumos',
+    titulo: 'Insumos por equipo',
+    descripcion: 'Qué consumió cada máquina: pedidos, entregas, demora del proveedor y cuánto rindió cada insumo. Es el papel con el que se le reclama al proveedor.',
+    grupo: 'equipos',
+    campos: [
+      ...PERIODO,
+      { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
+      { tipo: 'proveedor', name: 'proveedor_id', label: 'Lo entrega' },
+      { tipo: 'opciones', name: 'estado', label: 'Estado', opciones: INSUMO_LABELS },
+    ],
+    // Sin `inicial`: el período ya arranca en el mes en curso por
+    // `valoresIniciales()`, que es de donde salen los defaults de todo campo
+    // `fecha`. Repetirlo acá sería el mismo default escrito dos veces.
+  },
 ]
 
 // Los tres volcados planos. Sin filtros: son la tabla entera. Se ven en
@@ -174,6 +190,7 @@ export function valoresIniciales(r: Reporte): Record<string, string> {
       base[campo.name] = campo.name === 'desde' ? primerDiaDelMesISO() : hoyISO()
     } else if (
       campo.tipo === 'cliente' || campo.tipo === 'sector'
+      || campo.tipo === 'proveedor'
       || campo.tipo === 'categoria' || campo.tipo === 'opciones'
     ) {
       base[campo.name] = TODOS
