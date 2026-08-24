@@ -63,6 +63,7 @@ import { Incidencias } from '../pages/Incidencias'
 import { IncidenciaDetalle } from '../pages/IncidenciaDetalle'
 import { Equipos } from '../pages/Equipos'
 import { Reparaciones } from '../pages/Reparaciones'
+import { Insumos } from '../pages/Insumos'
 import { DepositosClientes } from '../pages/DepositosClientes'
 
 // Admin: varias de estas pantallas esconden el alta detrás del rol, y sin el
@@ -123,6 +124,8 @@ const EQUIPO = {
   id: 5, cliente_id: 1, tipo: 'Notebook', modelo: 'ThinkPad', marca: 'Lenovo',
   serial: 'LN-001', ubicacion_oficina: 'Piso 2', sector: 'Administración',
   deposito_id: null, deposito_nombre: null, estado: 'operativo',
+  // Los manda siempre el backend — ver el fixture de botones-de-alta.
+  proveedor_id: null, proveedor_nombre: null, referencias: [],
   fecha_adicion: null, garantia_vence: null, observaciones: null,
 }
 
@@ -253,6 +256,26 @@ const PANTALLAS: {
     },
   },
   {
+    titulo: 'Insumos — barra de filtros',
+    cuantos: 3,
+    montar: async () => {
+      render(<Insumos />, '/insumos')
+      // Por el encabezado y no por un combobox, mismo motivo que arriba.
+      await screen.findByRole('heading', { name: /Insumos/ })
+    },
+  },
+  {
+    titulo: 'Insumos — pedido',
+    // Sólo los dos del diálogo: el equipo y el insumo. Los filtros de atrás
+    // quedan fuera del árbol de accesibilidad con el modal abierto.
+    cuantos: 2,
+    montar: async (user) => {
+      render(<Insumos />, '/insumos')
+      await user.click(await screen.findByRole('button', { name: /Pedir insumo/ }))
+      await screen.findByRole('dialog')
+    },
+  },
+  {
     titulo: 'Incidencias — barra de filtros',
     cuantos: 3,
     montar: async () => {
@@ -299,7 +322,9 @@ const PANTALLAS: {
   },
   {
     titulo: 'Equipos — alta',
-    cuantos: 3,
+    // Cliente, depósito, estado y —desde el 2026-08-24— «Es de un tercero»,
+    // que es de quién es el equipo cuando no es del cliente.
+    cuantos: 4,
     montar: async (user) => {
       render(<Equipos />, '/equipos')
       await user.click(await screen.findByRole('button', { name: /Nuevo equipo/ }))

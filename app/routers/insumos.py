@@ -1,0 +1,200 @@
+"""Insumos por equipo — pedir, recibir y colocar.
+
+Tres endpoints de acción y no un CRUD a secas porque son tres momentos
+distintos, con días entre uno y otro y hechos por personas distintas: se pide
+por teléfono, llega con un remito, y se pone cuando el técnico pasa. Un solo
+`PUT` con las tres fechas dejaría que la bandeja de pendientes dependiera de que
+alguien se acuerde de borrar un campo.
+
+El alta acepta las tres fechas igual, y eso es lo que permite registrar un
+cambio **ya hecho** —el caso de la primera carga, cuando se vuelca lo que estaba
+en un cuaderno— sin inventar un pedido que nunca existió.
+
+Ver `app/services/insumos.py` para el modelo y, sobre todo, para el límite: este
+módulo **no mueve stock**.
+"""
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+
+from ..auth import get_current_user
+from ..dependencies import get_insumo_repository
+from ..services.insumos import InsumoRepository
+
+router = APIRouter(prefix="/api/insumos", tags=["insumos"])
+
+
+class InsumoIn(BaseModel):
+    equipo_id: int
+    # `catalog_items.id` del catálogo de consumibles (módulo `stock`). Es el
+    # que identifica QUÉ tóner: una máquina color lleva cuatro items distintos,
+    # y por eso no hay campo "color" al lado.
+    insumo_item_id: int
+    # Una fila por unidad — ver el docstring del servicio.
+    cantidad: int = Field(default=1, ge=1, le=50)
+    # None y equipo de un tercero → se hereda el proveedor del equipo.
+    proveedor_id: int | None = None
+    fecha_pedido: date | None = None
+    fecha_entrega: date | None = None
+    fecha_colocacion: date | None = None
+    remito_proveedor: str | None = None
+    contador_copias: int | None = Field(default=None, ge=0)
+    incidencia_id: int | None = None
+    observaciones: str | None = None
+
+
+class EntregaIn(BaseModel):
+    fecha_entrega: date
+    remito_proveedor: str | None = None
+
+
+class ColocacionIn(BaseModel):
+    fecha_colocacion: date
+    # La lectura del display al poner el insumo. Opcional: si la máquina no
+    # tiene contador o nadie lo miró, el cambio se registra igual y lo único
+    # que no se puede calcular es el rendimiento.
+    contador_copias: int | None = Field(default=None, ge=0)
+
+
+class InsumoUpdate(BaseModel):
+    """Corrección de una carga. No están `equipo_id` ni `insumo_item_id`: mover
+    una fila de equipo o de insumo no corrige un dato, arrastra el rendimiento
+    de dos cadenas de contadores."""
+
+    proveedor_id: int | None = None
+    fecha_pedido: date | None = None
+    fecha_entrega: date | None = None
+    fecha_colocacion: date | None = None
+    remito_proveedor: str | None = None
+    contador_copias: int | None = Field(default=None, ge=0)
+    observaciones: str | None = None
+
+
+class InsumoOut(BaseModel):
+    id: int
+    equipo_id: int
+    equipo_descripcion: str | None
+    equipo_serial: str | None
+    cliente_id: int | None
+    insumo_item_id: int
+    insumo_nombre: str
+    proveedor_id: int | None
+    proveedor_nombre: str | None
+    fecha_pedido: str | None
+    fecha_entrega: str | None
+    fecha_colocacion: str | None
+    # Derivados de las fechas, nunca almacenados.
+    estado: str
+    dias_esperando: int | None
+    remito_proveedor: str | None
+    contador_copias: int | None
+    # Lo que rindió el insumo anterior de la misma clase en este equipo.
+    copias_desde_el_anterior: int | None
+    incidencia_id: int | None
+    usuario: str
+    observaciones: str | None
+    created_at: str | None
+
+
+@router.post("", status_code=201, response_model=list[InsumoOut])
+def create_insumo(
+    data: InsumoIn,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+    user: dict = Depends(get_current_user),
+):
+    """Devuelve una **lista**: `cantidad` unidades son `cantidad` filas."""
+    try:
+        return insumos.create(usuario=user["username"], **data.model_dump())
+    except KeyError as e:
+        que, _id = e.args[0]
+        raise HTTPException(404, f"{que} not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.get("", response_model=list[InsumoOut])
+def list_insumos(
+    equipo_id: int | None = None,
+    cliente_id: int | None = None,
+    proveedor_id: int | None = None,
+    insumo_item_id: int | None = None,
+    incidencia_id: int | None = None,
+    estado: str | None = None,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    """`estado=pendiente` responde "qué me deben"; sin filtro sale todo, con lo
+    pendiente arriba."""
+    try:
+        return insumos.list(
+            equipo_id=equipo_id, cliente_id=cliente_id, proveedor_id=proveedor_id,
+            insumo_item_id=insumo_item_id, incidencia_id=incidencia_id,
+            estado=estado,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.get("/{insumo_id}", response_model=InsumoOut)
+def get_insumo(
+    insumo_id: int, insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    i = insumos.get(insumo_id)
+    if i is None:
+        raise HTTPException(404, "insumo not found")
+    return i
+
+
+@router.post("/{insumo_id}/entrega", response_model=InsumoOut)
+def entregar_insumo(
+    insumo_id: int, data: EntregaIn,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    """Llegó. Es el paso que saca la fila de la bandeja de pendientes."""
+    try:
+        return insumos.entregar(insumo_id, **data.model_dump())
+    except KeyError:
+        raise HTTPException(404, "insumo not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.post("/{insumo_id}/colocacion", response_model=InsumoOut)
+def colocar_insumo(
+    insumo_id: int, data: ColocacionIn,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    """Se puso en la máquina, con la lectura del contador."""
+    try:
+        return insumos.colocar(insumo_id, **data.model_dump())
+    except KeyError:
+        raise HTTPException(404, "insumo not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.put("/{insumo_id}", response_model=InsumoOut)
+def update_insumo(
+    insumo_id: int, data: InsumoUpdate,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    try:
+        return insumos.update(insumo_id, **data.model_dump(exclude_unset=True))
+    except KeyError as e:
+        if e.args and isinstance(e.args[0], tuple):
+            que, _id = e.args[0]
+            raise HTTPException(404, f"{que} not found")
+        raise HTTPException(404, "insumo not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.delete("/{insumo_id}", status_code=204)
+def delete_insumo(
+    insumo_id: int, insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    try:
+        insumos.delete(insumo_id)
+    except KeyError:
+        raise HTTPException(404, "insumo not found")
+    return Response(status_code=204)

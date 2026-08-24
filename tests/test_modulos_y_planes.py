@@ -35,6 +35,11 @@ RUTAS = {
     "presupuestos": "/api/presupuestos",
     "alquileres":   "/api/contratos",
     "stock":        "/api/consumibles",
+    # El consumo del parque del cliente (2026-08-24). Entra a este diccionario
+    # y no a un test propio a propósito: los cinco tests de abajo lo recorren,
+    # así que el gate del módulo nuevo queda cubierto el mismo día en vez de
+    # "cuando alguien se acuerde de agregarle su test".
+    "insumos":      "/api/insumos",
 }
 
 # El módulo `stock` monta UN router con dos familias de rutas: el inventario y
