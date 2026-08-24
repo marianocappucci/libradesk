@@ -12,7 +12,7 @@ Dos diferencias de esquema respecto del original, ninguna opcional:
 
 Lectura pura, sin tablas propias — mismo criterio que `DashboardService`.
 """
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased, sessionmaker
@@ -47,6 +47,17 @@ def _ruta_categoria(cat: CategoriaIncidencia | None, padre: CategoriaIncidencia 
     if cat is None:
         return None
     return f"{padre.nombre} · {cat.nombre}" if padre else cat.nombre
+
+
+def _dias_entre(desde: str | None, hasta: str | None) -> int | None:
+    """Días entre dos fechas ISO, o `None` si falta alguna.
+
+    `None` y no cero: que no haya entrega todavía no es una entrega en el día.
+    Es la misma distinción que hace `dias_esperando` del otro lado.
+    """
+    if not desde or not hasta:
+        return None
+    return (date.fromisoformat(hasta) - date.fromisoformat(desde)).days
 
 
 def _horas_resolucion(i: Incidencia) -> int | None:
@@ -353,3 +364,67 @@ class ReportesService:
                 }
                 for m, e, c in session.execute(stmt).all()
             ]
+
+    # ── Insumos por equipo ──────────────────────────────────────────
+    def insumos(self, desde: str, hasta: str, cliente_id: int | None = None,
+                proveedor_id: int | None = None,
+                estado: str | None = None) -> list[dict]:
+        """Lo que consumió el parque en el período, con su contrato al lado.
+
+        **Se apoya en `InsumoRepository.list()` en vez de escribir la consulta
+        de nuevo**, a diferencia de los otros seis reportes de este archivo. El
+        motivo es que ahí ya viven tres derivaciones que el reporte necesita
+        enteras —el estado a partir de las tres fechas, las copias que rindió el
+        anterior y la cobertura del contrato—, y reescribirlas acá daría un
+        reporte que puede decir algo distinto de la pantalla que muestra lo
+        mismo. Es el defecto que este producto ya evitó una vez extrayendo
+        `reporte_vista`: dos definiciones del mismo reporte.
+
+        Lo que el reporte sí agrega es lo que la pantalla no necesita: el nombre
+        del cliente y el número con el que el proveedor llama a cada máquina,
+        que es el dato con el que se le reclama.
+        """
+        from .equipos import Equipo, EquipoReferencia
+        from .insumos import InsumoRepository
+
+        filas = InsumoRepository(self.session_factory).list(
+            cliente_id=cliente_id, proveedor_id=proveedor_id, estado=estado,
+            desde=date.fromisoformat(desde), hasta=date.fromisoformat(hasta),
+        )
+        if not filas:
+            return []
+
+        equipo_ids = {f["equipo_id"] for f in filas}
+        with self.session_factory() as session:
+            clientes = dict(session.execute(
+                select(Cliente.id, Cliente.nombre).where(
+                    Cliente.id.in_({f["cliente_id"] for f in filas if f["cliente_id"]})
+                )
+            ).all())
+            sectores = dict(session.execute(
+                select(Equipo.id, Equipo.sector).where(Equipo.id.in_(equipo_ids))
+            ).all())
+            # La referencia DEL PROVEEDOR primero: es la que se dicta por
+            # teléfono. Si la máquina no tiene una, cae la del cliente, que al
+            # menos la identifica adentro de la casa.
+            referencias: dict[int, str] = {}
+            for r in session.execute(
+                select(EquipoReferencia)
+                .where(EquipoReferencia.equipo_id.in_(equipo_ids))
+                .order_by(EquipoReferencia.proveedor_id.is_(None),
+                          EquipoReferencia.id)
+            ).scalars():
+                referencias.setdefault(r.equipo_id, r.valor)
+
+        for f in filas:
+            f["cliente"] = clientes.get(f["cliente_id"], "—")
+            f["sector"] = sectores.get(f["equipo_id"])
+            f["referencia"] = referencias.get(f["equipo_id"])
+            # Cuánto TARDÓ lo que sí llegó. `dias_esperando` —que ya viene de
+            # la fase 1— mide lo otro: lo que todavía no llegó, contra hoy. Son
+            # los dos números del reclamo y hacen falta los dos: con el primero
+            # se discute el promedio de entrega, con el segundo se pide lo que
+            # falta. Sin éste, un proveedor que entrega todo en 20 días
+            # aparecería con demora cero por el solo hecho de haber entregado.
+            f["dias_de_entrega"] = _dias_entre(f["fecha_pedido"], f["fecha_entrega"])
+        return filas

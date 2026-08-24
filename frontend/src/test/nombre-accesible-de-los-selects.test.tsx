@@ -64,6 +64,7 @@ import { IncidenciaDetalle } from '../pages/IncidenciaDetalle'
 import { Equipos } from '../pages/Equipos'
 import { Reparaciones } from '../pages/Reparaciones'
 import { Insumos } from '../pages/Insumos'
+import { ContratosProveedor } from '../pages/ContratosProveedor'
 import { DepositosClientes } from '../pages/DepositosClientes'
 
 // Admin: varias de estas pantallas esconden el alta detrás del rol, y sin el
@@ -262,6 +263,26 @@ const PANTALLAS: {
       render(<Insumos />, '/insumos')
       // Por el encabezado y no por un combobox, mismo motivo que arriba.
       await screen.findByRole('heading', { name: /Insumos/ })
+    },
+  },
+  {
+    titulo: 'Contratos de proveedor — barra de filtros',
+    cuantos: 3,
+    montar: async () => {
+      render(<ContratosProveedor />, '/contratos-proveedor')
+      await screen.findByRole('heading', { name: /Contratos de proveedor/ })
+    },
+  },
+  {
+    titulo: 'Contratos de proveedor — alta',
+    // Cliente, proveedor y tipo. Los dos primeros son `SelectBuscable` —que
+    // necesita `ariaLabel` sí o sí— y el tercero un Radix adentro de un
+    // `FormControl`, que se nombra solo por el `FormLabel`.
+    cuantos: 3,
+    montar: async (user) => {
+      render(<ContratosProveedor />, '/contratos-proveedor')
+      await user.click(await screen.findByRole('button', { name: /Nuevo contrato/ }))
+      await screen.findByRole('dialog')
     },
   },
   {

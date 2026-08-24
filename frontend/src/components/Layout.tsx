@@ -32,6 +32,7 @@ import {
   FilePenLine as FileSignature,
   FileSpreadsheet,
   FileText,
+  Handshake,
   LayoutDashboard,
   MapPin,
   Monitor,
@@ -126,6 +127,14 @@ export const Layout = createLayout({
         // hace la misma persona. El módulo `stock` de Inventario es la
         // mercadería NUESTRA, que es otro circuito.
         { to: '/insumos', label: 'Insumos', icon: Droplets, module: 'insumos' },
+        // El contrato del cliente con SU proveedor, no el nuestro con el
+        // cliente: por eso no va en el grupo Alquileres, que es la dirección
+        // inversa. Va pegado a Insumos porque es el papel que hay detrás del
+        // tóner que llega sin cobrar.
+        {
+          to: '/contratos-proveedor', label: 'Contratos de proveedor',
+          icon: Handshake, module: 'insumos',
+        },
         { to: '/equipos-trabajo', label: 'Equipos y flota', icon: EquiposFlota },
       ],
     },

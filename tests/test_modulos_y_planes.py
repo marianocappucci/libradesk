@@ -42,6 +42,13 @@ RUTAS = {
     "insumos":      "/api/insumos",
 }
 
+# El módulo `insumos` monta DOS routers desde la fase 2 y `RUTAS` cubre uno: el
+# contrato con el proveedor cuelga del mismo módulo —sin el circuito de
+# consumibles no tiene para qué existir— así que se habilitan y se cortan a la
+# vez. Sin esta ruta, gatear sólo uno de los dos pasaría desapercibido, que es
+# lo que ya pasó con los tres routers de alquileres.
+RUTA_CONTRATOS_PROVEEDOR = "/api/contratos-proveedor"
+
 # El módulo `stock` monta UN router con dos familias de rutas: el inventario y
 # los materiales de una incidencia. La de arriba cubre la primera; ésta la
 # segunda, porque un gateo a medias dejaría un ticket anotando consumos contra
@@ -200,3 +207,23 @@ def test_aplicar_un_plan_inexistente_falla_fuerte(tmp_path):
 
     with pytest.raises(ValueError, match="enterprise"):
         aplicar_plan_en_db(str(tmp_path / "no-existe.db"), "enterprise")
+
+
+def test_los_dos_routers_de_insumos_van_juntos(client, destino_base):
+    """El consumo y su contrato cuelgan del mismo módulo, así que se habilitan y
+    se cortan a la vez. Sin este test, gatear uno solo pasaría desapercibido:
+    `RUTAS` cubre `/api/insumos` y nadie miraría el contrato — que es la mitad
+    que dice si el insumo se paga o no."""
+    from plans import aplicar_plan_en_db
+
+    assert _existe_de_verdad(client, RUTA_CONTRATOS_PROVEEDOR), \
+        f"{RUTA_CONTRATOS_PROVEEDOR} ya no existe"
+
+    aplicar_plan_en_db(destino_base, "estandar")
+    _login(client)
+    assert client.get(RUTA_CONTRATOS_PROVEEDOR).status_code == 403
+    assert client.get(RUTAS["insumos"]).status_code == 403
+
+    aplicar_plan_en_db(destino_base, "premium")
+    assert client.get(RUTA_CONTRATOS_PROVEEDOR).status_code == 200
+    assert client.get(RUTAS["insumos"]).status_code == 200
