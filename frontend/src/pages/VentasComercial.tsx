@@ -39,6 +39,7 @@ import { ClipboardList, Coins, Wallet } from 'lucide-react'
 // `Eye` llegó de develop (el PDF del recibo se abre con un ojo, PR #127) y es
 // una ACCIÓN, así que entra por el módulo de acciones como el resto.
 import { ArrowLeft, Eye, FilePlus, Trash2 } from '@/components/iconos-accion'
+import { hoyISO } from 'libra-ui/fechas'
 
 type Venta = {
   id: number; numero: string; estado: string; fecha: string
@@ -772,7 +773,7 @@ function DetalleCuenta({ cliente, onCerrar, onCambio }: {
   async function cobrar() {
     const ok = await onCambio(() => api.post('/api/cuenta-corriente/pagos', {
       cliente_id: cliente.cliente_id, monto: Number(monto),
-      fecha: new Date().toISOString().slice(0, 10), concepto: 'Pago a cuenta',
+      fecha: hoyISO(), concepto: 'Pago a cuenta',
     }))
     if (ok) { setMonto(''); await recargar() }
   }

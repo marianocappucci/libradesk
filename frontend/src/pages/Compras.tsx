@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowDownToLine, ShoppingCart as IconoOrdenesCompra, Wallet } from 'lucide-react'
 import { FilePlus, Trash2 } from '@/components/iconos-accion'
+import { hoyISO } from 'libra-ui/fechas'
 
 type Proveedor = { id: number; nombre: string; activo: boolean }
 type Orden = {
@@ -218,7 +219,7 @@ function DetalleEgreso({ egreso, onCerrar, onCambio }: {
 
   async function pagar() {
     const ok = await onCambio(() => api.post(`/api/egresos/${egreso.id}/pagos`, {
-      fecha: new Date().toISOString().slice(0, 10),
+      fecha: hoyISO(),
       monto: Number(monto), medio_pago: 'transferencia',
     }))
     if (ok) { setMonto(''); await recargar() }
@@ -470,7 +471,7 @@ function FormEgreso({ proveedores, onGuardar }: {
   async function guardar() {
     const prov = proveedores.find((p) => p.id === Number(proveedorId))
     const ok = await onGuardar(() => api.post('/api/egresos', {
-      fecha: new Date().toISOString().slice(0, 10),
+      fecha: hoyISO(),
       concepto: concepto.trim(), total: Number(total) || 0,
       proveedor_id: prov?.id ?? null, proveedor_nombre: prov?.nombre ?? '',
       numero, categoria,

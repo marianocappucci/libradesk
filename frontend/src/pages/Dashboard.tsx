@@ -43,15 +43,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function firstOfMonthIso(): string {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
+import { hoyISO, primerDiaDelMesISO } from 'libra-ui/fechas'
 
 /** Los tramos del backlog, con el rótulo que se lee en pantalla. Las claves
  *  son las que devuelve `app/services/dashboard.py`. */
@@ -272,8 +264,8 @@ function SemanaDeCuadrillas() {
 }
 
 export function Dashboard() {
-  const [dateFrom, setDateFrom] = useState(firstOfMonthIso())
-  const [dateTo, setDateTo] = useState(todayIso())
+  const [dateFrom, setDateFrom] = useState(primerDiaDelMesISO())
+  const [dateTo, setDateTo] = useState(hoyISO())
   const [dias, setDias] = useState('30')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [operativo, setOperativo] = useState<DashboardOperativo | null>(null)

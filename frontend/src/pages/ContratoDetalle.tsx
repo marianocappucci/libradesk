@@ -29,8 +29,8 @@ import {
   ArrowLeft, PackagePlus, Printer, Repeat, TrendingUp, Undo2, XCircle,
 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { hoyISO } from 'libra-ui/fechas'
 
-const HOY = () => new Date().toISOString().slice(0, 10)
 
 type Accion =
   | { tipo: 'colocar' }
@@ -69,7 +69,7 @@ export function ContratoDetalle() {
   // Estado de los formularios de las cuatro acciones. Uno solo porque nunca hay
   // dos diálogos abiertos a la vez.
   const [activoId, setActivoId] = useState('')
-  const [fechaCampo, setFechaCampo] = useState(HOY())
+  const [fechaCampo, setFechaCampo] = useState(hoyISO())
   const [ubicacion, setUbicacion] = useState('')
   const [motivoRetiro, setMotivoRetiro] = useState('devolucion')
   const [estadoActivo, setEstadoActivo] = useState('retirado_a_revisar')
@@ -125,7 +125,7 @@ export function ContratoDetalle() {
     setAccion(a)
     setFormError(null)
     setActivoId('')
-    setFechaCampo(HOY())
+    setFechaCampo(hoyISO())
     setUbicacion('')
     setMotivoRetiro('devolucion')
     setEstadoActivo('retirado_a_revisar')

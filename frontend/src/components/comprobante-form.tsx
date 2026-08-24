@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Trash2 } from '@/components/iconos-accion'
+import { enDiasISO, hoyISO } from 'libra-ui/fechas'
 
 /** `tax_rate` es el PORCENTAJE como string ('21', '10.5'), no la fracción: es
  *  lo que muestra el `<select>` y lo que se leía en el campo del documento
@@ -152,16 +153,6 @@ function DescripcionConSugerencias({
       )}
     </div>
   )
-}
-
-export function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-export function enDiasISO(dias: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
 }
 
 export function draftVacio(): ComprobanteDraft {

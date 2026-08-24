@@ -35,6 +35,7 @@ import { fechaDeDate } from '@/lib/format'
 import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { hoyISO } from 'libra-ui/fechas'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
@@ -797,7 +798,7 @@ function ArmarSalida({ abierto, onCerrar, reclamos, onListo }: {
   // `<input type="date">` lee y escribe ISO, y con el formato local queda vacío
   // y `new Date()` de la previa da `Invalid Date`. El primer intento usó el
   // helper de presentación y lo agarró el test de la previa de horarios.
-  const [dia, setDia] = useState(() => new Date().toISOString().slice(0, 10))
+  const [dia, setDia] = useState(() => hoyISO())
   const [hora, setHora] = useState('09:00')
   const [duracion, setDuracion] = useState('60')
   const [traslado, setTraslado] = useState('0')

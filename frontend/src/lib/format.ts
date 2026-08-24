@@ -129,25 +129,6 @@ export function fechaHora(iso: string | null | undefined): string {
 // recorte de string a propósito: pasar por `new Date().toISOString()` convierte
 // a UTC y la agenda se correría tres horas.
 
-/** Hoy en hora LOCAL, `aaaa-mm-dd` — el default de un `<input type="date">`.
- *
- * 🔴 **No es lo mismo que `new Date().toISOString().slice(0, 10)`**, que es la
- * forma en que lo escriben otras nueve pantallas de este producto: ese
- * `toISOString()` pasa a **UTC**, así que a partir de las 21:00 de Argentina
- * propone la fecha de MAÑANA. Es el mismo defecto que el backend ya cerró con
- * `services/fecha.py` —una venta cargada a las 21:00 del 12 quedaba con fecha
- * 13—, sólo que del lado del browser.
- *
- * Mismo criterio que las dos de acá abajo: se arma por partes en vez de pasar
- * por UTC. La usa la pantalla de insumos; las otras nueve siguen como estaban,
- * y migrarlas es un trabajo aparte sobre pantallas que hoy funcionan.
- */
-export function hoyISO(): string {
-  const d = new Date()
-  const mes = String(d.getMonth() + 1).padStart(2, '0')
-  const dia = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mes}-${dia}`
-}
 
 /** Lo que guarda el backend → lo que el input muestra. */
 export function deIsoALocal(iso: string | null | undefined): string {
