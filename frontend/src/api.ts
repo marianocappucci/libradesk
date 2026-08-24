@@ -208,6 +208,59 @@ export const INSUMO_TONO: Record<EstadoInsumo, TonoEstado> = {
   colocado: 'ok',
 }
 
+// --- qué hay que pedir (fase 3) --------------------------------------------
+//
+// El consumo de un insumo en una máquina, resumido a partir del historial que
+// ya se venía cargando: **no hay ninguna tabla detrás de esto**. Contesta lo
+// único que evita que la máquina se pare — cuándo hay que pedir el próximo.
+
+export type ResumenDeConsumo = {
+  equipo_id: number
+  equipo_descripcion: string | null
+  equipo_sector: string | null
+  cliente_id: number | null
+  cliente_nombre: string | null
+  insumo_item_id: number
+  insumo_nombre: string
+  // Con menos de dos colocaciones no hay intervalo que promediar y el estado
+  // es `sin_historial`: no se inventa una cadencia por defecto.
+  cambios: number
+  ultimo_cambio: string | null
+  dias_desde_el_ultimo: number | null
+  // 🔑 Mide el CAMBIO, no la vida del tóner: adentro del intervalo está el
+  // tiempo que la máquina estuvo parada esperando el repuesto. Para «cuánto
+  // dura un tóner» el número honesto es `copias_promedio`.
+  dias_entre_cambios: number | null
+  copias_promedio: number | null
+  // Lo que tarda el proveedor para ESTA máquina, medido de sus entregas.
+  demora_proveedor: number | null
+  proximo_cambio_estimado: string | null
+  // Desde cuándo conviene pedirlo, que es antes de que se acabe.
+  pedir_desde: string | null
+  estado: EstadoDeConsumo
+  dias_para_pedir: number | null
+}
+
+export type EstadoDeConsumo =
+  | 'pedir_ahora' | 'ya_pedido' | 'al_dia' | 'sin_historial'
+
+export const CONSUMO_LABELS: Record<EstadoDeConsumo, string> = {
+  pedir_ahora: 'Pedir',
+  ya_pedido: 'Ya pedido',
+  al_dia: 'Al día',
+  sin_historial: 'Sin historial',
+}
+
+export const CONSUMO_TONO: Record<EstadoDeConsumo, TonoEstado> = {
+  // Sólo lo que hay que pedir pide una acción hoy. `sin_historial` es neutro y
+  // no un aviso: que todavía no se pueda estimar no es un problema de la
+  // máquina, es que le falta un cambio más registrado.
+  pedir_ahora: 'negativo',
+  ya_pedido: 'curso',
+  al_dia: 'ok',
+  sin_historial: 'neutro',
+}
+
 // --- depósitos -------------------------------------------------------------
 //
 // `cliente_id: null` es un depósito **propio de la empresa**; con cliente es

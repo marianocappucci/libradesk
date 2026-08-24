@@ -141,6 +141,68 @@ def list_insumos(
         raise HTTPException(422, str(e))
 
 
+class ResumenOut(BaseModel):
+    """El consumo de un insumo en una máquina, ya resumido (fase 3).
+
+    Todo derivado del historial: no hay ninguna tabla nueva detrás de esto.
+    """
+
+    equipo_id: int
+    equipo_descripcion: str | None
+    equipo_sector: str | None
+    cliente_id: int | None
+    cliente_nombre: str | None
+    insumo_item_id: int
+    insumo_nombre: str
+    # Cuántas colocaciones hay registradas. Con menos de dos no hay intervalo
+    # que promediar y el estado es `sin_historial`.
+    cambios: int
+    ultimo_cambio: str | None
+    dias_desde_el_ultimo: int | None
+    # Cada cuánto se cambia esta máquina. 🔑 Mide el CAMBIO, no la vida del
+    # tóner: adentro del intervalo está el tiempo que la máquina estuvo parada
+    # esperando el repuesto. Para "cuánto dura un tóner" el número honesto es
+    # `copias_promedio`, que no depende de cuándo se pudo cambiar.
+    dias_entre_cambios: int | None
+    copias_promedio: int | None
+    # Lo que tarda el proveedor en entregar para esta máquina, medido de sus
+    # propias entregas. Es lo que se le descuenta al aviso.
+    demora_proveedor: int | None
+    proximo_cambio_estimado: str | None
+    # Desde cuándo conviene pedirlo, que es antes de que se acabe.
+    pedir_desde: str | None
+    # sin_historial | ya_pedido | pedir_ahora | al_dia
+    estado: str
+    dias_para_pedir: int | None
+
+
+@router.get("/resumen", response_model=list[ResumenOut])
+def resumen_de_consumo(
+    cliente_id: int | None = None,
+    equipo_id: int | None = None,
+    estado: str | None = None,
+    insumos: InsumoRepository = Depends(get_insumo_repository),
+):
+    """Qué le toca a cada máquina — la fase 3.
+
+    Convierte el historial que se viene cargando en algo que se puede mirar
+    **antes** de que la máquina se pare: cada cuánto se cambia, cuándo fue la
+    última vez y desde cuándo conviene ir pidiendo el próximo.
+
+    Va antes que `/{insumo_id}` en el archivo **y hace falta**: `resumen` no
+    parsea como entero, así que sin este orden la ruta caería en la de la ficha
+    y devolvería un 422 en vez de la lista.
+
+    `estado=pedir_ahora` es la bandeja: lo que hay que pedir hoy.
+    """
+    try:
+        return insumos.resumen(
+            cliente_id=cliente_id, equipo_id=equipo_id, estado=estado,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @router.get("/{insumo_id}", response_model=InsumoOut)
 def get_insumo(
     insumo_id: int, insumos: InsumoRepository = Depends(get_insumo_repository),
