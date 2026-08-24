@@ -33,6 +33,7 @@ import {
 // El mismo alias que usa `ContratoDetalle`: `FileSignature` es el nombre que
 // lucide deprecó y `FilePenLine` el que sigue vivo en el paquete.
 import { FilePenLine as FileSignature } from 'lucide-react'
+import { hoyISO } from 'libra-ui/fechas'
 
 /** Lo que se carga de cada equipo. Todo texto: lo tipea el técnico en el
  *  domicilio del cliente y el importe se convierte recién al mandarlo. */
@@ -50,7 +51,6 @@ const LINEA_VACIA: LineaForm = {
   cargo_reposicion: '', observaciones: '',
 }
 
-const HOY = () => new Date().toISOString().slice(0, 10)
 
 /**
  * Qué equipos se pueden documentar con cada tipo, y es el espejo exacto de lo
@@ -85,7 +85,7 @@ export function NuevaActa(
 ) {
   const [abierto, setAbierto] = useState(false)
   const [tipo, setTipo] = useState<TipoActa>('entrega')
-  const [fecha, setFecha] = useState(HOY())
+  const [fecha, setFecha] = useState(hoyISO())
   const [entregaNombre, setEntregaNombre] = useState('')
   const [recibeNombre, setRecibeNombre] = useState('')
   const [observaciones, setObservaciones] = useState('')
@@ -103,7 +103,7 @@ export function NuevaActa(
 
   function reiniciar() {
     setTipo('entrega')
-    setFecha(HOY())
+    setFecha(hoyISO())
     setEntregaNombre('')
     setRecibeNombre('')
     setObservaciones('')

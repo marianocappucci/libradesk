@@ -12,17 +12,14 @@
 import { ESTADO_LABELS, PRIORIDAD_LABELS } from '../api'
 import { Monitor, Wallet } from 'lucide-react'
 import { Ticket } from '@/components/iconos-accion'
+import { hoyISO, primerDiaDelMesISO } from 'libra-ui/fechas'
 
 export const TODOS = '__todos__'
 
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-export function firstOfMonthIso(): string {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
+/** Los dos nombres que ya importaba `ReporteDetalle`, ahora servidos por el
+ *  módulo compartido. Se conservan como reexport en vez de cambiar al
+ *  consumidor: lo que cambia es de dónde sale el día, no cómo se lo pide. */
+export { hoyISO as todayIso, primerDiaDelMesISO as firstOfMonthIso }
 
 const ESTADO_EQUIPO_LABELS: Record<string, string> = {
   activo: 'Activo',
@@ -174,7 +171,7 @@ export function valoresIniciales(r: Reporte): Record<string, string> {
   const base: Record<string, string> = {}
   for (const campo of r.campos) {
     if (campo.tipo === 'fecha') {
-      base[campo.name] = campo.name === 'desde' ? firstOfMonthIso() : todayIso()
+      base[campo.name] = campo.name === 'desde' ? primerDiaDelMesISO() : hoyISO()
     } else if (
       campo.tipo === 'cliente' || campo.tipo === 'sector'
       || campo.tipo === 'categoria' || campo.tipo === 'opciones'

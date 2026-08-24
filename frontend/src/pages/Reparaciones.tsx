@@ -31,6 +31,7 @@ import { Wrench } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { hoyISO } from 'libra-ui/fechas'
 
 const TODOS = '__todos__'
 
@@ -127,7 +128,7 @@ export function Reparaciones() {
     setFormError(null)
     form.reset({
       // Por default hoy: lo normal es cerrarla el día que vuelve el equipo.
-      fecha_retorno: new Date().toISOString().slice(0, 10),
+      fecha_retorno: hoyISO(),
       diagnostico: '',
       costo: '',
     })
