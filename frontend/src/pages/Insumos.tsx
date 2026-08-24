@@ -329,6 +329,28 @@ export function Insumos() {
       },
     },
     {
+      id: 'contrato',
+      header: 'Contrato',
+      size: 140, minSize: 110,
+      // Tres estados y no dos: sin contrato cargado («—») no es lo mismo que
+      // con un contrato que **no cubre los insumos** —uno de service—, que es
+      // el caso en el que hay que discutir la factura del proveedor.
+      cell: ({ row }) => {
+        const i = row.original
+        if (i.contrato_numero === null) {
+          return <span className="text-muted-foreground">—</span>
+        }
+        return (
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm">{i.contrato_numero}</span>
+            {!i.cubierto_por_contrato && (
+              <span className="text-xs font-medium text-destructive">no cubre</span>
+            )}
+          </span>
+        )
+      },
+    },
+    {
       id: 'rendimiento',
       header: sortableHeader('Rindió el anterior'),
       accessorKey: 'copias_desde_el_anterior',

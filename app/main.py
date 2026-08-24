@@ -33,6 +33,7 @@ from .modules_gate import require_module
 from .routers import auth as auth_router
 from .routers import (
     activos, agenda, categorias, clientes, comercial, compras, contratos,
+    contratos_proveedor,
     cuotas, dashboard, depositos, equipos, equipos_trabajo, facturacion,
     facturacion_config, health, incidencias,
     informes, ingresos, insumos, presupuestos, proveedores, remitos,
@@ -64,7 +65,9 @@ from .services.proveedores import ProveedorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
-# La clase, no el módulo: `insumos` ya nombra al router en este archivo.
+# La clase, no el módulo: `insumos` ya nombra al router en este archivo. Vale
+# igual para `contratos_proveedor`.
+from .services.contratos_proveedor import ContratoProveedorRepository
 from .services.insumos import InsumoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import comercial as comercial_service
@@ -246,6 +249,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.servicios = ServicioCatalogoRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
     app.state.insumos = InsumoRepository(sessions)
+    app.state.contratos_proveedor = ContratoProveedorRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
     app.state.activos = ActivoRepository(sessions)
@@ -414,6 +418,15 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # están en premium—, exactamente como está escrito para las compras.
     app.include_router(
         insumos.router,
+        dependencies=staff_or_admin + [Depends(require_module("insumos"))],
+    )
+    # El contrato con el proveedor (fase 2), en el MISMO módulo: un contrato de
+    # proveedor sin el circuito de consumibles no tiene para qué existir —no se
+    # cobra, no se liquida, no emite nada—, así que gatearlo aparte ofrecería
+    # media funcionalidad. Mismo criterio con el que activos y contratos cuelgan
+    # juntos de `alquileres`.
+    app.include_router(
+        contratos_proveedor.router,
         dependencies=staff_or_admin + [Depends(require_module("insumos"))],
     )
     # Compras: órdenes, recepción de mercadería y egresos. Gate propio y no

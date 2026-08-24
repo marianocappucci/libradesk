@@ -199,8 +199,20 @@ def _dias_esperando(i: EquipoInsumo) -> int | None:
     return (date.fromisoformat(hoy()) - i.fecha_pedido).days
 
 
+def fecha_de_referencia(i: EquipoInsumo) -> date | None:
+    """Contra que fecha se pregunta si el contrato cubria este insumo.
+
+    **La primera que exista de las tres**, en orden: pedido, entrega,
+    colocacion. Es el momento en que nacio la necesidad, que es lo que el
+    contrato tiene que estar cubriendo; con la fecha de colocacion se estaria
+    preguntando por el dia en que el tecnico paso, que puede ser meses despues
+    de que el proveedor entrego.
+    """
+    return i.fecha_pedido or i.fecha_entrega or i.fecha_colocacion
+
+
 def _to_dict(i: EquipoInsumo, *, equipo=None, proveedor=None,
-             copias_previas: int | None = None) -> dict:
+             copias_previas: int | None = None, contrato=None) -> dict:
     contador = i.contador_copias
     # Ver el docstring: un contador que retrocede (placa cambiada) da None y no
     # un negativo, que promediaria mal.
@@ -237,6 +249,16 @@ def _to_dict(i: EquipoInsumo, *, equipo=None, proveedor=None,
         # nombre dice el intervalo a proposito: "rendimiento" a secas se lee
         # como una propiedad de esta fila y es la del tramo que cierra.
         "copias_desde_el_anterior": rendimiento,
+        # El contrato de proveedor que cubria el equipo en la fecha de esta fila
+        # (fase 2). Se resuelve, no se guarda — ver `contratos_proveedor`.
+        "contrato_numero": contrato.numero if contrato is not None else None,
+        # 🔑 **No es lo mismo que tener contrato.** Un contrato de service cubre
+        # la maquina y no los insumos, asi que un toner bajo ese contrato SI se
+        # paga. Con un solo campo "tiene contrato" la pantalla diria que esta
+        # cubierto justo en el caso en que hay que discutir la factura.
+        "cubierto_por_contrato": bool(
+            contrato is not None and contrato.incluye_insumos
+        ),
         "incidencia_id": i.incidencia_id,
         "usuario": i.usuario,
         "observaciones": i.observaciones,
@@ -321,10 +343,19 @@ class InsumoRepository:
     # ── Lectura ──────────────────────────────────────────────────────────
 
     def _resolver(self, session, filas: list[EquipoInsumo]) -> list[dict]:
+        from .contratos_proveedor import coberturas_por_equipo, cubre
         from .equipos import Equipo
         from .proveedores import Proveedor
 
         previas = _copias_previas(session, filas)
+        # Dos consultas para todo el listado y no dos por fila: ver
+        # `coberturas_por_equipo`.
+        coberturas = coberturas_por_equipo(session, {f.equipo_id for f in filas})
+
+        def contrato_de_la_fila(f: EquipoInsumo):
+            cuando = fecha_de_referencia(f)
+            return cubre(coberturas, f.equipo_id, cuando) if cuando else None
+
         return [
             _to_dict(
                 f,
@@ -334,6 +365,7 @@ class InsumoRepository:
                     if f.proveedor_id is not None else None
                 ),
                 copias_previas=previas.get(f.id),
+                contrato=contrato_de_la_fila(f),
             )
             for f in filas
         ]
@@ -347,11 +379,19 @@ class InsumoRepository:
         insumo_item_id: int | None = None,
         incidencia_id: int | None = None,
         estado: str | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
     ) -> list[dict]:
         """Lo pendiente primero y, dentro de cada grupo, lo mas reciente arriba.
 
         Es el orden en que se lee la pantalla: lo que falta reclamar va antes
         que el historial, igual que las reparaciones abiertas.
+
+        `desde`/`hasta` recortan por la **fecha de referencia** de cada fila
+        —la primera que exista de pedido, entrega o colocacion—, que es la misma
+        que decide contra que momento se mira el contrato. El `coalesce` de aca
+        abajo es esa regla en SQL: si cambia `fecha_de_referencia()`, este
+        recorte tiene que cambiar con ella, y hay un test que los cruza.
         """
         from .equipos import Equipo
 
@@ -375,6 +415,16 @@ class InsumoRepository:
                 q = q.where(EquipoInsumo.insumo_item_id == insumo_item_id)
             if incidencia_id is not None:
                 q = q.where(EquipoInsumo.incidencia_id == incidencia_id)
+            if desde is not None or hasta is not None:
+                referencia = func.coalesce(
+                    EquipoInsumo.fecha_pedido,
+                    EquipoInsumo.fecha_entrega,
+                    EquipoInsumo.fecha_colocacion,
+                )
+                if desde is not None:
+                    q = q.where(referencia >= desde)
+                if hasta is not None:
+                    q = q.where(referencia <= hasta)
             if estado == "pendiente":
                 q = q.where(EquipoInsumo.fecha_entrega.is_(None),
                             EquipoInsumo.fecha_colocacion.is_(None))

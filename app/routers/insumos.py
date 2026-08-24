@@ -91,6 +91,12 @@ class InsumoOut(BaseModel):
     contador_copias: int | None
     # Lo que rindió el insumo anterior de la misma clase en este equipo.
     copias_desde_el_anterior: int | None
+    # El contrato de proveedor que cubría el equipo en la fecha de esta fila
+    # (fase 2). Se resuelve al leer, no se guarda.
+    contrato_numero: str | None
+    # 🔑 Tener contrato **no** es estar cubierto: uno de service cubre la
+    # máquina y no los insumos, así que ese tóner se paga igual.
+    cubierto_por_contrato: bool
     incidencia_id: int | None
     usuario: str
     observaciones: str | None

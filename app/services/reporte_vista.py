@@ -424,3 +424,120 @@ def volcado(slug: str, titulo: str, headers: list[tuple[str, int]],
     cruda, sin resaltados ni totales."""
     columnas = [Columna(label, ancho) for label, ancho in headers]
     return Vista(slug, titulo, filtros, columnas, _plano([_fila(f) for f in filas]))
+
+
+# ── Insumos (fase 2) ───────────────────────────────────────────────
+
+#: Los tres estados de un insumo, con su resaltado. Lo pendiente es lo unico
+#: que pide una accion de nuestro lado, y por eso es lo unico que se pinta
+#: fuerte: si los tres estados llevaran color, el reclamo se pierde entre el
+#: historial. Mismo criterio que el resto de los reportes.
+INSUMO_LABEL = {
+    "pendiente": "Pedido", "en_poder": "En el cliente", "colocado": "Colocado",
+}
+INSUMO_MARCA = {"pendiente": "urgente", "en_poder": "nuevo", "colocado": "ok"}
+
+#: A partir de cuantos dias esperando un pedido deja de ser "esperá" y pasa a
+#: ser un llamado. Es el mismo umbral que resalta la pantalla de Insumos.
+DIAS_RECLAMO = 7
+
+
+def insumos(data: list[dict], filtros: list[str]) -> Vista:
+    """Lo que consumio cada maquina, agrupado POR EQUIPO.
+
+    Agrupado por equipo y no plano porque las dos preguntas que trae a alguien a
+    este reporte son de una maquina: *"cuanto me dura un toner en esta"* y
+    *"cuantos le pedi para esta"*. Con las filas mezcladas, la cadena de
+    contadores de una impresora queda partida entre las de las otras y el numero
+    de rendimiento, que es el que justifica pedir el contador, no se puede leer.
+    """
+    columnas = [
+        Columna("Insumo", 26), Columna("Estado", 14), Columna("Pedido", 11),
+        Columna("Entregado", 11), Columna("Demora", 9, numerica=True),
+        Columna("Colocado", 11), Columna("Contador", 12, numerica=True),
+        Columna("Rindió el anterior", 16, numerica=True),
+        Columna("Remito", 14), Columna("Contrato", 16),
+    ]
+
+    por_equipo: dict[int, list[dict]] = {}
+    for r in data:
+        por_equipo.setdefault(r["equipo_id"], []).append(r)
+
+    grupos = []
+    for filas_equipo in por_equipo.values():
+        primera = filas_equipo[0]
+        # El numero del proveedor en el encabezado: es con lo que se pide, asi
+        # que tenerlo arriba del bloque evita ir a buscarlo a otra pantalla
+        # mientras se hace el reclamo.
+        partes = [primera["equipo_descripcion"] or f"Equipo #{primera['equipo_id']}"]
+        if primera.get("referencia"):
+            partes.append(f"N° {primera['referencia']}")
+        if primera.get("sector"):
+            partes.append(primera["sector"])
+        partes.append(primera.get("cliente") or "—")
+        etiqueta = " · ".join(partes)
+
+        filas = []
+        for r in filas_equipo:
+            # La columna mide dos cosas segun el estado, y las dos son demora:
+            # lo entregado muestra **cuanto tardo** (entrega − pedido) y lo
+            # pendiente **cuanto lleva esperando** (hoy − pedido). Con una sola
+            # de las dos, un proveedor que entrega todo en veinte dias saldria
+            # con la columna vacia por el solo hecho de haber entregado.
+            demora = r["dias_esperando"]
+            if demora is None:
+                demora = r.get("dias_de_entrega")
+            demorado = demora is not None and demora > DIAS_RECLAMO
+            # Sin contrato y sin cobertura son cosas distintas: "—" es que no
+            # hay contrato cargado; "no cubre" es que lo hay y el insumo se paga
+            # igual, que es el caso que hace falta ver antes de discutir una
+            # factura.
+            if r["contrato_numero"] is None:
+                contrato, marca_contrato = "—", None
+            elif r["cubierto_por_contrato"]:
+                contrato, marca_contrato = r["contrato_numero"], "ok"
+            else:
+                contrato = f"{r['contrato_numero']} (no cubre)"
+                marca_contrato = "atencion"
+
+            filas.append(_fila([
+                r["insumo_nombre"],
+                INSUMO_LABEL.get(r["estado"], r["estado"]),
+                fmt_fecha(r["fecha_pedido"]), fmt_fecha(r["fecha_entrega"]),
+                f"{demora} d" if demora is not None else None,
+                fmt_fecha(r["fecha_colocacion"]),
+                r["contador_copias"], r["copias_desde_el_anterior"],
+                r["remito_proveedor"], contrato,
+            ], [
+                None, INSUMO_MARCA.get(r["estado"]), None, None,
+                "peligro" if demorado else None,
+                None, None, None, None, marca_contrato,
+            ]))
+        grupos.append(Grupo(etiqueta=etiqueta, filas=filas))
+
+    pendientes = [r for r in data if r["estado"] == "pendiente"]
+    entregas = [
+        r["dias_de_entrega"] for r in data if r.get("dias_de_entrega") is not None
+    ]
+    rendimientos = [
+        r["copias_desde_el_anterior"] for r in data
+        if r["copias_desde_el_anterior"] is not None
+    ]
+    # 🔑 El promedio de la columna es el de **lo entregado**, no el de lo que
+    # falta: es el numero con el que se discute el cumplimiento del contrato.
+    # Lo pendiente ya esta contado al lado, que es la otra mitad del reclamo.
+    #
+    # Los dos promedios salen vacios cuando no hay de que promediar, en vez de
+    # cero: un cero se lee como una medicion.
+    totales = _fila([
+        f"Total: {len(data)}",
+        f"Pendientes: {len(pendientes)}",
+        None, None,
+        f"{round(sum(entregas) / len(entregas))} d prom." if entregas else None,
+        None, None,
+        round(sum(rendimientos) / len(rendimientos)) if rendimientos else None,
+        None, None,
+    ])
+
+    return Vista("insumos", "Insumos por equipo", filtros, columnas, grupos,
+                 totales=totales)

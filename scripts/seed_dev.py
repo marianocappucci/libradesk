@@ -977,9 +977,15 @@ def _sembrar_insumos(api: Api, contar) -> None:
         contar("proveedores", True)
 
     # La máquina: es del cliente **pero de un tercero**, que es el caso que el
-    # módulo vino a modelar. Se reusa el primer equipo y se lo marca; crear uno
-    # nuevo dejaría el parque de dev con un aparato de más en cada corrida.
-    maquina = buscar(equipos, "tipo", "Fotocopiadora")
+    # módulo vino a modelar.
+    #
+    # 🔴 **Se busca por SERIAL y no por tipo.** Por tipo funcionaba mientras
+    # hubo una sola fotocopiadora; con la segunda —la del contrato de service,
+    # abajo— `buscar` empezó a devolver cualquiera de las dos según el orden del
+    # listado, y la corrida siguiente intentaba cargarle el número «4471» a la
+    # equivocada: `409`, porque ese número ya identificaba a la otra. La
+    # idempotencia tiene que mirar el campo que identifica a ESTE registro.
+    maquina = buscar(equipos, "serial", "BR-EJEMPLO-01")
     if maquina is None:
         maquina = api.post("/api/equipos", {
             "cliente_id": equipos[0]["cliente_id"], "tipo": "Fotocopiadora",
@@ -997,11 +1003,75 @@ def _sembrar_insumos(api: Api, contar) -> None:
         })
         contar("referencias_de_equipo", True)
 
-    if api.get(f"/api/insumos?equipo_id={maquina['id']}"):
-        return
-
     def hace(dias: int) -> str:
         return (HOY - timedelta(days=dias)).isoformat()
+
+    # ── El contrato que hay detrás (fase 2) ────────────────────────────
+    #
+    # Sin esto, la pantalla de Contratos de proveedor abre vacía y la columna
+    # "Contrato" de los insumos dice "—" en todas las filas, que es
+    # indistinguible de que el cruce no ande.
+    #
+    # **Dos contratos y no uno**, mismo criterio que el resto de este script:
+    # uno que cubre los insumos —el caso normal— y uno de **service**, que
+    # cubre la máquina y NO el tóner. Con uno solo, la diferencia que decide si
+    # un insumo se paga no se ve en ninguna pantalla.
+    contratos = api.get("/api/contratos-proveedor") or []
+    if not contratos:
+        alquiler = api.post("/api/contratos-proveedor", {
+            "proveedor_id": junin["id"], "cliente_id": maquina["cliente_id"],
+            "tipo": "alquiler", "numero_externo": "SJ-2211",
+            "fecha_inicio": hace(400), "fecha_fin": (HOY + timedelta(days=45)).isoformat(),
+            "incluye_insumos": True, "incluye_service": True,
+            "contacto_nombre": "Mesa de pedidos", "contacto_telefono": "2362-44-0000",
+            "observaciones": "Los tóner entran por contrato; se piden por el N° interno.",
+        })
+        api.post(f"/api/contratos-proveedor/{alquiler['id']}/equipos", {
+            "equipo_id": maquina["id"], "fecha_alta": hace(400),
+        })
+        contar("contratos_de_proveedor", True)
+
+        # El de service, sobre OTRA fotocopiadora del mismo cliente: cubrir dos
+        # contratos la misma máquina lo rechaza el backend, y con razón. Se
+        # crea si no hay: colgarlo del primer equipo que aparezca dejaba el
+        # tóner cargado contra un access point, que es un dato de ejemplo que
+        # confunde a quien revisa la pantalla.
+        del_cliente = api.get(f"/api/equipos?cliente_id={maquina['cliente_id']}") or []
+        otra = buscar(del_cliente, "serial", "BR-EJEMPLO-02")
+        if otra is None:
+            otra = api.post("/api/equipos", {
+                "cliente_id": maquina["cliente_id"], "tipo": "Fotocopiadora",
+                "marca": "Brother", "modelo": "DCP-L2540", "serial": "BR-EJEMPLO-02",
+                "sector": "Recepción", "proveedor_id": junin["id"],
+            })
+            contar("equipos", True)
+        if otra is not None:
+            service = api.post("/api/contratos-proveedor", {
+                "proveedor_id": junin["id"], "cliente_id": maquina["cliente_id"],
+                "tipo": "service", "fecha_inicio": hace(200),
+                "incluye_insumos": False, "incluye_service": True,
+                "observaciones": "Sólo mantenimiento: los insumos los paga el cliente.",
+            })
+            api.post(f"/api/contratos-proveedor/{service['id']}/equipos", {
+                "equipo_id": otra["id"], "fecha_alta": hace(200),
+            })
+            contar("contratos_de_proveedor", True)
+
+            # Y un insumo sobre ESA máquina, que es lo único que hace visible
+            # el caso "hay contrato y NO cubre": sin esta fila, la columna
+            # Contrato muestra siempre el caso feliz y la distinción que decide
+            # si un tóner se paga no se puede revisar en ninguna pantalla.
+            api.post("/api/insumos", {
+                "equipo_id": otra["id"], "insumo_item_id": toner["id"],
+                "fecha_pedido": hace(30), "fecha_entrega": hace(28),
+                "fecha_colocacion": hace(27), "contador_copias": 4200,
+                "remito_proveedor": "R-0099",
+                "observaciones": "Fuera de contrato: el de service no cubre insumos.",
+            })
+            contar("insumos", True)
+
+    if api.get(f"/api/insumos?equipo_id={maquina['id']}"):
+        return
 
     # Los dos colocados, en orden: el segundo es el que muestra el rendimiento
     # del primero (17.400 − 10.000 = 7.400 copias).

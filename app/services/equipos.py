@@ -583,7 +583,13 @@ class EquipoRepository:
         comprobante de ingreso. Y es el caso que a esta lista se le escapo dos
         veces —las reparaciones y los ingresos llegaron despues del metodo y
         nadie volvio a mirarlo—, asi que la tabla nueva entra el mismo dia.
+
+        **Y la cobertura de un contrato de proveedor tambien** (fase 2, mismo
+        dia): que el contrato haya cubierto esta maquina entre marzo y agosto es
+        parte de la historia del CONTRATO, no del equipo, asi que borrarla con
+        el equipo dejaria al contrato afirmando algo distinto de lo que paso.
         """
+        from .contratos_proveedor import ContratoProveedorEquipo
         from .ingresos import IngresoReparacion
         from .insumos import EquipoInsumo
         from .reparaciones import Reparacion
@@ -601,6 +607,10 @@ class EquipoRepository:
                 "insumos": session.execute(
                     select(func.count()).select_from(EquipoInsumo)
                     .where(EquipoInsumo.equipo_id == equipo_id)
+                ).scalar_one(),
+                "coberturas_de_contrato": session.execute(
+                    select(func.count()).select_from(ContratoProveedorEquipo)
+                    .where(ContratoProveedorEquipo.equipo_id == equipo_id)
                 ).scalar_one(),
             }
 

@@ -111,6 +111,13 @@ export type Insumo = {
   // Lo que rindió el insumo ANTERIOR de la misma clase en este equipo. Null
   // cuando no hay anterior o cuando el contador retrocedió (placa cambiada).
   copias_desde_el_anterior: number | null
+  // El contrato de proveedor que cubría el equipo en la fecha de esta fila
+  // (fase 2). Se resuelve al leer: la fila no lo guarda.
+  contrato_numero: string | null
+  // 🔑 **Tener contrato no es estar cubierto.** Uno de service cubre la máquina
+  // y no los insumos, así que ese tóner se paga igual — que es justamente el
+  // caso en el que hay que discutir una factura.
+  cubierto_por_contrato: boolean
   incidencia_id: number | null
   usuario: string
   observaciones: string | null
@@ -123,6 +130,73 @@ export const INSUMO_LABELS: Record<EstadoInsumo, string> = {
   pendiente: 'Pedido',
   en_poder: 'En el cliente',
   colocado: 'Colocado',
+}
+
+// --- contratos con el proveedor (fase 2) -----------------------------------
+//
+// El papel que hay detrás del insumo que llega gratis: entre el CLIENTE y un
+// tercero, no entre el cliente y nosotros. Por eso es otra entidad que
+// `Contrato` —aquél es lo que nosotros le alquilamos al cliente, con su precio
+// y sus cuotas— y por eso acá no hay una sola columna de plata.
+
+export type ContratoProveedor = {
+  id: number
+  // `CPR-00000001`, correlativo propio.
+  numero: string
+  proveedor_id: number
+  proveedor_nombre: string | null
+  cliente_id: number
+  cliente_nombre: string | null
+  tipo: TipoContratoProveedor
+  // El número que le da EL PROVEEDOR al contrato: el que hay que citarle.
+  numero_externo: string | null
+  fecha_inicio: string | null
+  // Null = sin vencimiento pactado, que no es lo mismo que vencido.
+  fecha_fin: string | null
+  renovacion_automatica: boolean
+  // Lo que el contrato obliga. Separados porque el mismo papel suele cubrir las
+  // dos cosas, y tenerlos aparte es lo que permite saber cuál te incumplen.
+  incluye_insumos: boolean
+  incluye_service: boolean
+  contacto_nombre: string | null
+  contacto_telefono: string | null
+  contacto_email: string | null
+  observaciones: string | null
+  // Derivados de las fechas, nunca almacenados.
+  vigente: boolean
+  dias_para_vencer: number | null
+  equipos_vigentes: number
+  created_at: string | null
+}
+
+export type ContratoProveedorFicha = ContratoProveedor & {
+  equipos: CoberturaDeContrato[]
+}
+
+export type CoberturaDeContrato = {
+  id: number
+  contrato_proveedor_id: number
+  equipo_id: number
+  equipo_descripcion: string | null
+  equipo_serial: string | null
+  equipo_sector: string | null
+  // El número con el que el proveedor llama a esa máquina.
+  referencias: ReferenciaEquipo[]
+  fecha_alta: string | null
+  // Null = el contrato la sigue cubriendo.
+  fecha_baja: string | null
+  vigente: boolean
+  observaciones: string | null
+}
+
+export type TipoContratoProveedor =
+  | 'alquiler' | 'comodato' | 'service' | 'mantenimiento'
+
+export const TIPO_CONTRATO_PROVEEDOR_LABELS: Record<TipoContratoProveedor, string> = {
+  alquiler: 'Alquiler',
+  comodato: 'Comodato',
+  service: 'Service',
+  mantenimiento: 'Mantenimiento',
 }
 
 export const INSUMO_TONO: Record<EstadoInsumo, TonoEstado> = {
