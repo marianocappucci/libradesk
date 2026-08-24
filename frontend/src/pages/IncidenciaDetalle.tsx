@@ -37,6 +37,7 @@ import {
 import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { hoyISO } from 'libra-ui/fechas'
 
 const NONE = '__none__'
 
@@ -359,7 +360,7 @@ export function IncidenciaDetalle() {
     : abiertas.find((r) => r.equipo_id === Number(reemplazo.sustituto))
 
   function abrirReemplazo() {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyISO()
     setReemplazo({
       // Por defecto se retira el equipo del ticket, que es el caso normal.
       retirado: incidencia?.equipo_id ? String(incidencia.equipo_id) : NONE,

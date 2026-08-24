@@ -22,6 +22,7 @@ import {
 import { FilePenLine as FileSignature } from 'lucide-react'
 import { ArrowLeft } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { hoyISO } from 'libra-ui/fechas'
 
 const contratoSchema = z.object({
   tipo_contrato: z.string().min(1),
@@ -48,7 +49,6 @@ const contratoSchema = z.object({
 
 type ContratoFormValues = z.infer<typeof contratoSchema>
 
-const HOY = () => new Date().toISOString().slice(0, 10)
 
 /** El `id` del `<form>`, para que el botón del encabezado —que vive fuera— lo
  *  pueda enviar con `form={ID_FORM}`. */
@@ -77,7 +77,7 @@ export function ContratoNuevo() {
     resolver: zodResolver(contratoSchema),
     defaultValues: {
       tipo_contrato: 'alquiler', cliente_id: '',
-      fecha_inicio: HOY(), fecha_fin: '',
+      fecha_inicio: hoyISO(), fecha_fin: '',
       estado: 'borrador', periodicidad: 'mensual',
       frecuencia_visita: 'ninguna', primera_visita: '',
       metodo_actualizacion: 'manual',

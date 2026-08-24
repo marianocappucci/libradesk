@@ -20,6 +20,7 @@ import { MapPin, Monitor, Users } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { primerDiaDelMesISO, sumarDiasISO } from 'libra-ui/fechas'
 
 function formatFecha(valor: string | null): string {
   // La guarda de "fecha sola vs. fecha con hora" vive en `lib/format`: la tenian
@@ -36,25 +37,17 @@ function textoGarantia(dias: number): string {
   return `vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
 }
 
-/** `YYYY-MM-DD` en hora **local**. `toISOString()` no sirve: pasa a UTC y en
- *  Argentina (UTC-3) el primer día del mes se convierte en el último del mes
- *  anterior — el mismo desfasaje que ya obliga a armar las fechas a mano en
- *  `formatFecha`, arriba. */
-function iso(d: Date): string {
-  const mes = String(d.getMonth() + 1).padStart(2, '0')
-  const dia = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mes}-${dia}`
-}
-
 /** El mes anterior completo, que es el período que se informa: un informe se
- *  emite cuando el mes ya cerró. `new Date(a, m, 0)` da el último día del mes
- *  `m-1`, incluidos los febreros bisiestos. */
+ *  emite cuando el mes ya cerró.
+ *
+ *  Se calcula sobre el `aaaa-mm-dd` y no construyendo `Date`s locales: el día
+ *  anterior al primero de este mes es el último del anterior, y de ahí sale el
+ *  mes sin tener que preguntarle a nadie cuántos días tiene —los febreros
+ *  bisiestos incluidos—. El helper local que hacía esto leía el mes de la zona
+ *  del navegador, así que el 31 a la noche informaba el mes equivocado. */
 function mesAnterior(): { desde: string; hasta: string } {
-  const hoy = new Date()
-  return {
-    desde: iso(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)),
-    hasta: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 0)),
-  }
+  const hasta = sumarDiasISO(primerDiaDelMesISO(), -1)
+  return { desde: `${hasta.slice(0, 7)}-01`, hasta }
 }
 
 /** Descarga del informe de servicio del cliente.

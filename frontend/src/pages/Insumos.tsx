@@ -45,7 +45,8 @@ import {
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Droplets } from 'lucide-react'
-import { fecha, hoyISO } from '@/lib/format'
+import { fecha } from '@/lib/format'
+import { hoyISO } from 'libra-ui/fechas'
 // `FilePlus` y no `Plus`: es el alta de un registro, que es lo que ese dibujo
 // significa en el vocabulario (`components/iconos-accion.tsx`).
 import { FilePlus, PackageCheck } from '@/components/iconos-accion'
