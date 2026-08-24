@@ -529,6 +529,77 @@ describe('Agenda — el filtro de cuadrilla', () => {
   })
 })
 
+// --- la instancia sin cuadrillas -------------------------------------------
+//
+// La agenda es core del producto: no la gatea ningún módulo, así que aparece en
+// el menú de TODA instancia, incluida la que nunca cargó una cuadrilla porque no
+// despacha a nadie. Hasta el 2026-08-24 esa instancia veía «Cargando…» para
+// siempre: el catálogo vacío y el catálogo en vuelo son los dos
+// `equipos.length === 0`, y la pantalla resolvía el empate a favor del cartel de
+// carga. Lo reportó el humano contra `compulibra.libradesk.com.ar`, que tiene
+// cero filas en `equipos_trabajo` contra dos en cada una de las otras dos
+// instancias. Ningún test cubría el catálogo vacío: por eso salió.
+
+describe('Agenda — la instancia sin cuadrillas', () => {
+  it('con el catálogo vacío dice que no hay cuadrillas, y deja de decir "Cargando"', async () => {
+    stub([], [])
+    renderAgenda(`?vista=semana&dia=${MARTES}`)
+
+    expect(await screen.findByText(/Todavía no hay cuadrillas cargadas/)).toBeInTheDocument()
+    // La mitad que importa. Sin este assert el test pasaría con el defecto
+    // puesto: el texto nuevo podría convivir con el cartel de carga.
+    expect(screen.queryByText('Cargando…')).not.toBeInTheDocument()
+    // Y manda a donde se resuelve, que es otra pantalla.
+    expect(screen.getByRole('link', { name: /Equipos y flota/ }))
+      .toHaveAttribute('href', '/equipos-trabajo')
+  })
+
+  it('mientras el catálogo está en vuelo sigue diciendo "Cargando"', async () => {
+    // El control positivo del test de arriba: sin él, "no dice Cargando" se
+    // cumpliría también borrando el estado de carga — que es el defecto
+    // opuesto, un parpadeo de "no hay cuadrillas" en toda instancia que sí las
+    // tiene.
+    let responder: (v: Response) => void = () => {}
+    const enVuelo = new Promise<Response>((r) => { responder = r })
+    vi.stubGlobal('fetch', vi.fn((url: string) => (
+      String(url).includes('/api/equipos-trabajo') ? enVuelo : Promise.resolve(json([]))
+    )))
+
+    renderAgenda(`?vista=semana&dia=${MARTES}`)
+    expect(await screen.findByText('Cargando…')).toBeInTheDocument()
+
+    responder(json([NORTE]))
+    await waitFor(() => expect(screen.queryByText('Cargando…')).not.toBeInTheDocument())
+  })
+
+  it('con todas las cuadrillas dadas de baja el cartel es el otro', async () => {
+    // Dos vacíos distintos, y no dan la misma instrucción: el primero se
+    // arregla creando una cuadrilla, el segundo reactivando la que hay.
+    stub([], [DE_BAJA])
+    renderAgenda(`?vista=semana&dia=${MARTES}`)
+
+    expect(await screen.findByText('No hay equipos activos para agendar.')).toBeInTheDocument()
+    expect(screen.queryByText(/Todavía no hay cuadrillas cargadas/)).not.toBeInTheDocument()
+  })
+
+  it('si el catálogo falla se ve el error y no un "no hay cuadrillas" inventado', async () => {
+    // Con la API caída la pantalla no sabe cuántas cuadrillas hay: afirmar que
+    // no hay ninguna es afirmar sobre el dato que justamente no llegó.
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(
+      String(url).includes('/api/equipos-trabajo')
+        ? new Response(JSON.stringify({ detail: 'La base no responde.' }), {
+          status: 500, headers: { 'content-type': 'application/json' },
+        })
+        : json([]),
+    )))
+
+    renderAgenda(`?vista=semana&dia=${MARTES}`)
+    expect(await screen.findByText('La base no responde.')).toBeInTheDocument()
+    expect(screen.queryByText('Cargando…')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Todavía no hay cuadrillas cargadas/)).not.toBeInTheDocument()
+  })
+})
+
 // --- la fecha en el ticket -------------------------------------------------
 
 const INCIDENCIA = {
