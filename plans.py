@@ -85,6 +85,19 @@ _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 # - `cuenta_corriente`: saldo por cliente, y las listas de precios, que viajan
 #   en el mismo router.
 #
+# `insumos` (2026-08-24) es el consumo del parque del cliente: qué tóner le
+# entró a cada máquina, quién se lo entregó y con qué contador se puso. Se gatea
+# con el mismo criterio que los anteriores —una mesa de ayuda que sólo
+# diagnostica no lleva el consumo de nadie— y tiene con `stock` la misma
+# relación que `compras`: **elegir el insumo se hace contra el catálogo**, así
+# que quien contrata `insumos` tiene `stock`, y lo garantiza este archivo.
+#
+# 🔑 **Lo que NO implica es `alquileres`**, y vale la pena dejarlo escrito
+# porque los dos hablan de equipos alquilados. Acá el equipo se lo alquila un
+# TERCERO al cliente y nosotros atendemos el parque; en `alquileres` el equipo
+# es nuestro y se lo entregamos al cliente. Son las dos direcciones de la misma
+# relación, y ninguna necesita a la otra.
+#
 # Las **sucursales** no están acá a propósito: no se gatean. Son estructura de
 # la empresa, como los sectores y las categorías.
 #
@@ -102,7 +115,7 @@ _ESTANDAR = _BASICO | {"dashboard", "reportes"}
 # menú** si nadie las apaga antes. Se decide antes del deploy, no después.
 _PREMIUM = _ESTANDAR | {
     "remitos", "presupuestos", "alquileres", "facturacion_externa", "stock",
-    "compras", "ventas", "cuenta_corriente",
+    "compras", "ventas", "cuenta_corriente", "insumos",
 }
 
 PLAN_MODULOS = {

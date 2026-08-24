@@ -70,6 +70,7 @@ from .services import facturacion_config as _facturacion_config  # noqa: F401
 from .services import facturacion_externa as _facturacion_externa  # noqa: F401
 from .services import incidencias as _incidencias  # noqa: F401
 from .services import ingresos as _ingresos  # noqa: F401
+from .services import insumos as _insumos  # noqa: F401
 from .services import modules as _modules  # noqa: F401
 from .services import proveedores as _proveedores  # noqa: F401
 from .services import reparaciones as _reparaciones  # noqa: F401

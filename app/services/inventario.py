@@ -212,6 +212,28 @@ def listar_items(solo_activos: bool = True,
         ]
 
 
+def item(item_id: int) -> dict | None:
+    """Un item del catálogo por id, o `None` si no existe.
+
+    Existe para que un módulo que **referencia** un consumible sin moverlo de
+    depósito —hoy `services/insumos.py`— pueda validar que el item existe y
+    copiarse el nombre, sin abrir la conexión del motor ni conocer
+    `SqliteCommerceRepository`.
+
+    No devuelve stock a propósito: quien referencia un consumible no lo está
+    descontando de acá, y sumar el total costaría la consulta agregada de
+    `listar_items()` para un dato que ese llamador no mira.
+    """
+    with libracore_core.get_connection() as conn:
+        it = _repo(conn).get_catalog_item(item_id)
+        if it is None:
+            return None
+        return {
+            "id": it.id, "nombre": it.name, "activo": it.active,
+            "unidad": it.unit.code, "descripcion": it.description,
+        }
+
+
 # ── La alícuota de IVA de un producto ───────────────────────────────────────
 #
 # Vive en `catalog_items.tax_profile`, que es **la columna del motor** para

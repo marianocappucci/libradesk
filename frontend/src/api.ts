@@ -49,9 +49,89 @@ export type Equipo = {
   deposito_id: number | null
   deposito_nombre: string | null
   estado: string
+  // De quién es el equipo cuando NO es del cliente: el tercero que se lo
+  // alquila o se lo dio en comodato, y que suele proveerle los insumos.
+  // Null = es del cliente, que es el caso normal del parque.
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  // Cómo lo llaman los demás: el número que el proveedor pide por teléfono
+  // para despachar un tóner, y el patrimonial del cliente. Viajan con el
+  // equipo porque son parte de su identidad, no un detalle detrás de un click.
+  referencias: ReferenciaEquipo[]
   fecha_adicion: string | null
   garantia_vence: string | null
   observaciones: string | null
+}
+
+export type ReferenciaEquipo = {
+  id: number
+  equipo_id: number
+  // Null = es el número del propio cliente (patrimonial, inventario interno).
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  // "N° interno", "Patrimonial", "N° de contrato".
+  etiqueta: string
+  valor: string
+}
+
+// --- insumos por equipo ----------------------------------------------------
+//
+// Lo que consume el parque del cliente: el tóner que le entra a cada máquina,
+// quién se lo entregó y con qué contador se puso. **No es stock**: en el caso
+// que motivó el módulo el insumo lo pone el tercero dueño de las máquinas y no
+// sale de ningún depósito nuestro — para eso están los materiales del ticket.
+
+export type Insumo = {
+  id: number
+  equipo_id: number
+  equipo_descripcion: string | null
+  equipo_serial: string | null
+  cliente_id: number | null
+  // `catalog_items.id`: el item del catálogo de consumibles. Es lo que
+  // identifica QUÉ tóner — una máquina color lleva cuatro items distintos.
+  insumo_item_id: number
+  // Copia del nombre al momento de usarlo. Renombrar el producto no reescribe
+  // lo que dice un cambio de marzo.
+  insumo_nombre: string
+  // Quién lo entrega. Null = lo puso el propio cliente.
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  fecha_pedido: string | null
+  fecha_entrega: string | null
+  fecha_colocacion: string | null
+  // Derivado de las tres fechas, nunca almacenado: no hay columna `estado` que
+  // pueda contradecirlas.
+  estado: EstadoInsumo
+  // Días desde el pedido, si todavía no llegó. Es la columna que ordena el
+  // reclamo.
+  dias_esperando: number | null
+  remito_proveedor: string | null
+  // La lectura del display al colocarlo.
+  contador_copias: number | null
+  // Lo que rindió el insumo ANTERIOR de la misma clase en este equipo. Null
+  // cuando no hay anterior o cuando el contador retrocedió (placa cambiada).
+  copias_desde_el_anterior: number | null
+  incidencia_id: number | null
+  usuario: string
+  observaciones: string | null
+  created_at: string | null
+}
+
+export type EstadoInsumo = 'pendiente' | 'en_poder' | 'colocado'
+
+export const INSUMO_LABELS: Record<EstadoInsumo, string> = {
+  pendiente: 'Pedido',
+  en_poder: 'En el cliente',
+  colocado: 'Colocado',
+}
+
+export const INSUMO_TONO: Record<EstadoInsumo, TonoEstado> = {
+  // Lo único que pide una acción de nuestro lado es lo que no llegó: hay que
+  // reclamarlo. Lo que está en el armario del cliente está en curso y lo
+  // colocado ya terminó su ciclo.
+  pendiente: 'atencion',
+  en_poder: 'curso',
+  colocado: 'ok',
 }
 
 // --- depósitos -------------------------------------------------------------

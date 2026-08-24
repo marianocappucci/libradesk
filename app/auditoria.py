@@ -32,6 +32,15 @@ AUDITABLES: dict[str, str] = {
     "Reparacion": "reparacion",
     "EquipoTrabajo": "equipo_trabajo",
     "Vehiculo": "vehiculo",
+    # El numero con el que un tercero llama al equipo (2026-08-24). Se audita
+    # por lo mismo que el `Contrato`: es un dato chico, se carga y se corrige a
+    # mano, y de el depende algo caro — con el numero equivocado el proveedor
+    # despacha el insumo para otra maquina.
+    #
+    # `EquipoInsumo` NO entra, y por el criterio de mas abajo: es historial y la
+    # ficha del equipo ya lo muestra, asi que auditarlo pondria el mismo hecho
+    # dos veces en la misma pantalla.
+    "EquipoReferencia": "referencia_de_equipo",
 }
 
 # 🔴 Aca vivia `"Servicio": "servicio"`, con el comentario "el precio de lista de

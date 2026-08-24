@@ -17,8 +17,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, ForeignKey, String, Text, delete, func,
-    select, update,
+    CheckConstraint, Date, DateTime, ForeignKey, String, Text, UniqueConstraint,
+    delete, func, select, update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -50,6 +50,22 @@ class Equipo(Base):
         ForeignKey("depositos.id"), index=True,
     )
     estado: Mapped[str] = mapped_column(String(50), nullable=False, default="activo")
+    # De quien es el equipo cuando NO es del cliente: el tercero que se lo
+    # alquila o se lo dio en comodato y que, en general, le provee los insumos
+    # (`services/insumos.py` hereda de aca el proveedor de cada toner).
+    # **NULL = es del cliente**, que es el caso normal del parque.
+    #
+    # No hay columna `propiedad` al lado, por lo mismo que `activos` no guarda
+    # la modalidad del contrato: seria la misma verdad escrita dos veces, y el
+    # dia que discrepen no hay forma de saber cual miente.
+    #
+    # Reusa `proveedores`, que hasta hoy solo nombraba al service. Es la misma
+    # empresa del mundo real —Sistemas Junin alquila las fotocopiadoras Y
+    # entrega los toner—, asi que una tabla `terceros` paralela seria el mismo
+    # catalogo cargado dos veces, con "Compu Service" y "compuservice" otra vez.
+    proveedor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("proveedores.id"), index=True,
+    )
     fecha_adicion: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     garantia_vence: Mapped[date | None] = mapped_column(Date)
     observaciones: Mapped[str | None] = mapped_column(Text)
@@ -113,7 +129,108 @@ class EquipoMovimiento(Base):
     )
 
 
-def _to_dict(e: Equipo, deposito_nombre: str | None = None) -> dict:
+class EquipoReferencia(Base):
+    """Como llama OTRO a este equipo.
+
+    El caso que la motiva: el cliente le alquila fotocopiadoras a un tercero, y
+    para pedirle un toner hay que darle **el numero interno de ese tercero**. Ese
+    numero no es el serial —el serial esta en la etiqueta del fabricante— ni el
+    patrimonial del cliente: son tres identificadores distintos para la misma
+    maquina, y hasta hoy el equipo tenia lugar para uno solo.
+
+    **Por que una tabla y no una columna `codigo_interno`**, como la que si tiene
+    `activos`: una columna alcanza para el primer tercero y se rompe con el
+    segundo, o con el numero patrimonial del cliente, que llega siempre. La tabla
+    cuesta lo mismo y contesta las dos direcciones —*"que numero le paso a Junin
+    por esta maquina"* y *"me dicen 4471, cual es"*—, que es lo unico que se le
+    pide a un identificador ajeno.
+
+    (En `activos` la columna se queda donde esta: ahi el codigo es **nuestro**,
+    el que va en la etiqueta que ponemos nosotros. Si algun dia un tercero le
+    pone nombre a un activo propio, esta tabla se hace polimorfica con el mismo
+    XOR que ya usan `equipos_movimientos` y `equipos_reparaciones`.)
+
+    **`UNIQUE (proveedor_id, valor)`** es la constraint que evita el error que
+    justifica todo esto: dos maquinas con el mismo numero del mismo proveedor es
+    como llega el toner equivocado. Con `proveedor_id` NULL —el numero del propio
+    cliente— la base **no** garantiza nada, porque dos clientes distintos pueden
+    repetir el patrimonial sin que eso sea un error; esa unicidad la valida el
+    repositorio contra el cliente del equipo, que es el alcance en que el numero
+    significa algo.
+    """
+
+    __tablename__ = "equipos_referencias"
+    __table_args__ = (
+        UniqueConstraint("proveedor_id", "valor", name="uq_referencia_proveedor_valor"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    equipo_id: Mapped[int] = mapped_column(
+        ForeignKey("equipos.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    # NULL = es el numero del propio cliente (patrimonial, inventario interno).
+    proveedor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("proveedores.id"), index=True,
+    )
+    # Como se lo llama: "N° interno", "Patrimonial", "N° de contrato".
+    etiqueta: Mapped[str] = mapped_column(String(100), nullable=False)
+    valor: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+def _ref_to_dict(r: EquipoReferencia, proveedor_nombre: str | None = None) -> dict:
+    return {
+        "id": r.id,
+        "equipo_id": r.equipo_id,
+        "proveedor_id": r.proveedor_id,
+        "proveedor_nombre": proveedor_nombre,
+        "etiqueta": r.etiqueta,
+        "valor": r.valor,
+    }
+
+
+def _extras(session, equipos: list[Equipo]) -> tuple[dict[int, str], dict[int, list[dict]]]:
+    """El nombre del proveedor dueño y las referencias de cada equipo.
+
+    **Dos consultas para toda la lista**, no dos por equipo: un parque de 200
+    maquinas es exactamente donde el N+1 hace que la pantalla no abra, y es el
+    mismo criterio con el que `_nombres_depositos` resuelve el deposito.
+    """
+    from .proveedores import Proveedor
+
+    if not equipos:
+        return {}, {}
+
+    ids = [e.id for e in equipos]
+    referencias = list(session.execute(
+        select(EquipoReferencia)
+        .where(EquipoReferencia.equipo_id.in_(ids))
+        .order_by(EquipoReferencia.id)
+    ).scalars())
+
+    proveedor_ids = {e.proveedor_id for e in equipos if e.proveedor_id is not None}
+    proveedor_ids |= {r.proveedor_id for r in referencias if r.proveedor_id is not None}
+    nombres: dict[int, str] = {}
+    if proveedor_ids:
+        nombres = {
+            p_id: nombre
+            for p_id, nombre in session.execute(
+                select(Proveedor.id, Proveedor.nombre)
+                .where(Proveedor.id.in_(proveedor_ids))
+            ).all()
+        }
+
+    por_equipo: dict[int, list[dict]] = {}
+    for r in referencias:
+        por_equipo.setdefault(r.equipo_id, []).append(
+            _ref_to_dict(r, nombres.get(r.proveedor_id))
+        )
+    return nombres, por_equipo
+
+
+def _to_dict(e: Equipo, deposito_nombre: str | None = None,
+             proveedor_nombre: str | None = None,
+             referencias: list[dict] | None = None) -> dict:
     return {
         "id": e.id,
         "cliente_id": e.cliente_id,
@@ -128,6 +245,15 @@ def _to_dict(e: Equipo, deposito_nombre: str | None = None) -> dict:
         # depositos solo para escribir donde esta el equipo.
         "deposito_nombre": deposito_nombre,
         "estado": e.estado,
+        # De quien es, si no es del cliente. Resuelto acá para que la lista no
+        # cruce `/api/proveedores` sólo para escribir "es de Sistemas Junín".
+        "proveedor_id": e.proveedor_id,
+        "proveedor_nombre": proveedor_nombre,
+        # Cómo lo llaman los demás — ver `EquipoReferencia`. Viaja con el equipo
+        # y no por un endpoint aparte porque es lo primero que se busca cuando
+        # hay que pedir un insumo: una segunda llamada por fila lo escondería
+        # detrás de un click.
+        "referencias": referencias if referencias is not None else [],
         "fecha_adicion": e.fecha_adicion.isoformat() if e.fecha_adicion else None,
         "garantia_vence": e.garantia_vence.isoformat() if e.garantia_vence else None,
         "observaciones": e.observaciones,
@@ -301,26 +427,63 @@ class EquipoRepository:
             ))
             session.commit()
             session.refresh(e)
-            return _to_dict(e, deposito)
+            return self._resolver(session, e, deposito)
+
+    def _resolver(self, session, e: Equipo, deposito_nombre: str | None) -> dict:
+        """El dict de UN equipo con el proveedor y las referencias resueltos.
+
+        Existe para que las cinco vias que devuelven un equipo —alta, listado,
+        ficha, edicion y el movimiento entre depositos— den exactamente el mismo
+        JSON. Cuando cada una armaba el suyo, agregar un campo dejaba tres
+        contestando lo viejo, que es como la UI termina creyendo que un equipo
+        se quedo sin referencias despues de editarlo.
+        """
+        nombres, referencias = _extras(session, [e])
+        return _to_dict(
+            e, deposito_nombre, nombres.get(e.proveedor_id), referencias.get(e.id, []),
+        )
 
     def list(self, cliente_id: int | None = None,
-             deposito_id: int | None = None) -> list[dict]:
+             deposito_id: int | None = None,
+             referencia: str | None = None) -> list[dict]:
+        """`referencia` busca por el numero con el que **otro** llama al equipo
+        — ver `EquipoReferencia`.
+
+        Coincidencia exacta (sin distinguir mayusculas ni espacios al borde) y
+        no parcial: el numero llega dicho por telefono y entero, y un `contains`
+        sobre "44" devolveria media flota. La busqueda por texto libre sobre lo
+        que ya esta en pantalla la hace la tabla del frontend.
+        """
         with self.session_factory() as session:
             stmt = select(Equipo).order_by(Equipo.tipo)
             if cliente_id is not None:
                 stmt = stmt.where(Equipo.cliente_id == cliente_id)
             if deposito_id is not None:
                 stmt = stmt.where(Equipo.deposito_id == deposito_id)
+            if referencia is not None:
+                stmt = stmt.where(Equipo.id.in_(
+                    select(EquipoReferencia.equipo_id).where(
+                        func.lower(EquipoReferencia.valor) == referencia.strip().lower()
+                    )
+                ))
             equipos = list(session.execute(stmt).scalars())
-            nombres = _nombres_depositos(session, (e.deposito_id for e in equipos))
-            return [_to_dict(e, nombres.get(e.deposito_id)) for e in equipos]
+            depositos = _nombres_depositos(session, (e.deposito_id for e in equipos))
+            nombres, referencias = _extras(session, equipos)
+            return [
+                _to_dict(
+                    e, depositos.get(e.deposito_id), nombres.get(e.proveedor_id),
+                    referencias.get(e.id, []),
+                )
+                for e in equipos
+            ]
 
     def get(self, equipo_id: int) -> dict | None:
         with self.session_factory() as session:
             e = session.get(Equipo, equipo_id)
             if e is None:
                 return None
-            return _to_dict(e, _nombres_depositos(session, [e.deposito_id]).get(e.deposito_id))
+            deposito = _nombres_depositos(session, [e.deposito_id]).get(e.deposito_id)
+            return self._resolver(session, e, deposito)
 
     def update(self, equipo_id: int, usuario_actor: str | None = None,
                motivo: str | None = None, incidencia_id: int | None = None,
@@ -355,7 +518,7 @@ class EquipoRepository:
 
             session.commit()
             session.refresh(e)
-            return _to_dict(e, deposito_actual)
+            return self._resolver(session, e, deposito_actual)
 
     def mover_a_deposito(self, equipo_ids: list[int], deposito_id: int | None,
                          usuario_actor: str | None = None,
@@ -397,7 +560,7 @@ class EquipoRepository:
                     motivo=motivo,
                 ):
                     session.add(movimiento)
-                movidos.append(_to_dict(e, actual))
+                movidos.append(self._resolver(session, e, actual))
 
             session.commit()
             return movidos
@@ -412,8 +575,17 @@ class EquipoRepository:
 
         No entran aca los movimientos ni las incidencias: esos son
         asignaciones e historial *del equipo*, y `delete()` los resuelve.
+        Tampoco las referencias: un numero ajeno **es** un nombre del equipo y
+        no sobrevive a que el equipo deje de existir.
+
+        🔴 **Los insumos si entran** (2026-08-24). Cada fila dice que un
+        proveedor entrego algo un dia, con su remito: es un papel, igual que un
+        comprobante de ingreso. Y es el caso que a esta lista se le escapo dos
+        veces —las reparaciones y los ingresos llegaron despues del metodo y
+        nadie volvio a mirarlo—, asi que la tabla nueva entra el mismo dia.
         """
         from .ingresos import IngresoReparacion
+        from .insumos import EquipoInsumo
         from .reparaciones import Reparacion
 
         with self.session_factory() as session:
@@ -425,6 +597,10 @@ class EquipoRepository:
                 "reparaciones": session.execute(
                     select(func.count()).select_from(Reparacion)
                     .where(Reparacion.equipo_id == equipo_id)
+                ).scalar_one(),
+                "insumos": session.execute(
+                    select(func.count()).select_from(EquipoInsumo)
+                    .where(EquipoInsumo.equipo_id == equipo_id)
                 ).scalar_one(),
             }
 
@@ -443,7 +619,8 @@ class EquipoRepository:
         (ver `IncidenciaRepository.delete`, donde solo pierden el link):
         son el historial *del equipo*, y sin el equipo no describen nada.
 
-        🔴 **Y se niega si hay comprobantes o reparaciones** (2026-08-09).
+        🔴 **Y se niega si hay comprobantes, reparaciones o insumos**
+        (2026-08-09, los insumos desde el 2026-08-24).
         Faltaba: esas dos tablas llegaron despues de este metodo y nadie
         volvio a mirarlo, asi que el DELETE pasaba y las dejaba apuntando a un
         id inexistente. Contra PostgreSQL las dos FK rechazan el borrado, que
@@ -470,7 +647,113 @@ class EquipoRepository:
             session.execute(
                 delete(EquipoMovimiento).where(EquipoMovimiento.equipo_id == equipo_id)
             )
+            # Mismo motivo que los movimientos, y misma razon para escribirlo a
+            # mano: el `ondelete="CASCADE"` declarado en `EquipoReferencia` no
+            # se ejecuta nunca con el pragma de FKs apagado, y una referencia
+            # huerfana es peor que un movimiento huerfano — sostiene un UNIQUE
+            # que despues rechaza cargar ese mismo numero en el equipo nuevo.
+            session.execute(
+                delete(EquipoReferencia).where(EquipoReferencia.equipo_id == equipo_id)
+            )
             session.delete(e)
+            session.commit()
+
+    # ── Referencias: como llaman los demas a este equipo ─────────────────
+
+    def list_referencias(self, equipo_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            e = session.get(Equipo, equipo_id)
+            if e is None:
+                raise KeyError(equipo_id)
+            _, referencias = _extras(session, [e])
+            return referencias.get(equipo_id, [])
+
+    def crear_referencia(self, equipo_id: int, *, etiqueta: str, valor: str,
+                         proveedor_id: int | None = None) -> dict:
+        """Le agrega al equipo un identificador ajeno.
+
+        El duplicado se detecta **acá y no en el `IntegrityError`** por lo mismo
+        que en las reparaciones: la constraint da un 500 sin decir con qué
+        chocó, y acá lo que hace falta es justamente eso — cuál es el otro
+        equipo que ya tiene ese número.
+        """
+        from .proveedores import Proveedor
+
+        etiqueta = (etiqueta or "").strip()
+        valor = (valor or "").strip()
+        if not etiqueta:
+            raise ValueError("la referencia necesita una etiqueta (ej. «N° interno»)")
+        if not valor:
+            raise ValueError("la referencia necesita un valor")
+
+        with self.session_factory() as session:
+            e = session.get(Equipo, equipo_id)
+            if e is None:
+                raise KeyError(("equipo", equipo_id))
+            if proveedor_id is not None and session.get(Proveedor, proveedor_id) is None:
+                raise KeyError(("proveedor", proveedor_id))
+
+            duplicado = self._duplicado(session, e, proveedor_id, valor)
+            if duplicado is not None:
+                raise ValueError(
+                    f"«{valor}» ya identifica al equipo #{duplicado.equipo_id} "
+                    "para ese mismo destinatario: dos equipos con el mismo "
+                    "número es como llega el insumo equivocado."
+                )
+
+            r = EquipoReferencia(
+                equipo_id=equipo_id, proveedor_id=proveedor_id,
+                etiqueta=etiqueta, valor=valor,
+            )
+            session.add(r)
+            session.commit()
+            session.refresh(r)
+            proveedor = (
+                session.get(Proveedor, proveedor_id) if proveedor_id is not None else None
+            )
+            return _ref_to_dict(r, proveedor.nombre if proveedor else None)
+
+    @staticmethod
+    def _duplicado(session, equipo: Equipo, proveedor_id: int | None,
+                   valor: str) -> EquipoReferencia | None:
+        """El alcance en que un número ajeno tiene que ser único.
+
+        Con proveedor, **global**: el número interno de Sistemas Junín lo lleva
+        Sistemas Junín, y es el mismo aunque las máquinas estén en dos clientes
+        distintos. Es lo que además garantiza el `UNIQUE` de la tabla.
+
+        Sin proveedor —el número del propio cliente— el alcance es **ese
+        cliente**: dos clientes pueden numerar su patrimonio desde 1 sin que eso
+        sea un error, y por eso la base no lo puede vigilar sola. Ver el
+        docstring de `EquipoReferencia`.
+        """
+        q = select(EquipoReferencia).where(
+            func.lower(EquipoReferencia.valor) == valor.lower(),
+            EquipoReferencia.equipo_id != equipo.id,
+        )
+        if proveedor_id is not None:
+            q = q.where(EquipoReferencia.proveedor_id == proveedor_id)
+        else:
+            q = q.where(
+                EquipoReferencia.proveedor_id.is_(None),
+                EquipoReferencia.equipo_id.in_(
+                    select(Equipo.id).where(Equipo.cliente_id == equipo.cliente_id)
+                ),
+            )
+        return session.execute(q).scalars().first()
+
+    def borrar_referencia(self, referencia_id: int) -> None:
+        """Se borra y se vuelve a cargar; no hay edición.
+
+        Son dos campos y ninguno es historia: una referencia mal tipeada es un
+        error de carga, no un hecho que haya pasado. Un PUT acá sólo agregaría
+        un segundo camino para escribir lo mismo.
+        """
+        with self.session_factory() as session:
+            r = session.get(EquipoReferencia, referencia_id)
+            if r is None:
+                raise KeyError(referencia_id)
+            session.delete(r)
             session.commit()
 
     def list_movimientos(self, equipo_id: int) -> list[dict]:
