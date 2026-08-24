@@ -21,6 +21,7 @@ from .services.facturacion_config import ConfiguracionFacturacion
 from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
+from .services.insumos import InsumoRepository
 from .services.proveedores import ProveedorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
@@ -95,6 +96,10 @@ def get_servicio_repository(request: Request) -> ServicioCatalogoRepository:
 
 def get_reparacion_repository(request: Request) -> ReparacionRepository:
     return request.app.state.reparaciones
+
+
+def get_insumo_repository(request: Request) -> InsumoRepository:
+    return request.app.state.insumos
 
 
 def get_ingreso_repository(request: Request) -> IngresoRepository:

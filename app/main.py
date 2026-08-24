@@ -35,7 +35,8 @@ from .routers import (
     activos, agenda, categorias, clientes, comercial, compras, contratos,
     cuotas, dashboard, depositos, equipos, equipos_trabajo, facturacion,
     facturacion_config, health, incidencias,
-    informes, ingresos, presupuestos, proveedores, remitos, reparaciones,
+    informes, ingresos, insumos, presupuestos, proveedores, remitos,
+    reparaciones,
     reportes, sectores, servicios, sucursales, tecnicos, users, visitas,
 )
 from .routers import inventario as inventario_router
@@ -63,6 +64,8 @@ from .services.proveedores import ProveedorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
 from .services.ingresos import IngresoRepository
+# La clase, no el módulo: `insumos` ya nombra al router en este archivo.
+from .services.insumos import InsumoRepository
 from .services.reparaciones import ReparacionRepository
 from .services import comercial as comercial_service
 from .services import inventario, materiales
@@ -242,6 +245,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # levantó recién cuando las cuatro instancias quedaron verificadas.
     app.state.servicios = ServicioCatalogoRepository(sessions)
     app.state.reparaciones = ReparacionRepository(sessions)
+    app.state.insumos = InsumoRepository(sessions)
     app.state.ingresos = IngresoRepository(sessions)
     app.state.equipos_trabajo = EquipoTrabajoRepository(sessions)
     app.state.activos = ActivoRepository(sessions)
@@ -396,6 +400,21 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(
         inventario_router.router,
         dependencies=staff_or_admin + [Depends(require_module("stock"))],
+    )
+    # Insumos por equipo: el tóner que le entra a la fotocopiadora. Módulo
+    # propio y no colgado de `stock`, aunque el insumo salga de ese catálogo:
+    # lo que este circuito registra es **lo que consume el parque del cliente**,
+    # que en el caso que lo motivó no sale de ningún depósito nuestro —lo pone
+    # el tercero que le alquila las máquinas—. Un LibraDesk sin insumos sigue
+    # siendo LibraDesk, mismo criterio que `alquileres` y que `stock`.
+    #
+    # ⚠️ **Necesita el catálogo, o sea que `insumos` implica `stock`**, igual
+    # que `compras`: elegir qué tóner es se hace contra `/api/consumibles`, que
+    # está gateado por `stock`. Lo garantiza el plan y no el código —los dos
+    # están en premium—, exactamente como está escrito para las compras.
+    app.include_router(
+        insumos.router,
+        dependencies=staff_or_admin + [Depends(require_module("insumos"))],
     )
     # Compras: órdenes, recepción de mercadería y egresos. Gate propio y no
     # colgado de `stock` a propósito: se puede llevar inventario sin registrar

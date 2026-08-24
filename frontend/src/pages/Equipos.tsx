@@ -7,9 +7,10 @@ import { useNavigate } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, describirEquipo, lugarDe, opcionesCliente,
-  opcionesDeposito, ubicacionTexto,
-  type Cliente, type Deposito, type Equipo,
+  opcionesDeposito, opcionesProveedor, ubicacionTexto,
+  type Cliente, type Deposito, type Equipo, type Proveedor,
 } from '../api'
+import { DialogoDeReferencias } from './equipos-referencias'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,12 +30,16 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Monitor } from 'lucide-react'
-import { Eye, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
+import { Eye, FilePlus, Pencil, Tags, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
 // admite un <SelectItem value="">, así que el "ninguno" necesita valor propio.
 const SIN_DEPOSITO = '__ninguno__'
+
+// El equipo es del cliente, que es el caso normal del parque. Mismo motivo que
+// `SIN_DEPOSITO` para no usar la cadena vacía.
+const DEL_CLIENTE = '__del_cliente__'
 
 const equipoSchema = z.object({
   cliente_id: z.string().min(1, 'Elegí un cliente'),
@@ -45,6 +50,8 @@ const equipoSchema = z.object({
   ubicacion_oficina: z.string().trim().optional(),
   sector: z.string().trim().optional(),
   deposito_id: z.string().optional(),
+  // El tercero de quien es el equipo, cuando no es del cliente.
+  proveedor_id: z.string().optional(),
   estado: z.string().min(1),
   garantia_vence: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
@@ -57,7 +64,8 @@ type EquipoFormValues = z.infer<typeof equipoSchema>
 
 const EMPTY_VALUES: EquipoFormValues = {
   cliente_id: '', tipo: '', marca: '', modelo: '', serial: '',
-  ubicacion_oficina: '', sector: '', deposito_id: SIN_DEPOSITO, estado: 'activo',
+  ubicacion_oficina: '', sector: '', deposito_id: SIN_DEPOSITO,
+  proveedor_id: DEL_CLIENTE, estado: 'activo',
   garantia_vence: '', observaciones: '', motivo: '',
 }
 
@@ -73,6 +81,10 @@ export function Equipos() {
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [depositos, setDepositos] = useState<Deposito[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  // El equipo cuyos identificadores ajenos se están mirando. Diálogo aparte
+  // del de edición — ver `equipos-referencias.tsx`.
+  const [conReferencias, setConReferencias] = useState<Equipo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
@@ -153,14 +165,16 @@ export function Equipos() {
     try {
       // Sólo los activos: el selector del formulario es para elegir a dónde va
       // el equipo, y un depósito dado de baja no es un destino válido.
-      const [eq, cl, dep] = await Promise.all([
+      const [eq, cl, dep, prov] = await Promise.all([
         api.get<Equipo[]>(rutaEquipos()),
         api.get<Cliente[]>('/api/clientes'),
         api.get<Deposito[]>('/api/depositos?solo_activos=true'),
+        api.get<Proveedor[]>('/api/proveedores'),
       ])
       setEquipos(eq)
       setClientes(cl)
       setDepositos(dep)
+      setProveedores(prov)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -189,6 +203,7 @@ export function Equipos() {
       ubicacion_oficina: equipo.ubicacion_oficina ?? '',
       sector: equipo.sector ?? '',
       deposito_id: equipo.deposito_id === null ? SIN_DEPOSITO : String(equipo.deposito_id),
+      proveedor_id: equipo.proveedor_id === null ? DEL_CLIENTE : String(equipo.proveedor_id),
       estado: equipo.estado,
       garantia_vence: equipo.garantia_vence ?? '',
       observaciones: equipo.observaciones ?? '',
@@ -212,6 +227,13 @@ export function Equipos() {
         ? null
         : Number(values.deposito_id),
       estado: values.estado,
+      // 🔴 Va en el payload aunque el formulario no lo toque casi nunca: el PUT
+      // manda el equipo entero, así que una clave ausente llega como `null` y
+      // **cada edición borraría el dueño tercero**. Es exactamente lo que le
+      // pasó a `garantia_vence` — ver el comentario de acá abajo.
+      proveedor_id: !values.proveedor_id || values.proveedor_id === DEL_CLIENTE
+        ? null
+        : Number(values.proveedor_id),
       observaciones: values.observaciones || null,
       // Antes iba `null` fijo porque el formulario no tenía el campo: cada
       // edición borraba la garantía del equipo y lo sacaba del reporte de
@@ -252,6 +274,28 @@ export function Equipos() {
       { accessorKey: 'marca', header: 'Marca', size: 120, minSize: 90, cell: ({ row }) => row.original.marca ?? '—' },
       { accessorKey: 'modelo', header: 'Modelo', size: 150, minSize: 100, cell: ({ row }) => row.original.modelo ?? '—' },
       { accessorKey: 'serial', header: 'Serial', size: 130, minSize: 100, cell: ({ row }) => row.original.serial ?? '—' },
+      {
+        id: 'referencias',
+        header: 'N° ajeno',
+        size: 130,
+        minSize: 100,
+        // El número con el que lo llama el tercero, en la lista y no sólo en la
+        // ficha: es el dato que se viene a buscar acá cuando hay que pedirle un
+        // insumo, y detrás de un click deja de contestarse de un vistazo.
+        cell: ({ row }) => {
+          const refs = row.original.referencias
+          if (refs.length === 0) return '—'
+          return (
+            <span className="flex flex-wrap gap-1">
+              {refs.map((r) => (
+                <Badge key={r.id} variant="outline" title={r.proveedor_nombre ?? r.etiqueta}>
+                  {r.valor}
+                </Badge>
+              ))}
+            </span>
+          )
+        },
+      },
       {
         id: 'lugar',
         header: 'Dónde está',
@@ -294,6 +338,10 @@ export function Equipos() {
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
           <Button size="icon" variant="outline" title="Ver ficha del equipo" aria-label="Ver ficha del equipo" onClick={() => navigate(`/equipos/${row.original.id}`)}><Eye /></Button>
+          {/* `Tags` y no un icono nuevo: son las etiquetas con las que otros
+              nombran al equipo, que es lo que ese dibujo ya significa en el
+              vocabulario. Ver `components/iconos-accion.tsx`. */}
+          <Button size="icon" variant="outline" title="Identificadores del equipo" aria-label="Identificadores del equipo" onClick={() => setConReferencias(row.original)}><Tags /></Button>
           <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
           <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
         </div>
@@ -400,6 +448,27 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {/* De quién es el equipo cuando no es del cliente: el tercero
+                    que se lo alquila y que suele proveerle los insumos. Con
+                    esto cargado, pedir un tóner ya sabe a quién pedírselo. */}
+                <FormField control={form.control} name="proveedor_id" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Es de un tercero</FormLabel>
+                    <FormControl>
+                      <SelectBuscable
+                        value={field.value || DEL_CLIENTE}
+                        onChange={field.onChange}
+                        opciones={[
+                          { value: DEL_CLIENTE, label: 'No, es del cliente' },
+                          ...opcionesProveedor(proveedores),
+                        ]}
+                        ariaLabel="Es de un tercero"
+                        className="w-52"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="garantia_vence" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Garantía vence</FormLabel>
@@ -483,13 +552,27 @@ export function Equipos() {
                   e.tipo, e.marca, e.modelo, e.serial,
                   e.sector, e.deposito_nombre, e.ubicacion_oficina,
                   clienteNombre(e.cliente_id),
+                  // El número ajeno entra al buscador: tipear "4471" tiene que
+                  // encontrar la máquina, que es el gesto que motivó todo esto.
+                  ...e.referencias.map((r) => r.valor),
+                  e.proveedor_nombre,
                 ],
-                placeholder: 'Buscar por tipo, marca, modelo, serial, depósito, sector o cliente',
+                placeholder: 'Buscar por tipo, marca, modelo, serial, N° interno, depósito, sector o cliente',
               }}
             />
           )}
         </CardContent>
       </Card>
+
+      <DialogoDeReferencias
+        equipo={conReferencias}
+        proveedores={proveedores}
+        onClose={() => setConReferencias(null)}
+        // Las referencias viajan DENTRO del equipo, así que la lista se
+        // recarga: sin esto, la columna «N° ajeno» seguiría mostrando lo de
+        // antes hasta que alguien cambie de filtro.
+        onGuardado={loadEquipos}
+      />
 
       <ConfirmDialog
         open={aBorrar !== null}

@@ -103,7 +103,18 @@ export function fechaHoraDeDate(d: Date): string {
  */
 export function fecha(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return fechaDeDate(new Date(iso.includes('T') ? iso : `${iso}T00:00:00`))
+  // El `T00:00:00` solo va cuando el valor es una fecha SOLA: sin el,
+  // `new Date('2026-08-01')` se interpreta como UTC y en Argentina (UTC-3) se
+  // muestra el dia anterior.
+  //
+  // 🔴 Y solo cuando es una fecha sola. Pegarselo a un valor que ya trae hora
+  // arma `2026-08-01T10:00:00T00:00:00`, que no es una fecha: antes se veia
+  // "Invalid Date" en el historial de `Activos` y desde `formatToParts` tira
+  // `RangeError` y el dialogo no renderiza. La condicion vieja miraba si habia
+  // una `T`, asi que no cubria el `2026-08-01 10:00:00` con espacio que
+  // devuelve la misma columna por otro dialecto.
+  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+  return fechaDeDate(new Date(soloFecha ? `${iso}T00:00:00` : iso))
 }
 
 /** Un timestamp ISO completo → `dd-mm-aaaa HH:MM`. */
@@ -117,6 +128,26 @@ export function fechaHora(iso: string | null | undefined): string {
 // naive datetime (SQLite, hora local de la empresa). Las dos funciones son un
 // recorte de string a propósito: pasar por `new Date().toISOString()` convierte
 // a UTC y la agenda se correría tres horas.
+
+/** Hoy en hora LOCAL, `aaaa-mm-dd` — el default de un `<input type="date">`.
+ *
+ * 🔴 **No es lo mismo que `new Date().toISOString().slice(0, 10)`**, que es la
+ * forma en que lo escriben otras nueve pantallas de este producto: ese
+ * `toISOString()` pasa a **UTC**, así que a partir de las 21:00 de Argentina
+ * propone la fecha de MAÑANA. Es el mismo defecto que el backend ya cerró con
+ * `services/fecha.py` —una venta cargada a las 21:00 del 12 quedaba con fecha
+ * 13—, sólo que del lado del browser.
+ *
+ * Mismo criterio que las dos de acá abajo: se arma por partes en vez de pasar
+ * por UTC. La usa la pantalla de insumos; las otras nueve siguen como estaban,
+ * y migrarlas es un trabajo aparte sobre pantallas que hoy funcionan.
+ */
+export function hoyISO(): string {
+  const d = new Date()
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${dia}`
+}
 
 /** Lo que guarda el backend → lo que el input muestra. */
 export function deIsoALocal(iso: string | null | undefined): string {

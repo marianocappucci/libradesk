@@ -81,6 +81,7 @@ services:
   # desde afuera, tunel SSH — publicar 5432 en un VPS es publicarla a Internet.
   libradesk-postgres:
     image: postgres:16-alpine
+    command: postgres -c timezone=America/Argentina/Buenos_Aires
     container_name: libradesk-postgres
     restart: unless-stopped
     environment:
@@ -90,6 +91,7 @@ services:
       # levantar la base con una clave que esta escrita en git. Se define en
       # el `.env` del VPS, que no se versiona.
       POSTGRES_PASSWORD: ${LIBRADESK_DEV_DB_PASSWORD:?falta LIBRADESK_DEV_DB_PASSWORD en .env}
+      TZ: America/Argentina/Buenos_Aires
     volumes:
       - libradesk-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -122,6 +124,7 @@ services:
       - ./data-dev:/app/data
     environment:
       - SECRET_KEY=${DEV_SECRET_KEY:?falta DEV_SECRET_KEY}
+      - TZ=America/Argentina/Buenos_Aires
       - LIBRADESK_ADMIN_USERNAME=${DEV_ADMIN_USERNAME:-admin}
       - LIBRADESK_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:?falta DEV_ADMIN_PASSWORD}
       - DATA_DIR=/app/data

@@ -28,6 +28,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Coins,
+  Droplets,
   FilePenLine as FileSignature,
   FileSpreadsheet,
   FileText,
@@ -120,6 +121,11 @@ export const Layout = createLayout({
         // hacia un proveedor.
         { to: '/recepciones', label: 'Recepción de equipos', icon: ClipboardCheck },
         { to: '/reparaciones', label: 'Reparaciones', icon: Wrench },
+        // Los insumos van con las reparaciones y no con Inventario: son las dos
+        // cosas que le pasan al parque del cliente —se rompe, o consume—, y las
+        // hace la misma persona. El módulo `stock` de Inventario es la
+        // mercadería NUESTRA, que es otro circuito.
+        { to: '/insumos', label: 'Insumos', icon: Droplets, module: 'insumos' },
         { to: '/equipos-trabajo', label: 'Equipos y flota', icon: EquiposFlota },
       ],
     },

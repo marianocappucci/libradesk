@@ -13,7 +13,9 @@ from sqlalchemy.orm import aliased, sessionmaker
 from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .depositos import Deposito, lugar_de
-from .equipos import Equipo, EquipoMovimiento, _mov_to_dict, descripcion_equipo
+from .equipos import (
+    Equipo, EquipoMovimiento, _extras, _mov_to_dict, descripcion_equipo,
+)
 from .incidencias import Incidencia
 from .reparaciones import Reparacion, resolver as resolver_reparacion
 from .reportes import _ruta_categoria
@@ -464,6 +466,18 @@ class DashboardService:
             vence = e.garantia_vence
             vence_date = vence.date() if isinstance(vence, datetime) else vence
 
+            # De quién es y cómo lo llaman los demás. Van en la MISMA llamada,
+            # con el mismo criterio que el resto de la ficha: el número interno
+            # del proveedor es lo primero que se busca acá cuando hay que
+            # pedirle un insumo.
+            #
+            # 🔑 Los **insumos** no vienen acá, y no es un olvido: están detrás
+            # del módulo `insumos` y esta ficha cuelga de `dashboard`. Meterlos
+            # los serviría a una instancia que no contrató ese módulo, que es
+            # exactamente lo que el gate existe para impedir. La pantalla los
+            # pide aparte, a su endpoint gateado.
+            nombres_proveedor, referencias = _extras(session, [e])
+
             return {
                 "equipo": {
                     "id": e.id,
@@ -481,6 +495,9 @@ class DashboardService:
                     # Donde esta de verdad, ya resuelto: la pantalla no tiene
                     # que elegir entre `sector` y el deposito. Ver `lugar_de`.
                     "lugar": lugar_de(deposito.nombre if deposito else None, e.sector),
+                    "proveedor_id": e.proveedor_id,
+                    "proveedor_nombre": nombres_proveedor.get(e.proveedor_id),
+                    "referencias": referencias.get(e.id, []),
                     "garantia_vence": vence_date.isoformat() if vence_date else None,
                     "dias_garantia_restantes": (
                         (vence_date - date.today()).days if vence_date else None

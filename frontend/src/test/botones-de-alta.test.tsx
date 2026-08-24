@@ -53,6 +53,9 @@ const EQUIPO = {
   id: 7, cliente_id: 1, tipo: 'Notebook', modelo: 'ThinkPad', marca: 'Lenovo',
   serial: 'ABC123', ubicacion_oficina: null, sector: null, deposito_id: null,
   deposito_nombre: null, estado: 'operativo', fecha_adicion: null,
+  // El backend los manda siempre. Sin ellos el fixture describe una API que no
+  // existe, y la columna del número ajeno explota al leer su largo.
+  proveedor_id: null, proveedor_nombre: null, referencias: [],
   garantia_vence: null, observaciones: null,
 }
 

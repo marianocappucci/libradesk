@@ -16,8 +16,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO, MOVIMIENTO_LABELS,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO,
+  INSUMO_LABELS, INSUMO_TONO, MOVIMIENTO_LABELS,
   PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto, type EquipoFicha,
+  type Insumo,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,20 +28,13 @@ import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
-import { fechaDeDate, fechaHora } from '@/lib/format'
+import { fecha, fechaHora } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
-function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  // `new Date('2026-08-15')` (fecha sola, sin hora) se parsea como UTC, así que
-  // en Argentina (UTC-3) se mostraría el día anterior. Mismo caso que en la
-  // ficha del cliente.
-  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.exec(fecha)
-  const d = soloFecha
-    ? new Date(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10)))
-    : new Date(fecha)
-  return fechaDeDate(d)
+function formatFecha(valor: string | null): string {
+  // Ver `ClienteDetalle`: la guarda subio a `lib/format`.
+  return fecha(valor)
 }
 
 function formatFechaHora(fecha: string | null): string {
@@ -81,6 +76,11 @@ export function EquipoDetalle() {
   const equipoId = Number(id)
 
   const [ficha, setFicha] = useState<EquipoFicha | null>(null)
+  // `null` no es lo mismo que `[]`: significa **"no corresponde"** —la
+  // instancia no tiene el módulo `insumos`— y ahí la sección no se dibuja. Con
+  // `[]` se dibuja vacía, que es la respuesta correcta a "todavía no se cargó
+  // ninguno".
+  const [insumos, setInsumos] = useState<Insumo[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -92,6 +92,17 @@ export function EquipoDetalle() {
   async function cargar() {
     setLoading(true)
     setError(null)
+    // Los insumos van en una llamada APARTE y no adentro de la ficha, que trae
+    // todo lo demás junto. El motivo no es de performance: la ficha la sirve
+    // `/api/dashboard`, gateado por el módulo `dashboard`, y los insumos tienen
+    // módulo propio. Metiéndolos ahí se los serviría a una instancia que no
+    // contrató `insumos`, que es exactamente lo que el gate existe para
+    // impedir. De ahí también el `catch` que apaga la sección en vez de
+    // mostrar un error: con el módulo apagado esto devuelve 403 y no hay nada
+    // roto que reportar.
+    api.get<Insumo[]>(`/api/insumos?equipo_id=${equipoId}`)
+      .then(setInsumos)
+      .catch(() => setInsumos(null))
     try {
       setFicha(await api.get<EquipoFicha>(`/api/dashboard/equipo/${equipoId}`))
     } catch (err) {
@@ -221,7 +232,33 @@ export function EquipoDetalle() {
                 ) : 'Sin garantía registrada'}
               </Dato>
               <Dato label="Serial">{equipo.serial}</Dato>
+              {/* De quién es, cuando no es del cliente. Sin valor no se dibuja:
+                  el parque normal es del cliente y un "—" en cada ficha sería
+                  ruido en las 200 que no tienen tercero. */}
+              {equipo.proveedor_nombre && (
+                <Dato label="Equipo de un tercero">{equipo.proveedor_nombre}</Dato>
+              )}
               <Dato label="Alta">{formatFecha(equipo.fecha_adicion)}</Dato>
+              {/* Los números con los que lo llaman los demás. Es el dato que se
+                  viene a buscar acá cuando hay que pedirle un insumo al tercero,
+                  así que va en la tarjeta de identidad y no en una pestaña. */}
+              {equipo.referencias.length > 0 && (
+                <div className="grid gap-1 sm:col-span-2">
+                  <span className="text-xs text-muted-foreground">
+                    Números con los que lo identifican
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {equipo.referencias.map((r) => (
+                      <Badge key={r.id} variant="outline" className="gap-1.5">
+                        <span className="text-muted-foreground">
+                          {r.proveedor_nombre ?? r.etiqueta}
+                        </span>
+                        <span className="font-medium">{r.valor}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {equipo.observaciones && (
                 <div className="grid gap-0.5 sm:col-span-2">
                   <span className="text-xs text-muted-foreground">Observaciones</span>
@@ -352,6 +389,61 @@ export function EquipoDetalle() {
               )}
             </CardContent>
           </Card>
+
+          {insumos !== null && (
+            <Card className="evitar-corte">
+              <CardHeader>
+                <CardTitle className="text-base">Insumos ({insumos.length})</CardTitle>
+                <CardDescription>
+                  Qué consumió, quién se lo entregó y con qué contador se puso.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {insumos.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No se registró ningún insumo para este equipo.
+                  </p>
+                ) : (
+                  <ul className="divide-y rounded-md border">
+                    {insumos.map((i) => (
+                      <li key={i.id} className="grid gap-0.5 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <BadgeEstado tono={INSUMO_TONO[i.estado]}>
+                            {INSUMO_LABELS[i.estado]}
+                          </BadgeEstado>
+                          <span className="text-sm font-medium">{i.insumo_nombre}</span>
+                          {/* Sin proveedor lo puso el propio cliente, y eso no
+                              es un dato que falte. */}
+                          <span className="text-xs text-muted-foreground">
+                            {i.proveedor_nombre ?? 'lo puso el cliente'}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {[
+                            i.fecha_pedido ? `pedido ${formatFecha(i.fecha_pedido)}` : null,
+                            i.fecha_entrega ? `entregado ${formatFecha(i.fecha_entrega)}` : null,
+                            i.fecha_colocacion ? `colocado ${formatFecha(i.fecha_colocacion)}` : null,
+                            i.dias_esperando !== null ? `${i.dias_esperando} días esperando` : null,
+                            i.remito_proveedor ? `remito ${i.remito_proveedor}` : null,
+                            i.contador_copias !== null
+                              ? `contador ${i.contador_copias.toLocaleString('es-AR')}` : null,
+                            // El rendimiento del tramo que cierra: es lo que
+                            // ninguna fila suelta contesta.
+                            i.copias_desde_el_anterior !== null
+                              ? `el anterior rindió ${i.copias_desde_el_anterior.toLocaleString('es-AR')} copias`
+                              : null,
+                          ].filter(Boolean).join(' · ')}
+                        </span>
+                        {i.observaciones && (
+                          <span className="text-xs text-muted-foreground">{i.observaciones}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="evitar-corte">
             <CardHeader>

@@ -802,8 +802,14 @@ def sembrar(api: Api) -> None:
         if eq.get("deposito_id") == depositos[destino]["id"]:
             continue
         api.put(f"/api/equipos/{eq['id']}", {
+            # 🔴 La lista tiene que estar COMPLETA: el PUT reemplaza el equipo
+            # entero, así que una clave que falte llega como `null` y este
+            # traslado le borra ese dato. Es lo que ya pasó con
+            # `garantia_vence`; `proveedor_id` —de quién es el equipo, cuando es
+            # de un tercero— se sumó el 2026-08-24 por lo mismo.
             **{k: eq.get(k) for k in ("cliente_id", "tipo", "marca", "modelo",
                                       "serial", "estado", "garantia_vence",
+                                      "proveedor_id",
                                       "ubicacion_oficina", "sector", "observaciones")},
             "deposito_id": depositos[destino]["id"],
         })
@@ -921,7 +927,110 @@ def sembrar(api: Api) -> None:
     # La agenda, con trabajos en un rango de días hacia atrás y hacia adelante.
     _sembrar_agenda_en_rango(api, contar)
 
+    # Los insumos del parque. Va DESPUÉS del stock porque el insumo sale del
+    # catálogo de consumibles, que siembra aquel bloque.
+    _sembrar_insumos(api, contar)
+
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
+
+
+def _sembrar_insumos(api: Api, contar) -> None:
+    """Una fotocopiadora de un tercero, su número interno y tóner en los tres
+    estados.
+
+    Sin esto la pantalla de Insumos abre vacía y no se puede revisar: ni la
+    bandeja de pendientes, ni los tonos de la pastilla, ni la columna que dice
+    cuánto rindió el anterior — que es la que justifica pedir el contador.
+
+    **Los tres estados a propósito**, mismo criterio que el resto de este
+    script: uno pedido y sin llegar (con nueve días de espera, para que se vea
+    el resaltado del reclamo), uno entregado y todavía en el armario, y dos
+    colocados con contadores distintos, que son los que hacen aparecer un
+    rendimiento de verdad en vez de un guion.
+
+    Idempotente por equipo: si esa máquina ya tiene insumos cargados, no
+    duplica.
+    """
+    equipos = api.get("/api/equipos") or []
+    if not equipos:
+        print("  insumos: no hay equipos, se saltea")
+        return
+
+    # Un consumible del catálogo. Si el bloque de stock no llegó a sembrar
+    # ninguno, se crea acá: sin item no hay insumo que cargar.
+    consumibles = api.get("/api/consumibles") or []
+    toner = buscar(consumibles, "nombre", "Tóner TN-3472 negro")
+    if toner is None:
+        toner = api.post("/api/consumibles", {
+            "nombre": "Tóner TN-3472 negro", "costo": 42000, "precio": 68000,
+            "stock_minimo": 2, "descripcion": "Rinde 12.000 copias.",
+        })
+        contar("consumibles", True)
+
+    proveedores = api.get("/api/proveedores") or []
+    junin = buscar(proveedores, "nombre", "Sistemas Junín")
+    if junin is None:
+        junin = api.post("/api/proveedores", {
+            "nombre": "Sistemas Junín", "telefono": "2362-44-0000",
+            "observaciones": "Alquiler de fotocopiadoras con insumos incluidos.",
+        })
+        contar("proveedores", True)
+
+    # La máquina: es del cliente **pero de un tercero**, que es el caso que el
+    # módulo vino a modelar. Se reusa el primer equipo y se lo marca; crear uno
+    # nuevo dejaría el parque de dev con un aparato de más en cada corrida.
+    maquina = buscar(equipos, "tipo", "Fotocopiadora")
+    if maquina is None:
+        maquina = api.post("/api/equipos", {
+            "cliente_id": equipos[0]["cliente_id"], "tipo": "Fotocopiadora",
+            "marca": "Brother", "modelo": "MFC-L5900", "serial": "BR-EJEMPLO-01",
+            "sector": "Administración", "proveedor_id": junin["id"],
+        })
+        contar("equipos", True)
+
+    # El número con el que la llama el proveedor: es el dato que se viene a
+    # buscar a la ficha cuando hay que pedirle un tóner.
+    if not (maquina.get("referencias") or []):
+        api.post(f"/api/equipos/{maquina['id']}/referencias", {
+            "etiqueta": "N° interno", "valor": "4471",
+            "proveedor_id": junin["id"],
+        })
+        contar("referencias_de_equipo", True)
+
+    if api.get(f"/api/insumos?equipo_id={maquina['id']}"):
+        return
+
+    def hace(dias: int) -> str:
+        return (HOY - timedelta(days=dias)).isoformat()
+
+    # Los dos colocados, en orden: el segundo es el que muestra el rendimiento
+    # del primero (17.400 − 10.000 = 7.400 copias).
+    api.post("/api/insumos", {
+        "equipo_id": maquina["id"], "insumo_item_id": toner["id"],
+        "fecha_pedido": hace(75), "fecha_entrega": hace(72),
+        "fecha_colocacion": hace(70), "contador_copias": 10000,
+        "remito_proveedor": "R-0088",
+    })
+    api.post("/api/insumos", {
+        "equipo_id": maquina["id"], "insumo_item_id": toner["id"],
+        "fecha_pedido": hace(20), "fecha_entrega": hace(18),
+        "fecha_colocacion": hace(15), "contador_copias": 17400,
+        "remito_proveedor": "R-0104",
+    })
+    # Entregado y sin colocar: está en el armario del cliente.
+    api.post("/api/insumos", {
+        "equipo_id": maquina["id"], "insumo_item_id": toner["id"],
+        "fecha_pedido": hace(12), "fecha_entrega": hace(9),
+        "remito_proveedor": "R-0117",
+    })
+    # Pedido y sin llegar: es la fila que la pantalla resalta en rojo por
+    # llevar más de una semana esperando.
+    api.post("/api/insumos", {
+        "equipo_id": maquina["id"], "insumo_item_id": toner["id"],
+        "fecha_pedido": hace(9),
+        "observaciones": "Reclamado por teléfono el lunes.",
+    })
+    contar("insumos", True)
 
 
 def _sembrar_sucursales_y_stock(api: Api, contar) -> None:

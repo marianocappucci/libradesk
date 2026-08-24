@@ -17,21 +17,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MapPin, Monitor, Users } from 'lucide-react'
-import { fechaDeDate } from '@/lib/format'
+import { fecha } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
-function formatFecha(fecha: string | null): string {
-  if (!fecha) return '—'
-  // `new Date('2026-08-15')` (fecha sola, sin hora) se parsea como UTC, así
-  // que en Argentina (UTC-3) se mostraría el día anterior. `garantia_vence`
-  // es una columna Date y llega justo así, de modo que hay que armarla a
-  // mano; `fecha_creacion` trae hora y ya se parsea en hora local.
-  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.exec(fecha)
-  const d = soloFecha
-    ? new Date(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10)))
-    : new Date(fecha)
-  return fechaDeDate(d)
+function formatFecha(valor: string | null): string {
+  // La guarda de "fecha sola vs. fecha con hora" vive en `lib/format`: la tenian
+  // copiada esta pantalla y `EquipoDetalle`, y el helper la hacia peor que las
+  // dos.
+  return fecha(valor)
 }
 
 /** "vencida hace 12 días" / "vence en 5 días" / "vence hoy". El signo importa:

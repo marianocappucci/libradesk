@@ -22,6 +22,10 @@ class EquipoIn(BaseModel):
     # Donde esta guardado. None = instalado en el sector del cliente.
     deposito_id: int | None = None
     estado: str = "activo"
+    # El tercero de quien es el equipo, cuando no es del cliente: el que se lo
+    # alquila o se lo dio en comodato, y que suele proveerle los insumos.
+    # None = es del cliente, que es el caso normal del parque.
+    proveedor_id: int | None = None
     garantia_vence: date | None = None
     observaciones: str | None = None
 
@@ -33,11 +37,31 @@ class EquipoUpdate(EquipoIn):
     motivo: str | None = None
 
 
+class ReferenciaIn(BaseModel):
+    # "N° interno", "Patrimonial", "N° de contrato" — como lo llama el que lo
+    # pide por telefono.
+    etiqueta: str
+    valor: str
+    # De quien es ese numero. None = del propio cliente.
+    proveedor_id: int | None = None
+
+
+class ReferenciaOut(ReferenciaIn):
+    id: int
+    equipo_id: int
+    proveedor_nombre: str | None = None
+
+
 class EquipoOut(EquipoIn):
     id: int
     # Resuelto por el repositorio: la lista muestra donde esta el equipo sin
     # cruzar `/api/depositos` en el browser.
     deposito_nombre: str | None = None
+    proveedor_nombre: str | None = None
+    # Los identificadores ajenos, resueltos con el equipo: es lo primero que se
+    # busca cuando hay que pedirle un insumo al tercero, y detras de una segunda
+    # llamada por fila no se mira.
+    referencias: list[ReferenciaOut] = []
     fecha_adicion: str | None = None
     garantia_vence: str | None = None
 
@@ -74,9 +98,14 @@ def create_equipo(
 def list_equipos(
     cliente_id: int | None = None,
     deposito_id: int | None = None,
+    referencia: str | None = None,
     equipos: EquipoRepository = Depends(get_equipo_repository),
 ):
-    return equipos.list(cliente_id=cliente_id, deposito_id=deposito_id)
+    """`referencia` contesta la pregunta del teléfono: *"me dicen que es la
+    4471, ¿cuál es?"*. Coincidencia exacta — ver `EquipoRepository.list`."""
+    return equipos.list(
+        cliente_id=cliente_id, deposito_id=deposito_id, referencia=referencia,
+    )
 
 
 @router.get("/{equipo_id}", response_model=EquipoOut)
@@ -133,3 +162,52 @@ def delete_equipo(equipo_id: int, equipos: EquipoRepository = Depends(get_equipo
 @router.get("/{equipo_id}/movimientos", response_model=list[MovimientoOut])
 def list_movimientos(equipo_id: int, equipos: EquipoRepository = Depends(get_equipo_repository)):
     return equipos.list_movimientos(equipo_id)
+
+
+# ── Referencias ─────────────────────────────────────────────────────────────
+#
+# **Sin gate de módulo, igual que el resto de `equipos`.** Un número ajeno es
+# parte de la identidad del aparato: hace falta para pedir un insumo, para
+# reclamar una garantía y para atender el teléfono, se lleve o no el control de
+# consumibles. Gatearlo con `insumos` dejaría a un cliente básico sin poder
+# anotar el número que le pide su proveedor, que es el problema entero.
+
+
+@router.get("/{equipo_id}/referencias", response_model=list[ReferenciaOut])
+def list_referencias(
+    equipo_id: int, equipos: EquipoRepository = Depends(get_equipo_repository),
+):
+    try:
+        return equipos.list_referencias(equipo_id)
+    except KeyError:
+        raise HTTPException(404, "equipo not found")
+
+
+@router.post("/{equipo_id}/referencias", status_code=201, response_model=ReferenciaOut)
+def create_referencia(
+    equipo_id: int, data: ReferenciaIn,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+):
+    try:
+        return equipos.crear_referencia(equipo_id, **data.model_dump())
+    except KeyError as e:
+        que, _id = e.args[0]
+        raise HTTPException(404, f"{que} not found")
+    except ValueError as e:
+        # Incluye el duplicado, con el equipo que ya tiene ese número.
+        raise HTTPException(409, str(e))
+
+
+@router.delete("/{equipo_id}/referencias/{referencia_id}", status_code=204)
+def delete_referencia(
+    equipo_id: int, referencia_id: int,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+):
+    """`equipo_id` está en la ruta y no se usa para buscar: la referencia se
+    identifica sola. Va igual para que la URL diga de qué equipo se está
+    sacando, que es lo que hace legible el log de auditoría."""
+    try:
+        equipos.borrar_referencia(referencia_id)
+    except KeyError:
+        raise HTTPException(404, "referencia not found")
+    return Response(status_code=204)
