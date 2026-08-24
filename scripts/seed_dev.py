@@ -1068,7 +1068,57 @@ def _sembrar_insumos(api: Api, contar) -> None:
                 "remito_proveedor": "R-0099",
                 "observaciones": "Fuera de contrato: el de service no cubre insumos.",
             })
+            # Un cambio anterior en la misma máquina, para que tenga CADENCIA:
+            # con una sola colocación el resumen de la fase 3 no puede estimar
+            # nada y esta máquina quedaría en «sin historial» para siempre. Con
+            # dos, sale «al día», que es el estado que la pantalla necesita
+            # mostrar en contraste con el que hay que pedir.
+            api.post("/api/insumos", {
+                "equipo_id": otra["id"], "insumo_item_id": toner["id"],
+                "fecha_pedido": hace(88), "fecha_entrega": hace(86),
+                "fecha_colocacion": hace(85), "contador_copias": 1500,
+                "remito_proveedor": "R-0071",
+            })
             contar("insumos", True)
+
+
+    # ── Una máquina que YA hay que pedir (fase 3) ──────────────────────
+    #
+    # Sin ésta, la pantalla «Qué hay que pedir» abre vacía en dev: la primera
+    # máquina tiene un tóner pedido —así que sale como `ya_pedido`— y la
+    # segunda está al día. El estado que da sentido a la pantalla no se vería
+    # nunca, que es la forma de desplegar algo que nadie puede revisar.
+    #
+    # Dos colocaciones cada 50 días y la última hace 70: ya está vencida y no
+    # tiene ningún pedido en curso.
+    atrasada = buscar(
+        api.get(f"/api/equipos?cliente_id={maquina['cliente_id']}") or [],
+        "serial", "BR-EJEMPLO-03",
+    )
+    if atrasada is None:
+        atrasada = api.post("/api/equipos", {
+            "cliente_id": maquina["cliente_id"], "tipo": "Fotocopiadora",
+            "marca": "Kyocera", "modelo": "M2540", "serial": "BR-EJEMPLO-03",
+            "sector": "Guardia", "proveedor_id": junin["id"],
+        })
+        contar("equipos", True)
+        api.post(f"/api/equipos/{atrasada['id']}/referencias", {
+            "etiqueta": "N° interno", "valor": "4472", "proveedor_id": junin["id"],
+        })
+        contar("referencias_de_equipo", True)
+        api.post("/api/insumos", {
+            "equipo_id": atrasada["id"], "insumo_item_id": toner["id"],
+            "fecha_pedido": hace(125), "fecha_entrega": hace(122),
+            "fecha_colocacion": hace(120), "contador_copias": 30000,
+            "remito_proveedor": "R-0054",
+        })
+        api.post("/api/insumos", {
+            "equipo_id": atrasada["id"], "insumo_item_id": toner["id"],
+            "fecha_pedido": hace(74), "fecha_entrega": hace(72),
+            "fecha_colocacion": hace(70), "contador_copias": 38200,
+            "remito_proveedor": "R-0090",
+        })
+        contar("insumos", True)
 
     if api.get(f"/api/insumos?equipo_id={maquina['id']}"):
         return

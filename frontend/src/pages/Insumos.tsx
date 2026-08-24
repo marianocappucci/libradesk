@@ -404,6 +404,12 @@ export function Insumos() {
           </TituloPantalla>
         }
       >
+        {/* La otra mitad del circuito: acá se registra lo que ya pasó, y allá
+            está lo que va a pasar. Ruta propia y no una pestaña, mismo criterio
+            que Recepción de equipos: se puede linkear y el atrás funciona. */}
+        <Button variant="outline" asChild>
+          <Link to="/insumos/a-pedir"><Droplets />Qué hay que pedir</Link>
+        </Button>
         <Button onClick={abrirPedido}><FilePlus />Pedir insumo</Button>
       </EncabezadoDePantalla>
 

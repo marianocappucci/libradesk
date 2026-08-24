@@ -93,7 +93,7 @@ efecto util, el historial se lee entero aunque la instancia no tenga el modulo
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import (
     CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, func,
@@ -623,3 +623,307 @@ class InsumoRepository:
                 raise KeyError(insumo_id)
             session.delete(i)
             session.commit()
+
+    def resumen(self, *, cliente_id: int | None = None,
+                equipo_id: int | None = None,
+                estado: str | None = None) -> list[dict]:
+        """Qué le toca a cada máquina — el consumo resumido por (equipo, insumo).
+
+        Es la fase 3: convierte el historial que ya se venía cargando en algo
+        que se puede mirar antes de que la máquina se pare. Cada fila responde
+        *"cada cuánto se cambia esto, cuándo fue la última vez y desde cuándo
+        conviene ir pidiendo el próximo"*.
+
+        **Ordena por lo que hay que hacer primero**: lo que ya toca pedir
+        arriba y, dentro, lo más atrasado. Lo que no tiene historial suficiente
+        va al final — no es una omisión, es que todavía no se puede estimar.
+
+        Se calcula en Python y no en SQL a propósito: la aritmética vive en
+        `ResumenDeConsumo`, que se puede probar sin base, y una consulta con
+        ventanas dejaría la misma regla escrita en dos dialectos.
+        """
+        from .clientes import Cliente
+        from .equipos import Equipo
+
+        if estado is not None and estado not in ESTADOS_RESUMEN:
+            raise ValueError(f"estado desconocido: {estado!r}")
+
+        hoy_ = date.fromisoformat(hoy())
+
+        with self.session_factory() as session:
+            q = select(EquipoInsumo)
+            if equipo_id is not None:
+                q = q.where(EquipoInsumo.equipo_id == equipo_id)
+            if cliente_id is not None:
+                q = q.where(EquipoInsumo.equipo_id.in_(
+                    select(Equipo.id).where(Equipo.cliente_id == cliente_id)
+                ))
+            filas = list(session.execute(q).scalars())
+            if not filas:
+                return []
+
+            # Un grupo por (equipo, insumo): el negro y el cyan de la misma
+            # máquina son dos consumos distintos, con su propia cadencia.
+            grupos: dict[tuple[int, int], list] = {}
+            for f in filas:
+                grupos.setdefault((f.equipo_id, f.insumo_item_id), []).append(f)
+
+            equipos = {
+                e.id: e for e in session.execute(
+                    select(Equipo).where(
+                        Equipo.id.in_({e for e, _ in grupos})
+                    )
+                ).scalars()
+            }
+            clientes = dict(session.execute(
+                select(Cliente.id, Cliente.nombre).where(
+                    Cliente.id.in_({e.cliente_id for e in equipos.values()})
+                )
+            ).all())
+
+            resultado = []
+            for (eq_id, item_id), delgrupo in grupos.items():
+                colocaciones = [i for i in delgrupo if i.fecha_colocacion is not None]
+                # Pendiente o en el armario del cliente: las dos cuentan como
+                # "ya pedido", porque en las dos ya hay un tóner en camino a esa
+                # máquina y volver a pedir sería pedir de más.
+                pendientes = [i for i in delgrupo if i.fecha_colocacion is None]
+                equipo = equipos.get(eq_id)
+
+                resumen = ResumenDeConsumo(
+                    equipo_id=eq_id, insumo_item_id=item_id,
+                    # El nombre del insumo sale de la fila más reciente: es una
+                    # copia del catálogo al momento de usarlo, y si el producto
+                    # se renombró, la última es la que el operador reconoce.
+                    insumo_nombre=delgrupo[-1].insumo_nombre,
+                    colocaciones=colocaciones, pendientes=pendientes,
+                    hoy_=hoy_,
+                    demora_proveedor=_demora_tipica(delgrupo),
+                )
+                resultado.append(resumen.to_dict(
+                    equipo=equipo,
+                    cliente_nombre=(
+                        clientes.get(equipo.cliente_id) if equipo is not None else None
+                    ),
+                ))
+
+        # `pedir_ahora` primero, y dentro de cada estado lo más atrasado arriba.
+        # Los `None` de `dias_para_pedir` —sin historial— van al final: no hay
+        # nada que hacer con ellos hoy.
+        orden = {"pedir_ahora": 0, "ya_pedido": 1, "al_dia": 2, "sin_historial": 3}
+        resultado.sort(key=lambda r: (
+            orden.get(r["estado"], 9),
+            r["dias_para_pedir"] if r["dias_para_pedir"] is not None else 10**6,
+        ))
+        if estado is not None:
+            resultado = [r for r in resultado if r["estado"] == estado]
+        return resultado
+
+
+
+# ── Fase 3: lo que el historial permite anticipar ────────────────────────
+
+#: Cuánto antes del cambio estimado se considera que "ya toca". Si el promedio
+#: son 50 días, a los 45 la máquina entra en la lista aunque todavía no venza:
+#: pedir el día exacto es pedir tarde, porque el insumo tarda en llegar.
+#:
+#: Es un margen sobre la propia cadencia de la máquina y no un número fijo de
+#: días: una que se cambia cada 15 días necesita menos anticipación que una que
+#: se cambia cada 200.
+MARGEN_ANTICIPO = 0.10
+
+#: Con menos de dos colocaciones no hay ningún intervalo que promediar, así que
+#: no hay nada que estimar. **No se inventa una duración por defecto**: una
+#: predicción sacada de la nada se lee igual que una medida, y la primera vez
+#: que falle nadie vuelve a mirar la lista.
+MINIMO_COLOCACIONES = 2
+
+ESTADOS_RESUMEN = ("sin_historial", "ya_pedido", "pedir_ahora", "al_dia")
+
+
+def _promedio(valores: list[int]) -> int | None:
+    """`None` cuando no hay nada que promediar, nunca cero: un cero se lee como
+    una medición y acá significa "no sé"."""
+    return round(sum(valores) / len(valores)) if valores else None
+
+
+def _demora_tipica(filas: list[EquipoInsumo]) -> int | None:
+    """Cuánto tarda el proveedor en entregar **para esta máquina**.
+
+    Se mide de las entregas propias y no de un número global porque es lo que se
+    le va a descontar al aviso: la anticipación que necesita una máquina cuyo
+    proveedor tarda diez días no es la misma que la de una que se surte del
+    armario del cliente el mismo día.
+
+    `None` mientras no haya ninguna entrega registrada — y ahí el aviso sale sin
+    descuento, que es lo único que se puede hacer sin inventar un número.
+    """
+    return _promedio([
+        (f.fecha_entrega - f.fecha_pedido).days
+        for f in filas
+        if f.fecha_pedido is not None and f.fecha_entrega is not None
+    ])
+
+
+class ResumenDeConsumo:
+    """El consumo de UN insumo en UNA máquina, ya resumido.
+
+    Es una clase y no un dict armado a mano para que el cálculo —lo único con
+    aritmética de todo el módulo— quede en un lugar con nombre y se pueda
+    probar sin base de datos.
+
+    ## Qué se puede anticipar con lo que hay, y qué no
+
+    Lo que el producto registra es la **colocación**: la fecha y el contador del
+    display en ese momento. De ahí sale cada cuánto se cambia esta máquina y
+    cuántas copias rindió cada tóner.
+
+    🔴 **Lo que NO se puede es predecir por copias.** Para saber cuántas copias
+    lleva hechas la máquina desde el último cambio haría falta una **lectura de
+    hoy**, y el contador se lee sólo al cambiar el tóner. Estimar por días es lo
+    único honesto con los datos que existen; el día que alguien tome lecturas
+    periódicas, la estimación por copias entra sin cambiar el schema. Es la
+    misma razón por la que la fase 2 no trajo el tope de copias del contrato.
+
+    ## Y el intervalo mide el CAMBIO, no la vida del tóner
+
+    Entre que el tóner se acaba y que llega el repuesto pueden pasar días con la
+    máquina parada, y ese tiempo está adentro del intervalo. Para lo que se usa
+    —*"¿cada cuánto le toca a esta máquina?"*— es el número correcto, porque
+    incluye la realidad de la operación. Para *"cuánto dura un tóner"* el número
+    honesto es el de **copias**, que no depende de cuándo se pudo cambiar.
+    """
+
+    def __init__(self, equipo_id: int, insumo_item_id: int, insumo_nombre: str,
+                 colocaciones: list, pendientes: list, hoy_: date,
+                 demora_proveedor: int | None = None):
+        self.equipo_id = equipo_id
+        self.insumo_item_id = insumo_item_id
+        self.insumo_nombre = insumo_nombre
+        self.hoy = hoy_
+        self.demora_proveedor = demora_proveedor
+        # Orden cronológico: los intervalos se miden entre consecutivas.
+        self.colocaciones = sorted(
+            colocaciones, key=lambda i: (i.fecha_colocacion, i.id)
+        )
+        self.pendientes = pendientes
+
+    @property
+    def cambios(self) -> int:
+        return len(self.colocaciones)
+
+    @property
+    def ultimo_cambio(self) -> date | None:
+        return self.colocaciones[-1].fecha_colocacion if self.colocaciones else None
+
+    @property
+    def dias_desde_el_ultimo(self) -> int | None:
+        return (self.hoy - self.ultimo_cambio).days if self.ultimo_cambio else None
+
+    @property
+    def dias_entre_cambios(self) -> int | None:
+        """El promedio de los intervalos entre colocaciones consecutivas."""
+        intervalos = [
+            (b.fecha_colocacion - a.fecha_colocacion).days
+            for a, b in zip(self.colocaciones, self.colocaciones[1:])
+        ]
+        return _promedio(intervalos)
+
+    @property
+    def copias_promedio(self) -> int | None:
+        """Lo que rindió cada tóner, en copias.
+
+        Sale de la diferencia entre contadores consecutivos, **salteando los
+        tramos que no se pueden medir**: sin lectura, o con el contador más bajo
+        que el anterior —la placa cambiada—. Un tramo que no se puede medir no
+        vale cero, y por eso se descarta en vez de promediarse.
+        """
+        rindes = []
+        for a, b in zip(self.colocaciones, self.colocaciones[1:]):
+            if a.contador_copias is None or b.contador_copias is None:
+                continue
+            if b.contador_copias < a.contador_copias:
+                continue
+            rindes.append(b.contador_copias - a.contador_copias)
+        return _promedio(rindes)
+
+    @property
+    def proximo_cambio_estimado(self) -> date | None:
+        promedio = self.dias_entre_cambios
+        if promedio is None or self.ultimo_cambio is None:
+            return None
+        return self.ultimo_cambio + timedelta(days=promedio)
+
+    @property
+    def pedir_desde(self) -> date | None:
+        """Cuándo hay que **pedirlo**, que es antes de que se acabe.
+
+        Al cambio estimado se le descuenta lo que tarda el proveedor —medido de
+        las entregas de esta misma máquina— más un margen sobre su propia
+        cadencia. Sin ese descuento, la lista avisaría el día en que la máquina
+        se queda parada, que es tarde por definición.
+        """
+        estimado = self.proximo_cambio_estimado
+        if estimado is None:
+            return None
+        promedio = self.dias_entre_cambios or 0
+        anticipo = round(promedio * MARGEN_ANTICIPO) + (self.demora_proveedor or 0)
+        return estimado - timedelta(days=anticipo)
+
+    @property
+    def dias_para_pedir(self) -> int | None:
+        """Cuántos días faltan —o sobran, en negativo— para que toque pedirlo.
+
+        Es una propiedad y no una cuenta dentro de `to_dict()` por lo mismo que
+        el resto: la aritmética vive toda junta y se puede probar sin armar el
+        dict de salida.
+        """
+        return (self.pedir_desde - self.hoy).days if self.pedir_desde else None
+
+    @property
+    def estado(self) -> str:
+        """Los cuatro estados, en el orden en que se preguntan.
+
+        🔑 **`ya_pedido` gana sobre `pedir_ahora`**: si para esta máquina hay un
+        insumo pendiente o esperando en el armario del cliente, la lista no
+        tiene que volver a pedirlo. Sin esa precedencia, una máquina vencida
+        seguiría gritando después de que alguien la atendió y la lista se
+        convierte en ruido — que es como se deja de mirar una lista.
+        """
+        if self.pendientes:
+            return "ya_pedido"
+        if self.cambios < MINIMO_COLOCACIONES or self.pedir_desde is None:
+            return "sin_historial"
+        return "pedir_ahora" if self.hoy >= self.pedir_desde else "al_dia"
+
+    def to_dict(self, *, equipo=None, cliente_nombre: str | None = None) -> dict:
+        return {
+            "equipo_id": self.equipo_id,
+            "equipo_descripcion": (
+                " ".join(x for x in (equipo.tipo, equipo.marca, equipo.modelo) if x)
+                if equipo is not None else None
+            ),
+            "equipo_sector": equipo.sector if equipo is not None else None,
+            "cliente_id": equipo.cliente_id if equipo is not None else None,
+            "cliente_nombre": cliente_nombre,
+            "insumo_item_id": self.insumo_item_id,
+            "insumo_nombre": self.insumo_nombre,
+            "cambios": self.cambios,
+            "ultimo_cambio": (
+                self.ultimo_cambio.isoformat() if self.ultimo_cambio else None
+            ),
+            "dias_desde_el_ultimo": self.dias_desde_el_ultimo,
+            "dias_entre_cambios": self.dias_entre_cambios,
+            "copias_promedio": self.copias_promedio,
+            "demora_proveedor": self.demora_proveedor,
+            "proximo_cambio_estimado": (
+                self.proximo_cambio_estimado.isoformat()
+                if self.proximo_cambio_estimado else None
+            ),
+            "pedir_desde": (
+                self.pedir_desde.isoformat() if self.pedir_desde else None
+            ),
+            "estado": self.estado,
+            # La columna que ordena la lista.
+            "dias_para_pedir": self.dias_para_pedir,
+        }
