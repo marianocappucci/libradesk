@@ -58,6 +58,7 @@ from libracommerce.usecases.inventory import (
     verificar_disponibilidad,
 )
 from libracommerce.usecases.sales import confirm_sale
+from libracore import medios_pago
 from libracore.db import core as libracore_core
 from sqlalchemy import DateTime, Integer, UniqueConstraint, delete, func, select
 from sqlalchemy.orm import Mapped, mapped_column
@@ -69,7 +70,20 @@ from .fecha import ahora as _ahora
 
 #: Como se cobro. `cuenta_corriente` es el unico que genera deuda; los demas
 #: son informativos para el reporte de ventas.
-MEDIOS_PAGO = ("efectivo", "transferencia", "cheque", "tarjeta", "cuenta_corriente")
+#:
+#: 🔴 **Del motor, no de una tupla escrita aca.** Era una de las 28 copias del
+#: vocabulario de la familia y divergia en las dos direcciones: tenia `tarjeta`
+#: --que la lista canonica no ofrecia-- y le faltaban `mercadopago`, `cuenta_dni`
+#: y `billetera`, o sea que este producto no podia registrar un cobro por
+#: MercadoPago aunque el resto de la casa si.
+#:
+#: Al adoptar la canonica, `tarjeta` deja de aceptarse AL ESCRIBIR: se parte en
+#: `tarjeta_debito` y `tarjeta_credito`, que es como lo declara ARCA. Las ventas
+#: viejas con `tarjeta` se siguen LEYENDO --`medios_pago.HISTORICOS` la conoce--
+#: y el frontend las muestra bien.
+#:
+#: Ver `libracore.medios_pago` y wiki/concepts/medios-de-pago-familia-libra.md.
+MEDIOS_PAGO = tuple(medios_pago.ELEGIBLES)
 
 
 class VentaRemito(Base):

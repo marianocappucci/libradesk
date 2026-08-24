@@ -8,6 +8,7 @@ Gate por plan: `ventas`, puesto en `main.py`.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from libracore import medios_pago
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
@@ -55,6 +56,23 @@ class ConversionIn(BaseModel):
 
 
 # ── Ventas ───────────────────────────────────────────────────────────────
+
+
+@router.get("/medios-pago")
+def medios_de_pago() -> list[dict]:
+    """`[{id, label}]` para el selector de cobro.
+
+    🔴 **La lista es del motor.** El frontend tenía la suya —`MEDIOS` en
+    `VentasComercial.tsx`, espejo de la tupla del backend— y las dos divergían
+    de la canónica en las dos direcciones: tenían `tarjeta` (que ya no se
+    escribe, se parte en débito y crédito) y les faltaban `mercadopago`,
+    `cuenta_dni` y `billetera`.
+
+    La cuenta corriente **sí** se ofrece acá, a diferencia de los productos de
+    turnos: en este POS es un medio real —"se lo lleva a cuenta"— y es el único
+    que genera deuda. Ver `services/ventas.MEDIOS_PAGO`.
+    """
+    return medios_pago.para_selector()
 
 
 @router.get("/ventas")

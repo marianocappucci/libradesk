@@ -12,7 +12,7 @@
 //
 // Por eso no hay tipo A/B/C, ni CAE, ni punto de venta fiscal en ninguna de
 // estas pantallas. Si aparecen, algo se entendió mal.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
@@ -75,16 +75,53 @@ type MovimientoCC = {
   fecha: string; tipo: string; concepto: string; monto: number; referencia: string
 }
 
-const MEDIOS = [
-  { valor: 'efectivo', label: 'Efectivo' },
-  { valor: 'transferencia', label: 'Transferencia' },
-  { valor: 'cheque', label: 'Cheque' },
-  { valor: 'tarjeta', label: 'Tarjeta' },
-  { valor: 'cuenta_corriente', label: 'Cuenta corriente' },
-]
+// 🔴 Acá había un `MEDIOS` escrito a mano, espejo de la tupla del backend
+// (`services/ventas.MEDIOS_PAGO`). Las dos divergían de la lista canónica de la
+// familia en las dos direcciones: tenían `tarjeta` —que ya no se escribe, se
+// parte en débito y crédito como lo declara ARCA— y les faltaban `mercadopago`,
+// `cuenta_dni` y `billetera`, o sea que este producto no podía registrar un
+// cobro por MercadoPago aunque el resto de la casa sí.
+//
+// Ahora sale de `GET /api/medios-pago`, que la sirve `libracore.medios_pago`.
+// Ver `wiki/concepts/medios-de-pago-familia-libra.md`.
 
-const medioLabel = (valor: string) =>
-  MEDIOS.find((m) => m.valor === valor)?.label ?? valor
+type MedioPago = { id: string; label: string }
+
+/** Cache de módulo: la lista es de constantes del motor y no cambia mientras la
+ *  pestaña esté abierta. */
+let cacheMedios: MedioPago[] | null = null
+
+function useMediosPago() {
+  const [medios, setMedios] = useState<MedioPago[]>(cacheMedios ?? [])
+  useEffect(() => {
+    if (cacheMedios) return
+    api.get<MedioPago[]>('/api/medios-pago')
+      .then((ms) => {
+        // Se comprueba la forma, no se confía en ella: un cuerpo truncado o el
+        // HTML del catch-all es truthy, y el `.map()` de abajo tumbaría el
+        // formulario entero con un TypeError.
+        cacheMedios = Array.isArray(ms) ? ms : []
+        setMedios(cacheMedios)
+      })
+      .catch(() => {})
+  }, [])
+  return medios
+}
+
+/** Cómo se muestra un medio. **Nunca vacío**: uno que el motor no nombró sale
+ *  con su slug crudo, que es la única forma de enterarse de que existe. Cubre
+ *  las ventas viejas con `tarjeta`, que se leen aunque ya no se escriban. */
+const medioLabel = (valor: string, medios: MedioPago[]) =>
+  medios.find((m) => m.id === valor)?.label ?? ETIQUETA_HISTORICA[valor] ?? valor
+
+/** Las grafías que el motor ya no ofrece pero están en ventas de antes. Espeja
+ *  a `medios_pago.HISTORICOS`; sin esto la grilla muestra el slug. */
+const ETIQUETA_HISTORICA: Record<string, string> = {
+  tarjeta: 'Tarjeta',
+  mercado_pago: 'Mercado Pago',
+  debito: 'Tarjeta de débito',
+  credito: 'Tarjeta de crédito',
+}
 
 /** Los estados de `SaleStatus` de libracommerce, en castellano. */
 const ESTADOS: Record<string, { label: string; tono: TonoEstado }> = {
@@ -269,6 +306,7 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
   const [abierto, setAbierto] = useState(false)
   const [clienteId, setClienteId] = useState('')
   const [depositoId, setDepositoId] = useState('')
+  const medios = useMediosPago()
   const [medio, setMedio] = useState('efectivo')
   const [productoId, setProductoId] = useState('')
   const [lineas, setLineas] = useState<
@@ -411,8 +449,8 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
               <Select value={medio} onValueChange={setMedio}>
                 <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {MEDIOS.map((m) => (
-                    <SelectItem key={m.valor} value={m.valor}>{m.label}</SelectItem>
+                  {medios.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -557,6 +595,7 @@ function AccionRemito({ venta, clientes, onGenerado }: {
 
 export function VentaDetalle() {
   const { id } = useParams<{ id: string }>()
+  const medios = useMediosPago()
   const { datos, error, cargando, conError } = useDatos<VentaDetalleData | null>(
     `/api/ventas/${Number(id)}`, null,
   )
@@ -642,7 +681,7 @@ export function VentaDetalle() {
             ? <p className="text-muted-foreground">Sin cobros registrados.</p>
             : datos.pagos.map((p, i) => (
               <p key={i} className="flex justify-between gap-4">
-                <span>{medioLabel(p.medio)}{p.referencia && ` · ${p.referencia}`}</span>
+                <span>{medioLabel(p.medio, medios)}{p.referencia && ` · ${p.referencia}`}</span>
                 <span className="tabular-nums">{pesos(p.monto)}</span>
               </p>
             ))}
