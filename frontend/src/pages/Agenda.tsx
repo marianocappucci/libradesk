@@ -30,7 +30,7 @@
  *  `components/agenda/datos.ts`).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { CalendarDays } from 'lucide-react'
 import { api, ApiError, type EquipoTrabajo } from '../api'
@@ -55,6 +55,13 @@ export function Agenda() {
   const [params, setParams] = useSearchParams()
   const [equipos, setEquipos] = useState<EquipoTrabajo[]>([])
   const [errorEquipos, setErrorEquipos] = useState<string | null>(null)
+  // 🔴 Arranca en `true` y esto NO es cosmético. Hasta el 2026-08-24 la pantalla
+  // no tenía forma de distinguir "el catálogo todavía no llegó" de "el catálogo
+  // llegó vacío" —las dos son `equipos.length === 0`— y resolvía el empate
+  // llamándole "Cargando…" a las dos. En una instancia sin cuadrillas cargadas
+  // eso es un cartel de carga que no termina nunca: lo reportó el humano contra
+  // `compulibra.libradesk.com.ar`, que tiene cero filas en `equipos_trabajo`.
+  const [cargandoEquipos, setCargandoEquipos] = useState(true)
 
   const vista = vistaDeLaUrl(params.get('vista'))
   // `hoyLocal()` en cada render y no en un `useState`: si alguien deja la
@@ -75,11 +82,21 @@ export function Agenda() {
           setErrorEquipos(err instanceof ApiError ? err.detail : 'Error de conexión.')
         }
       })
+      // En el `finally` y no en cada rama: si el error apagara la marca sólo en
+      // el `then`, una instancia con la API caída se quedaría en "Cargando…"
+      // igual que la que no tiene cuadrillas.
+      .finally(() => { if (vigente) setCargandoEquipos(false) })
     return () => { vigente = false }
   }, [])
 
   const { desde, dias } = rangoDeVista(vista, dia)
-  const { porDia, activos, cargando, error } = useAgendaRango(equipos, desde, dias)
+  // Sin `cargando`: el hook lo expone (el Dashboard sí lo usa) pero acá no
+  // hay dónde mostrarlo. La única caja que lo leía era el cartel de abajo, que
+  // sólo se dibuja con `activos.length === 0` — y sin cuadrillas activas el
+  // hook corta antes de pedir nada y `cargando` no llega a prenderse nunca.
+  // Leído ahí valía siempre `false`: era el `equipos.length === 0` de al lado,
+  // el que no distingue vacío de en vuelo, el que sostenía el cartel entero.
+  const { porDia, activos, error } = useAgendaRango(equipos, desde, dias)
 
   /** Los parámetros de la pantalla con algunos cambiados. Los demás se
    *  conservan: cambiar de vista no tiene por qué olvidar la cuadrilla elegida. */
@@ -184,11 +201,23 @@ export function Agenda() {
       )}
 
       {activos.length === 0 ? (
-        <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-          {cargando || equipos.length === 0
-            ? 'Cargando…'
-            : 'No hay equipos activos para agendar.'}
-        </CardContent></Card>
+        /* Sin cuadrillas que dibujar hay TRES situaciones y ninguna es la otra:
+           el catálogo en vuelo, el catálogo que no se pudo traer, y el catálogo
+           que llegó y está vacío. Con error no se dibuja cartel: el párrafo de
+           arriba ya dice qué pasó, y un "todavía no hay cuadrillas" al lado
+           afirmaría sobre un dato que justamente no se tiene. */
+        errorEquipos ? null : (
+          <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
+            {cargandoEquipos ? 'Cargando…' : equipos.length === 0 ? (
+              <>
+                Todavía no hay cuadrillas cargadas.{' '}
+                <Link to="/equipos-trabajo" className="underline underline-offset-4">
+                  Se crean en «Equipos y flota»
+                </Link>.
+              </>
+            ) : 'No hay equipos activos para agendar.'}
+          </CardContent></Card>
+        )
       ) : vista === 'dia' ? (
         <VistaDia
           dia={dia}
