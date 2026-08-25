@@ -115,6 +115,22 @@ services:
     depends_on:
       libradesk-postgres:
         condition: service_healthy
+    # 🔴 Las migraciones también acá, no sólo en el deploy. `cmd_actualizar`
+    # las corre para las instancias de cliente y la demo, pero ESTA la levanta
+    # el compose del repo y el motor no la toca. Se descubrió el 2026-08-25:
+    # `libracargo-dev` estaba una revisión atrás del código que servía, con el
+    # chequeo de salud en 200, y los cinco productos con Alembic tenían el
+    # mismo hueco. Acá las 36 revisiones nunca se aplicaron solas.
+    #
+    # 🔑 **Va como `entrypoint:` y no como `command:` a propósito.** Este
+    # servicio es el único de los cinco que NO override el comando: usa el
+    # `CMD` de la imagen, sin `--reload`. Copiarlo acá para poder anteponerle
+    # el `alembic` sería una segunda copia del comando de arranque, que se
+    # desviaría del Dockerfile sin que nada lo dijera. El `exec "$$0" "$$@"`
+    # ejecuta el CMD que la imagen ya trae, sea cual sea.
+    #
+    # Los `$$` son escape de Compose: lo que ve la shell es `$0` y `$@`.
+    entrypoint: ["sh", "-c", "alembic upgrade head && exec \"$$0\" \"$$@\""]
     ports:
       - "8086:8000"
     volumes:
