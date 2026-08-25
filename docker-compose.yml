@@ -122,15 +122,22 @@ services:
     # chequeo de salud en 200, y los cinco productos con Alembic tenían el
     # mismo hueco. Acá las 36 revisiones nunca se aplicaron solas.
     #
-    # 🔑 **Va como `entrypoint:` y no como `command:` a propósito.** Este
-    # servicio es el único de los cinco que NO override el comando: usa el
-    # `CMD` de la imagen, sin `--reload`. Copiarlo acá para poder anteponerle
-    # el `alembic` sería una segunda copia del comando de arranque, que se
-    # desviaría del Dockerfile sin que nada lo dijera. El `exec "$$0" "$$@"`
-    # ejecuta el CMD que la imagen ya trae, sea cual sea.
+    # 🔴 **Esto fue `entrypoint: ["sh","-c","... && exec \"$$0\" \"$$@\""]` y
+    # NO funciona.** La idea era conservar el `CMD` de la imagen en vez de
+    # copiarlo acá: este servicio es el único de los cinco que no override el
+    # comando de arranque, así que duplicarlo abre la puerta a que se desvíe del
+    # Dockerfile en silencio.
     #
-    # Los `$$` son escape de Compose: lo que ve la shell es `$0` y `$@`.
-    entrypoint: ["sh", "-c", "alembic upgrade head && exec \"$$0\" \"$$@\""]
+    # **Compose borra el `CMD` de la imagen cuando el servicio declara
+    # `entrypoint:` y no declara `command:`.** Medido sobre el contenedor real:
+    # `.Config.Cmd` quedaba en `null` con la imagen trayendo su `CMD` intacto,
+    # así que `$0` era la cadena vacía, el `exec` fallaba y el contenedor entraba
+    # en crash loop. La prueba que lo dio por bueno tenía un `command:` al lado
+    # —o sea que probaba justamente el caso que acá no se da—.
+    #
+    # Así que el comando se copia, y lo que impide que se desvíe es un test que
+    # lee el `CMD` del Dockerfile y exige que esté acá adentro.
+    command: sh -c "alembic upgrade head && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
     ports:
       - "8086:8000"
     volumes:
