@@ -18,8 +18,10 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO,
   INSUMO_LABELS, INSUMO_TONO, MOVIMIENTO_LABELS,
+  CONSUMO_LABELS, CONSUMO_TONO,
   PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto,
   type ContratoProveedor, type EquipoFicha, type Insumo,
+  type ResumenDeConsumo,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -85,6 +87,9 @@ export function EquipoDetalle() {
   // vale para las dos cosas —no está cubierta, o la instancia no tiene el
   // módulo— y en las dos la línea simplemente no se dibuja.
   const [cobertura, setCobertura] = useState<ContratoProveedor | null>(null)
+  // El consumo resumido de esta máquina, uno por insumo (fase 3): cada cuánto
+  // se cambia, cuánto rinde y desde cuándo conviene ir pidiendo el próximo.
+  const [consumo, setConsumo] = useState<ResumenDeConsumo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -114,6 +119,9 @@ export function EquipoDetalle() {
     )
       .then(setCobertura)
       .catch(() => setCobertura(null))
+    api.get<ResumenDeConsumo[]>(`/api/insumos/resumen?equipo_id=${equipoId}`)
+      .then(setConsumo)
+      .catch(() => setConsumo([]))
     try {
       setFicha(await api.get<EquipoFicha>(`/api/dashboard/equipo/${equipoId}`))
     } catch (err) {
@@ -432,6 +440,38 @@ export function EquipoDetalle() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* El resumen arriba del historial: la pregunta que se hace
+                    parado frente a la máquina no es "qué pasó" sino "cuándo hay
+                    que pedirle el próximo". Una fila por insumo, porque el
+                    negro y el cyan tienen cada uno su cadencia. */}
+                {consumo.length > 0 && (
+                  <ul className="mb-3 grid gap-2">
+                    {consumo.map((c) => (
+                      <li
+                        key={`${c.equipo_id}-${c.insumo_item_id}`}
+                        className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
+                      >
+                        <BadgeEstado tono={CONSUMO_TONO[c.estado]}>
+                          {CONSUMO_LABELS[c.estado]}
+                        </BadgeEstado>
+                        <span className="text-sm font-medium">{c.insumo_nombre}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {[
+                            c.dias_entre_cambios !== null
+                              ? `se cambia cada ${c.dias_entre_cambios} días`
+                              : `${c.cambios} cambio${c.cambios === 1 ? '' : 's'} registrado${c.cambios === 1 ? '' : 's'}`,
+                            c.copias_promedio !== null
+                              ? `rinde ${c.copias_promedio.toLocaleString('es-AR')} copias`
+                              : null,
+                            c.pedir_desde !== null
+                              ? `pedir desde ${formatFecha(c.pedir_desde)}`
+                              : null,
+                          ].filter(Boolean).join(' · ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {insumos.length === 0 ? (
                   <p className="py-4 text-center text-sm text-muted-foreground">
                     No se registró ningún insumo para este equipo.

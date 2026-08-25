@@ -39,6 +39,26 @@ configure(
     # `libracore.respaldo` (`build_backup_router` en app/main.py). Contalibra
     # y Restolibra tienen implementacion propia y todavia no.
     backup_zip=True,
+    # 🔴 **Sin esta línea el deploy no aplica ninguna revisión.** El paso lo
+    # trae el motor desde LibraCore `v1.48.0` —`cmd_actualizar` corre estos
+    # comandos con `compose run --rm` ANTES del `up -d`, así la migración usa
+    # el código nuevo mientras la instancia todavía sirve el viejo— pero el
+    # default es vacío, así que un producto que no declara nada no ve ningún
+    # paso y su deploy pasa de largo en silencio.
+    #
+    # Este repo tiene 36 revisiones y no la declaraba. Las bases de producción
+    # están al día igual porque alguien las corrió a mano en cada deploy; el
+    # defecto es que dependía de que ese alguien se acordara. A LibraCargo se
+    # le olvidó el 2026-08-24 y quedó con el código nuevo sobre el esquema
+    # viejo: `healthy`, `/salud` en 200, y todo `SELECT` sobre la tabla nueva
+    # muriendo.
+    #
+    # Una sola cadena. Este producto importa de LibraGenda sólo `domain` y
+    # `scheduling` —dataclasses congelados y algoritmos, sin persistencia— así
+    # que no tiene la `alembic_version` del motor al lado de la propia.
+    # Gestiolibra y MedLibra usan `libragenda.sqlalchemy_repository` y por eso
+    # declaran `libragenda-migrar upgrade` primero.
+    migraciones=(("alembic", "upgrade", "head"),),
     # `health_path` tampoco se pasa acá — ver el comentario largo en
     # `nuevo_cliente.py`. Este producto ya sirve su salud en `/health`, el
     # default. Lo que importa es que los dos scripts sigan diciendo lo MISMO:

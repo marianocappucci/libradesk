@@ -21,7 +21,12 @@ Las tres cosas que estos tests protegen, en orden de gravedad si fallaran:
 """
 import contextlib
 import io
+import os
+import pathlib
 import re
+import subprocess
+import sys
+import textwrap
 import zlib
 
 import pytest
@@ -591,3 +596,117 @@ def test_el_render_postgres_realmente_mira_la_cadena(monkeypatch):
         "ALTER TABLE tecnicos ADD COLUMN es_tecnico BOOLEAN DEFAULT 1 NOT NULL;"
     ) == [("es_tecnico", "1")]
 
+
+
+# ── El CLI de Alembic, tal como lo corre el deploy ───────────────────────────
+
+#: Raiz del repo: lo que dentro del contenedor es `/app`, que es tambien el
+#: directorio de trabajo de la imagen y desde donde el deploy corre `alembic`.
+RAIZ = pathlib.Path(__file__).resolve().parents[1]
+
+#: La forma exacta en la que se manifestaba el defecto.
+FALTA_PLANS = "No module named 'plans'"
+
+
+def _ini_como_lo_ve_el_contenedor(tmp_path, *, con_prepend: bool) -> pathlib.Path:
+    """Una copia del `alembic.ini` REAL, apta para correr desde cualquier lado.
+
+    Se copia el archivo del repo en vez de escribir uno inventado **a
+    proposito**: asi, si alguien borra la linea `prepend_sys_path` del ini de
+    verdad, la copia tambien la pierde y el test de abajo se pone en rojo. Un
+    ini escrito aca probaria la teoria de Alembic, no la configuracion que se
+    despliega.
+
+    Lo unico que se toca es `script_location`, que se vuelve absoluto porque la
+    copia vive en un tmp_path y el original lo declara relativo.
+    """
+    texto = (RAIZ / "alembic.ini").read_text(encoding="utf-8")
+    texto = texto.replace(
+        "script_location = migrations",
+        f"script_location = {RAIZ / 'migrations'}",
+        1,
+    )
+    if not con_prepend:
+        texto = "\n".join(
+            linea for linea in texto.splitlines()
+            if not linea.strip().startswith("prepend_sys_path")
+        ) + "\n"
+    destino = tmp_path / ("con_prepend.ini" if con_prepend else "sin_prepend.ini")
+    destino.write_text(texto, encoding="utf-8")
+    return destino
+
+
+def _sitio_con_app_pero_sin_plans(tmp_path) -> pathlib.Path:
+    """Un directorio de instalacion como el de la imagen: con `app`, sin `plans`.
+
+    En el contenedor las dos cosas viven en lugares distintos —`app` es un wheel
+    en site-packages y `plans.py` es un archivo suelto de `/app`— y de esa
+    separacion depende el defecto. En un install editable viven en el mismo
+    directorio, asi que hay que reconstruirla: un enlace a `app` y nada mas.
+    """
+    sitio = tmp_path / "sitio"
+    sitio.mkdir(exist_ok=True)
+    enlace = sitio / "app"
+    if not enlace.exists():
+        enlace.symlink_to(RAIZ / "app", target_is_directory=True)
+    return sitio
+
+
+def test_el_cli_de_alembic_arranca_sin_la_raiz_en_sys_path(tmp_path):
+    """🔴 El deploy corre `compose run --rm <instancia> alembic upgrade head`.
+
+    Dentro de la imagen `app` esta instalado como wheel en site-packages, pero
+    `plans.py` es un modulo suelto de la raiz que **no se instala**. Y ahi
+    `alembic` es un console script: Python le pone en `sys.path[0]` el
+    directorio del ejecutable, no el de trabajo. Asi que la cadena
+    `env.py -> app.schema -> app.services.modules` moria en
+    `from plans import TODOS_LOS_MODULOS` y **abortaba el deploy de esa
+    instancia** (LibraCore corta el deploy si una migracion falla). El servidor
+    no lo sufria porque `uvicorn` si agrega el directorio de trabajo.
+
+    **Por que el subproceso saca la raiz de `sys.path` a mano.** Aca el proyecto
+    esta instalado en modo editable, y eso deja un `.pth` con la raiz del repo
+    adentro de site-packages: `plans` se importa desde cualquier lado y el
+    defecto es *irreproducible* tal cual. Sacar esa entrada es lo que convierte
+    a este entorno en el del contenedor; no sacarla seria escribir un verde que
+    no depende de nada.
+
+    El primer tramo es un **control positivo**: sin la linea del ini, el CLI
+    TIENE que morir. Si no muriera, la asercion de abajo no probaria nada.
+    """
+    def correr(ini: pathlib.Path) -> subprocess.CompletedProcess:
+        # `-c` en vez del console script porque hay que tocar `sys.path` antes
+        # de que Alembic arranque. El efecto final es el mismo: la raiz no esta,
+        # el directorio de trabajo si, y quien la reponga tiene que ser el ini.
+        codigo = textwrap.dedent(f"""
+            import os, sys
+            raiz = os.getcwd()
+            sys.path = [p for p in sys.path if p not in ('', '.', raiz)]
+            sys.path.append({str(_sitio_con_app_pero_sin_plans(tmp_path))!r})
+            from alembic.config import main
+            main(argv=['-c', {str(ini)!r}, 'current'])
+        """)
+        entorno = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        # Una URL que no atiende: lo que se mide es si se LLEGA a conectar, o
+        # sea si la cadena de imports de env.py sobrevivio. El error de conexion
+        # es el resultado esperado cuando todo salio bien.
+        entorno["DATABASE_URL"] = "postgresql+psycopg://nadie:nada@127.0.0.1:1/no-existe"
+        return subprocess.run(
+            [sys.executable, "-c", codigo],
+            cwd=RAIZ, env=entorno, capture_output=True, text=True, timeout=180,
+        )
+
+    sin = correr(_ini_como_lo_ve_el_contenedor(tmp_path, con_prepend=False))
+    assert FALTA_PLANS in sin.stderr, (
+        "control positivo fallido: sin `prepend_sys_path` el CLI tendria que "
+        "morir importando `plans`. Si no muere, este entorno no reproduce el "
+        "del contenedor y la asercion de abajo no prueba nada. stderr: "
+        + sin.stderr[-2000:]
+    )
+
+    con = correr(_ini_como_lo_ve_el_contenedor(tmp_path, con_prepend=True))
+    assert FALTA_PLANS not in con.stderr, (
+        "`alembic.ini` dejo de declarar `prepend_sys_path = .`: el deploy "
+        "vuelve a abortar en la migracion de cada instancia. stderr: "
+        + con.stderr[-2000:]
+    )

@@ -65,6 +65,7 @@ import { Equipos } from '../pages/Equipos'
 import { Reparaciones } from '../pages/Reparaciones'
 import { Insumos } from '../pages/Insumos'
 import { ContratosProveedor } from '../pages/ContratosProveedor'
+import { InsumosAPedir } from '../pages/InsumosAPedir'
 import { DepositosClientes } from '../pages/DepositosClientes'
 
 // Admin: varias de estas pantallas esconden el alta detrás del rol, y sin el
@@ -263,6 +264,14 @@ const PANTALLAS: {
       render(<Insumos />, '/insumos')
       // Por el encabezado y no por un combobox, mismo motivo que arriba.
       await screen.findByRole('heading', { name: /Insumos/ })
+    },
+  },
+  {
+    titulo: 'Qué hay que pedir — barra de filtros',
+    cuantos: 2,
+    montar: async () => {
+      render(<InsumosAPedir />, '/insumos/a-pedir')
+      await screen.findByRole('heading', { name: /Qué hay que pedir/ })
     },
   },
   {
