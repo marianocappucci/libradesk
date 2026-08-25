@@ -48,6 +48,29 @@ configure(
     # dos en el default no hay nada que desincronizar; el test es lo que impide
     # que vuelvan a separarse.
     postgres=True,
+    # ⚠️ **Tiene que decir lo mismo que `scripts/panel_admin.py`.** Hasta el
+    # 2026-08-24 este archivo no pasaba `backup_zip` y el otro sí, que es el
+    # único campo en el que los dos `configure()` diferían. Como pisan un `_cfg`
+    # GLOBAL y `libracore.admin.services` importa los dos módulos en el mismo
+    # proceso, una diferencia acá hace que el resultado dependa del orden de los
+    # imports. `tests/test_provisioning.py` lo compara entero con `asdict`.
+    #
+    # **No estaba mordiendo**: todo camino que hoy lee `cfg.backup_zip` —el
+    # `backup-all` del cron de las 03:45, el `backup <slug>` de la CLI y el menú
+    # interactivo— entra por `panel_admin.py`, que ya lo tenía en `True`. Se ve
+    # en el servidor: las tres instancias vienen armando su
+    # `backup_automatico_*.zip` diario en `data/backups/`. Era una mina, no un
+    # incendio: el primer `cmd_backup` que se llamara desde el backoffice se
+    # habría llevado el camino viejo, en silencio.
+    #
+    # `True` es el valor correcto, no un empate arbitrario: este producto sirve
+    # su pantalla de Backups con el `build_backup_router` de
+    # `libracore.respaldo` (ver `app/main.py`), así que el ZIP que arma el cron
+    # es exactamente el que el cliente puede listar, bajar y restaurar solo. Sin
+    # el flag, el `tar.gz` empaqueta `data/` mientras el dump de PostgreSQL
+    # queda **afuera**, en `clientes/<slug>/backups/` — el archivo que parece el
+    # backup de la instancia no lo es.
+    backup_zip=True,
     # 🔴 **Sin esta línea el deploy no aplica ninguna revisión.** El paso lo
     # trae el motor desde LibraCore `v1.48.0` —`cmd_actualizar` corre estos
     # comandos con `compose run --rm` ANTES del `up -d`, así la migración usa
