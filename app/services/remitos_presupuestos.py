@@ -44,7 +44,6 @@ import os
 from libracore import config_manager
 from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
-from sqlalchemy.engine import make_url
 
 from . import iva
 
@@ -113,16 +112,28 @@ def configure(database_url: str, data_dir: str) -> None:
     """
     if not database_url:
         raise ValueError("database_url vacia")
-    # LibraCore distingue SQLite de PostgreSQL por el tipo del argumento:
-    # recibe una ruta para SQLite y la URL completa para PostgreSQL. Pasar solo
-    # `.database` en el segundo caso lo convertiría en un archivo SQLite.
-    if database_url.startswith(("postgresql://", "postgresql+psycopg://")):
-        libracore_core.configure(database_url)
-    else:
-        db_path = make_url(database_url).database
-        if not db_path:
-            raise ValueError(f"database_url sin path de archivo: {database_url!r}")
-        libracore_core.configure(db_path)
+    # 🔴 **Este producto corre sobre PostgreSQL y nada mas.** La guarda va aca,
+    # en el arranque del producto, y no dentro de `libracore.db.core`: el motor
+    # tiene que poder abrir un SQLite igual, porque de eso vive la herramienta
+    # de diagnostico `python -m libracore.db.schema_dump`, que vuelca el schema
+    # de un archivo viejo o de la base de LibraEdge --- la excepcion permanente
+    # de la familia. La regla "este producto no habla con otro motor" es del
+    # producto.
+    #
+    # Aca habia un `if/else`: URL de PostgreSQL a `configure()` tal cual, y
+    # cualquier otra cosa convertida a ruta de archivo con `make_url().database`.
+    # Con la guarda esa segunda rama no existe mas. Ademas el criterio sale del
+    # motor y no de una lista escrita a mano --- `es_url_postgres` es el mismo
+    # chequeo en un solo lugar, y las listas a mano son las que se olvidan de
+    # `postgresql+psycopg://` (le paso a Gestiolibra).
+    if not libracore_core.es_url_postgres(database_url):
+        raise RuntimeError(
+            "LibraDesk corre solo sobre PostgreSQL y recibio {!r}, que no es "
+            "una URL de PostgreSQL. El modo SQLite se retiro el 2026-08-12: no "
+            "chequea las FK, tipa dinamicamente y acepta cadenas donde la base "
+            "pide enteros.".format(database_url)
+        )
+    libracore_core.configure(database_url)
 
     config_manager.CONFIG_PATH = os.path.join(data_dir, "config.json")
     config_manager.LOGO_DIR = os.path.join(data_dir, "logos")

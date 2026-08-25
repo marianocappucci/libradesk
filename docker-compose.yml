@@ -115,6 +115,29 @@ services:
     depends_on:
       libradesk-postgres:
         condition: service_healthy
+    # 🔴 Las migraciones también acá, no sólo en el deploy. `cmd_actualizar`
+    # las corre para las instancias de cliente y la demo, pero ESTA la levanta
+    # el compose del repo y el motor no la toca. Se descubrió el 2026-08-25:
+    # `libracargo-dev` estaba una revisión atrás del código que servía, con el
+    # chequeo de salud en 200, y los cinco productos con Alembic tenían el
+    # mismo hueco. Acá las 36 revisiones nunca se aplicaron solas.
+    #
+    # 🔴 **Esto fue `entrypoint: ["sh","-c","... && exec \"$$0\" \"$$@\""]` y
+    # NO funciona.** La idea era conservar el `CMD` de la imagen en vez de
+    # copiarlo acá: este servicio es el único de los cinco que no override el
+    # comando de arranque, así que duplicarlo abre la puerta a que se desvíe del
+    # Dockerfile en silencio.
+    #
+    # **Compose borra el `CMD` de la imagen cuando el servicio declara
+    # `entrypoint:` y no declara `command:`.** Medido sobre el contenedor real:
+    # `.Config.Cmd` quedaba en `null` con la imagen trayendo su `CMD` intacto,
+    # así que `$0` era la cadena vacía, el `exec` fallaba y el contenedor entraba
+    # en crash loop. La prueba que lo dio por bueno tenía un `command:` al lado
+    # —o sea que probaba justamente el caso que acá no se da—.
+    #
+    # Así que el comando se copia, y lo que impide que se desvíe es un test que
+    # lee el `CMD` del Dockerfile y exige que esté acá adentro.
+    command: sh -c "alembic upgrade head && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
     ports:
       - "8086:8000"
     volumes:
