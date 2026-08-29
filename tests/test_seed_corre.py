@@ -141,9 +141,25 @@ def test_la_agenda_queda_con_dias_para_los_dos_lados(api):
 
     Y se mide contra **hoy**, que es el día que la pantalla abre por defecto.
     """
-    sembrar(api)
+    # ⚠️ **Se pregunta por la fecha que devolvió `sembrar()`, no por
+    # `date.today()`.** El mismo patrón puso en rojo el CI de Restolibra el
+    # 2026-08-29 a las 00:04 de Argentina con el código que había pasado en
+    # verde una hora antes: `HOY` se resolvía al importar el seed y la corrida
+    # cruzó la medianoche. Volver a preguntarle al reloj acá reproduce el
+    # defecto con una ventana más chica -- entre que `sembrar()` devuelve y el
+    # assert corre, el día puede cambiar igual, y este test compara `<` y `>`
+    # justo contra ese borde.
+    fecha = sembrar(api)
 
-    hoy = str(date.today())
+    # 🔑 Control de que la fecha devuelta es realmente «hoy» y no cualquier
+    # cosa: sin esto, un `sembrar()` que devolviera una fecha inventada --y
+    # sembrara en esa-- pasaría los asserts de abajo sin que la agenda tenga
+    # nada el día que el operador la abre.
+    assert abs((fecha - date.today()).days) <= 1, (
+        f"sembrar() dijo haber sembrado para {fecha}, y hoy es {date.today()}"
+    )
+
+    hoy = str(fecha)
     dias = {
         str(i["fecha_programada"])[:10]
         for i in api.get("/api/incidencias")
