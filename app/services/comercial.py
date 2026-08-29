@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS facturas (
     cae_vto          TEXT,
     observaciones    TEXT,
     pdf_path         TEXT,
-    created_at       TEXT DEFAULT (datetime('now'))
+    created_at       TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS cajas (
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS cajas (
     medios_pago TEXT NOT NULL DEFAULT '[]',
     activo      INTEGER NOT NULL DEFAULT 1,
     es_default  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 -- 🔴 Las tres ultimas columnas NO estan en el `CREATE TABLE` de LibraCore: se
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS caja_movimientos (
     monto       REAL NOT NULL,
     referencia  TEXT DEFAULT '',
     factura_id  INTEGER,
-    created_at  TEXT DEFAULT (datetime('now')),
+    created_at  TEXT DEFAULT (datetime('now','-3 hours')),
     turno_id    INTEGER,
     caja_id     INTEGER REFERENCES cajas(id) ON DELETE SET NULL,
     medio_pago  TEXT DEFAULT '',
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS egresos (
     estado           TEXT NOT NULL DEFAULT 'pendiente',
     observaciones    TEXT DEFAULT '',
     usuario_id       INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at       TEXT DEFAULT (datetime('now'))
+    created_at       TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS egresos_pagos (
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS egresos_pagos (
     medio_pago  TEXT DEFAULT '',
     referencia  TEXT DEFAULT '',
     usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS ventas_pagos (
@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS ventas_pagos (
     medio      TEXT NOT NULL,
     monto      REAL NOT NULL,
     referencia TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS cc_pagos (
@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS cc_pagos (
     medio_pago  TEXT DEFAULT 'efectivo',
     caja_id     INTEGER REFERENCES cajas(id) ON DELETE SET NULL,
     usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS cc_debitos (
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS cc_debitos (
     concepto    TEXT DEFAULT '',
     referencia  TEXT DEFAULT '',
     usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
     estado        TEXT NOT NULL DEFAULT 'ok',
     detalle       TEXT DEFAULT '',
     automatico    INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT DEFAULT (datetime('now'))
+    created_at    TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS recibos (
@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS recibos (
     anulado_motivo    TEXT DEFAULT '',
     anulado_at        TEXT DEFAULT '',
     usuario_id        INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at        TEXT DEFAULT (datetime('now'))
+    created_at        TEXT DEFAULT (datetime('now','-3 hours'))
 );
 """
 
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS sucursales (
     codigo     TEXT DEFAULT '',
     direccion  TEXT DEFAULT '',
     activa     INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','-3 hours'))
 );
 """
 

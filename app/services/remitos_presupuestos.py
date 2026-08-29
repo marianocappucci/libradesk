@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS remitos (
     observations   TEXT,
     pdf_path       TEXT,
     usuario_id     INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at     TEXT DEFAULT (datetime('now'))
+    created_at     TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS presupuestos (
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS presupuestos (
     pdf_path        TEXT,
     remito_id       INTEGER REFERENCES remitos(id),
     usuario_id      INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    created_at      TEXT DEFAULT (datetime('now'))
+    created_at      TEXT DEFAULT (datetime('now','-3 hours'))
 );
 """
 
