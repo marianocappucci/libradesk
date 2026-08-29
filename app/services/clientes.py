@@ -86,13 +86,22 @@ class Cliente(Base):
     #    creaba la columna sin default y el modelo se separaba de la cadena.
     #
     # El literal es el que genera el adaptador PostgreSQL de LibraCore para su
-    # `TEXT DEFAULT (datetime('now'))`, y `nullable=False` viene del
-    # `fecha_creacion TIMESTAMP ... NOT NULL` de antes de la `0017`, que solo
-    # le cambio el tipo.
+    # `TEXT DEFAULT (datetime('now','-3 hours'))` --el `AHORA_AR` del motor--, y
+    # `nullable=False` viene del `fecha_creacion TIMESTAMP ... NOT NULL` de antes
+    # de la `0017`, que solo le cambio el tipo.
+    #
+    # 🔴 El `- interval '3 hours'` es hora de Argentina, y hasta la revision
+    # `0037` este literal decia UTC: el alta de un cliente quedaba 3 h adelantada
+    # como todo lo demas de la familia. Que este literal y el que deja la cadena
+    # tengan que coincidir NO se cuida a mano -- lo cuida
+    # `test_alembic_construye_lo_mismo_que_create_all`, que fue el que se puso
+    # rojo al cambiar la revision y sin el cual esta linea se habria quedado en
+    # UTC en silencio.
     fecha_creacion: Mapped[str] = mapped_column(
         "created_at", Text, nullable=False,
         server_default=text(
-            "to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI:SS')"
+            "to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + interval '-3 hours', "
+            "'YYYY-MM-DD HH24:MI:SS')"
         ),
     )
 
