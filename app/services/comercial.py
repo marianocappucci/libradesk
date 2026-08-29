@@ -160,7 +160,8 @@ CREATE TABLE IF NOT EXISTS caja_movimientos (
     turno_id    INTEGER,
     caja_id     INTEGER REFERENCES cajas(id) ON DELETE SET NULL,
     medio_pago  TEXT DEFAULT '',
-    usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+    usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    anulado     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS categorias_egreso (
