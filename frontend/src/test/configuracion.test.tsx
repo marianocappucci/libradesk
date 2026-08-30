@@ -176,10 +176,20 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
     // `Depends(require_admin)` de verdad, así que ahí mostrar el botón sería
     // ofrecer un 403.
     render(<Configuracion />, '/configuracion')
-    await screen.findByText('Datos de la empresa')
 
+    // 🔴 Se espera el MENSAJE, no el titulo de la tarjeta. El titulo se rinde
+    // enseguida; el formulario recien cuando llega `GET /api/config/empresa`, y
+    // hasta entonces la tarjeta dice "Cargando…".
+    //
+    // Con el `await` sobre el titulo, el `queryByRole('button')` de abajo se
+    // cumplia porque el formulario TODAVIA NO EXISTIA --o sea que pasaba igual
+    // aunque el boton se le mostrara a un usuario de staff, que es justo lo que
+    // este test mide--. Se destapo al migrar la pantalla al kit, que corre el
+    // render un tick: el mismo test empezo a fallar sin que cambiara la
+    // pantalla.
+    expect(await screen.findByText(/Solo un administrador puede modificar/))
+      .toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Solo un administrador puede modificar/)).toBeInTheDocument()
   })
 })
 
