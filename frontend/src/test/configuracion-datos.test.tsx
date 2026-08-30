@@ -17,7 +17,7 @@ import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { Configuracion, ConfiguracionDatos } from '../pages/Configuracion'
+import { EmpresaCard } from '../pages/Configuracion'
 
 let rol = 'admin'
 vi.mock('../context/AuthContext', () => ({
@@ -78,7 +78,7 @@ beforeEach(() => {
 
 describe('Logo', () => {
   it('lo sube como multipart, con el nombre de campo que espera el motor', async () => {
-    render(<Configuracion />, '/configuracion')
+    render(<EmpresaCard />, '/configuracion')
     const usuario = userEvent.setup()
 
     const input = await waitFor(() => {
@@ -101,14 +101,14 @@ describe('Logo', () => {
 
   it('sin logo cargado lo dice, en vez de mostrar una imagen rota', async () => {
     hayLogo = false
-    render(<Configuracion />, '/configuracion')
+    render(<EmpresaCard />, '/configuracion')
 
     expect(await screen.findByText(/Todavía no hay logo cargado/i)).toBeInTheDocument()
     expect(document.querySelector('img[alt="Logo de la empresa"]')).toBeNull()
   })
 
   it('con logo cargado lo muestra', async () => {
-    render(<Configuracion />, '/configuracion')
+    render(<EmpresaCard />, '/configuracion')
     await waitFor(() => {
       expect(document.querySelector('img[alt="Logo de la empresa"]')).toBeTruthy()
     })
@@ -116,7 +116,7 @@ describe('Logo', () => {
 
   it('el staff no ve el botón de subir', async () => {
     rol = 'staff'
-    render(<Configuracion />, '/configuracion')
+    render(<EmpresaCard />, '/configuracion')
 
     expect(await screen.findByText(/Solo un administrador puede cambiar el logo/i))
       .toBeInTheDocument()
@@ -124,68 +124,11 @@ describe('Logo', () => {
 })
 
 
-describe('Datos / Backup', () => {
-  it('lista las copias guardadas', async () => {
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-
-    expect(await screen.findByText('backup_manual_20260805_120000.zip')).toBeInTheDocument()
-    expect(screen.getByText('backup_antes_restore_20260804_090000.zip')).toBeInTheDocument()
-  })
-
-  it('la descarga es un link directo, no un fetch', async () => {
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-
-    const link = await screen.findByRole('link', { name: /Descargar copia/i })
-    expect(link).toHaveAttribute('href', '/api/config/backup-ahora')
-  })
-
-  it('guardar una copia en el servidor recarga el listado', async () => {
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-    const usuario = userEvent.setup()
-
-    await usuario.click(await screen.findByRole('button', { name: /Guardar copia en el servidor/i }))
-
-    await waitFor(() => {
-      expect(pedidos.filter((p) => p.url.includes('/api/config/backups') && p.metodo === 'POST'))
-        .toHaveLength(1)
-    })
-  })
-
-  it('🔴 restaurar pide confirmación antes de tocar nada', async () => {
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-    const usuario = userEvent.setup()
-
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    await usuario.upload(input, new File(['x'], 'copia.zip', { type: 'application/zip' }))
-
-    // Aparece el diálogo y **todavía no se llamó al endpoint**.
-    expect(await screen.findByText(/¿Restaurar los datos\?/i)).toBeInTheDocument()
-    expect(pedidos.some((p) => p.url.includes('/restore'))).toBe(false)
-
-    await usuario.click(screen.getByRole('button', { name: /^Restaurar$/i }))
-
-    await waitFor(() => {
-      expect(pedidos.some((p) => p.url.includes('/restore') && p.metodo === 'POST')).toBe(true)
-    })
-  })
-
-  it('después de restaurar dice dónde quedó el estado anterior', async () => {
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-    const usuario = userEvent.setup()
-
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    await usuario.upload(input, new File(['x'], 'copia.zip', { type: 'application/zip' }))
-    await usuario.click(await screen.findByRole('button', { name: /^Restaurar$/i }))
-
-    expect(await screen.findByText(/backup_antes_restore_hoy\.zip/)).toBeInTheDocument()
-  })
-
-  it('el staff no ve nada de esto', async () => {
-    rol = 'staff'
-    render(<ConfiguracionDatos />, '/configuracion/datos')
-
-    expect(await screen.findByText(/Solo un administrador puede descargar o restaurar/i))
-      .toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Descargar copia/i })).toBeNull()
-  })
-})
+// El bloque de "Datos / Backup" se fue el 2026-08-30: la tarjeta es ahora la de
+// `libra-ui/Configuracion`, byte por byte la misma en los ocho productos, y sus
+// tests viven alla --listar, descargar por link directo, guardar una copia, y
+// que restaurar pida confirmacion antes de tocar nada--. Repetirlos aca seria
+// medir el codigo de otro repo desde este.
+//
+// Lo que si sigue siendo de este producto es QUE la seccion este montada y con
+// que forma, y eso lo cubre `configuracion-forma.test.tsx`.

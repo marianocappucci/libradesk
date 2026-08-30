@@ -35,10 +35,8 @@ import { PresupuestoDetalle } from './pages/PresupuestoDetalle'
 import { Facturacion } from './pages/Facturacion'
 import { Reportes } from './pages/Reportes'
 import { ReporteDetalle } from './pages/ReporteDetalle'
-import {
-  Configuracion, ConfiguracionCategorias, ConfiguracionDatos, ConfiguracionFacturacion,
-  ConfiguracionServicios,
-} from './pages/Configuracion'
+import { Configuracion } from './pages/Configuracion'
+import { REDIRECCIONES_DE_CONFIGURACION } from './rutas-viejas'
 import { Proveedores } from './pages/Proveedores'
 import { Usuarios } from './pages/Usuarios'
 import { Logs } from './pages/Logs'
@@ -151,16 +149,18 @@ export default function App() {
       <Route path="/reportes" element={<ProtectedRoute><Reportes /></ProtectedRoute>} />
       <Route path="/reportes/:slug" element={<ProtectedRoute><ReporteDetalle /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><Configuracion /></ProtectedRoute>} />
-      {/* Una ruta por pestaña, no un `useState`: así se puede linkear una
-          sección y el botón "atrás" del navegador hace lo que se espera. */}
-      <Route path="/configuracion/categorias" element={<ProtectedRoute><ConfiguracionCategorias /></ProtectedRoute>} />
+      {/* Las cuatro pestañas dejaron de ser rutas el 2026-08-30: la sección va
+          en `?seccion=`, como en los otros siete productos. Las rutas viejas
+          redirigen en vez de desaparecer — la tabla vive en `rutas-viejas.ts`
+          para que el test no pueda medir una copia distinta de la que la app
+          usa. */}
+      {Object.entries(REDIRECCIONES_DE_CONFIGURACION).map(([desde, hacia]) => (
+        <Route key={desde} path={desde} element={<Navigate to={hacia} replace />} />
+      ))}
       {/* Proveedores dejó de ser pestaña y pasó a `/proveedores`. La ruta vieja
           redirige en vez de desaparecer: quedó linkeada en documentación y en
           favoritos del navegador desde que era pestaña. */}
       <Route path="/configuracion/proveedores" element={<Navigate to="/proveedores" replace />} />
-      <Route path="/configuracion/servicios" element={<ProtectedRoute><ConfiguracionServicios /></ProtectedRoute>} />
-      <Route path="/configuracion/facturacion" element={<ProtectedRoute><ConfiguracionFacturacion /></ProtectedRoute>} />
-      <Route path="/configuracion/datos" element={<ProtectedRoute><ConfiguracionDatos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       {/* El gateo real es del backend (`require_admin` en `/api/logs`): acá
           `adminOnly` sólo esconde el ítem del menú. Un staff que escriba la

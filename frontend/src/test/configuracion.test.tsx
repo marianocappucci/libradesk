@@ -10,16 +10,14 @@
 //    no distinguiría en cuál está.
 // 3. **El conmutador es el mismo que el de depósitos**, que es lo que pidió el
 //    usuario — se verifica que las dos pantallas rindan la misma estructura.
-import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
+import { render as renderRTL, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Proveedores dejó de ser pestaña y se mudó a `proveedores.test.tsx` junto con
 // la pantalla (2026-08-13).
-import { CLASES_LISTA } from '../components/conmutador'
-import { Configuracion, ConfiguracionCategorias } from '../pages/Configuracion'
-import { Depositos } from '../pages/Depositos'
+import { Configuracion, CategoriasCard } from '../pages/Configuracion'
 import { escribirEn } from './escribir'
 
 // `useAuth` viene del contexto; las pestañas sólo lo usan para saber si es
@@ -80,21 +78,31 @@ beforeEach(() => {
   }))
 })
 
+// 🔴 `role="tab"` y no `link`: desde el 2026-08-30 esta pantalla usa el `Tabs`
+// de shadcn, a traves de `libra-ui/Configuracion`. Antes era un conmutador
+// propio donde cada pestaña era una RUTA, con las clases de `tabs.tsx` copiadas
+// a mano: se veia casi igual y era otro mecanismo. Lo que un lector de pantalla
+// anuncia cambio con el, y estos tests son lo que lo fija.
 const pestania = (nombre: string | RegExp) =>
-  screen.getByRole('link', { name: nombre })
+  screen.getByRole('tab', { name: nombre })
 
 describe('Configuración en pestañas', () => {
-  it('las pestañas están, y apuntan a rutas propias', async () => {
+  it('las pestañas están, y son las de la familia', async () => {
     render(<Configuracion />, '/configuracion')
     await screen.findByText('Datos de la empresa')
 
-    expect(pestania('Empresa')).toHaveAttribute('href', '/configuracion')
-    expect(pestania(/Tipos de incidencia/)).toHaveAttribute('href', '/configuracion/categorias')
-    expect(pestania('Facturación')).toHaveAttribute('href', '/configuracion/facturacion')
-    // Proveedores ya no está acá: tiene pantalla propia bajo Compras. Se afirma
-    // porque mientras fue pestaña, el ítem del menú comercial apuntaba a esta
-    // ruta y entrar por Compras se veía igual que entrar por Configuración.
-    expect(screen.queryByRole('link', { name: 'Proveedores' })).not.toBeInTheDocument()
+    const nombres = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(nombres).toEqual([
+      'Empresa', 'Integraciones', 'Servicios', 'Tipos de incidencia', 'Datos / Backup',
+    ])
+    // 🔴 "Facturación" ya NO es de primer nivel: este producto no emite
+    // comprobantes —manda lo facturable a Contalibra o a SOS Contador—, así que
+    // es una INTEGRACIÓN y vive adentro de esa pestaña.
+    expect(screen.queryByRole('tab', { name: 'Facturación' })).not.toBeInTheDocument()
+    // Proveedores tampoco: tiene pantalla propia bajo Compras. Se afirma porque
+    // mientras fue pestaña, el ítem del menú comercial apuntaba a esta ruta y
+    // entrar por Compras se veía igual que entrar por Configuración.
+    expect(screen.queryByRole('tab', { name: 'Proveedores' })).not.toBeInTheDocument()
   })
 
   it('🔴 cada pestaña muestra lo suyo y NADA de las otras', async () => {
@@ -106,17 +114,21 @@ describe('Configuración en pestañas', () => {
   })
 
   it('la pestaña de tipos de incidencia muestra sólo el catálogo', async () => {
-    render(<ConfiguracionCategorias />, '/configuracion/categorias')
+    render(<CategoriasCard />, '/configuracion/categorias')
     await screen.findByText('Hardware')
     expect(screen.queryByText('Datos de la empresa')).not.toBeInTheDocument()
   })
 
-  it('la pestaña activa se marca con aria-current, no sólo con color', async () => {
-    render(<ConfiguracionCategorias />, '/configuracion/categorias')
+  it('la pestaña activa se marca con aria-selected, no sólo con color', async () => {
+    // Sin esto habría que afirmar sobre clases de Tailwind, y un lector de
+    // pantalla no distinguiría en cuál está. El atributo cambió de
+    // `aria-current="page"` a `aria-selected` al pasar de enlaces a pestañas
+    // de verdad: es exactamente lo que el rol nuevo anuncia.
+    render(<Configuracion />, '/configuracion?seccion=categorias')
     await screen.findByText('Hardware')
 
-    expect(pestania(/Tipos de incidencia/)).toHaveAttribute('aria-current', 'page')
-    expect(pestania('Empresa')).not.toHaveAttribute('aria-current')
+    expect(pestania(/Tipos de incidencia/)).toHaveAttribute('aria-selected', 'true')
+    expect(pestania('Empresa')).toHaveAttribute('aria-selected', 'false')
   })
 })
 
@@ -130,7 +142,7 @@ describe('Configuración en pestañas', () => {
 // tests corren como el usuario que reportó el problema.
 describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
   it('tipos de incidencia: crear, renombrar, eliminar y agregar subcategoría', async () => {
-    render(<ConfiguracionCategorias />, '/configuracion/categorias')
+    render(<CategoriasCard />, '/configuracion/categorias')
     await screen.findByText('Hardware')
 
     expect(screen.getByRole('button', { name: /Nueva categoría/ })).toBeInTheDocument()
@@ -143,7 +155,7 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
     // Que el botón exista no alcanza — lo que el usuario pidió es poder crear
     // subcategorías, y eso es el `parent_id` viajando en el POST.
     const user = userEvent.setup()
-    render(<ConfiguracionCategorias />, '/configuracion/categorias')
+    render(<CategoriasCard />, '/configuracion/categorias')
     await screen.findByText('Hardware')
 
     await user.click(screen.getByRole('button', { name: /Subcategoría/ }))
@@ -164,43 +176,29 @@ describe('🔴 el ABM de los catálogos está disponible sin ser admin', () => {
     // `Depends(require_admin)` de verdad, así que ahí mostrar el botón sería
     // ofrecer un 403.
     render(<Configuracion />, '/configuracion')
-    await screen.findByText('Datos de la empresa')
 
+    // 🔴 Se espera el MENSAJE, no el titulo de la tarjeta. El titulo se rinde
+    // enseguida; el formulario recien cuando llega `GET /api/config/empresa`, y
+    // hasta entonces la tarjeta dice "Cargando…".
+    //
+    // Con el `await` sobre el titulo, el `queryByRole('button')` de abajo se
+    // cumplia porque el formulario TODAVIA NO EXISTIA --o sea que pasaba igual
+    // aunque el boton se le mostrara a un usuario de staff, que es justo lo que
+    // este test mide--. Se destapo al migrar la pantalla al kit, que corre el
+    // render un tick: el mismo test empezo a fallar sin que cambiara la
+    // pantalla.
+    expect(await screen.findByText(/Solo un administrador puede modificar/))
+      .toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Solo un administrador puede modificar/)).toBeInTheDocument()
   })
 })
 
-describe('El conmutador es el mismo que el de depósitos', () => {
-  it('las dos pantallas rinden la misma estructura de pestañas', async () => {
-    // El usuario pidió que las pestañas de Configuración se vieran como las de
-    // depósitos. Se comparte el componente en vez de copiarlo, y esto lo fija:
-    // si alguien duplicara el control, las dos estructuras divergirían.
-    // **Un solo `parentElement`**: `asChild` colapsa el `<Button>` dentro del
-    // `<Link>`, así que el padre directo del link YA es el conmutador. Con dos
-    // niveles se comparaba el contenedor externo de la pantalla —que es
-    // `grid gap-4` en las dos— y el test pasaba por el motivo equivocado:
-    // seguía en verde aunque se duplicara el control.
-    const { unmount } = render(<Depositos />, '/depositos')
-    // Se espera por la pestaña y no por el título: desde el 2026-08-13 las dos
-    // pantallas de depósitos se titulan igual ("Depósitos"), así que el título
-    // ya no identifica a ésta. Y la pestaña es justo lo que este test mide.
-    await screen.findByRole('link', { name: 'De la empresa' })
-    const claseDepositos = pestania('De la empresa').parentElement!.className
-    // El ancla del test: sin esto, comparar dos `className` que resultaran
-    // vacíos daría verde. Se ancla a la constante del conmutador y no a un
-    // literal suelto ('rounded-md' era el de la caja con borde, hasta el
-    // 2026-08-22) para que siga midiendo cuando el aspecto cambie.
-    expect(claseDepositos).toBe(CLASES_LISTA)
-    unmount()
-
-    render(<Configuracion />, '/configuracion')
-    await screen.findByText('Datos de la empresa')
-    const cfg = pestania('Empresa').parentElement!
-
-    expect(cfg.className).toBe(claseDepositos)
-    // Y las dos marcan la activa igual.
-    expect(within(cfg).getByRole('link', { name: 'Empresa' }))
-      .toHaveAttribute('aria-current', 'page')
-  })
-})
+// El bloque que comparaba esta pantalla con la de depositos se fue el
+// 2026-08-30, y no por descuido: existia porque Configuracion IMITABA las
+// pestañas de shadcn con las clases copiadas a mano, y habia que sostener que
+// las dos copias no divergieran. Ahora Configuracion ES el primitivo --via
+// `libra-ui/Configuracion`--, asi que no hay dos copias que comparar.
+//
+// 🔴 El `Conmutador` NO se fue: lo sigue usando depositos, donde cada pestaña
+// es una ruta propia de verdad. Que su aspecto siga siendo el de `tabs.tsx` lo
+// sostiene `pestanias-mismo-aspecto.test.ts`, que compara los dos archivos.
