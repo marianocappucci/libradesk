@@ -22,7 +22,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Proveedores } from '../pages/Proveedores'
-import { PESTANIAS_CONFIG } from '../pages/configuracion-piezas'
+import { Configuracion } from '../pages/Configuracion'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { role: 'staff' }, loading: false }),
@@ -66,28 +66,35 @@ beforeEach(() => {
 })
 
 describe('🔴 Proveedores es una pantalla propia, no una pestaña de Configuración', () => {
-  it('no rinde el conmutador de Configuración', async () => {
+  it('no rinde la barra de pestañas de Configuración', async () => {
     render(<Proveedores />, '/proveedores')
     await screen.findByText('Compu Service')
 
-    // Se afirma sobre las otras pestañas y no sobre el título: si sólo se
-    // mirara el `<h2>`, la pantalla podría decir "Proveedores" arriba y traer
-    // el conmutador entero abajo, que es exactamente lo que se reportó.
-    for (const p of PESTANIAS_CONFIG) {
-      expect(screen.queryByRole('link', { name: p.label })).not.toBeInTheDocument()
-    }
-    // Y el control de las pestañas no está por otro nombre: ningún link a una
-    // ruta de configuración.
+    // Se afirma sobre la barra entera y no sobre el título: si sólo se mirara
+    // el `<h2>`, la pantalla podría decir "Proveedores" arriba y traer las
+    // pestañas abajo, que es exactamente lo que se reportó.
+    expect(screen.queryAllByRole('tab')).toEqual([])
+    // Y no está por otro nombre: ningún link a una ruta de configuración.
     const aConfig = screen.queryAllByRole('link')
       .filter((a) => a.getAttribute('href')?.startsWith('/configuracion'))
     expect(aConfig).toEqual([])
   })
 
-  it('Configuración ya no ofrece la pestaña de proveedores', () => {
-    // El control de arriba: si `PESTANIAS_CONFIG` todavía la tuviera, el bucle
-    // pasaría igual (la pantalla no la rinde) y la duplicación seguiría viva.
-    expect(PESTANIAS_CONFIG.map((p) => p.label)).not.toContain('Proveedores')
-    expect(PESTANIAS_CONFIG.map((p) => p.to)).not.toContain('/configuracion/proveedores')
+  it('Configuración ya no ofrece la pestaña de proveedores', async () => {
+    // El control del de arriba: si Configuración todavía la declarara, el caso
+    // anterior pasaría igual (esta pantalla no la rinde) y la duplicación
+    // seguiría viva.
+    //
+    // 🔴 Se mide sobre la pantalla RENDIDA y no sobre una constante. Hasta el
+    // 2026-08-30 se leía `PESTANIAS_CONFIG`, la lista que alimentaba el
+    // conmutador propio; al pasar la pantalla al kit esa lista se fue, y un
+    // test atado a ella habría que borrarlo justo cuando deja de haber quien
+    // sostenga la afirmación.
+    render(<Configuracion />, '/configuracion')
+    await screen.findByText('Datos de la empresa')
+
+    const pestanias = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(pestanias).not.toContain('Proveedores')
   })
 
   it('muestra el listado', async () => {

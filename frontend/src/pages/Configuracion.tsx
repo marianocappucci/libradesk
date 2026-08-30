@@ -29,12 +29,10 @@
 // esta pantalla.
 import { useEffect, useRef, useState } from 'react'
 import {
-  api, ApiError, type BackupGuardado, type CategoriaIncidencia, type ConfigEmpresa,
+  api, ApiError, type CategoriaIncidencia, type ConfigEmpresa,
   type Servicio,
 } from '../api'
 import { useAuth } from '../context/AuthContext'
-import { Conmutador } from '@/components/conmutador'
-import { PESTANIAS_CONFIG } from './configuracion-piezas'
 import { FacturacionConfigCard } from './configuracion-facturacion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,11 +42,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
-  Check, CornerDownRight, Download, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
+  Check, CornerDownRight, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
 } from '@/components/iconos-accion'
-import { Settings } from 'lucide-react'
-import { TituloPantalla } from 'libra-ui/titulo-pantalla'
-import { fechaHora } from '@/lib/format'
+import { ListChecks, Send, Settings } from 'lucide-react'
+import { Tags } from '@/components/iconos-accion'
+import { createConfiguracion } from 'libra-ui/Configuracion'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -90,7 +88,7 @@ const CAMPOS: { key: keyof ConfigEmpresa; label: string; placeholder?: string }[
 /** Catálogo de tipos de incidencia: dos niveles, global (no por cliente).
  *  Vive acá y no en una pantalla propia porque es configuración que se toca
  *  una vez cada mucho, igual que los datos de la empresa. */
-function CategoriasCard() {
+export function CategoriasCard() {
   const [categorias, setCategorias] = useState<CategoriaIncidencia[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -274,7 +272,20 @@ function CategoriasCard() {
   )
 }
 
-export function Configuracion() {
+/** Los datos de la empresa de este producto, con su gate de rol.
+ *
+ *  🔴 **No se usa la `EmpresaCard` del kit y es a proposito.** Esta esconde el
+ *  boton de guardar a quien no es admin: el `PUT` de `/api/config/empresa` va
+ *  detras de `require_admin` en el backend, asi que sin el gate un usuario de
+ *  staff veria un boton que siempre le contesta 403. Entra por
+ *  `empresa.contenido` (libra-ui v0.52.0), asi que sigue siendo la PRIMERA
+ *  pestana, como en los otros siete productos.
+ *
+ *  ⚠️ `esAdmin` aplica SOLO a los datos de la empresa. Los catalogos no estan
+ *  detras de admin, y eso es deliberado --ver el comentario del encabezado del
+ *  archivo.
+ */
+export function EmpresaCard() {
   const { user } = useAuth()
   const esAdmin = user?.role === 'admin'
   const [config, setConfig] = useState<ConfigEmpresa>(VACIO)
@@ -320,7 +331,7 @@ export function Configuracion() {
   }
 
   return (
-    <Pantalla actual="empresa">
+    <div className="grid gap-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Datos de la empresa</CardTitle>
@@ -370,7 +381,7 @@ export function Configuracion() {
       </Card>
 
       <LogoCard esAdmin={esAdmin} />
-    </Pantalla>
+    </div>
   )
 }
 
@@ -483,28 +494,6 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
   )
 }
 
-/** El marco que comparten las tres pestañas: título y conmutador.
- *
- *  Está acá y no repetido en cada una porque el conmutador tiene que verse
- *  idéntico en las tres — si una lo dibujara distinto, cambiar de pestaña se
- *  sentiría como cambiar de pantalla.
- */
-function Pantalla({ actual, children }: { actual: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-4">
-      <TituloPantalla icono={Settings}>Configuración</TituloPantalla>
-      {/* La barra separada del contenido por una línea, igual que la
-          Configuración de Contalibra. El `pb-2` es el aire entre las píldoras
-          y esa línea: sin él la barra queda apoyada sobre el borde. */}
-      <div className="border-b pb-2">
-        <Conmutador pestanias={PESTANIAS_CONFIG} actual={actual} />
-      </div>
-      {children}
-      <CreditosIconos />
-    </div>
-  )
-}
-
 /** Atribución del set de iconos.
  *
  *  La licencia ISC pide que se conserve el aviso de copyright en las
@@ -526,7 +515,7 @@ function Pantalla({ actual, children }: { actual: string; children: React.ReactN
  *  esta tarjeta deja de ser buena práctica y pasa a ser un requisito legal — y
  *  el enlace tiene que ser un enlace de verdad, no texto.
  */
-function CreditosIconos() {
+export function CreditosIconos() {
   return (
     <p className="text-xs text-muted-foreground">
       Iconos:{' '}
@@ -543,40 +532,13 @@ function CreditosIconos() {
   )
 }
 
-/** Pestaña de tipos de incidencia. */
-export function ConfiguracionCategorias() {
-  return (
-    <Pantalla actual="categorias">
-      <CategoriasCard />
-    </Pantalla>
-  )
-}
-
-/** Pestaña del destino de la facturación: Contalibra, SOS Contador o los dos. */
-export function ConfiguracionFacturacion() {
-  return (
-    <Pantalla actual="facturacion">
-      <FacturacionConfigCard />
-    </Pantalla>
-  )
-}
-
-/** Pestaña del catálogo de servicios. */
-export function ConfiguracionServicios() {
-  return (
-    <Pantalla actual="servicios">
-      <ServiciosCard />
-    </Pantalla>
-  )
-}
-
 /** El catálogo de servicios que se reusan al armar remitos y presupuestos.
  *
  *  🔴 **No reemplaza al campo libre.** Un ítem de comprobante sigue siendo
  *  texto libre; este catálogo sólo lo sugiere mientras se escribe. Cargar algo
  *  acá no obliga a nadie a usarlo, y no cargarlo deja el sistema como estaba.
  */
-function ServiciosCard() {
+export function ServiciosCard() {
   const { user } = useAuth()
   const esAdmin = user?.role === 'admin'
   const [servicios, setServicios] = useState<Servicio[] | null>(null)
@@ -863,274 +825,65 @@ function ServiciosCard() {
 }
 
 
-/** Estado de la copia del backup en la nube del cliente (add-on).
+/** La pantalla de Configuración, armada con la del kit.
  *
- * `contratado: false` es "no tenés el add-on", **no** una falla: la pantalla no
- * tiene que mostrar una alarma a quien no lo contrató. `al_dia: false` con
- * `contratado: true` sí lo es — el backend distingue en `motivo` si la última
- * subida falló o si anduvo pero es de hace días. */
-export type ResguardoExterno = {
-  contratado: boolean
-  al_dia: boolean | null
-  motivo: string | null
-  detalle: {
-    cuando: string | null
-    archivo: string | null
-    destino: string | null
-    bytes: number | null
-    en_destino: number | null
-    error: string | null
-  } | null
-}
-
-/** La tarjeta del resguardo externo, con sus tres estados.
+ *  El armado viene de `libra-ui/Configuracion`, que desde la v0.47.0 es **la
+ *  pantalla de Configuración de la familia entera** — la de Contalibra, con su
+ *  barra de pestañas, la sub-navegación de Integraciones, el botón de *Backup
+ *  rápido* y los tutoriales.
  *
- *  Tres y no dos: con "anda / no anda" le mostraría una alarma a quien no
- *  contrató el add-on —que es ruido— y no le mostraría nada a quien lo contrató
- *  y hace días que no sube, que es el caso silencioso que esto vino a cerrar.
+ *  ## Lo que cambió de mecanismo, y por qué
  *
- *  Si el endpoint no existe (LibraCore anterior a v1.32.0) no aparece. */
-function ResguardoExternoCard() {
-  const [estado, setEstado] = useState<ResguardoExterno | null>(null)
-
-  useEffect(() => {
-    api.get<ResguardoExterno>('/api/config/resguardo-externo')
-      .then(setEstado)
-      .catch(() => setEstado(null))
-  }, [])
-
-  if (!estado) return null
-
-  if (!estado.contratado) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="text-base text-muted-foreground">Copia externa</CardTitle>
-          <CardDescription>
-            Tus copias viven en este servidor. Con el resguardo externo se guardan
-            todas las noches en tu propia cuenta de Google Drive o Dropbox, así
-            siguen estando aunque el servidor no esté. Consultanos para activarlo.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
-  return (
-    <Card className={estado.al_dia ? 'border-emerald-500/40' : 'border-amber-500/60'}>
-      <CardHeader>
-        <CardTitle className={`text-base ${estado.al_dia ? '' : 'text-amber-600 dark:text-amber-400'}`}>
-          Copia externa {estado.al_dia ? 'al día' : 'con problemas'}
-        </CardTitle>
-        <CardDescription>
-          {estado.al_dia
-            ? <>También se guarda fuera de este servidor, en <span className="font-mono">{estado.detalle?.destino}</span>.</>
-            : estado.motivo}
-        </CardDescription>
-      </CardHeader>
-      {estado.al_dia && estado.detalle && (
-        <CardContent>
-          <p className="text-xs text-muted-foreground">
-            Última copia: {estado.detalle.cuando}
-            {estado.detalle.en_destino != null && <> · {estado.detalle.en_destino} guardadas afuera</>}
-          </p>
-        </CardContent>
-      )}
-    </Card>
-  )
-}
-
-/** Pestaña de Datos / Backup. */
-export function ConfiguracionDatos() {
-  return (
-    <Pantalla actual="datos">
-      <DatosCard />
-    </Pantalla>
-  )
-}
-
-/** Bajar una copia de los datos, y volver a una anterior.
+ *  Hasta hoy cada pestaña era **una ruta** (`/configuracion/servicios`), con un
+ *  `Conmutador` propio cuyas clases eran las de `tabs.tsx` copiadas a mano. El
+ *  argumento escrito ahí era de accesibilidad —son enlaces, no paneles— y sigue
+ *  siendo cierto; lo que lo destrabó es el pedido del humano del 2026-08-29 de
+ *  que las ocho pantallas sean la misma. Las rutas viejas no se borran:
+ *  redirigen, porque pueden estar en un favorito.
  *
- *  El archivo es un **ZIP con la base y los archivos de la instancia**, no un
- *  `.db` suelto — el formato es el mismo en los seis productos de la familia,
- *  donde varios tienen dos bases y archivos subidos.
+ *  🔴 **El `Conmutador` NO se va**: lo sigue usando la pantalla de depósitos, y
+ *  ahí cada pestaña sí es una ruta propia.
+ *
+ *  ## Lo que este producto declara distinto
+ *
+ *  - **La tarjeta de Empresa es la suya**, por el gate de rol: el `PUT` va
+ *    detrás de `require_admin`, así que la del kit le mostraría a un usuario de
+ *    staff un botón que siempre contesta 403.
+ *  - **No hay ARCA.** Este producto no emite comprobantes: manda lo facturable
+ *    a Contalibra o a SOS Contador (decidido el 2026-08-12). Esa configuración
+ *    —a cuál de los dos, con qué credenciales— es una **integración**, así que
+ *    va adentro de esa pestaña y no como una de primer nivel.
+ *  - **No hay MercadoPago**: no hay cobro con QR acá.
+ *  - **El pie lleva la atribución de los iconos**, que es una condición de la
+ *    licencia ISC y no un agradecimiento. Sin el `pie` del kit (v0.53.0) esta
+ *    migración la habría borrado.
+ *
+ *  ## Lo que gana
+ *
+ *  La pestaña de **Correo (SMTP)**, que este producto no tenía aunque su router
+ *  estaba montado: el SMTP sólo entraba por el backoffice de la suite.
  */
-function DatosCard() {
-  const { user } = useAuth()
-  const esAdmin = user?.role === 'admin'
-  const [backups, setBackups] = useState<BackupGuardado[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  const [ocupado, setOcupado] = useState(false)
-  const [aRestaurar, setARestaurar] = useState<File | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+export const Configuracion = createConfiguracion({
+  // El icono que el sidebar de este producto le da a /configuracion.
+  icono: Settings,
+  // Sale en el tutorial de Gmail: es el nombre que hay que ponerle a la
+  // contraseña de aplicación que se crea en la cuenta de Google.
+  producto: 'LibraDesk',
+  empresa: { contenido: <EmpresaCard /> },
+  integraciones: {
+    email: true,
+    extra: [
+      {
+        clave: 'facturacion', label: 'Facturación', icono: Send,
+        contenido: <FacturacionConfigCard />,
+      },
+    ],
+  },
+  propias: [
+    { clave: 'servicios', label: 'Servicios', icono: ListChecks, contenido: <ServiciosCard /> },
+    { clave: 'categorias', label: 'Tipos de incidencia', icono: Tags, contenido: <CategoriasCard /> },
+  ],
+  pie: <CreditosIconos />,
+})
 
-  useEffect(() => { recargar() }, [])
-
-  function describeError(err: unknown): string {
-    if (err instanceof ApiError) return err.detail
-    return 'Error de conexión.'
-  }
-
-  async function recargar() {
-    setError(null)
-    try {
-      setBackups(await api.get<BackupGuardado[]>('/api/config/backups'))
-    } catch (err) {
-      setError(describeError(err))
-    }
-  }
-
-  async function crear() {
-    setOcupado(true)
-    setError(null)
-    setAviso(null)
-    try {
-      await api.post('/api/config/backups')
-      setAviso('Copia guardada en el servidor.')
-      await recargar()
-    } catch (err) {
-      setError(describeError(err))
-    } finally {
-      setOcupado(false)
-    }
-  }
-
-  async function restaurar(archivo: File) {
-    setOcupado(true)
-    setError(null)
-    setAviso(null)
-    try {
-      const form = new FormData()
-      form.append('backup_file', archivo)
-      const r = await api.postForm<{ backup_previo: string }>('/api/config/restore', form)
-      setAviso(
-        `Datos restaurados. El estado anterior quedó guardado como ${r.backup_previo}.`,
-      )
-      await recargar()
-    } catch (err) {
-      setError(describeError(err))
-    } finally {
-      setOcupado(false)
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-
-  if (!esAdmin) {
-    return (
-      <Card>
-      {/* Arriba de todo: si la copia externa falla, es lo primero
-          que el cliente tiene que ver. */}
-      <ResguardoExternoCard />
-        <CardHeader><CardTitle className="text-base">Datos / Backup</CardTitle></CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Solo un administrador puede descargar o restaurar los datos.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Copia de tus datos</CardTitle>
-          <CardDescription>
-            Un archivo ZIP con la base de datos y los archivos del sistema.
-            Guardalo fuera del servidor.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {/* Link directo y no `fetch`: el navegador maneja la descarga con la
-              misma cookie, sin pasar el ZIP entero por memoria del JS. */}
-          <Button asChild>
-            <a href="/api/config/backup-ahora">
-              <Download className="mr-2 h-4 w-4" />
-              Descargar copia
-            </a>
-          </Button>
-          <Button type="button" variant="outline" disabled={ocupado} onClick={crear}>
-            {ocupado ? 'Trabajando…' : 'Guardar copia en el servidor'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {(error || aviso) && (
-        <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
-          {error ?? aviso}
-        </p>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Copias guardadas en el servidor</CardTitle>
-          <CardDescription>
-            Se conservan las 10 más recientes. Las de <code>antes_restore</code> las
-            hace el sistema solo, justo antes de restaurar.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {backups === null ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
-          ) : backups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Todavía no hay ninguna.</p>
-          ) : (
-            <ul className="grid gap-2">
-              {backups.map((b) => (
-                <li key={b.filename} className="flex flex-wrap items-center gap-2 text-sm">
-                  <Badge variant="outline">{fechaHora(b.mtime)}</Badge>
-                  <span className="text-muted-foreground">{b.size_mb} MB</span>
-                  <a className="underline" href={`/api/config/backups/${b.filename}`}>
-                    {b.filename}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Restaurar</CardTitle>
-          <CardDescription>
-            Reemplaza <strong>todos</strong> los datos actuales por los del archivo.
-            Antes de hacerlo, el sistema guarda solo una copia del estado actual.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip,application/zip"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) setARestaurar(f) }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={ocupado}
-            onClick={() => inputRef.current?.click()}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Elegir archivo y restaurar
-          </Button>
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={aRestaurar !== null}
-        onOpenChange={(abierto) => { if (!abierto) setARestaurar(null) }}
-        title="¿Restaurar los datos?"
-        description={
-          `Se van a reemplazar todos los datos actuales por los de ${aRestaurar?.name ?? ''}. ` +
-          'El estado de ahora queda guardado como copia por si hace falta volver.'
-        }
-        confirmLabel="Restaurar"
-        onConfirm={() => { const f = aRestaurar; setARestaurar(null); if (f) restaurar(f) }}
-      />
-    </div>
-  )
-}
+export default Configuracion
