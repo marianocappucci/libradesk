@@ -27,7 +27,7 @@ import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ConfiguracionCategorias, ConfiguracionServicios } from '../pages/Configuracion'
+import { CategoriasCard, ServiciosCard } from '../pages/Configuracion'
 import { Proveedores } from '../pages/Proveedores'
 
 // Admin: el alta de servicios está detrás del rol, y sin esto el botón no se
@@ -67,7 +67,7 @@ beforeEach(() => {
 
 describe('🔴 se puede escribir una palabra entera de un tirón', () => {
   it('el nombre de un servicio nuevo', async () => {
-    render(<ConfiguracionServicios />, '/configuracion/servicios')
+    render(<ServiciosCard />, '/configuracion/servicios')
 
     await userEvent.click(await screen.findByRole('button', { name: /Agregar servicio/i }))
     const nombre = await screen.findByLabelText('Nombre')
@@ -84,7 +84,7 @@ describe('🔴 se puede escribir una palabra entera de un tirón', () => {
   it('la descripción del mismo formulario', async () => {
     // El segundo campo del mismo form: si el arreglo fuera un `autoFocus` puesto
     // en el nombre en vez de la causa real, este test seguiría rojo.
-    render(<ConfiguracionServicios />, '/configuracion/servicios')
+    render(<ServiciosCard />, '/configuracion/servicios')
 
     await userEvent.click(await screen.findByRole('button', { name: /Agregar servicio/i }))
     const desc = await screen.findByLabelText(/Descripción para el comprobante/i)
@@ -95,7 +95,7 @@ describe('🔴 se puede escribir una palabra entera de un tirón', () => {
   })
 
   it('renombrar un tipo de incidencia', async () => {
-    render(<ConfiguracionCategorias />, '/configuracion/categorias')
+    render(<CategoriasCard />, '/configuracion/categorias')
     await screen.findByText('Hardware')
 
     await userEvent.click(screen.getByRole('button', { name: 'Renombrar Hardware' }))

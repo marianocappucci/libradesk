@@ -1,6 +1,7 @@
 /** Las pestañas de Equipos y flota (pedido 42, separación en pestañas).
  *
- *  En un archivo aparte por el mismo motivo que `configuracion-piezas.tsx`:
+ *  En un archivo aparte por el mismo motivo que tenia `configuracion-piezas.tsx`
+ *  --que se fue el 2026-08-30, al pasar Configuracion a la pantalla del kit--:
  *  exportar una constante desde un archivo que también exporta componentes
  *  dispara `react-refresh/only-export-components`.
  *
