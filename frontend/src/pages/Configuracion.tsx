@@ -46,7 +46,10 @@ import {
 } from '@/components/iconos-accion'
 import { ListChecks, Send, Settings } from 'lucide-react'
 import { Tags } from '@/components/iconos-accion'
-import { createConfiguracion } from 'libra-ui/Configuracion'
+import { CONDICIONES_IVA, createConfiguracion } from 'libra-ui/Configuracion'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 /** Los campos editables de un servicio, como strings del formulario. */
 type FormServicio = {
@@ -81,9 +84,20 @@ const CAMPOS: { key: keyof ConfigEmpresa; label: string; placeholder?: string }[
   { key: 'empresa_telefono', label: 'Teléfono', placeholder: '3514567890' },
   { key: 'empresa_email', label: 'Email', placeholder: 'info@compulibra.com.ar' },
   { key: 'empresa_iibb', label: 'Ingresos Brutos' },
-  { key: 'empresa_iva_condition', label: 'Condición frente al IVA', placeholder: 'Monotributista' },
-  { key: 'empresa_inicio_actividades', label: 'Inicio de actividades', placeholder: '2020-01-01' },
 ]
+
+/** 🔴 Estos dos NO son campos de texto, y acá lo eran.
+ *
+ *  Este producto tiene tarjeta de Empresa propia —esconde el botón de guardar a
+ *  quien no es admin— y por eso quedó afuera de lo que la `EmpresaCard` de
+ *  `libra-ui` les da a los otros seis: la condición de IVA se elige de una lista
+ *  cerrada, y el inicio de actividades es una fecha.
+ *
+ *  `CONDICIONES_IVA` se importa del kit y no se copia: son las condiciones de un
+ *  **emisor**, con qué comprobante emite cada una, y corregirlas una vez tiene
+ *  que corregirlas en los ocho. */
+const CAMPO_IVA: keyof ConfigEmpresa = 'empresa_iva_condition'
+const CAMPO_INICIO: keyof ConfigEmpresa = 'empresa_inicio_actividades'
 
 /** Catálogo de tipos de incidencia: dos niveles, global (no por cliente).
  *  Vive acá y no en una pantalla propia porque es configuración que se toca
@@ -294,6 +308,14 @@ export function EmpresaCard() {
   const [error, setError] = useState<string | null>(null)
   const [guardado, setGuardado] = useState(false)
 
+  // El valor guardado que no esté entre las tres entra como una opción más.
+  // Ver el comentario del `<Select>`: recortar la lista a secas lo borraría en
+  // el primer guardado, sin decir nada.
+  const guardadaIva = config[CAMPO_IVA]
+  const condiciones = !guardadaIva || CONDICIONES_IVA.some((c) => c.valor === guardadaIva)
+    ? CONDICIONES_IVA
+    : [...CONDICIONES_IVA, { valor: guardadaIva, label: guardadaIva }]
+
   useEffect(() => {
     cargar()
   }, [])
@@ -359,6 +381,35 @@ export function EmpresaCard() {
                     />
                   </div>
                 ))}
+
+                <div className="grid gap-2">
+                  <Label htmlFor={`cfg-${CAMPO_IVA}`}>Condición frente al IVA</Label>
+                  {/* 🔑 Si lo guardado no está entre las tres, entra como una
+                      opción más: sin eso el `<Select>` no lo encuentra, muestra
+                      el campo vacío, y el primer guardado lo pisa en silencio. */}
+                  <Select value={config[CAMPO_IVA]} disabled={!esAdmin}
+                          onValueChange={(v) => setConfig({ ...config, [CAMPO_IVA]: v })}>
+                    <SelectTrigger id={`cfg-${CAMPO_IVA}`}>
+                      <SelectValue placeholder="Elegí una" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {condiciones.map((c) => (
+                        <SelectItem key={c.valor} value={c.valor}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor={`cfg-${CAMPO_INICIO}`}>Inicio de actividades</Label>
+                  <Input
+                    id={`cfg-${CAMPO_INICIO}`}
+                    type="date"
+                    value={config[CAMPO_INICIO]}
+                    disabled={!esAdmin}
+                    onChange={(e) => setConfig({ ...config, [CAMPO_INICIO]: e.target.value })}
+                  />
+                </div>
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
