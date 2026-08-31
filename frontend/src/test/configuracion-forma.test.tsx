@@ -108,8 +108,12 @@ describe('la Configuración de LibraDesk', () => {
     montar()
 
     expect(await screen.findByText('Datos de la empresa')).toBeInTheDocument()
-    // El campo que sólo tiene la de este producto.
-    expect(screen.getByLabelText(/Nombre \/ razón social/)).toBeInTheDocument()
+    // 🔴 `findBy` y no `getBy`: el TÍTULO de la tarjeta se pinta enseguida y el
+    // formulario recién existe cuando llega el `GET`. Con la aserción síncrona
+    // esto pasaba **casi siempre** y fallaba 1 de cada 4 corridas de la suite
+    // completa —el orden de los archivos cambia el timing—. Es la misma carrera
+    // que ya se había encontrado en el test de admin-only de esta pantalla.
+    expect(await screen.findByLabelText(/Nombre \/ razón social/)).toBeInTheDocument()
   })
 
   it('el tutorial de Gmail está, y nombra a LibraDesk', async () => {

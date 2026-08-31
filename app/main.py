@@ -24,6 +24,7 @@ from libracore.config_router import (
     build_backup_router, build_empresa_admin_router, build_empresa_router,
 )
 from libracore.respaldo import Instancia
+from libracore.smtp_router import build_smtp_probe_router
 from sqlalchemy.engine import make_url
 
 from . import database, schema
@@ -294,6 +295,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # quien pueda escribir ahí puede redirigir a dónde salen los enlaces de
     # recuperación de contraseña de todos los usuarios.
     app.include_router(build_smtp_settings_router())
+    # `POST /admin/smtp/probar`: abre la conexion, negocia TLS y hace login.
+    #
+    # 🔑 Resuelve por el MISMO camino que los envios (`smtp_efectivo` sobre el
+    # resolver de mas abajo), que es lo que hace que el boton signifique algo:
+    # un endpoint que probara otra config diria "Conectado" contra un servidor
+    # mientras los mails salen por otro. El gate va afuera porque el router del
+    # motor no trae ninguno propio, y esto abre una sesion SMTP con las
+    # credenciales del cliente.
+    app.include_router(
+        build_smtp_probe_router(lambda: resolver_smtp_config(sessions)),
+        dependencies=[Depends(require_admin)],
+    )
     # `GET /terminos`, `POST /terminos/aceptar`, `GET /terminos/historial`.
     # NO se gatea desde afuera: es el unico camino para salir del gate.
     app.include_router(build_terminos_router())
