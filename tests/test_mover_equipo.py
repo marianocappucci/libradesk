@@ -96,8 +96,8 @@ def test_mover_no_toca_garantia_proveedor_ni_observaciones(client, escenario):
     assert movido["observaciones"] == "Entró con dos sensores"
     assert movido["serial"] == "MP-1"
     assert movido["marca"] == "Mindray"
-    # Y el estado tampoco: entrar o salir del depósito no dice por qué.
-    assert movido["estado"] == "almacenado"
+    # El estado SÍ cambia yendo a un sector, y es lo pedido (ver más abajo).
+    # Lo que este test fija es que no se lleve puesto nada más.
 
     # Releído de la base, no sólo lo que devolvió la llamada.
     guardado = client.get(f"/api/equipos/{equipo}").json()
@@ -132,17 +132,19 @@ def test_el_traslado_queda_en_el_historial_con_los_dos_extremos(client, escenari
     })
 
     movs = client.get(f"/api/equipos/{equipo}/movimientos").json()
-    # El más reciente primero (`list_movimientos` ordena descendente).
-    traslado = movs[0]
-    assert traslado["tipo"] == "traslado"
+    # Se busca la fila por tipo y no por índice: instalar el equipo escribe
+    # DOS movimientos —el traslado y la activación— y cuál queda primero
+    # depende del orden de inserción, que no es lo que este test mide.
+    traslado = next(m for m in movs if m["tipo"] == "traslado")
     assert traslado["sector_origen"] == "Pañol"
     assert traslado["sector_destino"] == "Consultorios"
     assert traslado["ubicacion_destino"] == "Consultorio 6"
     assert traslado["motivo"] == "Se instala el monitor nuevo"
     assert traslado["usuario"] == "admin"
-    # Un solo movimiento nuevo: el traslado. El estado no cambió, así que no
-    # hay una segunda fila diciendo que sí.
-    assert [m["tipo"] for m in movs] == ["traslado", "alta"]
+    # DOS filas nuevas, no una: el equipo se trasladó Y se activó. Las dos
+    # cosas pasaron, así que las dos se cuentan — el cambio de estado no es
+    # silencioso.
+    assert [m["tipo"] for m in movs] == ["activo", "traslado", "alta"]
 
 
 def test_volver_al_deposito_conserva_el_sector_como_de_donde_salio(client, escenario):
@@ -168,6 +170,88 @@ def test_volver_al_deposito_conserva_el_sector_como_de_donde_salio(client, escen
     assert traslado["sector_origen"] == "Consultorios"
     assert traslado["sector_destino"] == "Taller"
     assert traslado["ubicacion_origen"] == "Consultorio 6"
+
+
+# --- el estado sigue al destino, en una sola direccion -----------------------
+
+def test_instalarlo_en_un_sector_lo_deja_activo(client, escenario):
+    """El pedido del humano, usando la pantalla: *«cuando un equipo se mueve de
+    depósito a un sector es porque se mueve a un estado activo... si no, el
+    movimiento se genera de depósito a consultorio pero sigue con el estado en
+    depósito, y hay que editar el equipo y cambiarlo a activo»*.
+
+    O sea: el endpoint sacaba el trabajo de dos pasos y lo devolvía por otra
+    puerta.
+    """
+    equipo = escenario["equipo"]
+    assert client.get(f"/api/equipos/{equipo}").json()["estado"] == "almacenado"
+
+    r = client.post(f"/api/equipos/{equipo}/mover", json={
+        "sector": "Consultorios", "ubicacion_oficina": "Consultorio 6",
+    })
+    assert r.json()["estado"] == "activo"
+    assert client.get(f"/api/equipos/{equipo}").json()["estado"] == "activo"
+
+
+def test_la_activacion_deja_su_propia_fila_en_el_historial(client, escenario):
+    """No es un cambio silencioso: son dos hechos y son dos filas."""
+    equipo = escenario["equipo"]
+    client.post(f"/api/equipos/{equipo}/mover", json={"sector": "Guardia"})
+
+    movs = client.get(f"/api/equipos/{equipo}/movimientos").json()
+    estado = [m for m in movs if m["tipo"] == "activo"]
+    assert len(estado) == 1
+    assert estado[0]["descripcion"] == "Estado cambiado a: activo"
+
+
+def test_un_equipo_que_ya_estaba_activo_no_genera_fila_de_estado(client, escenario):
+    """Corregir el sector de un equipo instalado es UN hecho, no dos. Sin este
+    caso, la regla de arriba podría estar escribiendo una fila de estado en
+    cada traslado y el test anterior pasaría igual."""
+    equipo = escenario["equipo"]
+    client.post(f"/api/equipos/{equipo}/mover", json={"sector": "Guardia"})
+    antes = len(client.get(f"/api/equipos/{equipo}/movimientos").json())
+
+    client.post(f"/api/equipos/{equipo}/mover", json={"sector": "Admisión"})
+    movs = client.get(f"/api/equipos/{equipo}/movimientos").json()
+
+    # Una sola fila nueva: el traslado.
+    assert len(movs) == antes + 1
+    assert movs[0]["tipo"] == "traslado"
+
+
+def test_guardarlo_en_un_deposito_NO_deduce_el_estado(client, escenario):
+    """La otra mitad de la regla, y la que la hace asimétrica. Ahí el destino
+    no alcanza: se guarda un equipo porque se lo retiró, porque está roto y
+    sale a service, o porque volvió y espera instalación."""
+    equipo = escenario["equipo"]
+    # Se instala (queda activo) y después se lo manda al taller.
+    client.post(f"/api/equipos/{equipo}/mover", json={"sector": "Consultorios"})
+    r = client.post(f"/api/equipos/{equipo}/mover", json={
+        "deposito_id": escenario["taller"], "motivo": "Falla la pantalla",
+    })
+
+    assert r.json()["estado"] == "activo"
+    movs = client.get(f"/api/equipos/{equipo}/movimientos").json()
+    assert movs[0]["tipo"] == "traslado"
+
+
+def test_uno_dado_de_baja_que_vuelve_a_un_sector_se_reactiva(client, escenario):
+    """El caso incómodo de la regla uniforme, explícito para que se vea. Queda
+    `activo` —una máquina en un consultorio no está de baja— y el historial lo
+    dice con su propia fila, así que la reactivación no pasa desapercibida."""
+    equipo = escenario["equipo"]
+    ficha = client.get(f"/api/equipos/{equipo}").json()
+    ficha["estado"] = "baja"
+    assert client.put(f"/api/equipos/{equipo}", json=ficha).status_code == 200
+
+    r = client.post(f"/api/equipos/{equipo}/mover", json={"sector": "Admisión"})
+    assert r.json()["estado"] == "activo"
+
+    movs = client.get(f"/api/equipos/{equipo}/movimientos").json()
+    reactivacion = [m for m in movs if m["tipo"] == "activo"]
+    assert len(reactivacion) == 1
+    assert reactivacion[0]["descripcion"] == "Estado cambiado a: activo"
 
 
 # --- lo que el endpoint rechaza ---------------------------------------------
