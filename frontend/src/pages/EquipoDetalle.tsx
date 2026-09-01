@@ -31,7 +31,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
 import { fecha, fechaHora } from '@/lib/format'
-import { AlertTriangle, ArrowLeft, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { MoverEquipo } from '@/components/mover-equipo'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 function formatFecha(valor: string | null): string {
@@ -90,6 +91,10 @@ export function EquipoDetalle() {
   // El consumo resumido de esta máquina, uno por insumo (fase 3): cada cuánto
   // se cambia, cuánto rinde y desde cuándo conviene ir pidiendo el próximo.
   const [consumo, setConsumo] = useState<ResumenDeConsumo[]>([])
+  // Abierto = se está moviendo este equipo. La ficha era de sólo lectura:
+  // se mira acá la trazabilidad y no había forma de generar el próximo
+  // movimiento sin volver a la lista y abrir el formulario completo.
+  const [moviendo, setMoviendo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -189,6 +194,9 @@ export function EquipoDetalle() {
           </div>
         }
       >
+        <Button size="sm" onClick={() => setMoviendo(true)}>
+          <ArrowLeftRight />Mover
+        </Button>
         <BotonImprimir>Imprimir informe</BotonImprimir>
         {volver}
       </EncabezadoDePantalla>
@@ -581,6 +589,15 @@ export function EquipoDetalle() {
           )}
         </div>
       </Imprimible>
+
+      <MoverEquipo
+        equipo={moviendo ? equipo : null}
+        onClose={() => setMoviendo(false)}
+        // Se recarga la ficha entera y no sólo el equipo: el traslado agrega
+        // una fila al historial y mueve el contador de «Movimientos», que la
+        // respuesta del POST no trae.
+        onMovido={() => cargar()}
+      />
     </div>
   )
 }
