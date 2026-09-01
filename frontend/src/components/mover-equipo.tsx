@@ -46,7 +46,8 @@
  */
 import { useEffect, useId, useState } from 'react'
 import {
-  api, ApiError, describirEquipo, opcionesDeposito, ubicacionTexto,
+  api, ApiError, describirEquipo, ESTADO_EQUIPO_LABELS, opcionesDeposito,
+  ubicacionTexto,
   type Deposito, type Equipo, type Sector,
 } from '../api'
 import { Button } from '@/components/ui/button'
@@ -235,6 +236,18 @@ export function MoverEquipo({ equipo, onClose, onMovido }: {
                 placeholder="Consultorio 6, Box 2…"
               />
             </div>
+            {/* Se avisa acá y no se deja como sorpresa: el backend activa el
+                equipo al instalarlo, y el estado es una columna de la lista.
+                Sólo se dibuja cuando el estado va a cambiar de verdad — en un
+                equipo ya activo sería ruido en cada traslado. */}
+            {equipo.estado !== 'activo' && (
+              <p className="text-xs text-muted-foreground">
+                Queda en estado <span className="font-medium">Activo</span>:
+                instalarlo en un sector es ponerlo en servicio. Pasa de
+                «{ESTADO_EQUIPO_LABELS[equipo.estado] ?? equipo.estado}», y el
+                cambio queda en el historial.
+              </p>
+            )}
           </TabsContent>
 
           <TabsContent value="deposito" className="grid gap-3 pt-3">
@@ -250,8 +263,10 @@ export function MoverEquipo({ equipo, onClose, onMovido }: {
               {/* Se dice acá y no se resuelve solo: guardar un equipo no
                   explica por qué, y el sector se conserva a propósito. */}
               <p className="text-xs text-muted-foreground">
-                El sector queda registrado como de dónde salió. El estado del
-                equipo no se toca.
+                El sector queda registrado como de dónde salió. <span
+                className="font-medium">El estado no se toca</span>: guardar un
+                equipo no dice si se lo retiró, si está roto o si volvió de
+                service. Para eso está la edición.
               </p>
             </div>
           </TabsContent>

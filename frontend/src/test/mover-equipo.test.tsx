@@ -98,8 +98,13 @@ const FICHA = {
  *  URL y no sólo por lo que quedó en la grilla. */
 let llamadas: { metodo: string; url: string; body: unknown }[]
 
+/** El equipo que devuelve `/api/equipos`. Se reasigna en los casos que
+ *  necesitan otro estado de partida. */
+let equipoDelFixture: typeof EQUIPO
+
 beforeEach(() => {
   llamadas = []
+  equipoDelFixture = EQUIPO
   vi.stubGlobal('fetch', vi.fn((url: string, opciones?: RequestInit) => {
     const u = String(url)
     const metodo = opciones?.method ?? 'GET'
@@ -113,7 +118,7 @@ beforeEach(() => {
     if (u.includes('/api/dashboard/equipo/')) return Promise.resolve(json(FICHA))
     if (u.includes('/api/sectores')) return Promise.resolve(json([SECTOR_ADMISION]))
     if (u.includes('/api/depositos')) return Promise.resolve(json([PANOL, TALLER]))
-    if (u.includes('/api/equipos')) return Promise.resolve(json([EQUIPO]))
+    if (u.includes('/api/equipos')) return Promise.resolve(json([equipoDelFixture]))
     return Promise.resolve(json([]))
   }))
 })
@@ -177,6 +182,32 @@ describe('el traslado no pasa por el PUT del equipo', () => {
 
     await waitFor(() => expect(llamadasDeMover()).toHaveLength(1))
     expect(llamadasDeMover()[0].body).toEqual({ deposito_id: 5, motivo: null })
+  })
+})
+
+describe('el equipo queda activo al instalarlo', () => {
+  // Reporte del humano usando la pantalla: el movimiento se escribía
+  // «Depósito → Consultorio 6» y el equipo seguía diciendo «En depósito», así
+  // que había que ir a editarlo. El backend ahora lo activa; lo que estos dos
+  // fijan es que la pantalla lo AVISE — un cambio de estado que el usuario no
+  // pidió y no ve es peor que no hacerlo.
+  it('lo avisa antes de mover, y de qué estado viene', async () => {
+    const user = userEvent.setup()
+    const dialogo = await abrirMoverAUnSector(user)
+
+    expect(within(dialogo).getByText(/Queda en estado/)).toHaveTextContent(
+      /Pasa de «En depósito»/,
+    )
+  })
+
+  it('no lo avisa si el equipo ya estaba activo', async () => {
+    // Sin este caso el aviso podría estar dibujándose siempre, y el test de
+    // arriba pasaría igual: sería ruido en cada traslado de un equipo en uso.
+    const user = userEvent.setup()
+    equipoDelFixture = { ...EQUIPO, estado: 'activo' }
+    const dialogo = await abrirMoverAUnSector(user)
+
+    expect(within(dialogo).queryByText(/Queda en estado/)).toBeNull()
   })
 })
 
