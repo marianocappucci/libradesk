@@ -556,10 +556,26 @@ class EquipoRepository:
         conserva, y ahi es lo correcto: mueve N equipos de un saque y no puede
         preguntar por cada uno a donde va dentro del destino.
 
-        **El estado no se toca**, por el mismo motivo que en
-        `mover_a_deposito`: un equipo entra al deposito porque se lo retiro
-        (`almacenado`) o porque volvio de service y espera instalacion, y
-        deducirlo del destino escribiria un cambio de estado que nadie pidio.
+        **El estado sigue al destino, pero solo en UNA direccion.** Es
+        asimetrico a proposito:
+
+        - **A un sector: el equipo queda `activo`.** Instalarlo en un
+          consultorio ES ponerlo en servicio; no hay otra lectura. Hasta el
+          2026-08-31 este camino no lo tocaba, y el resultado era un equipo con
+          el movimiento «Deposito → Consultorio 6» bien escrito y el estado
+          diciendo «En deposito», que hay que ir a corregir a mano en el
+          formulario — o sea, el mismo trabajo de dos pasos que este endpoint
+          vino a sacar. Lo reporto el humano usandolo.
+        - **A un deposito: el estado NO se toca**, mismo criterio que
+          `mover_a_deposito`. Ahi el destino no alcanza para deducirlo: un
+          equipo entra al deposito porque se lo retiro (`almacenado`), porque
+          esta roto y sale a service (`en_reparacion`) o porque volvio y espera
+          instalacion. Elegir uno seria escribir un cambio que nadie pidio.
+
+        El cambio de estado **no es silencioso**: `movimientos_por_cambio`
+        emite su propia fila ademas del traslado, asi que la ficha muestra las
+        dos cosas. Incluye el caso de un equipo en `baja` que vuelve a un
+        sector: queda `activo` y la fila lo dice.
         """
         if deposito_id is not None and sector and sector.strip():
             raise DestinoAmbiguo(
@@ -578,6 +594,7 @@ class EquipoRepository:
 
             sector_previo = e.sector
             ubicacion_previa = e.ubicacion_oficina
+            estado_previo = e.estado
             deposito_previo = _nombres_depositos(
                 session, [e.deposito_id]
             ).get(e.deposito_id)
@@ -589,6 +606,10 @@ class EquipoRepository:
             # a muchos.
             if sector and sector.strip():
                 e.sector = sector.strip()
+                # Instalarlo en un sector ES ponerlo en servicio. Ver el
+                # docstring: la regla es asimetrica y sólo vale en esta
+                # direccion.
+                e.estado = "activo"
             e.ubicacion_oficina = (ubicacion_oficina or "").strip() or None
 
             deposito_actual = _validar_deposito(session, e.cliente_id, deposito_id)
@@ -597,10 +618,11 @@ class EquipoRepository:
                 e,
                 sector_previo=sector_previo,
                 ubicacion_previa=ubicacion_previa,
-                # No es un descuido que el previo sea el actual: este camino no
-                # toca el estado, y pasarlo igual a si mismo es lo que hace que
-                # `movimientos_por_cambio` emita el traslado y nada mas.
-                estado_previo=e.estado,
+                # Yendo a un deposito esto vale lo mismo que `e.estado` —el
+                # estado no se toca por ese camino— y `movimientos_por_cambio`
+                # emite solo el traslado. Yendo a un sector difiere cuando el
+                # equipo no estaba ya activo, y ahi salen las dos filas.
+                estado_previo=estado_previo,
                 usuario=usuario_actor or "Sistema",
                 deposito_previo=deposito_previo,
                 deposito_actual=deposito_actual,
