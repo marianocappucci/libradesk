@@ -406,6 +406,17 @@ def _validar_deposito(session, cliente_id: int, deposito_id: int | None) -> str 
     return d.nombre
 
 
+class DestinoAmbiguo(ValueError):
+    """Se pidio mover un equipo a un deposito Y a un sector a la vez, o a
+    ninguno de los dos.
+
+    No es un caso a resolver por defecto. `lugar_de()` muestra el deposito
+    cuando hay uno, asi que un equipo con deposito y sector a la vez tiene un
+    sector que no se ve en ninguna pantalla: elegir uno por el llamador seria
+    guardar en silencio un dato que despues nadie encuentra.
+    """
+
+
 class EquipoRepository:
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
@@ -513,6 +524,87 @@ class EquipoRepository:
                 deposito_actual=deposito_actual,
                 motivo=motivo,
                 incidencia_id=incidencia_id,
+            ):
+                session.add(movimiento)
+
+            session.commit()
+            session.refresh(e)
+            return self._resolver(session, e, deposito_actual)
+
+    def mover(self, equipo_id: int, *, deposito_id: int | None = None,
+              sector: str | None = None, ubicacion_oficina: str | None = None,
+              motivo: str | None = None, usuario_actor: str | None = None) -> dict:
+        """Manda UN equipo a UN destino: un deposito, o un sector del cliente.
+
+        **Por que no alcanzaba el `PUT /api/equipos/{id}`.** Ese PUT recibe el
+        equipo entero, asi que una clave ausente en el payload llega como
+        `null` y se guarda: ya borro `garantia_vence` de todo el parque una vez
+        y estuvo a punto de borrar `proveedor_id` (los dos comentarios estan en
+        `frontend/src/pages/Equipos.tsx`). Sacar un equipo del deposito no
+        deberia poder tocarle la garantia, y por ese camino podia. Aca se
+        escribe **solo donde esta el equipo** — las otras columnas no se
+        nombran, asi que no hay forma de que las pise.
+
+        **El destino es uno de los dos, nunca los dos.** Ver `DestinoAmbiguo`.
+
+        **`ubicacion_oficina` se aplica tal cual venga, incluido `None`.** Es
+        parte del destino ("Consultorios" + "Consultorio 6"), no un campo que
+        se conserve: al mandar el equipo al panol, la oficina donde estaba deja
+        de ser cierta, y `ubicacion_texto()` la seguiria pegando al nombre del
+        deposito ("Panol · Consultorio 6"). Queda en el historial, que es donde
+        corresponde. La version de a muchos (`mover_a_deposito`) si la
+        conserva, y ahi es lo correcto: mueve N equipos de un saque y no puede
+        preguntar por cada uno a donde va dentro del destino.
+
+        **El estado no se toca**, por el mismo motivo que en
+        `mover_a_deposito`: un equipo entra al deposito porque se lo retiro
+        (`almacenado`) o porque volvio de service y espera instalacion, y
+        deducirlo del destino escribiria un cambio de estado que nadie pidio.
+        """
+        if deposito_id is not None and sector and sector.strip():
+            raise DestinoAmbiguo(
+                "Un equipo está en un depósito o en un sector del cliente, no "
+                "en los dos: elegí uno."
+            )
+        if deposito_id is None and not (sector and sector.strip()):
+            raise DestinoAmbiguo(
+                "Falta el destino: un depósito o un sector del cliente."
+            )
+
+        with self.session_factory() as session:
+            e = session.get(Equipo, equipo_id)
+            if e is None:
+                raise KeyError(equipo_id)
+
+            sector_previo = e.sector
+            ubicacion_previa = e.ubicacion_oficina
+            deposito_previo = _nombres_depositos(
+                session, [e.deposito_id]
+            ).get(e.deposito_id)
+
+            e.deposito_id = deposito_id
+            # Yendo a un deposito el sector NO se borra: queda como de donde
+            # salio el equipo, que es lo que `lugar_de()` va a mostrar de
+            # nuevo cuando alguien lo saque. Mismo criterio que la version de
+            # a muchos.
+            if sector and sector.strip():
+                e.sector = sector.strip()
+            e.ubicacion_oficina = (ubicacion_oficina or "").strip() or None
+
+            deposito_actual = _validar_deposito(session, e.cliente_id, deposito_id)
+
+            for movimiento in movimientos_por_cambio(
+                e,
+                sector_previo=sector_previo,
+                ubicacion_previa=ubicacion_previa,
+                # No es un descuido que el previo sea el actual: este camino no
+                # toca el estado, y pasarlo igual a si mismo es lo que hace que
+                # `movimientos_por_cambio` emita el traslado y nada mas.
+                estado_previo=e.estado,
+                usuario=usuario_actor or "Sistema",
+                deposito_previo=deposito_previo,
+                deposito_actual=deposito_actual,
+                motivo=motivo,
             ):
                 session.add(movimiento)
 

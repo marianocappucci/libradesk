@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from ..auth import get_current_user
 from ..dependencies import get_equipo_repository
 from ..services.depositos import ClienteAjeno
-from ..services.equipos import EquipoRepository
+from ..services.equipos import DestinoAmbiguo, EquipoRepository
 
 router = APIRouter(prefix="/api/equipos", tags=["equipos"])
 
@@ -34,6 +34,22 @@ class EquipoUpdate(EquipoIn):
     # Solo para el historial: si el update genera un traslado o un cambio
     # de estado, este texto queda como motivo del movimiento. No se guarda
     # en el equipo.
+    motivo: str | None = None
+
+
+class MoverEquipoIn(BaseModel):
+    """A donde va el equipo. Uno de los dos, nunca los dos — ver
+    `EquipoRepository.mover()`."""
+
+    # A un deposito (propio o del cliente).
+    deposito_id: int | None = None
+    # O a un sector del cliente, por nombre. Texto y no una FK a `sectores`:
+    # `equipos.sector` es texto desde siempre y el historial guarda nombres, no
+    # ids, para que renombrar un lugar no reescriba el pasado.
+    sector: str | None = None
+    # Donde dentro del destino ("Consultorio 6"). Se aplica tal cual, incluido
+    # el `None`: es parte del destino, no un campo que se conserve.
+    ubicacion_oficina: str | None = None
     motivo: str | None = None
 
 
@@ -132,6 +148,28 @@ def update_equipo(
     except KeyError:
         raise HTTPException(404, "equipo not found")
     except ClienteAjeno as e:
+        raise HTTPException(422, str(e))
+
+
+@router.post("/{equipo_id}/mover", response_model=EquipoOut)
+def mover_equipo(
+    equipo_id: int,
+    data: MoverEquipoIn,
+    equipos: EquipoRepository = Depends(get_equipo_repository),
+    user: dict = Depends(get_current_user),
+):
+    """Cambia SOLO donde esta el equipo, y deja el traslado en su historial.
+
+    Aparte del `PUT` a proposito: ese manda el equipo entero y una clave
+    ausente llega como `null`. Ver `EquipoRepository.mover()`.
+    """
+    try:
+        return equipos.mover(
+            equipo_id, usuario_actor=user["username"], **data.model_dump()
+        )
+    except KeyError:
+        raise HTTPException(404, "equipo not found")
+    except (DestinoAmbiguo, ClienteAjeno) as e:
         raise HTTPException(422, str(e))
 
 

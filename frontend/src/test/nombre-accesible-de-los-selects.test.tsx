@@ -352,13 +352,46 @@ const PANTALLAS: {
   },
   {
     titulo: 'Equipos — alta',
-    // Cliente, depósito, estado y —desde el 2026-08-24— «Es de un tercero»,
-    // que es de quién es el equipo cuando no es del cliente.
-    cuantos: 4,
+    // Cliente, depósito, estado, «Es de un tercero» —desde el 2026-08-24, de
+    // quién es el equipo cuando no es del cliente— y, desde el 2026-08-31, el
+    // campo Sector.
+    //
+    // 🔴 Sector es un `<input>` de texto y aun así cuenta: desde que sugiere
+    // los sectores del cliente lleva el atributo `list`, y **un input con
+    // `list` tiene rol `combobox` implícito**. O sea que este guard lo empezó
+    // a mirar solo, que es exactamente para lo que está — el nombre se lo da
+    // el `htmlFor` del `FormLabel`, como al resto.
+    cuantos: 5,
     montar: async (user) => {
       render(<Equipos />, '/equipos')
       await user.click(await screen.findByRole('button', { name: /Nuevo equipo/ }))
       await screen.findByRole('dialog')
+    },
+  },
+  {
+    // El diálogo de mover (2026-08-31). Se abre en la pestaña opuesta a donde
+    // está el equipo, y el fixture lo tiene instalado (`deposito_id: null`),
+    // así que arranca en «A un depósito»: un solo combobox, el `SelectBuscable`
+    // del depósito, que es el primitivo que no toma el `id` del `FormControl`
+    // y necesita `ariaLabel` sí o sí.
+    titulo: 'Equipos — mover a un depósito',
+    cuantos: 1,
+    montar: async (user) => {
+      render(<Equipos />, '/equipos')
+      await user.click(await screen.findByRole('button', { name: /Mover equipo/ }))
+      await screen.findByRole('dialog')
+    },
+  },
+  {
+    titulo: 'Equipos — mover a un sector',
+    // La otra pestaña: el campo de sector, que es el `<input list>` de arriba.
+    // Radix desmonta el panel inactivo, así que nunca se ven los dos juntos.
+    cuantos: 1,
+    montar: async (user) => {
+      render(<Equipos />, '/equipos')
+      await user.click(await screen.findByRole('button', { name: /Mover equipo/ }))
+      await screen.findByRole('dialog')
+      await user.click(screen.getByRole('tab', { name: /sector del cliente/i }))
     },
   },
   {

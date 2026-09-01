@@ -8,9 +8,10 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_EQUIPO_LABELS, describirEquipo, lugarDe, opcionesCliente,
   opcionesDeposito, opcionesProveedor, ubicacionTexto,
-  type Cliente, type Deposito, type Equipo, type Proveedor,
+  type Cliente, type Deposito, type Equipo, type Proveedor, type Sector,
 } from '../api'
 import { DialogoDeReferencias } from './equipos-referencias'
+import { MoverEquipo } from '@/components/mover-equipo'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,7 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Monitor } from 'lucide-react'
-import { Eye, FilePlus, Pencil, Tags, Trash2 } from '@/components/iconos-accion'
+import { ArrowLeftRight, Eye, FilePlus, Pencil, Tags, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 // Sin depósito: el equipo está instalado en el sector del cliente. Radix no
@@ -85,6 +86,14 @@ export function Equipos() {
   // El equipo cuyos identificadores ajenos se están mirando. Diálogo aparte
   // del de edición — ver `equipos-referencias.tsx`.
   const [conReferencias, setConReferencias] = useState<Equipo | null>(null)
+  // El equipo que se está mandando a otro lado. Diálogo aparte del de
+  // edición a propósito — ver `components/mover-equipo.tsx`.
+  const [aMover, setAMover] = useState<Equipo | null>(null)
+  // Los sectores del cliente elegido en el formulario, para sugerirlos en el
+  // campo Sector. Son los mismos que usan incidencias y contratos: el campo
+  // del equipo sigue siendo texto libre, esto sólo evita que el mismo lugar
+  // se escriba de tres formas distintas.
+  const [sectores, setSectores] = useState<Sector[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Alta y edición en un solo Dialog reusado (`editando === null` es alta),
@@ -121,6 +130,22 @@ export function Equipos() {
     loadEquipos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroCliente])
+
+  // Los sectores se recargan al cambiar de cliente en el formulario, no al
+  // abrirlo: el alta arranca sin cliente y el select se puede cambiar con el
+  // diálogo ya abierto. Sin cliente no hay a quién pedírselos.
+  const clienteDelForm = form.watch('cliente_id')
+  useEffect(() => {
+    if (!clienteDelForm) {
+      setSectores([])
+      return
+    }
+    // Son sugerencias: si falla, el campo sigue aceptando texto libre igual
+    // que siempre. No hay nada que reportarle al usuario.
+    api.get<Sector[]>(`/api/sectores?cliente_id=${clienteDelForm}`)
+      .then(setSectores)
+      .catch(() => setSectores([]))
+  }, [clienteDelForm])
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -271,14 +296,68 @@ export function Equipos() {
     const base: ColumnDef<Equipo>[] = [
       { accessorKey: 'tipo', header: sortableHeader('Tipo'), size: 140, minSize: 100, meta: { stretch: true }, cell: ({ row }) => <span className="font-medium">{row.original.tipo}</span> },
       { accessorKey: 'cliente_id', header: 'Cliente', size: 160, minSize: 120, cell: ({ row }) => clienteNombre(row.original.cliente_id) },
-      { accessorKey: 'marca', header: 'Marca', size: 120, minSize: 90, cell: ({ row }) => row.original.marca ?? '—' },
-      { accessorKey: 'modelo', header: 'Modelo', size: 150, minSize: 100, cell: ({ row }) => row.original.modelo ?? '—' },
+      // --- por qué tres columnas se esconden -------------------------------
+      //
+      // `DataTable` fija el `minWidth` de la tabla como la suma de los `size`
+      // declarados, así que la lista pedía scroll horizontal en cualquier
+      // pantalla normal: las ocho columnas suman 1110 px y la de acciones mide
+      // 212 (cinco botones de 36 + cuatro gaps de 4 + 16 de padding), o sea
+      // 1322 px de mínimo. Con la sidebar abierta el contenido es la ventana
+      // menos 352 px (medido, ver `Cuotas.tsx`), así que hacía falta una
+      // pantalla de 1674 px para que no scrolleara. En 1366, 1440 y 1536
+      // scrolleaba siempre.
+      //
+      // `opcional` saca la columna del `minWidth` además de ocultarla — sin
+      // eso la tabla sigue pidiendo scroll por una columna que ni se ve.
+      // Quedan las seis que contestan para qué se entra acá (cuál es, de quién
+      // es, dónde está y cómo está): 140+160+130+160+120+212 = 922, o sea
+      // 1274 px de ventana. Las otras tres van apareciendo a medida que entran:
+      //
+      //   Marca      +120 → 1042 → aparece en 1400
+      //   Modelo     +150 → 1192 → aparece en 1550
+      //   N° ajeno   +130 → 1322 → aparece en 1680
+      //
+      // Ninguna se pierde: las cuatro —marca, modelo, serial y el número
+      // ajeno— siguen entrando por el buscador de arriba, que es como se las
+      // usa de verdad ("me dicen que es la 4471").
+      {
+        accessorKey: 'marca', header: 'Marca', size: 120, minSize: 90,
+        meta: {
+          opcional: true,
+          className: 'hidden min-[1400px]:table-cell',
+          // ⚠️ Un `<col>` NO puede llevar `table-cell` —lo convierte en
+          //    celda anónima y descoloca el colgroup entero—: va
+          //    `table-column`. Ver `Cuotas.tsx`.
+          colClassName: 'hidden min-[1400px]:table-column',
+        },
+        cell: ({ row }) => row.original.marca ?? '—',
+      },
+      {
+        accessorKey: 'modelo', header: 'Modelo', size: 150, minSize: 100,
+        meta: {
+          opcional: true,
+          className: 'hidden min-[1550px]:table-cell',
+          // ⚠️ Un `<col>` NO puede llevar `table-cell` —lo convierte en
+          //    celda anónima y descoloca el colgroup entero—: va
+          //    `table-column`. Ver `Cuotas.tsx`.
+          colClassName: 'hidden min-[1550px]:table-column',
+        },
+        cell: ({ row }) => row.original.modelo ?? '—',
+      },
       { accessorKey: 'serial', header: 'Serial', size: 130, minSize: 100, cell: ({ row }) => row.original.serial ?? '—' },
       {
         id: 'referencias',
         header: 'N° ajeno',
         size: 130,
         minSize: 100,
+        meta: {
+          opcional: true,
+          className: 'hidden min-[1680px]:table-cell',
+          // ⚠️ Un `<col>` NO puede llevar `table-cell` —lo convierte en
+          //    celda anónima y descoloca el colgroup entero—: va
+          //    `table-column`. Ver `Cuotas.tsx`.
+          colClassName: 'hidden min-[1680px]:table-column',
+        },
         // El número con el que lo llama el tercero, en la lista y no sólo en la
         // ficha: es el dato que se viene a buscar acá cuando hay que pedirle un
         // insumo, y detrás de un click deja de contestarse de un vistazo.
@@ -342,6 +421,11 @@ export function Equipos() {
               nombran al equipo, que es lo que ese dibujo ya significa en el
               vocabulario. Ver `components/iconos-accion.tsx`. */}
           <Button size="icon" variant="outline" title="Identificadores del equipo" aria-label="Identificadores del equipo" onClick={() => setConReferencias(row.original)}><Tags /></Button>
+          {/* Mover va ANTES de editar y no adentro: sacar un equipo del
+              depósito para instalarlo es un gesto propio, no la corrección de
+              una ficha, y por el formulario completo se hacía cambiando dos
+              campos que ahí no se ven relacionados. */}
+          <Button size="icon" variant="outline" title="Mover equipo" aria-label="Mover equipo" onClick={() => setAMover(row.original)}><ArrowLeftRight /></Button>
           <Button size="icon" variant="outline" title="Editar equipo" aria-label="Editar equipo" onClick={() => abrirEditar(row.original)}><Pencil /></Button>
           <Button size="icon" variant="outline" className="text-destructive hover:text-destructive" title="Eliminar equipo" aria-label="Eliminar equipo" onClick={() => setABorrar(row.original)}><Trash2 /></Button>
         </div>
@@ -412,10 +496,26 @@ export function Equipos() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                {/* Texto libre CON sugerencias, no un select: el campo tiene
+                    que seguir aceptando cualquier cosa —es como funcionó
+                    siempre y hay instancias que no cargan sectores—, y a la vez
+                    ofrecer los que el cliente ya tiene para que el mismo lugar
+                    no termine escrito de tres formas. El `<datalist>` hace
+                    exactamente eso y no cambia nada para quien no lo use. */}
                 <FormField control={form.control} name="sector" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sector</FormLabel>
-                    <FormControl><Input {...field} className="w-36" placeholder="Depósito, Admisión…" /></FormControl>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        list="sectores-del-cliente"
+                        className="w-36"
+                        placeholder="Admisión, Guardia…"
+                      />
+                    </FormControl>
+                    <datalist id="sectores-del-cliente">
+                      {sectores.map((s) => <option key={s.id} value={s.nombre} />)}
+                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -563,6 +663,15 @@ export function Equipos() {
           )}
         </CardContent>
       </Card>
+
+      <MoverEquipo
+        equipo={aMover}
+        onClose={() => setAMover(null)}
+        // Sólo los equipos: mover no cambia la lista de clientes, y recargarla
+        // apagaría la tabla un instante y con ella la búsqueda escrita (mismo
+        // motivo que en `handleSubmit`).
+        onMovido={loadEquipos}
+      />
 
       <DialogoDeReferencias
         equipo={conReferencias}
