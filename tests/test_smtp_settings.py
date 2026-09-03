@@ -16,7 +16,6 @@ tiene `tests/conftest.py`, asi que la fixture se redefine aca igual que alli.
 import pytest
 from sqlalchemy import text
 
-
 # `client` sale de conftest.py.
 
 

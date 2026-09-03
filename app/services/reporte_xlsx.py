@@ -9,8 +9,12 @@ from openpyxl import Workbook
 
 from .reporte_vista import MARCA_ARGB, Vista
 from .xlsx_helper import (
-    add_data_row, add_group_header, add_header_row, add_meta_header,
-    add_totals_row, create_sheet,
+    add_data_row,
+    add_group_header,
+    add_header_row,
+    add_meta_header,
+    add_totals_row,
+    create_sheet,
 )
 
 

@@ -63,8 +63,8 @@ referencia. Acá la FK **sí** va: `contratos_cuotas` es una tabla de este mismo
 producto y de esta misma cadena de migraciones. La que no lleva FK es
 `remito_id`, porque los remitos son de LibraCore.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0032_contratos_actas"
 down_revision = "0031_baja_servicios"

@@ -29,8 +29,8 @@ dijera una patente y el equipo otra.
 falta reconstruir la tabla por el lado de los defaults. `batch_alter_table` la
 recrea igual por las FK, que en SQLite no se pueden agregar de otro modo.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0009_agenda_de_equipos'
 down_revision = '0008_equipos_de_trabajo_y_flota'

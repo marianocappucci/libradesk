@@ -31,7 +31,11 @@ from pypdf import PdfReader
 from pypdf.generic import ByteStringObject, ContentStream
 
 from app.services import (
-    acta_pdf, hoja_ruta_pdf, incidencia_pdf, informe_pdf, ingreso_pdf,
+    acta_pdf,
+    hoja_ruta_pdf,
+    incidencia_pdf,
+    informe_pdf,
+    ingreso_pdf,
     pdf_texto,
 )
 

@@ -30,7 +30,7 @@ propietaria queda pendiente para otra sesión).
 
 **Backend**
 - FastAPI + SQLAlchemy (Python 3.12)
-- SQLite (estándar de la familia Libra)
+- PostgreSQL — único motor (sidecar `postgres:16-alpine`); el arranque rechaza cualquier otro destino
 - [libraauth](https://github.com/marianocappucci/libraauth) — sesión por cookie + usuarios (motor nuevo, primer consumidor)
 - openpyxl para exports xlsx
 
@@ -51,7 +51,7 @@ propietaria queda pendiente para otra sesión).
 ```
 libradesk/
 ├── app/
-│   ├── main.py            # create_app(): engine SQLite, libraauth, routers
+│   ├── main.py            # create_app(): engine PostgreSQL, libraauth, routers
 │   ├── asgi.py             # entrypoint uvicorn, sirve frontend/dist
 │   ├── database.py         # engine/session factory propios
 │   ├── auth.py              # shim sobre libraauth.session_auth
@@ -159,7 +159,7 @@ frontend) con sus deploy keys de solo lectura dedicadas
 ```bash
 docker compose logs -f libradesk      # Logs en tiempo real
 docker compose restart libradesk
-docker exec -it libradesk sqlite3 /app/data/libradesk.db
+docker exec -it libradesk-postgres psql -U libradesk libradesk
 ```
 
 ---
@@ -169,11 +169,11 @@ docker exec -it libradesk sqlite3 /app/data/libradesk.db
 - El backend FastAPI sirve tanto la API (`/api/*`, `/auth/*`) como el
   frontend estático (build horneado en `/opt/frontend-dist`, fuera del
   bind mount de dev — mismo patrón que el resto de la familia).
-- `libraauth` y el dominio propio de LibraDesk viven en el **mismo**
-  archivo SQLite (`Base.metadata.create_all()` se llama para las dos
-  metadatas contra el mismo engine) — decisión explícita para no
+- `libraauth` y el dominio propio de LibraDesk viven en la **misma**
+  base PostgreSQL (un solo engine para las dos
+  metadatas) — decisión explícita para no
   arrastrar las 28 tablas de facturación/ARCA de `libracore.db` que no
   aplican a este producto.
 - `docs/schema.sql` queda como referencia histórica del schema Postgres
   de la versión Node.js anterior — no se usa en el sistema actual
-  (SQLAlchemy `create_all()` en su lugar, sin Alembic todavía).
+  (el schema lo maneja Alembic: migraciones en `migrations/`, corridas en el deploy).

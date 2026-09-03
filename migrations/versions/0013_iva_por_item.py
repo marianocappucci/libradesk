@@ -17,8 +17,8 @@ Lo que NO toca: el schema de `remitos`/`presupuestos`. Es de LibraCore y lo
 comparten Contalibra y Restolibra; la alicuota por linea viaja **dentro del
 JSON de `items`**, que ya es texto libre y no tiene forma fija.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0013_iva_por_item"
 down_revision = "0012_servicios"

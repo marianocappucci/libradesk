@@ -60,8 +60,8 @@ cubrir varias ventas** el día que se agrupe como ya se agrupan los reclamos. La
 regla que hay que sostener hoy es que una venta no salga dos veces; la otra
 dirección se deja abierta.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0026_ventas_remitos"
 down_revision = "0025_contratos_cuotas"

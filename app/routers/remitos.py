@@ -17,11 +17,14 @@ from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
 from ..dependencies import (
-    get_cliente_repository, get_data_dir, get_remito_service,
+    get_cliente_repository,
+    get_data_dir,
+    get_remito_service,
 )
 from ..services.clientes import ClienteRepository
 from ..services.remitos_presupuestos import (
-    RemitoService, datos_cliente_para_comprobante,
+    RemitoService,
+    datos_cliente_para_comprobante,
 )
 
 router = APIRouter(prefix="/api/remitos", tags=["remitos"])

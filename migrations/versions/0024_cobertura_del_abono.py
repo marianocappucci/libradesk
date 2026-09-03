@@ -52,8 +52,8 @@ otro criterio, y el costo de la de más son dos columnas nullable.
 > la validación en dos lugares y daría un `IntegrityError` sin mensaje útil donde
 > hoy sale un texto que dice qué corregir.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0024_cobertura_del_abono"
 down_revision = "0023_sacar_firma_del_cliente"

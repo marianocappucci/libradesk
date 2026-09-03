@@ -25,7 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from seed_dev import Api, obtener_o_crear, sembrar as sembrar_dev, url_no_productiva  # noqa: E402
+from seed_dev import Api, obtener_o_crear, url_no_productiva  # noqa: E402
+from seed_dev import sembrar as sembrar_dev
 
 #: La cartera de la demo. Una empresa de soporte técnico atiende a clientes de
 #: rubros distintos, y las pantallas de LibraDesk se leen mejor así: un cliente

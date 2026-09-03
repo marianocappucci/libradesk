@@ -6,7 +6,6 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, 
 
 from app import database
 
-
 # Acá vivía `test_sqlite_backend_keeps_the_existing_contract`, que fijaba el
 # contrato del backend SQLite del piloto. Se retiró el 2026-08-12 junto con
 # SQLite: probaba que un motor que el producto ya no usa sigue andando. Pasaba

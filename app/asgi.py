@@ -3,10 +3,9 @@
 fuera de `/app` en `/opt/frontend-dist`, ver `Dockerfile`), catch-all a
 `index.html` para el ruteo client-side de la SPA."""
 import os
-
-from libracore.db.url_de_instancia import url_de_instancia
 from pathlib import Path
 
+from libracore.db.url_de_instancia import url_de_instancia
 
 from app.spa import montar_spa
 

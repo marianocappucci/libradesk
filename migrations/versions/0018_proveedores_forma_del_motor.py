@@ -23,8 +23,8 @@ motor**: la baja de LibraDesk es logica a proposito --un proveedor con
 reparaciones historicas no se puede borrar sin romper esa historia-- y el motor
 borra de verdad. La pantalla de compras usa la baja logica.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0018_proveedores_forma_del_motor"
 down_revision = "0017_clientes_a_clients"

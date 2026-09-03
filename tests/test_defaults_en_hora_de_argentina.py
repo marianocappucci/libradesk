@@ -25,7 +25,6 @@ problema con otra cara.
 from pathlib import Path
 
 import pytest
-
 from libracore.db.schema import defaults_con_reloj, defaults_fuera_de_hora_ar
 
 RAIZ = Path(__file__).resolve().parents[1]

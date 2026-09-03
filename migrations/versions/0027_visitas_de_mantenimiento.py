@@ -53,8 +53,8 @@ Es el mismo criterio que `ix_cuota_periodo_recurrente` de la revisión `0025`:
 generar dos veces septiembre tiene que ser imposible en la base, no sólo
 improbable en el código.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0027_visitas_de_mantenimiento"
 down_revision = "0026_ventas_remitos"

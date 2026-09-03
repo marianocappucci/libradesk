@@ -41,8 +41,8 @@ cargada.** Al 2026-08-16 son los de `libradesk-dev` y ninguno de producción —
 instancias reales tienen `frecuencia_visita` en NULL, o sea que no generan
 visitas—. El cambio es el arreglo, no un efecto colateral.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0030_primera_visita"
 down_revision = "0029_cargos_mano_de_obra"

@@ -34,9 +34,8 @@ nueva, copiando y renombrando. Sin esto, cualquier migracion que no sea un
 """
 import os
 
-from libracore.db.url_de_instancia import url_de_instancia
-
 from alembic import context
+from libracore.db.url_de_instancia import url_de_instancia
 from sqlalchemy import engine_from_config, pool
 
 # Todo lo compartido sale de `app.schema`: ahi esta la lista de modulos que

@@ -193,8 +193,9 @@ def test_el_reporte_acepta_el_filtro_por_categoria(client, catalogo, tickets):
     """Acá el filtro **sí** es recursivo: elegir "Hardware" tiene que contestar
     por impresoras y notebooks juntas, que es la pregunta que se hace de
     verdad."""
-    from openpyxl import load_workbook
     from io import BytesIO
+
+    from openpyxl import load_workbook
 
     def titulos(qs: str) -> set[str]:
         r = client.get(f"/api/reportes/incidencias-periodo.xlsx?{qs}")

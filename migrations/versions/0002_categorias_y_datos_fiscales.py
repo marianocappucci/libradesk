@@ -38,8 +38,8 @@ ninguna fila. El resultado por `PRAGMA foreign_key_list` es el mismo que emite
 Las dos columnas de `clientes` no necesitan nada especial: `batch_alter_table`
 con solo `add_column` no reconstruye (usa `recreate="auto"`).
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0002_categorias_y_datos_fiscales'
 down_revision = '0001_baseline'

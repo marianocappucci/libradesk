@@ -13,8 +13,8 @@ envio ahora que hay mas de un destino posible. **No entra en la clave unica**:
 la regla sigue siendo un comprobante = un envio, decidido con el humano el
 2026-08-12. Las filas viejas quedan en 'contalibra', que es a donde fueron.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0016_config_facturacion"
 down_revision = "0015_entidad_id_texto"

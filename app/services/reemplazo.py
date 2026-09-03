@@ -34,7 +34,7 @@ producen historial identico, no dos dialectos.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -42,12 +42,19 @@ from sqlalchemy.orm import sessionmaker
 
 from .depositos import Deposito, lugar_de
 from .equipos import (
-    Equipo, _mov_to_dict, _to_dict as _equipo_to_dict, descripcion_equipo,
-    movimientos_por_cambio, ubicacion_texto,
+    Equipo,
+    _mov_to_dict,
+    descripcion_equipo,
+    movimientos_por_cambio,
+    ubicacion_texto,
+)
+from .equipos import (
+    _to_dict as _equipo_to_dict,
 )
 from .incidencias import ActividadIncidencia, Incidencia, _actividad_to_dict
 from .proveedores import Proveedor
-from .reparaciones import Reparacion, resolver as resolver_reparacion
+from .reparaciones import Reparacion
+from .reparaciones import resolver as resolver_reparacion
 
 # destino -> (estado del equipo retirado, sector por defecto, frase para la nota)
 #
@@ -124,7 +131,7 @@ def _sellar_cronologia(filas: list) -> None:
     empatada con el resto, que es exactamente el defecto que esta funcion
     existe para evitar.
     """
-    base = datetime.now(timezone.utc).replace(tzinfo=None)
+    base = datetime.now(UTC).replace(tzinfo=None)
     for i, fila in enumerate(filas):
         campo = "fecha" if hasattr(fila, "fecha") else "created_at"
         setattr(fila, campo, base + timedelta(milliseconds=i))

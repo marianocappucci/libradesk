@@ -40,8 +40,8 @@ uno solo obligaría a elegir cuál de los dos se pierde.
 **No hay backfill.** Ningún activo pasó por service todavía: la tabla `activos`
 se creó vacía en la 0004 y sigue vacía en dev.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0006_activos_en_service'
 down_revision = '0005_depositos'

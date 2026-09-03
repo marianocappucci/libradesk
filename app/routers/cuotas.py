@@ -19,7 +19,9 @@ from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
 from ..dependencies import (
-    get_cliente_repository, get_cuota_repository, get_remito_service,
+    get_cliente_repository,
+    get_cuota_repository,
+    get_remito_service,
 )
 from ..services.clientes import ClienteRepository
 from ..services.cuotas import CuotaRepository

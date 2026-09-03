@@ -40,8 +40,18 @@ from datetime import date, datetime
 
 from fpdf import FPDF
 from libracore.pdf_generator import (
-    _ACCENT_DARK, _CW, _INK, _LINE, _LX, _MUTED, _RIGHT_W, _RX,
-    _draw_header_block, _empresa, _TextoSeguroPDF, _wrap_text,
+    _ACCENT_DARK,
+    _CW,
+    _INK,
+    _LINE,
+    _LX,
+    _MUTED,
+    _RIGHT_W,
+    _RX,
+    _draw_header_block,
+    _empresa,
+    _TextoSeguroPDF,
+    _wrap_text,
 )
 
 from .pdf_texto import ancho_util, recortar

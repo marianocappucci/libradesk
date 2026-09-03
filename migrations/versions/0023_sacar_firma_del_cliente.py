@@ -20,8 +20,8 @@ la lea la convierte en un blob de 40 KB por ticket que el backup arrastra y que
 el próximo autogenerate propone dropear igual, un mes más tarde y sin este
 comentario al lado.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0023_sacar_firma_del_cliente"
 down_revision = "0022_servicio_valor_hora"

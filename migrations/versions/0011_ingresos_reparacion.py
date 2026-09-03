@@ -21,8 +21,8 @@ donde se lee.
 como dato: reconstruirlos de los movimientos de equipo sería inventar números de
 comprobante que nunca se le dieron a nadie.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # Renumerada de `0010` a `0011` al mergear: una sesión paralela metió
 # `0010_log_de_actividad` colgando del mismo `0009`. Dos revisiones con el mismo

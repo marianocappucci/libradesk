@@ -37,7 +37,6 @@ from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
 
-
 # Los papeles que una persona puede cumplir. Se guardan como banderas
 # independientes: la misma persona puede tener varias.
 # `responsable` se sumo el 2026-08-04 con el pedido 42: es quien manda un equipo

@@ -10,7 +10,10 @@ from pydantic import BaseModel, Field
 from ..auth import get_current_user
 from ..dependencies import get_deposito_repository, get_equipo_repository
 from ..services.depositos import (
-    ClienteAjeno, DepositoEnUso, DepositoRepository, NombreRepetido,
+    ClienteAjeno,
+    DepositoEnUso,
+    DepositoRepository,
+    NombreRepetido,
 )
 from ..services.equipos import EquipoRepository
 

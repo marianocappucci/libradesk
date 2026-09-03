@@ -59,7 +59,14 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
     select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker

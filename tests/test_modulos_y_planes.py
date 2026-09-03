@@ -15,7 +15,6 @@ import pytest
 
 from plans import PLAN_MODULOS, PLANES, TODOS_LOS_MODULOS, modulos_de_plan
 
-
 # `client` sale de conftest.py.
 
 

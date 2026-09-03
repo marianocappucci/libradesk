@@ -58,13 +58,22 @@ from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import (
-    Date, DateTime, ForeignKey, Index, Numeric, String, Text, func, select, text,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    func,
+    select,
+    text,
     update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
-from .contratos import Contrato, ContratoPrecio, TIPOS_CON_CUOTA
+from .contratos import TIPOS_CON_CUOTA, Contrato, ContratoPrecio
 
 # Los cargos que puede llevar una cuota. Cubre los extras de los lineamientos
 # sin una tabla por cada uno.

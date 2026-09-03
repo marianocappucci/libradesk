@@ -1,6 +1,6 @@
 """Monta el router /auth (login/logout/me) que expone `libraauth`."""
-from libracore import config_manager
 from libraauth.session_auth import build_json_api_auth_router
+from libracore import config_manager
 
 
 def _empresa_nombre(_request) -> str | None:

@@ -60,7 +60,6 @@ revisión `0024`.
 """
 from __future__ import annotations
 
-
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -69,7 +68,10 @@ from sqlalchemy.orm import sessionmaker
 
 from .contratos import FRECUENCIAS_VISITA, Contrato  # noqa: F401  (se reexporta)
 from .cuotas import (
-    _MESES_POR_PERIODICIDAD, _UN_DIA, Periodo, _sumar_meses,
+    _MESES_POR_PERIODICIDAD,
+    _UN_DIA,
+    Periodo,
+    _sumar_meses,
 )
 from .incidencias import Incidencia
 

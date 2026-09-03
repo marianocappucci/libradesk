@@ -19,8 +19,8 @@ Esa comparacion es por PRAGMA y no por texto de DDL a proposito. En produccion,
 `CREATE TABLE`. Es la misma constraint escrita distinto: comparar el texto daria
 un rojo que no corresponde.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0001_baseline'
 down_revision = None
