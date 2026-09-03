@@ -276,3 +276,43 @@ def test_hay_domicilios_de_ejemplo_suficientes_para_no_repetir_de_a_dos():
     """
     assert len(DOMICILIOS) >= 8
     assert len({d for d, _ in DOMICILIOS}) == len(DOMICILIOS)
+
+
+def test_LA_FECHA_NO_SE_RESUELVE_AL_IMPORTAR(monkeypatch):
+    """🔴 La guarda del defecto que puso en rojo el CI de Restolibra el 2026-08-29.
+
+    `HOY` era un `date.today()` a nivel de módulo: quedaba congelado en el
+    instante del import. Un proceso que importa antes de medianoche y siembra
+    después —la suite tarda minutos, y el seed se vuelve a correr sobre
+    procesos que viven días— siembra para AYER, y después la agenda abre vacía
+    el día que alguien la mira.
+
+    Pega en los ~15 lugares de este seed que fechan algo relativo a `HOY`:
+    garantías, contratos, el circuito comercial y la agenda en rango.
+
+    No se prueba llamando a `sembrar()`: eso es una corrida entera contra la
+    base --de eso se ocupa `test_seed_corre.py`--. Se prueba la pieza que
+    decide la fecha, que es donde vivía el defecto.
+    """
+    import datetime
+
+    # Se mueve el reloj DESPUÉS de que el módulo ya está importado, que es
+    # exactamente el cruce de medianoche a mitad de corrida.
+    otro_dia = datetime.date(2031, 7, 4)
+
+    class RelojMovido(datetime.date):
+        @classmethod
+        def today(cls):
+            return otro_dia
+
+    monkeypatch.setattr(seed_dev, "date", RelojMovido)
+
+    assert seed_dev._fijar_hoy() == otro_dia, (
+        "la fecha sigue viniendo del import: mover el reloj no la cambió"
+    )
+    # Y deja el módulo consistente: los sembradores leen `seed_dev.HOY`, no el
+    # valor devuelto.
+    assert seed_dev.HOY == otro_dia, (
+        "`_fijar_hoy` devolvió la fecha nueva pero no actualizó `HOY`, que es "
+        "la que usan los sembradores"
+    )

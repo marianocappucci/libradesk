@@ -44,7 +44,34 @@ import urllib.request
 from datetime import date, datetime, time, timedelta
 from http.cookiejar import CookieJar
 
+#: La fecha que la siembra considera «hoy». La leen los ~15 lugares que fechan
+#: datos relativos al día — garantías, contratos, la agenda en rango, el
+#: circuito comercial.
+#:
+#: 🔴 **Se refresca en `sembrar()`, NO al importar el módulo.** Era
+#: `HOY = date.today()` a secas acá arriba, o sea congelada en el instante del
+#: import. En Restolibra, con el mismo defecto, eso puso en rojo el CI de la
+#: promoción a producción del 2026-08-29 a las 00:04 de Argentina, con el mismo
+#: código que había pasado en verde una hora antes: la suite cruzó la medianoche
+#: entre el import y la siembra. Se lee como un test inestable y es un dato viejo.
+#:
+#: Y no es sólo el test: el seed se vuelve a correr por cron sobre un proceso
+#: que puede vivir días. Con la fecha del import, «la agenda de hoy» termina
+#: siendo la del día que arrancó el proceso, y la pantalla abre vacía.
 HOY = date.today()
+
+
+def _fijar_hoy() -> date:
+    """Resuelve `HOY` para esta corrida y lo devuelve.
+
+    Se hace UNA vez por siembra y no en cada uso: dentro de una misma corrida
+    todas las fechas relativas tienen que salir del mismo «hoy», o un cruce de
+    medianoche a mitad de camino dejaría la agenda partida en dos días y las
+    ventanas de garantía corridas entre sí.
+    """
+    global HOY
+    HOY = date.today()
+    return HOY
 
 #: Todos los campos de `IncidenciaIn`, para reenviarlos en un PUT.
 #:
@@ -212,7 +239,11 @@ def obtener_o_crear(api: Api, ruta: str, clave: str, valor: str, cuerpo: dict):
     return api.post(ruta, cuerpo), True
 
 
-def sembrar(api: Api) -> None:
+def sembrar(api: Api) -> date:
+    # 🔴 Primera línea, y no en cada uso: ver `_fijar_hoy`. Se devuelve la
+    # fecha usada para que quien verifique «hay algo de hoy» pregunte por
+    # ESTA y no por `date.today()` al momento del assert.
+    hoy = _fijar_hoy()
     creados: dict[str, int] = {}
 
     def contar(k: str, nuevo: bool):
@@ -932,6 +963,8 @@ def sembrar(api: Api) -> None:
     _sembrar_insumos(api, contar)
 
     print("Sembrado:", creados or "nada nuevo (ya estaba todo)")
+
+    return hoy
 
 
 def _sembrar_insumos(api: Api, contar) -> None:
