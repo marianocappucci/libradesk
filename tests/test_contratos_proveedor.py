@@ -13,7 +13,6 @@ from datetime import date, timedelta
 
 import pytest
 
-
 HOY = date.today()
 
 

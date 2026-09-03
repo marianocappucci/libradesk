@@ -20,7 +20,6 @@ import pytest
 
 from app.services.insumos import MARGEN_ANTICIPO, ResumenDeConsumo
 
-
 HOY = date.today()
 
 

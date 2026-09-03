@@ -33,8 +33,8 @@ exactamente lo que pasa hoy con todos. Así que **la adopción es explícita**: 
 14 clientes de Lagrace siguen cotizando igual hasta que alguien les asigne una,
 y nadie ve cambiar un precio por haber corrido esta migración.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0028_lista_precios_cliente"
 down_revision = "0027_visitas_de_mantenimiento"

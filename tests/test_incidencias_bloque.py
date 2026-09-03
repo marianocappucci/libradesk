@@ -215,8 +215,9 @@ def test_el_pdf_de_una_incidencia(client, escenario):
 def test_el_pdf_dice_lo_que_tiene_que_decir(client, escenario):
     """Se lee el texto de vuelta con pypdf, no sólo la firma `%PDF`: un PDF
     vacío pasa igual el chequeo de firma. Mismo criterio que el informe."""
-    from pypdf import PdfReader
     from io import BytesIO
+
+    from pypdf import PdfReader
 
     ticket = client.post("/api/incidencias", json={
         "cliente_id": escenario["cliente"]["id"],

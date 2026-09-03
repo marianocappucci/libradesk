@@ -7,16 +7,30 @@ estado — 31 filas reales migradas desde Postgres). `tecnico_id`/
 donde haya coincidencia."""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
-    UniqueConstraint, delete, func, select, text, update,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    delete,
+    func,
+    select,
+    text,
+    update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+
 # Sin riesgo de import circular: `materiales` no importa nada del producto,
 # solo los dos motores.
 from . import materiales
@@ -710,7 +724,8 @@ def _datos_de_items(item_ids, cliente_id: int | None) -> dict:
     """
     from libracore.db import core as _core
 
-    from . import inventario, iva as _iva, precios
+    from . import inventario, precios
+    from . import iva as _iva
 
     unicos = {int(i) for i in item_ids if i}
     if not unicos:
@@ -903,7 +918,7 @@ class IncidenciaRepository:
                     estado_nuevo=i.estado, tecnico=usuario_actor,
                 ))
                 if i.estado in ("resuelta", "cerrado"):
-                    i.fecha_cierre = datetime.now(timezone.utc)
+                    i.fecha_cierre = datetime.now(UTC)
                 else:
                     i.fecha_cierre = None
             session.commit()

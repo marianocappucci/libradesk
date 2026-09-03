@@ -22,7 +22,7 @@ registra antes que el catch-all y le gana.
 > app. Los que miran el cuerpo —que son todos los de esta familia desde
 > LibraCore v1.34.0— se ponen en rojo, que es lo correcto.
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from fastapi import APIRouter
 
@@ -31,4 +31,4 @@ router = APIRouter()
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(UTC).isoformat()}

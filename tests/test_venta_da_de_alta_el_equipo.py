@@ -24,7 +24,8 @@ from datetime import datetime
 
 import pytest
 
-from app.services import activos as activos_mod, inventario
+from app.services import activos as activos_mod
+from app.services import inventario
 
 CUANDO = datetime(2026, 8, 16, 10, 0, 0)
 

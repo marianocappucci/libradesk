@@ -128,10 +128,10 @@ def configure(database_url: str, data_dir: str) -> None:
     # `postgresql+psycopg://` (le paso a Gestiolibra).
     if not libracore_core.es_url_postgres(database_url):
         raise RuntimeError(
-            "LibraDesk corre solo sobre PostgreSQL y recibio {!r}, que no es "
+            f"LibraDesk corre solo sobre PostgreSQL y recibio {database_url!r}, que no es "
             "una URL de PostgreSQL. El modo SQLite se retiro el 2026-08-12: no "
             "chequea las FK, tipa dinamicamente y acepta cadenas donde la base "
-            "pide enteros.".format(database_url)
+            "pide enteros."
         )
     libracore_core.configure(database_url)
 

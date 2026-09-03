@@ -2,9 +2,8 @@
 que el resto de los routers (`uuid4` no aplica acá — `libraauth` usa id
 autoincrement)."""
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
-
 from libraauth.repository import UsernameTaken, UserRepository
+from pydantic import BaseModel
 
 from ..dependencies import get_user_repository
 

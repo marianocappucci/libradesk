@@ -96,7 +96,14 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, func,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
     select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
@@ -480,9 +487,9 @@ class InsumoRepository:
         toner lo puso el cliente— se corrige editando la fila; es raro y no
         justifica una bandera en el alta.
         """
+        from . import inventario
         from .equipos import Equipo
         from .proveedores import Proveedor
-        from . import inventario
 
         if cantidad < 1:
             raise ValueError("la cantidad tiene que ser al menos 1")

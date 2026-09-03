@@ -22,6 +22,7 @@ del visitante y es un cableado que falta.
 """
 import pytest
 
+
 @pytest.fixture
 def auth_recargable():
     """Devuelve `app/routers/auth.py` a como estaba al terminar el test.
@@ -31,6 +32,7 @@ def auth_recargable():
     existe en la instancia de un cliente pasarian a depender del orden.
     """
     import importlib
+
     from app.routers import auth as auth_router
     yield
     importlib.reload(auth_router)
@@ -64,6 +66,7 @@ def _router_de_auth_con(monkeypatch, **entorno):
     recargar aca reproduce el arranque real, no lo esquiva.
     """
     import importlib
+
     from app.routers import auth as auth_router
 
     for k, v in entorno.items():

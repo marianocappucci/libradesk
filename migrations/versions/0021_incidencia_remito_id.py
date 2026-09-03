@@ -29,8 +29,8 @@ de un `0` que habría que interpretar.
 generó este remito?"— y la contesta `RemitoService.dependencias()` en cada
 intento de borrado.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0021_incidencia_remito_id"
 down_revision = "0020_firma_del_cliente"

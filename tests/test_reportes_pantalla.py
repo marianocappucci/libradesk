@@ -23,7 +23,6 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-
 # `client` sale de conftest.py.
 
 

@@ -6,15 +6,21 @@ from pydantic import BaseModel, Field
 from ..auth import get_current_user
 from ..dependencies import (
     get_cliente_repository,
-    get_equipo_repository, get_incidencia_repository, get_reemplazo_service,
-    get_remito_service, get_servicio_repository,
+    get_equipo_repository,
+    get_incidencia_repository,
+    get_reemplazo_service,
+    get_remito_service,
+    get_servicio_repository,
 )
 from ..services import incidencia_pdf
 from ..services.clientes import ClienteRepository
 from ..services.equipos import EquipoRepository
 from ..services.incidencias import IncidenciaRepository
 from ..services.reemplazo import (
-    DESTINOS, CierreService, DatosService, ReemplazoService,
+    DESTINOS,
+    CierreService,
+    DatosService,
+    ReemplazoService,
 )
 from ..services.remitos_presupuestos import RemitoService
 from ..services.servicios_repo_catalogo import ServicioCatalogoRepository

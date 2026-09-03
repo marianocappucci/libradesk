@@ -61,7 +61,13 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
-    DateTime, ForeignKey, String, Text, UniqueConstraint, func, select,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 

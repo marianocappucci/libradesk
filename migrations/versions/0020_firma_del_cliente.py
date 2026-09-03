@@ -31,8 +31,8 @@ ganar nada: el tamaño lo domina el PNG, no el 33 % del base64.
 > cualquier cosa, y un cliente que mande 10 MB de "firma" llenaría el disco sin
 > que la base se queje. Ver `app/services/firma.py`.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0020_firma_del_cliente"
 down_revision = "0019_nro_cds_y_reclamante"

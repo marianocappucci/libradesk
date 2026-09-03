@@ -1,7 +1,6 @@
 """FastAPI dependency providers leyendo estado compartido desde
 `request.app.state` — mismo patron que `gestiolibra/app/dependencies.py`."""
 from fastapi import Request
-
 from libraauth.auditoria import AuditoriaRepository
 from libraauth.auth_events import AuthEventRepository
 from libraauth.repository import UserRepository
@@ -13,7 +12,6 @@ from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
 from .services.contratos_proveedor import ContratoProveedorRepository
 from .services.cuotas import CuotaRepository
-from .services.visitas import VisitaService
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
@@ -22,16 +20,17 @@ from .services.facturacion_config import ConfiguracionFacturacion
 from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
+from .services.ingresos import IngresoRepository
 from .services.insumos import InsumoRepository
 from .services.proveedores import ProveedorRepository
-from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
-from .services.ingresos import IngresoRepository
-from .services.reparaciones import ReparacionRepository
 from .services.remitos_presupuestos import PresupuestoService, RemitoService
+from .services.reparaciones import ReparacionRepository
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
+from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.tecnicos import TecnicoRepository
+from .services.visitas import VisitaService
 
 
 def get_user_repository(request: Request) -> UserRepository:

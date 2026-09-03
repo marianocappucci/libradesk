@@ -65,7 +65,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base, get_session_factory
 from . import comercial, iva
-
 from .fecha import ahora as _ahora
 
 #: Como se cobro. `cuenta_corriente` es el unico que genera deuda; los demas

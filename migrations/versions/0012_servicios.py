@@ -10,8 +10,8 @@ se retipeaba a mano en cada comprobante, asi que lo unico que existe son textos
 sueltos dentro de presupuestos viejos, sin precio canonico ni forma de saber
 cuales eran "el mismo" servicio.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0012_servicios"
 down_revision = "0011_ingresos_reparacion"

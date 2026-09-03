@@ -10,7 +10,8 @@ Dos cosas propias de presupuestos:
 - **Convertir a remito es idempotente**: si ya se convirtio, devuelve el
   remito existente en vez de emitir un segundo remito por el mismo trabajo.
 """
-from datetime import date as date_type, timedelta
+from datetime import date as date_type
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
@@ -19,12 +20,16 @@ from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
 from ..dependencies import (
-    get_cliente_repository, get_data_dir, get_presupuesto_service,
+    get_cliente_repository,
+    get_data_dir,
+    get_presupuesto_service,
     get_remito_service,
 )
 from ..services.clientes import ClienteRepository
 from ..services.remitos_presupuestos import (
-    ESTADOS_PRESUPUESTO, PresupuestoService, RemitoService,
+    ESTADOS_PRESUPUESTO,
+    PresupuestoService,
+    RemitoService,
     datos_cliente_para_comprobante,
 )
 

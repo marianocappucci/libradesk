@@ -32,7 +32,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, String, func, select, update,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    func,
+    select,
+    update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -305,7 +311,8 @@ class DepositoRepository:
         en un deposito propio conviven equipos de varios clientes y sin esa
         columna la lista no se puede leer."""
         from .clientes import Cliente
-        from .equipos import Equipo, _to_dict as _equipo_to_dict, descripcion_equipo
+        from .equipos import Equipo, descripcion_equipo
+        from .equipos import _to_dict as _equipo_to_dict
 
         with self.session_factory() as session:
             filas = session.execute(

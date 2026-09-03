@@ -24,8 +24,8 @@ agregada sobre datos y no se reconstruye nada; las FK viajan dentro del
 **No hay backfill.** Los equipos de trabajo no existen como dato: hasta hoy la
 organizacion de las cuadrillas vivia fuera del sistema.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0008_equipos_de_trabajo_y_flota'
 down_revision = '0007_roles_y_modalidad'

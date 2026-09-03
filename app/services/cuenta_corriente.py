@@ -33,10 +33,10 @@ from __future__ import annotations
 from functools import partial
 
 from libracore.db import cuenta_corriente as _cc
-from libracore.db.cuenta_corriente import VENTAS_LIBRACOMMERCE
 
 # Estas no dependen del origen de las ventas: se reexportan tal cual.
 from libracore.db.cuenta_corriente import (  # noqa: F401
+    VENTAS_LIBRACOMMERCE,
     create_cc_debito,
     create_cc_pago,
     delete_cc_debito,

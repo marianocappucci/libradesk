@@ -24,8 +24,16 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text,
-    func, select,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    func,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 

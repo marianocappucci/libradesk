@@ -35,8 +35,8 @@ sin conflicto de merge. Se renumero esta para que cuelgue de aquella; el orden
 lo eligio el usuario. Desde ahora lo cubre
 `test_la_cadena_tiene_una_sola_cabeza`.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0005_depositos'
 down_revision = '0004_alquileres'

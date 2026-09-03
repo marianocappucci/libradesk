@@ -19,7 +19,11 @@ from app.routers.incidencias import IncidenciaIn
 from app.services.incidencias import ESTADOS_VALIDOS
 from scripts import seed_dev
 from scripts.seed_dev import (
-    CAMPOS_CLIENTE, CAMPOS_INCIDENCIA, CIERRES, DOMICILIOS, url_no_productiva,
+    CAMPOS_CLIENTE,
+    CAMPOS_INCIDENCIA,
+    CIERRES,
+    DOMICILIOS,
+    url_no_productiva,
 )
 
 

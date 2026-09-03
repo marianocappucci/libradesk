@@ -38,8 +38,8 @@ y no una FK a una tabla de contactos, porque **eso es lo que hay**: la persona
 que atiende el teléfono anota un nombre de pila. Una tabla de contactos por
 cliente es otro módulo y nadie la pidió.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0019_nro_cds_y_reclamante"
 down_revision = "0018_proveedores_forma_del_motor"

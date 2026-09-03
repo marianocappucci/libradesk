@@ -19,8 +19,11 @@ de `services/reporte_vista.py` para por que se extrajo.
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import (
-    get_categoria_repository, get_cliente_repository, get_equipo_repository,
-    get_incidencia_repository, get_reportes_service,
+    get_categoria_repository,
+    get_cliente_repository,
+    get_equipo_repository,
+    get_incidencia_repository,
+    get_reportes_service,
 )
 from ..services import reporte_vista as vistas
 from ..services.categorias import CategoriaRepository
@@ -28,7 +31,11 @@ from ..services.clientes import ClienteRepository
 from ..services.equipos import EquipoRepository
 from ..services.incidencias import IncidenciaRepository
 from ..services.reporte_vista import (
-    ESTADO_LABEL, FACT_LABEL, PRIO_LABEL, Vista, fmt_fecha,
+    ESTADO_LABEL,
+    FACT_LABEL,
+    PRIO_LABEL,
+    Vista,
+    fmt_fecha,
 )
 from ..services.reporte_xlsx import renderizar
 from ..services.reportes import ReportesService
