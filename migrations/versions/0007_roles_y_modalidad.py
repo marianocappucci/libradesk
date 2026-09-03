@@ -36,8 +36,8 @@ default: los 23 tickets que ya existen no saben cómo se atendieron, y ponerles
 > PostgreSQL), así que **el schema que ve SQLite no cambia** y las bases que ya
 > aplicaron esta revisión no se tocan.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0007_roles_y_modalidad'
 down_revision = '0006_activos_en_service'

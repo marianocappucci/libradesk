@@ -31,8 +31,17 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text,
-    UniqueConstraint, func, select,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
@@ -1030,7 +1039,7 @@ class ContratoRepository:
         vuelta del service es este mismo reemplazo al reves — el activo que
         estaba afuera vuelve al contrato y el que lo suplia sale.
         """
-        from .activos import ESTADOS_NO_COLOCABLES, _ESTADOS_MANUALES, Activo
+        from .activos import _ESTADOS_MANUALES, ESTADOS_NO_COLOCABLES, Activo
 
         if estado_activo_retirado not in _ESTADOS_MANUALES:
             raise ValueError(

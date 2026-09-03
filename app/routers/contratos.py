@@ -16,18 +16,28 @@ import os
 from datetime import date
 
 from fastapi import (
-    APIRouter, Depends, File, HTTPException, Request, Response, UploadFile,
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
 )
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ..dependencies import (
-    get_acta_repository, get_contrato_repository, get_data_dir,
+    get_acta_repository,
+    get_contrato_repository,
+    get_data_dir,
 )
 from ..services import acta_pdf, archivos
 from ..services.actas import ActaRepository
 from ..services.contratos import (
-    CierreServiceActivo, ContratoRepository, DatosServiceActivo,
+    CierreServiceActivo,
+    ContratoRepository,
+    DatosServiceActivo,
 )
 
 router = APIRouter(prefix="/api/contratos", tags=["contratos"])

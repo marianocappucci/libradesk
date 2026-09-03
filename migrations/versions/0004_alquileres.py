@@ -27,8 +27,8 @@ registro empieza de aca en adelante.
 > `down_revision` (y renumerar) en vez de dejar dos revisiones con el mismo
 > padre: Alembic no upgradea una cadena con dos heads.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0004_alquileres'
 down_revision = '0003_proveedores_y_reparaciones'

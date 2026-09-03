@@ -16,7 +16,6 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
-
 # `client` sale de conftest.py.
 
 

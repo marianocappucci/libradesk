@@ -2,57 +2,95 @@
 tecnicos/sectores/dashboard) + `libraauth` para sesion/usuarios +
 `libracore` para remitos/presupuestos y sus PDF. Mismo patron que
 `gestiolibra/app/main.py`."""
-from fastapi import Depends, FastAPI
-
 import os
 
+from fastapi import Depends, FastAPI
 from libraauth.auditoria import (
-    AuditoriaBase, AuditoriaRepository, agregar_middleware_de_usuario, build_logs_router,
+    AuditoriaBase,
+    AuditoriaRepository,
+    agregar_middleware_de_usuario,
+    build_logs_router,
     configurar_auditoria,
 )
 from libraauth.auth_events import AuthEventRepository
+from libraauth.bootstrap import ensure_demo_user
+from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.models import Base as AuthBase
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
-from libraauth.demo_codigos import DemoCodigoRepository
 from libraauth.session_auth import (
-    build_demo_codigos_router, build_smtp_settings_router, demo_username,
+    build_demo_codigos_router,
+    build_smtp_settings_router,
+    demo_username,
 )
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 from libraauth.terminos import TerminosRepository, build_terminos_router
 from libracore.config_router import (
-    build_backup_router, build_empresa_admin_router, build_empresa_router,
+    build_backup_router,
+    build_empresa_admin_router,
+    build_empresa_router,
 )
 from libracore.respaldo import Instancia
 from libracore.smtp_router import build_smtp_probe_router
 from sqlalchemy.engine import make_url
 
 from . import database, schema
+from .auditoria import AUDITABLES
 from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
 from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
-from .routers import auth as auth_router
 from .routers import (
-    activos, agenda, categorias, clientes, comercial, compras, contratos,
+    activos,
+    agenda,
+    categorias,
+    clientes,
+    comercial,
+    compras,
+    contratos,
     contratos_proveedor,
-    cuotas, dashboard, depositos, equipos, equipos_trabajo, facturacion,
-    facturacion_config, health, incidencias,
-    informes, ingresos, insumos, presupuestos, proveedores, remitos,
+    cuotas,
+    dashboard,
+    depositos,
+    equipos,
+    equipos_trabajo,
+    facturacion,
+    facturacion_config,
+    health,
+    incidencias,
+    informes,
+    ingresos,
+    insumos,
+    presupuestos,
+    proveedores,
+    remitos,
     reparaciones,
-    reportes, sectores, servicios, sucursales, tecnicos, users, visitas,
+    reportes,
+    sectores,
+    servicios,
+    sucursales,
+    tecnicos,
+    users,
+    visitas,
 )
+from .routers import auth as auth_router
 from .routers import inventario as inventario_router
+
 # Alias por el mismo motivo que `inventario_router`: `app.services.ventas` ya
 # ocupa el nombre en este módulo.
 from .routers import ventas as ventas_router
-from .auditoria import AUDITABLES
+from .services import comercial as comercial_service
+from .services import inventario, materiales
+from .services import remitos_presupuestos as rp_service
 from .services.actas import ActaRepository
 from .services.activos import ActivoRepository
 from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
+
+# La clase, no el módulo: `insumos` ya nombra al router en este archivo. Vale
+# igual para `contratos_proveedor`.
+from .services.contratos_proveedor import ContratoProveedorRepository
 from .services.cuotas import CuotaRepository
-from .services.visitas import VisitaService
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
 from .services.equipos import EquipoRepository
@@ -61,24 +99,18 @@ from .services.facturacion_config import ConfiguracionFacturacion, configurar_le
 from .services.facturacion_externa import PuenteFacturacion
 from .services.incidencias import IncidenciaRepository
 from .services.informes import InformeService
+from .services.ingresos import IngresoRepository
+from .services.insumos import InsumoRepository
 from .services.modules import ModuleRepository
 from .services.proveedores import ProveedorRepository
-from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.reemplazo import ReemplazoService
-from .services.ingresos import IngresoRepository
-# La clase, no el módulo: `insumos` ya nombra al router en este archivo. Vale
-# igual para `contratos_proveedor`.
-from .services.contratos_proveedor import ContratoProveedorRepository
-from .services.insumos import InsumoRepository
 from .services.reparaciones import ReparacionRepository
-from .services import comercial as comercial_service
-from .services import inventario, materiales
-from .services import remitos_presupuestos as rp_service
 from .services.reportes import ReportesService
 from .services.sectores import SectorRepository
+from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.tecnicos import TecnicoRepository
-from libraauth.bootstrap import ensure_demo_user
 from .services.users import ensure_default_admin
+from .services.visitas import VisitaService
 
 
 def _es_postgres(database_url: str) -> bool:

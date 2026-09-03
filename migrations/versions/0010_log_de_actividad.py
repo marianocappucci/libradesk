@@ -19,8 +19,8 @@ Los tres índices son los de las tres columnas por las que filtra la pantalla
 (`ts`, `accion`, `entidad`). En una tabla que sólo crece y se lee ordenada por
 fecha, el que importa es el de `ts`.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0010_log_de_actividad'
 down_revision = '0009_agenda_de_equipos'

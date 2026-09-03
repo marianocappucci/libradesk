@@ -5,7 +5,6 @@ staff. Cerrarlo dejaria el catalogo cargado y sin nadie que pueda usarlo, que
 es el escenario que este pedido viene a evitar. Ver el montaje en `main.py`.
 """
 from fastapi import APIRouter, Depends, HTTPException
-
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_servicio_repository

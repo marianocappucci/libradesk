@@ -16,9 +16,9 @@ descontar, asi que el endpoint no tendria que existir.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..auth import get_current_user
 from ..services import inventario, materiales
 from ..services.fecha import ahora as _ahora
-from ..auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["stock"])
 

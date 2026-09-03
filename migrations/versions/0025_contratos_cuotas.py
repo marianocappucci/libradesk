@@ -61,8 +61,8 @@ de acá para allá ataría las dos cadenas de migración.
 > schema. La decisión de no poner el CHECK en la base es de la fase 1 y se
 > respeta acá.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0025_contratos_cuotas"
 down_revision = "0024_cobertura_del_abono"

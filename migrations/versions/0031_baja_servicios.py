@@ -50,8 +50,8 @@ consulte es una promesa que no se puede cumplir.
 Por eso el orden importa y por eso esto es la fase 3 y no parte de la 2: la
 vuelta atrás barata se ofreció mientras tuvo sentido ofrecerla.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0031_baja_servicios"
 down_revision = "0030_primera_visita"

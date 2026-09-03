@@ -52,8 +52,8 @@ sigue siendo un click. Los cargos son para lo que antes no se podía expresar.
 > trabajaron*, que es lo que esos tres cuentan, y no *lo que se factura*. Meter
 > ahí el viático habría roto las tres pantallas en silencio.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0029_cargos_mano_de_obra"
 down_revision = "0028_lista_precios_cliente"

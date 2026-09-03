@@ -22,8 +22,8 @@ del que no se puede derivar proveedor ni RMA. Mismo criterio que se tomo con el
 `equipo_id` de las incidencias migradas (pendiente 21): la historia hacia atras
 se deja como esta y el registro empieza de aca en adelante.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '0003_proveedores_y_reparaciones'
 down_revision = '0002_categorias_y_datos_fiscales'

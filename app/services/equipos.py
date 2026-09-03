@@ -17,8 +17,17 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, ForeignKey, String, Text, UniqueConstraint,
-    delete, func, select, update,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    delete,
+    func,
+    select,
+    update,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 

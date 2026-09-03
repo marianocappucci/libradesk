@@ -37,9 +37,21 @@ from datetime import date, datetime
 
 from fpdf import FPDF
 from libracore.pdf_generator import (
-    _ACCENT_DARK, _ACCENT_SOFT, _CW, _INK, _LINE, _LX, _MUTED, _RX,
-    _draw_emisor_cliente, _draw_header_block, _draw_no_fiscal_notice, _empresa,
-    _rrect, _TextoSeguroPDF, _wrap_text,
+    _ACCENT_DARK,
+    _ACCENT_SOFT,
+    _CW,
+    _INK,
+    _LINE,
+    _LX,
+    _MUTED,
+    _RX,
+    _draw_emisor_cliente,
+    _draw_header_block,
+    _draw_no_fiscal_notice,
+    _empresa,
+    _rrect,
+    _TextoSeguroPDF,
+    _wrap_text,
 )
 
 from .pdf_texto import recortar

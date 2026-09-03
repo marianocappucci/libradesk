@@ -73,7 +73,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
     select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
@@ -414,8 +421,7 @@ class ContratoProveedorRepository:
             return ficha
 
     def _lineas(self, session, contrato_id: int) -> list[dict]:
-        from .equipos import EquipoReferencia, _ref_to_dict
-        from .equipos import Equipo
+        from .equipos import Equipo, EquipoReferencia, _ref_to_dict
 
         lineas = list(session.execute(
             select(ContratoProveedorEquipo)

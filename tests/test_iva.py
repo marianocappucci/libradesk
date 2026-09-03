@@ -30,7 +30,6 @@ from fastapi.testclient import TestClient
 
 from app.services import iva
 
-
 # --- Las reglas puras, sin HTTP ----------------------------------------------
 
 def test_las_cuatro_alicuotas_de_arca_son_validas():

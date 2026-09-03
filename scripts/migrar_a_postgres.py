@@ -45,7 +45,6 @@ import sys
 import tempfile
 from collections import defaultdict
 
-
 # ── Censo del origen ────────────────────────────────────────────────────────
 
 def snapshot_del_origen(ruta: str, destino: str) -> None:

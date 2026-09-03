@@ -14,10 +14,15 @@ from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .depositos import Deposito, lugar_de
 from .equipos import (
-    Equipo, EquipoMovimiento, _extras, _mov_to_dict, descripcion_equipo,
+    Equipo,
+    EquipoMovimiento,
+    _extras,
+    _mov_to_dict,
+    descripcion_equipo,
 )
 from .incidencias import Incidencia
-from .reparaciones import Reparacion, resolver as resolver_reparacion
+from .reparaciones import Reparacion
+from .reparaciones import resolver as resolver_reparacion
 from .reportes import _ruta_categoria
 from .sectores import Sector
 from .tecnicos import Tecnico

@@ -25,9 +25,19 @@ from __future__ import annotations
 
 from fpdf import FPDF
 from libracore.pdf_generator import (
-    _ACCENT_DARK, _CW, _INK, _LINE, _LX, _MUTED, _RX,
-    _draw_emisor_cliente, _draw_header_block, _draw_no_fiscal_notice, _empresa,
-    _TextoSeguroPDF, _wrap_text,
+    _ACCENT_DARK,
+    _CW,
+    _INK,
+    _LINE,
+    _LX,
+    _MUTED,
+    _RX,
+    _draw_emisor_cliente,
+    _draw_header_block,
+    _draw_no_fiscal_notice,
+    _empresa,
+    _TextoSeguroPDF,
+    _wrap_text,
 )
 
 from .pdf_texto import ancho_util, recortar

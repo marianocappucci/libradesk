@@ -26,7 +26,6 @@ Lo que estos tests fijan, en orden de lo que puede romperse en silencio:
 
 import pytest
 
-
 # `client` sale de conftest.py.
 
 

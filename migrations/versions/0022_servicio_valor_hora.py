@@ -32,8 +32,8 @@ nueva. Declarar sólo uno hace que una base creada por `create_all()` no coincid
 con una creada por esta migración, y eso lo caza
 `test_alembic_construye_lo_mismo_que_create_all`.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0022_servicio_valor_hora"
 down_revision = "0021_incidencia_remito_id"

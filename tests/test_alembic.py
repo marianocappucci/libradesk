@@ -38,8 +38,8 @@ from sqlalchemy import create_engine, inspect, text
 
 from app.schema import (
     BASELINE,
-    SchemaInesperado,
     VERSION_TABLE,
+    SchemaInesperado,
     ensure_schema,
     include_name,
     metadata,
