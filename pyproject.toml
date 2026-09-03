@@ -195,7 +195,7 @@ dependencies = [
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
     # ni viven sus 11 tablas en este SQLite. Ver services/agenda.py.
-    "libragenda @ git+https://github.com/marianocappucci/libragenda.git@v0.9.0",
+    "libragenda @ git+https://github.com/marianocappucci/libragenda.git@v0.10.0",
 ]
 
 [project.optional-dependencies]
