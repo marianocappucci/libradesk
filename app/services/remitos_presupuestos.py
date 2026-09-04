@@ -407,31 +407,38 @@ class PresupuestoService:
         """Genera el remito con los datos del presupuesto, lo deja linkeado y
         marca el presupuesto como `aceptado`.
 
-        Idempotente a proposito: si ya tiene remito, devuelve ese en vez de
-        emitir un segundo remito por el mismo trabajo."""
+        Delega el esqueleto (idempotencia, link, marcar aceptado) en
+        `libracore.convertir_presupuesto_a_remito`; la arista de LibraDesk entra
+        por los hooks: `crear_remito` recomputa los totales (IVA por línea vía
+        `RemitoService.create`) y conserva `usuario_id`, y valida el estado ahí
+        —dentro del create— para que un retorno idempotente no valide, igual que
+        antes. `al_convertir` marca `aceptado` sólo en una conversión nueva."""
         presupuesto = rp.get_presupuesto(presupuesto_id)
         if presupuesto is None:
             raise KeyError(presupuesto_id)
-        if presupuesto.get("remito_id"):
-            existente = rp.get_remito(presupuesto["remito_id"])
-            if existente is not None:
-                return existente
-        if presupuesto["status"] in ("rechazado", "vencido"):
-            raise ValueError(f"no se convierte un presupuesto {presupuesto['status']}")
 
-        remito = remitos.create(
-            date=presupuesto["date"],
-            client_id=presupuesto["client_id"],
-            client_name=presupuesto["client_name"],
-            client_address=presupuesto["client_address"] or "",
-            client_cuit=presupuesto["client_cuit"] or "",
-            client_email=presupuesto["client_email"] or "",
-            client_phone=presupuesto["client_phone"] or "",
-            items=presupuesto["items"],
-            tax_rate=presupuesto["tax_rate"],
-            observations=f"Generado del presupuesto {presupuesto['number']}",
-            usuario_id=usuario_id,
+        def crear(p):
+            if p["status"] in ("rechazado", "vencido"):
+                raise ValueError(f"no se convierte un presupuesto {p['status']}")
+            remito = remitos.create(
+                date=p["date"],
+                client_id=p["client_id"],
+                client_name=p["client_name"],
+                client_address=p["client_address"] or "",
+                client_cuit=p["client_cuit"] or "",
+                client_email=p["client_email"] or "",
+                client_phone=p["client_phone"] or "",
+                items=p["items"],
+                tax_rate=p["tax_rate"],
+                observations=f"Generado del presupuesto {p['number']}",
+                usuario_id=usuario_id,
+            )
+            return remito["id"]
+
+        return rp.convertir_presupuesto_a_remito(
+            presupuesto,
+            idempotente=True,
+            crear_remito=crear,
+            al_convertir=lambda pres_id, _remito: rp.update_presupuesto_status(
+                pres_id, "aceptado"),
         )
-        rp.update_presupuesto_remito_id(presupuesto_id, remito["id"])
-        rp.update_presupuesto_status(presupuesto_id, "aceptado")
-        return remito
