@@ -215,9 +215,13 @@ jobs:
           assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
           PY
 
+      # F3 (2026-09-05): 4 workers, que son las vCPU del runner. Medido ahi mismo:
+      # 1 worker 11-17 min, 4 workers 7:53, 8 workers 8:40 (compiten con el
+      # PostgreSQL del servicio por las mismas 4 vCPU).  por el
+      # modulo del healthcheck, ver su .
       - name: Run tests
         if: steps.cambios.outputs.backend == 'true'
-        run: pytest -n 8 --dist loadgroup -v --cov --cov-report=term-missing
+        run: pytest -n 4 --dist loadgroup -v --cov --cov-report=term-missing
 
       # El paso "Tests de shell" se fue el 2026-08-17, junto con
       # `scripts/deploy_cliente.sh`: era el unico shell del repo, y sus dos
