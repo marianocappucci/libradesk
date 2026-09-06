@@ -217,7 +217,7 @@ jobs:
 
       - name: Run tests
         if: steps.cambios.outputs.backend == 'true'
-        run: pytest -n 4 --dist loadgroup -v --cov --cov-report=term-missing
+        run: pytest -n 8 --dist loadgroup -v --cov --cov-report=term-missing
 
       # El paso "Tests de shell" se fue el 2026-08-17, junto con
       # `scripts/deploy_cliente.sh`: era el unico shell del repo, y sus dos
