@@ -84,7 +84,10 @@ configure(
     # que no tiene la `alembic_version` del motor al lado de la propia.
     # Gestiolibra y MedLibra usan `libragenda.sqlalchemy_repository` y por eso
     # declaran `libragenda-migrar upgrade` primero.
-    migraciones=(("alembic", "upgrade", "head"),),
+    migraciones=(
+        ("libracommerce-migrar", "upgrade", "--prefijo", "libradesk"),
+        ("alembic", "upgrade", "head"),
+    ),
     # `health_path` tampoco se pasa acá — ver el comentario largo en
     # `nuevo_cliente.py`. Este producto ya sirve su salud en `/health`, el
     # default. Lo que importa es que los dos scripts sigan diciendo lo MISMO:
