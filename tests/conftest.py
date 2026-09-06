@@ -106,7 +106,15 @@ _ENV_DE_INSTANCIA = (
 # nivel de archivos del lado del servidor — el equivalente exacto del
 # `copytree` que hace la variante SQLite.
 _SUITE_PG_URL = os.environ.get("LIBRADESK_SUITE_POSTGRES_URL")
-_PLANTILLA_PG = "libradesk_plantilla"
+# Con pytest-xdist (F3, 2026-09-05) cada worker arma SU plantilla: el nombre lleva
+# el id del worker (`gw0`, `gw1`, …) porque `DROP DATABASE` + `CREATE DATABASE`
+# sobre un nombre compartido es una carrera entre procesos, y la plantilla se
+# borra al cerrar la sesión de cada uno. Las bases por test ya eran únicas (el
+# nombre sale del nodeid). Sin xdist la variable no existe y el nombre es el de
+# siempre.
+_PLANTILLA_PG = "libradesk_plantilla" + (
+    f"_{os.environ['PYTEST_XDIST_WORKER']}" if os.environ.get("PYTEST_XDIST_WORKER") else ""
+)
 
 if not _SUITE_PG_URL:
     raise RuntimeError(

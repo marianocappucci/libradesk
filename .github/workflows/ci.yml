@@ -60,7 +60,39 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # F3 (2026-09-05): un PR que solo toca frontend/ o documentacion no corre
+      # la suite de backend. Es el job caro -de 4 a 11 minutos por corrida en
+      # los ocho productos, medido en la auditoria de F3-; el de frontend cuesta
+      # el minimo facturable y no se toca. Los pasos de abajo llevan
+      # `if: steps.cambios.outputs.backend == 'true'`: el job sigue existiendo
+      # y termina en verde con los pasos salteados, asi que la proteccion de
+      # rama, que exige `test`, no cambia. Ante cualquier duda -no es un PR, la
+      # API no contesta, lista vacia- corre todo. La lista sale de la API y no
+      # de `git diff` porque el checkout es superficial.
+      - name: Que toca el PR
+        id: cambios
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n="${{ github.event.pull_request.number }}"
+          if [ -z "$n" ]; then echo "backend=true" >> "$GITHUB_OUTPUT"; echo "no es un PR: corre todo"; exit 0; fi
+          if ! archivos=$(gh api "repos/${{ github.repository }}/pulls/$n/files" --paginate --jq '.[].filename'); then
+            echo "backend=true" >> "$GITHUB_OUTPUT"; echo "la API no contesto: corre todo"; exit 0
+          fi
+          backend=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              frontend/*) ;;
+              *.md|docs/*|*.txt) ;;
+              *) backend=true ;;
+            esac
+          done <<< "$archivos"
+          [ -z "$archivos" ] && backend=true
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend"; echo "$archivos" | head -80
       - uses: actions/setup-python@v7
+        if: steps.cambios.outputs.backend == 'true'
         with:
           python-version: "3.12"
 
@@ -83,6 +115,7 @@ jobs:
       # Estructura generalizada (misma que gestiolibra/medlibra/ventalibra):
       # agregar una dependencia privada nueva es una linea de `configurar`.
       - name: Configure SSH access to private Libra dependencies
+        if: steps.cambios.outputs.backend == 'true'
         env:
           LIBRAAUTH_DEPLOY_KEY: ${{ secrets.LIBRAAUTH_DEPLOY_KEY }}
           LIBRACORE_DEPLOY_KEY: ${{ secrets.LIBRACORE_DEPLOY_KEY }}
@@ -117,6 +150,7 @@ jobs:
       # sin este paso recien se notaria dentro del pip install, como un
       # error de git que no dice cual de las dos claves se uso.
       - name: Verify each deploy key resolves to its own repo
+        if: steps.cambios.outputs.backend == 'true'
         run: |
           for repo in libraauth libracore libracommerce libragenda; do
             saludo=$(ssh -o StrictHostKeyChecking=yes -T "git@github-$repo" 2>&1 || true)
@@ -133,9 +167,11 @@ jobs:
       # al PATH para que los pasos siguientes (ruff, pytest, alembic, scripts)
       # sigan invocandose igual que antes.
       - uses: astral-sh/setup-uv@v7
+        if: steps.cambios.outputs.backend == 'true'
         with:
           version: "0.12.10"
       - name: Install package + dev deps (uv.lock)
+        if: steps.cambios.outputs.backend == 'true'
         run: |
           uv sync --locked --extra dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -145,13 +181,47 @@ jobs:
       # CURADO para dar cero hallazgos hoy en los 12 repos de la familia --
       # ver el comentario largo ahi. Un rojo aca es una regresion, no deuda.
       - name: Lint (ruff)
+        if: steps.cambios.outputs.backend == 'true'
         run: ruff check .
 
       # `--cov` sin argumento toma el paquete de [tool.coverage.run] del
       # pyproject. El piso (fail_under) tambien esta ahi: es un trinquete
       # fijado 2 puntos debajo de lo medido el 2026-07-31, no una meta.
+      # F3 (2026-09-05): el PostgreSQL del CI es descartable, asi que no paga el
+      # disco. `CREATE DATABASE ... TEMPLATE` --lo que cada test hace-- fuerza un
+      # checkpoint, y con fsync apagado tarda la mitad (medido: 506 -> 276 ms
+      # por base). Un ALTER SYSTEM por sentencia: varios en una transaccion no
+      # se admiten. Y se verifica que quedo aplicado, no solo que no fallo.
+      - name: PostgreSQL del CI sin fsync (descartable)
+        run: |
+          python - <<'PY'
+          import os, time, psycopg
+          url = os.environ["LIBRADESK_SUITE_POSTGRES_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+          with psycopg.connect(url, autocommit=True) as c:
+              for s in ("ALTER SYSTEM SET fsync=off", "ALTER SYSTEM SET full_page_writes=off",
+                        "ALTER SYSTEM SET synchronous_commit=off", "SELECT pg_reload_conf()"):
+                  c.execute(s)
+          # `pg_reload_conf()` es asincrono: la sesion que lo pidio sigue viendo el valor
+          # viejo un rato (la primera corrida de este paso murio asi, con fsync = on). Se
+          # verifica desde una conexion NUEVA y con reintentos, que es como lo ven los
+          # backends de la suite.
+          for intento in range(20):
+              with psycopg.connect(url, autocommit=True) as c:
+                  fsync = c.execute("show fsync").fetchone()[0]
+              if fsync == "off":
+                  break
+              time.sleep(0.5)
+          print("fsync =", fsync, "tras", intento + 1, "intento/s")
+          assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
+          PY
+
+      # F3 (2026-09-05): 4 workers, que son las vCPU del runner. Medido ahi mismo:
+      # 1 worker 11-17 min, 4 workers 7:53, 8 workers 8:40 (compiten con el
+      # PostgreSQL del servicio por las mismas 4 vCPU).  por el
+      # modulo del healthcheck, ver su .
       - name: Run tests
-        run: pytest -v --cov --cov-report=term-missing
+        if: steps.cambios.outputs.backend == 'true'
+        run: pytest -n 4 --dist loadgroup -v --cov --cov-report=term-missing
 
       # El paso "Tests de shell" se fue el 2026-08-17, junto con
       # `scripts/deploy_cliente.sh`: era el unico shell del repo, y sus dos
@@ -278,3 +348,18 @@ jobs:
           test "$FALLADOS" = "0"
           test "$ERRORES" = "0"
           test "$SALTEADOS" = "0"
+
+  # F2 (2026-09-05): que el CI ponga rojo un commit con un secreto. Barre los
+  # commits del PR (no toda la historia) con la configuracion de
+  # `.gitleaks.toml` en la raiz, que exime `tests/` porque ahi viven las
+  # contrasenas de prueba de la suite. Job independiente: corre en paralelo y
+  # su rojo no se mezcla con el de la suite.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

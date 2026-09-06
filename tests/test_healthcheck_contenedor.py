@@ -51,6 +51,14 @@ from pathlib import Path
 import pytest
 import uvicorn
 
+# F3 (2026-09-05): con pytest-xdist este modulo corre ENTERO en un solo worker
+# (`--dist loadgroup`). Su fixture de modulo crea una base con nombre FIJO
+# (`ld_healthcheck_contenedor`) y fabrica y borra `frontend/dist` en el checkout
+# compartido: con dos workers en el mismo modulo, el segundo muere con
+# `ObjectInUse: database ... is being accessed by other users` (medido, 4
+# errores en la primera corrida con -n 4) y el `dist/` se lo borran entre si.
+pytestmark = pytest.mark.xdist_group(name="healthcheck_contenedor")
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPOSES = {
     "dev": REPO_ROOT / "docker-compose.yml",
