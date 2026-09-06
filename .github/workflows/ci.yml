@@ -187,9 +187,41 @@ jobs:
       # `--cov` sin argumento toma el paquete de [tool.coverage.run] del
       # pyproject. El piso (fail_under) tambien esta ahi: es un trinquete
       # fijado 2 puntos debajo de lo medido el 2026-07-31, no una meta.
+      # F3 (2026-09-05): el PostgreSQL del CI es descartable, asi que no paga el
+      # disco. `CREATE DATABASE ... TEMPLATE` --lo que cada test hace-- fuerza un
+      # checkpoint, y con fsync apagado tarda la mitad (medido: 506 -> 276 ms
+      # por base). Un ALTER SYSTEM por sentencia: varios en una transaccion no
+      # se admiten. Y se verifica que quedo aplicado, no solo que no fallo.
+      - name: PostgreSQL del CI sin fsync (descartable)
+        run: |
+          python - <<'PY'
+          import os, time, psycopg
+          url = os.environ["LIBRADESK_SUITE_POSTGRES_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+          with psycopg.connect(url, autocommit=True) as c:
+              for s in ("ALTER SYSTEM SET fsync=off", "ALTER SYSTEM SET full_page_writes=off",
+                        "ALTER SYSTEM SET synchronous_commit=off", "SELECT pg_reload_conf()"):
+                  c.execute(s)
+          # `pg_reload_conf()` es asincrono: la sesion que lo pidio sigue viendo el valor
+          # viejo un rato (la primera corrida de este paso murio asi, con fsync = on). Se
+          # verifica desde una conexion NUEVA y con reintentos, que es como lo ven los
+          # backends de la suite.
+          for intento in range(20):
+              with psycopg.connect(url, autocommit=True) as c:
+                  fsync = c.execute("show fsync").fetchone()[0]
+              if fsync == "off":
+                  break
+              time.sleep(0.5)
+          print("fsync =", fsync, "tras", intento + 1, "intento/s")
+          assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
+          PY
+
+      # F3 (2026-09-05): 4 workers, que son las vCPU del runner. Medido ahi mismo:
+      # 1 worker 11-17 min, 4 workers 7:53, 8 workers 8:40 (compiten con el
+      # PostgreSQL del servicio por las mismas 4 vCPU).  por el
+      # modulo del healthcheck, ver su .
       - name: Run tests
         if: steps.cambios.outputs.backend == 'true'
-        run: pytest -v --cov --cov-report=term-missing
+        run: pytest -n 4 --dist loadgroup -v --cov --cov-report=term-missing
 
       # El paso "Tests de shell" se fue el 2026-08-17, junto con
       # `scripts/deploy_cliente.sh`: era el unico shell del repo, y sus dos
