@@ -137,7 +137,7 @@ services:
     #
     # Así que el comando se copia, y lo que impide que se desvíe es un test que
     # lee el `CMD` del Dockerfile y exige que esté acá adentro.
-    command: sh -c "alembic upgrade head && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
+    command: sh -c "libracommerce-migrar upgrade --prefijo libradesk && alembic upgrade head && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
     ports:
       - "8086:8000"
     volumes:

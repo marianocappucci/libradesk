@@ -98,7 +98,10 @@ configure(
     # que no tiene la `alembic_version` del motor al lado de la propia.
     # Gestiolibra y MedLibra usan `libragenda.sqlalchemy_repository` y por eso
     # declaran `libragenda-migrar upgrade` primero.
-    migraciones=(("alembic", "upgrade", "head"),),
+    migraciones=(
+        ("libracommerce-migrar", "upgrade", "--prefijo", "libradesk"),
+        ("alembic", "upgrade", "head"),
+    ),
     product_name="LIBRADESK",
     image_name="libradesk:latest",
     container_prefix="libradesk",
