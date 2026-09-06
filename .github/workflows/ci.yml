@@ -195,15 +195,24 @@ jobs:
       - name: PostgreSQL del CI sin fsync (descartable)
         run: |
           python - <<'PY'
-          import os, psycopg
+          import os, time, psycopg
           url = os.environ["LIBRADESK_SUITE_POSTGRES_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
           with psycopg.connect(url, autocommit=True) as c:
               for s in ("ALTER SYSTEM SET fsync=off", "ALTER SYSTEM SET full_page_writes=off",
                         "ALTER SYSTEM SET synchronous_commit=off", "SELECT pg_reload_conf()"):
                   c.execute(s)
-              fsync = c.execute("show fsync").fetchone()[0]
-              print("fsync =", fsync)
-              assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
+          # `pg_reload_conf()` es asincrono: la sesion que lo pidio sigue viendo el valor
+          # viejo un rato (la primera corrida de este paso murio asi, con fsync = on). Se
+          # verifica desde una conexion NUEVA y con reintentos, que es como lo ven los
+          # backends de la suite.
+          for intento in range(20):
+              with psycopg.connect(url, autocommit=True) as c:
+                  fsync = c.execute("show fsync").fetchone()[0]
+              if fsync == "off":
+                  break
+              time.sleep(0.5)
+          print("fsync =", fsync, "tras", intento + 1, "intento/s")
+          assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
           PY
 
       - name: Run tests
