@@ -203,6 +203,8 @@ dev = [
     "pytest-cov>=6",
     "ruff>=0.13",
     "pytest>=8.0",
+    # F3 (2026-09-05): la suite corre en 4 workers en el CI. Medido: 757 s -> 357 s.
+    "pytest-xdist>=3.8",
     "httpx>=0.27",
     # Solo para tests: leer de vuelta el texto de los PDF del informe. Sin
     # esto el unico chequeo posible es la firma `%PDF-`, que un documento

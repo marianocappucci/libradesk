@@ -187,9 +187,28 @@ jobs:
       # `--cov` sin argumento toma el paquete de [tool.coverage.run] del
       # pyproject. El piso (fail_under) tambien esta ahi: es un trinquete
       # fijado 2 puntos debajo de lo medido el 2026-07-31, no una meta.
+      # F3 (2026-09-05): el PostgreSQL del CI es descartable, asi que no paga el
+      # disco. `CREATE DATABASE ... TEMPLATE` --lo que cada test hace-- fuerza un
+      # checkpoint, y con fsync apagado tarda la mitad (medido: 506 -> 276 ms
+      # por base). Un ALTER SYSTEM por sentencia: varios en una transaccion no
+      # se admiten. Y se verifica que quedo aplicado, no solo que no fallo.
+      - name: PostgreSQL del CI sin fsync (descartable)
+        run: |
+          python - <<'PY'
+          import os, psycopg
+          url = os.environ["LIBRADESK_SUITE_POSTGRES_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+          with psycopg.connect(url, autocommit=True) as c:
+              for s in ("ALTER SYSTEM SET fsync=off", "ALTER SYSTEM SET full_page_writes=off",
+                        "ALTER SYSTEM SET synchronous_commit=off", "SELECT pg_reload_conf()"):
+                  c.execute(s)
+              fsync = c.execute("show fsync").fetchone()[0]
+              print("fsync =", fsync)
+              assert fsync == "off", "el ALTER SYSTEM no quedo aplicado"
+          PY
+
       - name: Run tests
         if: steps.cambios.outputs.backend == 'true'
-        run: pytest -v --cov --cov-report=term-missing
+        run: pytest -n 4 --dist loadgroup -v --cov --cov-report=term-missing
 
       # El paso "Tests de shell" se fue el 2026-08-17, junto con
       # `scripts/deploy_cliente.sh`: era el unico shell del repo, y sus dos
