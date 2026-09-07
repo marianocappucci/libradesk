@@ -604,8 +604,8 @@ dependencies = [
 
 [[package]]
 name = "libracommerce"
-version = "0.10.1"
-source = { git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.10.1#b5f7afec2536e8ba477b1422e7968878500c6d69" }
+version = "0.15.0"
+source = { git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.15.0#7bf45b3287b79f43b853144b00e227a2f1f3cbeb" }
 
 [package.optional-dependencies]
 migrations = [
@@ -676,7 +676,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "libraauth", git = "https://github.com/marianocappucci/libraauth.git?rev=v0.35.0" },
-    { name = "libracommerce", extras = ["migrations"], git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.10.1" },
+    { name = "libracommerce", extras = ["migrations"], git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.15.0" },
     { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.83.0" },
     { name = "libragenda", git = "https://github.com/marianocappucci/libragenda.git?rev=v0.10.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },

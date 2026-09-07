@@ -190,7 +190,7 @@ dependencies = [
     # v0.7.2 trae la transferencia entre depositos atomica y con guarda de
     # disponibilidad, que es el caso central de este producto: el deposito
     # central que abastece la camioneta del tecnico.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.10.1",
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.15.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
