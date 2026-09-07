@@ -51,7 +51,7 @@ dependencies = [
     # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
     # se escribe en la misma transaccion que la operacion, asi que el KeyError
     # no perdia una linea de log, se llevaba puesta la operacion entera.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.35.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.36.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -180,7 +180,7 @@ dependencies = [
     # cuenta en cuenta corriente" terminaba en 202,2 mm en una hoja de 210.
     #
     # Es anterior a v1.37.0 y aquel arreglo no lo cubria.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.83.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.88.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
@@ -190,7 +190,7 @@ dependencies = [
     # v0.7.2 trae la transferencia entre depositos atomica y con guarda de
     # disponibilidad, que es el caso central de este producto: el deposito
     # central que abastece la camioneta del tecnico.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.10.1",
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.15.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
