@@ -225,6 +225,13 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # Config SMTP editable por backoffice (libraauth v0.6.0), con la contraseña
     # cifrada en reposo. Mismo `sessions` que el resto del motor.
     app.state.smtp_settings = SmtpSettingsRepository(sessions)
+    # El resolver del SMTP **efectivo**, publicado para el envio de
+    # comprobantes. CALLABLE por la misma razon que abajo en
+    # `password_reset`: resolverlo una vez al arrancar dejaria fuera lo que
+    # se guarde por pantalla hasta recrear el contenedor. Es el mismo que
+    # prueba el boton *Probar conexion*, asi que probar y mandar no pueden
+    # discrepar.
+    app.state.smtp_config = lambda: resolver_smtp_config(sessions)
     # Terminos y Condiciones del Servicio: la prueba de la aceptacion y lo que
     # enciende el gate. MISMA fabrica de sesiones que el SMTP y los usuarios --
     # la tabla tiene FK a `usuarios`, que no siempre vive en la base del dominio.
