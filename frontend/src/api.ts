@@ -1238,6 +1238,13 @@ export type ComprobanteItem = {
    *  comprobantes guardados antes de 2026-08-05 no la tienen y caen a la del
    *  documento. Es lo que lee el PDF para la columna de IVA por línea. */
   iva_pct?: number
+  /** Aclaración corta de ESTE renglón. Se muestra debajo del nombre del ítem,
+   *  más chica y más clara, y sale así también en el PDF.
+   *
+   *  No es `observations`: eso es una sola y describe el comprobante entero.
+   *  Opcional en el tipo porque lo es en el dato — el backend no escribe la
+   *  clave cuando el campo viene vacío. */
+  detalle?: string
 }
 
 type ComprobanteBase = {

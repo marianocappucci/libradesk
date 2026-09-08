@@ -47,6 +47,11 @@ class ItemIn(BaseModel):
     # ya guardados al editarse.
     tax_rate: float | None = Field(default=None, ge=0, le=1)
 
+    # Aclaracion corta de ESTE renglon, opcional. Se imprime debajo del nombre
+    # del item, mas chica y mas clara (`pdf_generator._draw_items_table`). No es
+    # `observations`, que es una sola y describe el comprobante entero.
+    detalle: str = ""
+
 
 def _valid_until_default() -> date_type:
     return date_type.today() + timedelta(days=_VALIDEZ_DEFAULT_DIAS)
