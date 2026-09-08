@@ -44,7 +44,9 @@ import { Logs } from './pages/Logs'
 import { Productos } from './pages/Productos'
 import { DepositosStock, ListasPrecio } from './pages/Inventario'
 import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
-import { CuentaCorriente, Recibos, Ventas, VentaDetalle } from './pages/VentasComercial'
+import {
+  CuentaCorriente, Recibos, Ventas, VentaDetalle, VentaNueva,
+} from './pages/VentasComercial'
 import { Sucursales } from './pages/Sucursales'
 import { SucursalProvider } from './components/sucursal'
 
@@ -136,6 +138,11 @@ export default function App() {
       <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
       <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
       <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
+      {/* ⚠️ **Antes que `/ventas/:id`**, por lo mismo que `/contratos/nuevo`:
+          React Router v6 rankea y el segmento estático gana igual, pero
+          declarado después se lee como si `nueva` pudiera caer en el
+          parámetro — y ahí la ficha pediría `/api/ventas/nueva`. */}
+      <Route path="/ventas/nueva" element={<ProtectedRoute><VentaNueva /></ProtectedRoute>} />
       <Route path="/ventas/:id" element={<ProtectedRoute><VentaDetalle /></ProtectedRoute>} />
       <Route path="/recibos" element={<ProtectedRoute><Recibos /></ProtectedRoute>} />
       <Route path="/cuenta-corriente" element={<ProtectedRoute><CuentaCorriente /></ProtectedRoute>} />
