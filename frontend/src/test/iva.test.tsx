@@ -23,7 +23,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Cliente, Servicio } from '../api'
 import {
-  ComprobanteForm, comprobanteADraft, draftAPayload, draftVacio,
+  ComprobanteForm, ITEM_VACIO, comprobanteADraft, draftAPayload, draftVacio,
   type ComprobanteDraft, type ItemDraft,
 } from '../components/comprobante-form'
 
@@ -106,8 +106,14 @@ function soloVista(client_id: string, clientes: Cliente[] = CLIENTES) {
   )
 }
 
-function conItems(items: ItemDraft[]): ComprobanteDraft {
-  return { ...draftVacio(), items }
+/** Los ítems de estos casos, completados desde `ITEM_VACIO`.
+ *
+ *  Acepta ítems PARCIALES a propósito: los casos de acá hablan de alícuotas y
+ *  no tienen por qué nombrar cada campo del renglón. Antes eran literales
+ *  completos, y agregar un campo a `ItemDraft` —`detalle`, el 2026-09-08— los
+ *  rompía a los ocho de una sin que ninguno tuviera que ver con el cambio. */
+function conItems(items: Partial<ItemDraft>[]): ComprobanteDraft {
+  return { ...draftVacio(), items: items.map((i) => ({ ...ITEM_VACIO, ...i })) }
 }
 
 

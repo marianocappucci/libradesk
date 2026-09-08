@@ -180,20 +180,31 @@ def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
     IVA del PDF (`item["iva_pct"]`). Se guardan los dos en vez de derivar uno
     del otro al dibujar, para que un comprobante ya guardado no dependa de que
     alguien recuerde la conversion.
+
+    Y conserva `detalle` si viene: la aclaracion corta de ESE renglon, que el
+    PDF imprime debajo del nombre del item. Es opcional item por item, asi que
+    la clave solo se escribe cuando tiene texto.
     """
     salida = []
     for i in items:
         qty = float(i["qty"])
         unit_price = float(i["unit_price"])
         alicuota = _alicuota(i, tax_rate)
-        salida.append({
+        item = {
             "description": str(i["description"]).strip(),
             "qty": qty,
             "unit_price": unit_price,
             "subtotal": round(qty * unit_price, 2),
             "tax_rate": alicuota,
             "iva_pct": round(alicuota * 100, 1),
-        })
+        }
+        # `detalle` solo si tiene texto: la clave ausente y la clave vacia
+        # significan lo mismo para el PDF, y no escribirla deja los
+        # comprobantes sin detalle igual que antes de que el campo existiera.
+        detalle = str(i.get("detalle") or "").strip()
+        if detalle:
+            item["detalle"] = detalle
+        salida.append(item)
     return salida
 
 
