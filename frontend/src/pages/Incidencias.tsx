@@ -4,7 +4,7 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from 'libra-ui/data-table'
 import {
   api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_TONO, PRIORIDAD_LABELS, PRIORIDAD_TONO, opcionesCliente, opcionesEquipo,
   opcionesCategoria,
