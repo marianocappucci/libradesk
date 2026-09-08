@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarraDeAcciones, EncabezadoDePantalla } from 'libra-ui/acciones'
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from 'libra-ui/data-table'
 // `FileText` y `Receipt` se fueron con el merge de develop: el cambio "sólo el
 // remito se manda a facturar" borró la rama de presupuestos, que era la única
 // que los dibujaba.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from 'libra-ui/data-table'
 import {
   api, ApiError, ESTADO_PRESUPUESTO_LABELS, type Cliente, type EstadoPresupuesto,
   type Presupuesto,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from 'libra-ui/data-table'
 import { useNavigate } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
