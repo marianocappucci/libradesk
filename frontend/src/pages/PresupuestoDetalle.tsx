@@ -37,6 +37,11 @@ export function PresupuestoDetalle() {
   const [emailAbierto, setEmailAbierto] = useState(false)
   const [emailA, setEmailA] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // 🔑 El error del envio NO puede ir al `error` de la pantalla: ese lo lee el
+  // guard de abajo, que reemplaza la ficha entera por el mensaje. Sirve para un
+  // fallo al cargar; para un envio fallido se lleva puesto el dialogo y lo
+  // tipeado, que es lo unico desde donde se reintenta.
+  const [errorEmail, setErrorEmail] = useState<string | null>(null)
 
   useEffect(() => {
     cargar()
@@ -78,7 +83,7 @@ export function PresupuestoDetalle() {
   async function enviarEmail() {
     if (!emailA.trim()) return
     setEnviando(true)
-    setError(null)
+    setErrorEmail(null)
     setAviso(null)
     try {
       await api.post(`/api/presupuestos/${presId}/enviar-email`, { email: emailA })
@@ -91,7 +96,7 @@ export function PresupuestoDetalle() {
     } catch (err) {
       // El dialogo queda abierto: el error tipico es una direccion mal escrita
       // o el SMTP sin configurar, y en los dos casos se reintenta desde aca.
-      setError(describeError(err))
+      setErrorEmail(describeError(err))
     } finally {
       setEnviando(false)
     }
@@ -155,7 +160,8 @@ export function PresupuestoDetalle() {
         }
         accionesEncabezado={
           <>
-            <Button size="sm" variant="outline" onClick={() => setEmailAbierto(true)}>
+            <Button size="sm" variant="outline"
+                    onClick={() => { setErrorEmail(null); setEmailAbierto(true) }}>
               <Send />Enviar por email
             </Button>
             <Button asChild size="sm" variant="outline">
@@ -232,6 +238,7 @@ export function PresupuestoDetalle() {
               onChange={(e) => setEmailA(e.target.value)}
             />
           </div>
+          {errorEmail && <p className="text-sm text-destructive">{errorEmail}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEmailAbierto(false)}>Cancelar</Button>
             <Button disabled={enviando || !emailA.trim()} onClick={enviarEmail}>
