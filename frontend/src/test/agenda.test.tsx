@@ -307,7 +307,12 @@ describe('Agenda — la vista de semana', () => {
     stub([TRABAJO, DEL_JUEVES], [NORTE])
     renderAgenda(SEMANA)
 
-    await user.click(await screen.findByRole('link', { name: /Jue 13/ }))
+    // `\s*` y no un espacio: el link no tiene espacio literal --su textContent
+    // es "Jue13"-- y el espacio del nombre accesible lo ponia jsdom al tratar
+    // los nodos internos como bloque. jsdom 30 dejo de hacerlo, y cual de las
+    // dos es "correcta" depende del CSS, que jsdom no aplica. Lo que el test
+    // afirma es cual es el link del jueves 13, no cuantos espacios tiene.
+    await user.click(await screen.findByRole('link', { name: /Jue\s*13/ }))
 
     // Ya no es la grilla: es el detalle por cuadrilla, con su hoja de ruta del
     // jueves. Mirar sólo que el título cambió no probaría que se ve el día.
