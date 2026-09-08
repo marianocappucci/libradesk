@@ -193,6 +193,11 @@ jobs:
       # por base). Un ALTER SYSTEM por sentencia: varios en una transaccion no
       # se admiten. Y se verifica que quedo aplicado, no solo que no fallo.
       - name: PostgreSQL del CI sin fsync (descartable)
+        # 🔴 Este `if` faltaba, y era el unico paso del job sin el: en un PR
+        # que solo toca `frontend/` no corre el setup-python ni el install,
+        # asi que este paso reventaba con `ModuleNotFoundError: psycopg` y
+        # ponia el job en rojo por infraestructura, sin un solo test corrido.
+        if: steps.cambios.outputs.backend == 'true'
         run: |
           python - <<'PY'
           import os, time, psycopg

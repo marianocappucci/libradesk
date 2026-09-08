@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from 'libra-ui/data-table'
 import { useNavigate } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
