@@ -23,6 +23,10 @@ import { enDiasISO, hoyISO } from 'libra-ui/fechas'
  *  sola vez, en `draftAPayload`. */
 export type ItemDraft = {
   description: string
+  /** La aclaración corta del renglón, opcional. Va debajo de la descripción,
+   *  y sale en el PDF más chica y más clara que el nombre del ítem. Es de ESE
+   *  ítem: la aclaración del comprobante entero son las observaciones. */
+  detalle: string
   qty: string
   unit_price: string
   tax_rate: string
@@ -51,7 +55,7 @@ export type ComprobanteDraft = {
 }
 
 export const ITEM_VACIO: ItemDraft = {
-  description: '', qty: '1', unit_price: '0', tax_rate: '21',
+  description: '', detalle: '', qty: '1', unit_price: '0', tax_rate: '21',
 }
 
 /** El campo de descripción, con sugerencias del catálogo de servicios.
@@ -429,7 +433,10 @@ export function ComprobanteForm({
             </div>
             <div className="grid gap-2">
               {draft.items.map((item, i) => (
-                <div key={i} className="flex flex-wrap items-end gap-2">
+                // `items-start` y no `items-end`: la descripción lleva el
+                // detalle colgando abajo, así que si los campos se alinearan
+                // por el pie, la cantidad y el precio bajarían con él.
+                <div key={i} className="flex flex-wrap items-start gap-2">
                   <div className="grid min-w-52 flex-1 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Descripción</span>}
                     <DescripcionConSugerencias
@@ -441,6 +448,14 @@ export function ComprobanteForm({
                       onCambiar={(v) => setItem(i, 'description', v)}
                       onElegir={(s) => elegirServicio(i, s)}
                     />
+                    {/* Debajo de la descripción y con el mismo peso visual que
+                        va a tener impreso: chico y apagado. */}
+                    <Input value={item.detalle}
+                           placeholder="Detalle (opcional)…"
+                           aria-label={`Detalle del ítem ${i + 1}`}
+                           autoComplete="off"
+                           className="h-8 border-dashed text-xs text-muted-foreground placeholder:text-xs"
+                           onChange={(e) => setItem(i, 'detalle', e.target.value)} />
                   </div>
                   <div className="grid w-24 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Cantidad</span>}
@@ -549,6 +564,7 @@ export function draftAPayload(draft: ComprobanteDraft, tipo: 'remito' | 'presupu
     .filter((i) => i.description.trim())
     .map((i) => ({
       description: i.description.trim(),
+      detalle: i.detalle.trim(),
       qty: Number(i.qty) || 0,
       unit_price: Number(i.unit_price) || 0,
       // La única conversión de porcentaje a fracción del formulario.
@@ -586,6 +602,9 @@ export function comprobanteADraft(c: {
     items: c.items.length
       ? c.items.map((i) => ({
           description: i.description,
+          // Ausente en los comprobantes anteriores al campo: el backend no
+          // escribe la clave vacía. `?? ''` mantiene el input controlado.
+          detalle: i.detalle ?? '',
           qty: String(i.qty),
           unit_price: String(i.unit_price),
           // 🔴 Un comprobante guardado antes de 2026-08-05 no tiene `iva_pct`

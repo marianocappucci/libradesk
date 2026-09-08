@@ -13,8 +13,8 @@
 // Por eso no hay tipo A/B/C, ni CAE, ni punto de venta fiscal en ninguna de
 // estas pantallas. Si aparecen, algo se entendió mal.
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { api, ApiError } from '../api'
 import { Cifras, Pagina, Tabla, useDatos } from '@/components/comercial-ui'
 import { DetalleEstado } from '@/components/comprobante-detalle'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -140,22 +140,23 @@ export function Ventas() {
   const { activa } = useSucursal()
   const { datos, error, cargando, conError } =
     useDatos<Venta[]>(conSucursal('/api/ventas'), [])
-  const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
-  const { datos: productos } = useDatos<Producto[]>('/api/consumibles', [])
-  // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
-  // —el central que abastece a las dos— y el selector muestra cuál es cuál.
-  const { datos: depositos } = useDatos<DepositoStock[]>('/api/depositos-stock', [])
-  // Vive acá y no en el formulario porque el modal se cierra al guardar: el
-  // aviso tiene que sobrevivirle.
-  const [altaDeEquipos, setAltaDeEquipos] = useState(0)
+  // El aviso del alta de equipos llega en el **estado de la navegación**, no de
+  // un `useState` de esta pantalla: desde el 2026-09-08 el formulario es una
+  // pantalla propia (`VentaNueva`), así que quien tiene el dato es la vuelta a
+  // esta lista. `?? 0` porque a `/ventas` se entra también desde el menú, sin
+  // estado ninguno.
+  const { state } = useLocation()
+  const altaDeEquipos = (state as { altaDeEquipos?: number } | null)?.altaDeEquipos ?? 0
 
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
     <Pagina titulo="Ventas" icono={ClipboardList} error={error}
-            acciones={<FormVenta clientes={clientes} productos={productos}
-                                 depositos={depositos} onGuardar={conError}
-                                 setAltaDeEquipos={setAltaDeEquipos} />}>
+            acciones={
+              <Button onClick={() => navigate('/ventas/nueva')}>
+                <FilePlus />Nueva venta
+              </Button>
+            }>
       {altaDeEquipos > 0 && (
         <p className="rounded-md border border-dashed p-3 text-sm">
           Se {altaDeEquipos === 1 ? 'registró' : 'registraron'}{' '}
@@ -295,27 +296,89 @@ function AccionRecibo({ venta, onEmitido }: {
   )
 }
 
-function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos }: {
-  clientes: Cliente[]; productos: Producto[]; depositos: DepositoStock[]
-  onGuardar: (accion: () => Promise<unknown>) => Promise<boolean>
-  /** Cuántos equipos dejó la venta en el parque del cliente. Lo muestra la
-   *  página, no este formulario: el modal se cierra al guardar. */
-  setAltaDeEquipos: (n: number) => void
-}) {
+// ── Alta de una venta ──────────────────────────────────────────────────────
+
+/** Una línea del formulario de alta.
+ *
+ * `item_id === null` es un **servicio**: se cobra y no mueve stock. Es como el
+ * motor distingue producto de servicio, y en una mesa de ayuda la mano de obra
+ * es la mitad de lo que se factura.
+ *
+ * `uid` es la key de la fila: estable por construcción, que es la forma
+ * correcta de listar algo que se edita y se reordena. **No arregla ningún
+ * defecto medido** — con la key por índice esta pantalla se comporta igual,
+ * porque los campos son controlados y React repone el valor aunque reuse el
+ * nodo de la fila de arriba. Está dicho así, y no como "corrige el foco",
+ * porque se lo intentó probar y el test pasaba con las dos formas: ver
+ * `test/venta-alta-en-pagina.test.tsx`.
+ */
+type LineaVenta = {
+  uid: number
+  item_id: number | null
+  descripcion: string
+  cantidad: string
+  precio: string
+}
+
+/** Contador de módulo para las keys. No hace falta que sea único en el mundo:
+ *  alcanza con que no se repita entre las líneas vivas de un formulario. */
+let proximaLinea = 1
+
+/** Alta de venta — **una pantalla, no un modal** (pedido del humano,
+ *  2026-09-08):
+ *
+ *  > *"se abre una ventana modal para cargar la nueva venta cuando se tendría
+ *  > que abrir la pantalla como cuando estamos generando un presupuesto, ya que
+ *  > puede contener más de un ítem y en un modal es incómodo trabajar una
+ *  > venta"*.
+ *
+ * Una venta no tiene un número fijo de campos: tiene tantas líneas como haga
+ * falta, y cada una con descripción, cantidad y precio editables. En un diálogo
+ * eso obliga a scrollear adentro de una caja que además tapa la lista de atrás.
+ * Como pantalla las líneas entran en una tabla con encabezados y con el importe
+ * de cada una, que es lo que el modal no podía mostrar.
+ *
+ * Es el mismo cambio que ya se hizo con el alta de contrato el 2026-08-17
+ * (`ContratoNuevo`), y deja el alta de venta con la misma forma que el
+ * formulario de presupuesto — que fue la referencia que dio el humano.
+ *
+ * 🔴 **La ruta va antes que `/ventas/:id`** en el router: `nueva` es un
+ * segmento estático y no puede quedar interpretado como un id. Si lo capturara
+ * la ficha, la pantalla pediría `/api/ventas/nueva` y el backend contestaría
+ * 422.
+ *
+ * Al guardar vuelve a `/ventas` **con el número de equipos dados de alta en el
+ * estado de la navegación**: ese aviso no puede vivir acá, porque esta pantalla
+ * deja de existir en el mismo momento en que hay algo que avisar.
+ */
+export function VentaNueva() {
+  const navigate = useNavigate()
   const { activa } = useSucursal()
-  const [abierto, setAbierto] = useState(false)
+  const { datos: clientes, error: errorClientes } =
+    useDatos<Cliente[]>('/api/clientes', [])
+  const { datos: productos, error: errorProductos } =
+    useDatos<Producto[]>('/api/consumibles', [])
+  // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
+  // —el central que abastece a las dos— y el selector muestra cuál es cuál.
+  const { datos: depositos, error: errorDepositos } =
+    useDatos<DepositoStock[]>('/api/depositos-stock', [])
+  const medios = useMediosPago()
+
   const [clienteId, setClienteId] = useState('')
   const [depositoId, setDepositoId] = useState('')
-  const medios = useMediosPago()
   const [medio, setMedio] = useState('efectivo')
   const [productoId, setProductoId] = useState('')
-  const [lineas, setLineas] = useState<
-    { item_id: number | null; descripcion: string; cantidad: string; precio: string }[]
-  >([])
+  const [lineas, setLineas] = useState<LineaVenta[]>([])
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
 
   const total = lineas.reduce(
     (acc, l) => acc + (Number(l.cantidad) || 0) * (Number(l.precio) || 0), 0,
   )
+
+  function cambiar(uid: number, campo: 'descripcion' | 'cantidad' | 'precio', valor: string) {
+    setLineas((ls) => ls.map((l) => l.uid === uid ? { ...l, [campo]: valor } : l))
+  }
 
   async function agregar() {
     const p = productos.find((x) => x.id === Number(productoId))
@@ -335,23 +398,28 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
       const r = await api.get<{ precio: number }>(`/api/precios/resolver?${q}`)
       precio = r.precio
     } catch { /* se usa el del catálogo */ }
-    setLineas([...lineas, {
-      item_id: p.id, descripcion: p.nombre, cantidad: '1',
-      precio: String(precio),
+    setLineas((ls) => [...ls, {
+      uid: proximaLinea++, item_id: p.id, descripcion: p.nombre,
+      cantidad: '1', precio: String(precio),
     }])
     setProductoId('')
   }
 
   function agregarServicio() {
-    // Una línea sin `item_id` es un servicio: se cobra y no mueve stock. Es
-    // como el motor distingue producto de servicio, y en una mesa de ayuda la
-    // mano de obra es la mitad de lo que se factura.
-    setLineas([...lineas, { item_id: null, descripcion: '', cantidad: '1', precio: '' }])
+    setLineas((ls) => [...ls, {
+      uid: proximaLinea++, item_id: null, descripcion: '',
+      cantidad: '1', precio: '',
+    }])
   }
 
+  // Una venta en cuenta corriente sin cliente no tiene a quién cargarle la
+  // deuda: quedaría cobrada y sin deudor.
+  const faltaDeudor = medio === 'cuenta_corriente' && !clienteId
+
   async function guardar() {
-    let dadosDeAlta = 0
-    const ok = await onGuardar(async () => {
+    setGuardando(true)
+    setError('')
+    try {
       const r = await api.post<{ equipos_dados_de_alta?: number }>('/api/ventas', {
         cliente_id: clienteId ? Number(clienteId) : null,
         deposito_id: Number(depositoId),
@@ -362,55 +430,96 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
         })),
         pagos: total > 0 ? [{ medio, monto: total }] : [],
       })
-      dadosDeAlta = r.equipos_dados_de_alta ?? 0
-    })
-    if (ok) {
-      setAbierto(false); setLineas([]); setClienteId('')
       // Un alta automática que nadie ve es indistinguible de que no haya
-      // pasado. Se avisa **sólo cuando hubo algo**: un "0 equipos" en cada
-      // venta de consumibles sería ruido en la pantalla más usada.
-      setAltaDeEquipos(dadosDeAlta)
+      // pasado. El número viaja siempre; la lista lo muestra **sólo cuando hubo
+      // algo**, para que un "0 equipos" no sea ruido en cada venta de
+      // consumibles.
+      navigate('/ventas', {
+        state: { altaDeEquipos: r.equipos_dados_de_alta ?? 0 },
+        replace: true,
+      })
+    } catch (e) {
+      // Sin `setGuardando(false)` en el camino feliz: ahí la pantalla ya se
+      // desmontó y el setter sería sobre un componente que no existe.
+      setGuardando(false)
+      setError(e instanceof ApiError ? e.detail : 'No se pudo registrar la venta.')
     }
   }
 
   return (
-    <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button><FilePlus className="mr-2 h-4 w-4" /> Nueva venta</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader><DialogTitle>Nueva venta</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="v-cliente">Cliente</Label>
-              <Select value={clienteId} onValueChange={setClienteId}>
-                <SelectTrigger id="v-cliente"><SelectValue placeholder="Consumidor final" /></SelectTrigger>
-                <SelectContent>
-                  {clientes.filter((c) => c.activo).map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="v-dep">Depósito</Label>
-              <Select value={depositoId} onValueChange={setDepositoId}>
-                <SelectTrigger id="v-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-                <SelectContent>
-                  {depositos.filter((d) => d.activo).map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+    <Pagina
+      titulo="Nueva venta"
+      icono={ClipboardList}
+      error={[error, errorClientes, errorProductos, errorDepositos].find(Boolean) ?? ''}
+      acciones={
+        <>
+          {/* La acción principal va arriba a la derecha, como en el alta de
+              contrato: con el formulario largo, un botón al pie obliga a bajar
+              hasta el final para confirmar algo que ya se terminó de cargar
+              arriba. Y sin «Cancelar» al pie, que sería un segundo «Volver». */}
+          <Button size="sm" variant="outline" onClick={() => navigate('/ventas')}>
+            <ArrowLeft />Volver
+          </Button>
+          <Button onClick={() => void guardar()}
+                  disabled={guardando || !depositoId || lineas.length === 0 || faltaDeudor}>
+            {guardando ? 'Registrando…' : 'Registrar venta'}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        Comprobante interno: qué se vendió, a quién, a cuánto y cómo se cobró.
+        No emite factura — para eso, una vez registrada, generá su{' '}
+        <strong>remito</strong> desde la ficha.
+        {activa && ` Se registra en ${activa.nombre}.`}
+      </p>
 
-          <div className="space-y-2">
-            <Label>Ítems</Label>
-            <div className="flex gap-2">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Datos de la venta</CardTitle></CardHeader>
+        <CardContent className="grid items-start gap-3 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="v-cliente">Cliente</Label>
+            <Select value={clienteId} onValueChange={setClienteId}>
+              <SelectTrigger id="v-cliente"><SelectValue placeholder="Consumidor final" /></SelectTrigger>
+              <SelectContent>
+                {clientes.filter((c) => c.activo).map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Sin cliente es una venta de mostrador. El precio de cada ítem sale
+              de la lista del cliente elegido, así que conviene elegirlo antes de
+              cargarlos.
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="v-dep">Depósito</Label>
+            <Select value={depositoId} onValueChange={setDepositoId}>
+              <SelectTrigger id="v-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
+              <SelectContent>
+                {depositos.filter((d) => d.activo).map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              De acá se descuenta el stock de los productos.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Ítems</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grid min-w-64 flex-1 gap-2">
+              <Label htmlFor="v-producto">Producto del catálogo</Label>
               <Select value={productoId} onValueChange={setProductoId}>
-                <SelectTrigger><SelectValue placeholder="Elegir producto…" /></SelectTrigger>
+                <SelectTrigger id="v-producto">
+                  <SelectValue placeholder="Elegir producto…" />
+                </SelectTrigger>
                 <SelectContent>
                   {productos.map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
@@ -419,62 +528,104 @@ function FormVenta({ clientes, productos, depositos, onGuardar, setAltaDeEquipos
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={() => void agregar()} disabled={!productoId}>Agregar</Button>
-              <Button variant="outline" onClick={agregarServicio}>Servicio</Button>
             </div>
-            {lineas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
-                {l.item_id === null ? (
-                  <Input value={l.descripcion} className="flex-1" placeholder="Mano de obra…"
-                         aria-label="Descripción"
-                         onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))} />
-                ) : (
-                  <span className="flex-1 truncate text-sm">{l.descripcion}</span>
-                )}
-                <Input type="number" value={l.cantidad} className="w-20" aria-label="Cantidad"
-                       onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x))} />
-                <Input type="number" value={l.precio} className="w-28" aria-label="Precio"
-                       onChange={(e) => setLineas(lineas.map((x, j) => j === i ? { ...x, precio: e.target.value } : x))} />
-                <Button variant="ghost" size="icon" aria-label="Quitar ítem"
-                        onClick={() => setLineas(lineas.filter((_, j) => j !== i))}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+            <Button variant="outline" onClick={() => void agregar()} disabled={!productoId}>
+              Agregar
+            </Button>
+            <Button variant="outline" onClick={agregarServicio}>Servicio</Button>
           </div>
 
-          <div className="flex items-end justify-between gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="v-medio">Cómo se cobra</Label>
-              <Select value={medio} onValueChange={setMedio}>
-                <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {medios.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+          {lineas.length === 0 ? (
+            <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Todavía no hay ítems. Agregá un producto del catálogo —descuenta
+              stock— o un <strong>servicio</strong>, que se cobra y no lo mueve.
+            </p>
+          ) : (
+            // La tabla escrita a mano y no con `Tabla`: esa rinde celdas de
+            // sólo lectura y acá cada fila es un formulario. Los encabezados
+            // son la mitad del pedido — en el modal las tres cajas de una línea
+            // no tenían rótulo visible y había que adivinar cuál era el precio.
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="py-2 pr-4 text-left font-medium">Descripción</th>
+                    <th className="w-24 py-2 pr-4 text-right font-medium">Cantidad</th>
+                    <th className="w-36 py-2 pr-4 text-right font-medium">Precio unit.</th>
+                    <th className="w-32 py-2 pr-4 text-right font-medium">Importe</th>
+                    <th className="w-12 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineas.map((l) => (
+                    <tr key={l.uid} className="border-b last:border-0">
+                      <td className="py-2 pr-4">
+                        {l.item_id === null ? (
+                          <Input value={l.descripcion} placeholder="Mano de obra…"
+                                 aria-label="Descripción"
+                                 onChange={(e) => cambiar(l.uid, 'descripcion', e.target.value)} />
+                        ) : (
+                          <span className="block truncate">{l.descripcion}</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <Input type="number" min="0" value={l.cantidad} className="text-right"
+                               aria-label={`Cantidad de ${l.descripcion || 'la línea'}`}
+                               onChange={(e) => cambiar(l.uid, 'cantidad', e.target.value)} />
+                      </td>
+                      <td className="py-2 pr-4">
+                        <Input type="number" min="0" step="0.01" value={l.precio} className="text-right"
+                               aria-label={`Precio de ${l.descripcion || 'la línea'}`}
+                               onChange={(e) => cambiar(l.uid, 'precio', e.target.value)} />
+                      </td>
+                      {/* El importe de la línea. Es lo que deja controlar una
+                          venta de ocho ítems sin sacar la calculadora, y no
+                          existía en el modal. */}
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {pesos((Number(l.cantidad) || 0) * (Number(l.precio) || 0))}
+                      </td>
+                      <td className="py-2 text-right">
+                        <Button variant="ghost" size="icon"
+                                aria-label={`Quitar ${l.descripcion || 'la línea'}`}
+                                onClick={() => setLineas((ls) => ls.filter((x) => x.uid !== l.uid))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
                   ))}
-                </SelectContent>
-              </Select>
+                </tbody>
+              </table>
             </div>
-            <p className="text-lg font-semibold tabular-nums">{pesos(total)}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Cobro</CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="v-medio">Cómo se cobra</Label>
+            <Select value={medio} onValueChange={setMedio}>
+              <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {medios.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          {medio === 'cuenta_corriente' && !clienteId && (
-            // Una venta en cuenta corriente sin cliente no tiene a quién
-            // cargarle la deuda: quedaría cobrada y sin deudor.
-            <p className="text-sm text-destructive">
+          <div className="flex items-baseline gap-4">
+            <span className="text-sm text-muted-foreground">Total</span>
+            <span className="text-2xl font-semibold tabular-nums">{pesos(total)}</span>
+          </div>
+          {faltaDeudor && (
+            <p className="w-full text-sm text-destructive">
               Una venta en cuenta corriente necesita un cliente.
             </p>
           )}
-        </div>
-        <DialogFooter>
-          <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-          <Button onClick={guardar}
-                  disabled={!depositoId || lineas.length === 0
-                            || (medio === 'cuenta_corriente' && !clienteId)}>
-            Registrar venta
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+      </Card>
+    </Pagina>
   )
 }
 

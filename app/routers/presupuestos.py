@@ -15,7 +15,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
-from libracore import pdf_generator
+from libracore import config_manager, pdf_generator
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
@@ -24,7 +24,9 @@ from ..dependencies import (
     get_data_dir,
     get_presupuesto_service,
     get_remito_service,
+    get_smtp_config,
 )
+from ..services import comprobante_email
 from ..services.clientes import ClienteRepository
 from ..services.remitos_presupuestos import (
     ESTADOS_PRESUPUESTO,
@@ -47,6 +49,11 @@ class ItemIn(BaseModel):
     # ya guardados al editarse.
     tax_rate: float | None = Field(default=None, ge=0, le=1)
 
+    # Aclaracion corta de ESTE renglon, opcional. Se imprime debajo del nombre
+    # del item, mas chica y mas clara (`pdf_generator._draw_items_table`). No es
+    # `observations`, que es una sola y describe el comprobante entero.
+    detalle: str = ""
+
 
 def _valid_until_default() -> date_type:
     return date_type.today() + timedelta(days=_VALIDEZ_DEFAULT_DIAS)
@@ -66,6 +73,13 @@ class PresupuestoIn(BaseModel):
 
 class EstadoIn(BaseModel):
     status: str
+
+
+class EmailIn(BaseModel):
+    # Vacio = se manda al email del cliente. La pantalla lo precarga con ese
+    # mismo valor, asi que en la practica siempre viene lleno; el default esta
+    # para que un cliente de API no tenga que repetir un dato que ya esta.
+    email: str = ""
 
 
 def _datos_cliente(client_id: int, clientes: ClienteRepository, override_address: str | None) -> dict:
@@ -213,6 +227,37 @@ def delete_presupuesto(
     return Response(status_code=204)
 
 
+def _generar_pdf(presupuesto: dict, presupuestos: PresupuestoService,
+                 clientes: ClienteRepository, data_dir: str) -> str:
+    """Genera el PDF del presupuesto, lo guarda en la fila y devuelve el path.
+
+    Es helper y no cuerpo del endpoint porque lo usan **dos** caminos —la
+    descarga y el envio por email— y el PDF que se manda tiene que ser el mismo
+    que el que se baja. La regla de abajo escrita dos veces es exactamente como
+    se termina mandando por mail un PDF con el IVA al reves del que ve el
+    usuario en pantalla.
+
+    La condicion del receptor decide si el PDF discrimina el IVA o muestra el
+    precio final (LibraCore v1.13.0).
+
+    Se lee del cliente **al generar el PDF**, no se copia al comprobante: es
+    un dato del cliente, y si una condicion mal cargada se corrige, el PDF
+    tiene que salir bien la proxima vez sin tocar los presupuestos emitidos.
+
+    Un presupuesto sin cliente —o de un cliente borrado— cae a precio final,
+    el mismo default que una condicion vacia.
+    """
+    cliente = (
+        clientes.get(presupuesto["client_id"]) if presupuesto.get("client_id") else None
+    )
+    path = pdf_generator.generate_pdf_presupuesto(
+        presupuesto, output_dir=f"{data_dir}/presupuestos_pdf",
+        discriminar=bool(cliente and cliente["iva_discriminado"]),
+    )
+    presupuestos.set_pdf_path(presupuesto["id"], path)
+    return path
+
+
 @router.get("/{presupuesto_id}/pdf")
 def presupuesto_pdf(
     presupuesto_id: int,
@@ -223,24 +268,71 @@ def presupuesto_pdf(
     presupuesto = presupuestos.get(presupuesto_id)
     if presupuesto is None:
         raise HTTPException(404, "presupuesto not found")
-    # La condicion del receptor decide si el PDF discrimina el IVA o muestra el
-    # precio final (LibraCore v1.13.0).
-    #
-    # Se lee del cliente **al generar el PDF**, no se copia al comprobante: es
-    # un dato del cliente, y si una condicion mal cargada se corrige, el PDF
-    # tiene que salir bien la proxima vez sin tocar los presupuestos emitidos.
-    #
-    # Un presupuesto sin cliente —o de un cliente borrado— cae a precio final,
-    # el mismo default que una condicion vacia.
-    cliente = (
-        clientes.get(presupuesto["client_id"]) if presupuesto.get("client_id") else None
-    )
-    path = pdf_generator.generate_pdf_presupuesto(
-        presupuesto, output_dir=f"{data_dir}/presupuestos_pdf",
-        discriminar=bool(cliente and cliente["iva_discriminado"]),
-    )
-    presupuestos.set_pdf_path(presupuesto_id, path)
+    path = _generar_pdf(presupuesto, presupuestos, clientes, data_dir)
     return FileResponse(
         path, media_type="application/pdf",
         filename=f"presupuesto_{presupuesto['number']}.pdf",
     )
+
+
+@router.post("/{presupuesto_id}/enviar-email")
+def enviar_por_email(
+    presupuesto_id: int,
+    data: EmailIn,
+    presupuestos: PresupuestoService = Depends(get_presupuesto_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    data_dir: str = Depends(get_data_dir),
+    smtp_config=Depends(get_smtp_config),
+    user: dict = Depends(get_current_user),
+):
+    """Manda el presupuesto al cliente con el PDF adjunto y lo pasa a `enviado`.
+
+    🔑 **Mandarlo ES enviarlo.** La transicion va DESPUES del envio: si el SMTP
+    falla sale el 502 y el presupuesto se queda en borrador, que es lo que
+    realmente paso. Y solo desde borrador — reenviarle el PDF a uno ya aceptado
+    no lo hace retroceder, porque un reenvio no es un evento del ciclo.
+
+    Mismo contrato que el endpoint que LibraCore le arma a Contalibra y
+    Restolibra (`libracore.presupuestos_router`), que este producto no usa
+    porque su presupuesto es service-based.
+    """
+    presupuesto = presupuestos.get(presupuesto_id)
+    if presupuesto is None:
+        raise HTTPException(404, "presupuesto not found")
+
+    if not comprobante_email.smtp_configurado(smtp_config):
+        raise HTTPException(
+            400,
+            "Configurá el servidor SMTP en Configuración → Integraciones → "
+            "Email / SMTP.",
+        )
+
+    destino = (data.email or presupuesto.get("client_email") or "").strip()
+    if not destino:
+        raise HTTPException(422, "Ingresá una dirección de email.")
+
+    pdf_path = _generar_pdf(presupuesto, presupuestos, clientes, data_dir)
+    empresa = (config_manager.load().get("empresa_nombre") or "").strip()
+    etiqueta = f"Presupuesto {presupuesto['number']}"
+
+    try:
+        comprobante_email.enviar_documento(
+            smtp_config,
+            to_email=destino,
+            to_name=presupuesto["client_name"],
+            pdf_path=pdf_path,
+            asunto=f"{etiqueta} - {empresa}" if empresa else etiqueta,
+            cuerpo=(
+                f"Estimado/a {presupuesto['client_name']},\n\n"
+                f"Adjuntamos el presupuesto solicitado.\n\n"
+                f"Numero: {presupuesto['number']}\n"
+                f"Valido hasta: {presupuesto['valid_until']}\n\n"
+                f"Muchas gracias.\n{empresa}"
+            ),
+        )
+    except Exception as e:
+        raise HTTPException(502, f"Error al enviar: {e}") from None
+
+    if presupuesto["status"] == "borrador":
+        presupuestos.set_status(presupuesto_id, "enviado")
+    return presupuestos.get(presupuesto_id)

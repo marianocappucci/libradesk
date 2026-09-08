@@ -37,6 +37,11 @@ class ItemIn(BaseModel):
     # La alicuota de ESTA linea. `None` = se usa la del documento.
     tax_rate: float | None = Field(default=None, ge=0, le=1)
 
+    # Aclaracion corta de ESTE renglon, opcional. Se imprime debajo del nombre
+    # del item, mas chica y mas clara (`pdf_generator._draw_items_table`). No es
+    # `observations`, que es una sola y describe el comprobante entero.
+    detalle: str = ""
+
 
 class RemitoIn(BaseModel):
     client_id: int

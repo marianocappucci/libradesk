@@ -164,3 +164,9 @@ def get_config_facturacion(request: Request) -> ConfiguracionFacturacion:
 
 def get_data_dir(request: Request) -> str:
     return request.app.state.data_dir
+
+
+def get_smtp_config(request: Request):
+    """El resolver del SMTP efectivo: el mismo que usan la recuperacion
+    de contrasena y el boton de probar conexion."""
+    return request.app.state.smtp_config
