@@ -291,8 +291,28 @@ def test_sin_credenciales_no_se_consulta_nada(config, sin_entorno, monkeypatch):
     with pytest.raises(sos.SOSNoConfigurado) as e:
         sos.listar_cuits()
 
-    assert "la contraseña" in str(e.value), "el mensaje dice qué falta"
+    assert str(e.value) == (
+        "No hay con qué consultar SOS Contador: faltan el usuario y la contraseña."
+    )
     assert llamadas == []
+
+
+def test_el_mensaje_concuerda_cuando_falta_una_sola(config, sin_entorno, monkeypatch):
+    """El caso normal: el usuario está cargado y la contraseña no.
+
+    Se fija el texto entero porque **el mensaje es todo el valor del cambio**:
+    lo lee quien está configurando la pantalla, y con el verbo en plural para
+    una sola cosa faltante se lee como un error del sistema, no como una
+    instrucción.
+    """
+    monkeypatch.setattr(sos.httpx, "Client", lambda **kw: HttpFalso())
+
+    with pytest.raises(sos.SOSNoConfigurado) as e:
+        sos.listar_cuits("api@lagrace.test", "")
+
+    assert str(e.value) == (
+        "No hay con qué consultar SOS Contador: falta la contraseña."
+    )
 
 
 def test_un_login_sin_jwt_es_un_error_de_sos(config, sin_entorno, monkeypatch):
