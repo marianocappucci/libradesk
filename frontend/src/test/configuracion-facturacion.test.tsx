@@ -22,10 +22,18 @@ const json = (body: unknown, status = 200) => Promise.resolve(
 
 let puts: { url: string; body: any }[]
 
+// Qué contesta «Buscar en SOS». Por defecto una cuenta sin CUITs, que es una
+// respuesta legítima; los tests que miran el error lo cambian.
+let cuits: { status: number; body: unknown }
+
 function montar(sos: Record<string, unknown> = {}, contalibra: Record<string, unknown> = {}) {
   puts = []
+  cuits = { status: 200, body: { cuits: [] } }
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const u = String(url)
+    if (init?.method === 'POST' && u.includes('/sos/cuits')) {
+      return json(cuits.body, cuits.status)
+    }
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body))
       puts.push({ url: u, body })
@@ -111,6 +119,31 @@ describe('configuración del destino de facturación', () => {
     render(<FacturacionConfigCard />)
 
     expect(await screen.findByText(/no se puede leer/i)).toBeInTheDocument()
+  })
+
+  it('🔴 el motivo por el que no se pudo buscar se muestra, y no como cuenta vacía', async () => {
+    // El caso de `lagrace` (2026-09-09): la contraseña guardada quedó ilegible
+    // al rotarse `SECRET_KEY`. El backend contestaba 200 con la lista vacía y
+    // la pantalla culpaba a la cuenta del estudio contable.
+    montar({ secretos_ilegibles: true, configurado: false })
+    cuits = { status: 409, body: { detail: 'La contraseña guardada de SOS Contador no se puede leer' } }
+    render(<FacturacionConfigCard />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /Buscar en SOS/i }))
+
+    // El texto del 409, y no el del cartel de arriba —que dice casi lo mismo—:
+    // lo que se está fijando es que el botón explique por qué no buscó.
+    expect(await screen.findByText(/SOS Contador no se puede leer/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no tiene ninguna CUIT/i)).not.toBeInTheDocument()
+  })
+
+  it('y una cuenta sin CUITs sí lo dice', async () => {
+    montar()
+    render(<FacturacionConfigCard />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /Buscar en SOS/i }))
+
+    expect(await screen.findByText(/no tiene ninguna CUIT/i)).toBeInTheDocument()
   })
 
   it('sin ningún destino habilitado lo dice', async () => {

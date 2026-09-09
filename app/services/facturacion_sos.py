@@ -226,8 +226,17 @@ def listar_cuits(usuario: str = "", password: str = "") -> list[dict]:
 
     Las credenciales llegan por parámetro cuando la pantalla las tiene tipeadas
     y todavía sin guardar —que es el momento natural para apretar el botón— y
-    salen de la configuración guardada cuando no. Sin ninguna de las dos, lista
-    vacía: este listado no es un lugar para descubrir si una cuenta existe.
+    salen de la configuración guardada cuando no. Sin ninguna de las dos no se
+    sale a la red: este listado no es un lugar para descubrir si una cuenta
+    existe.
+
+    🔴 **Y eso se avisa levantando, no devolviendo lista vacía.** Una lista
+    vacía es una respuesta legítima —una cuenta sin CUITs— así que usarla
+    también para "no tengo con qué preguntar" deja a la pantalla diciendo *"ese
+    usuario no tiene ninguna CUIT en SOS"*, que culpa a la cuenta del estudio.
+    Pasó en `lagrace` el 2026-09-09: la contraseña guardada había quedado
+    ilegible al rotarse la `SECRET_KEY`, y el botón contestó 200 con una lista
+    vacía tres veces seguidas.
 
     Sólo el primer paso del login: `POST /login` da el JWT del **usuario**, que
     es justamente el que ve todas sus CUITs. El segundo paso
@@ -237,7 +246,12 @@ def listar_cuits(usuario: str = "", password: str = "") -> list[dict]:
     usuario = (usuario or "").strip() or cfg["usuario"]
     password = password or cfg["password"]
     if not (usuario and password):
-        return []
+        falta = " ni ".join(nombre for nombre, valor
+                            in (("el usuario", usuario), ("la contraseña", password))
+                            if not valor)
+        raise SOSNoConfigurado(
+            f"No hay con qué consultar SOS Contador: falta {falta}."
+        )
 
     with httpx.Client(timeout=TIMEOUT) as cliente:
         r = cliente.post(f"{cfg['base_url']}/login",

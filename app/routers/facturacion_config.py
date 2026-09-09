@@ -71,7 +71,8 @@ def guardar(destino: str, data: ConfigPayload,
 
 
 @router.post("/sos/cuits")
-def cuits_de_sos(data: CuitsPayload):
+def cuits_de_sos(data: CuitsPayload,
+                 config: ConfiguracionFacturacion = Depends(get_config_facturacion)):
     """Las CUITs que ve el usuario de SOS, para elegir el `idcuit` sin salir.
 
     Existe porque el `idcuit` **no aparece en ninguna pantalla de SOS**: es un
@@ -88,10 +89,22 @@ def cuits_de_sos(data: CuitsPayload):
     """
     # Import local: el adaptador de SOS no se carga en las instancias que no lo
     # usan, mismo criterio que en `facturacion_externa.esta_configurado`.
-    from ..services.facturacion_sos import ErrorSOS, listar_cuits
+    from ..services.facturacion_sos import ErrorSOS, SOSNoConfigurado, listar_cuits
 
     try:
         return {"cuits": listar_cuits(data.usuario, data.password)}
+    except SOSNoConfigurado as e:
+        # Sin credencial usable no hay a quién preguntarle, y el motivo cambia
+        # qué tiene que hacer quien está mirando: si la guardada está ilegible
+        # —`SECRET_KEY` rotada— el campo de contraseña se ve igual de vacío que
+        # si nunca se hubiera cargado, así que el mensaje lo tiene que decir.
+        if config.ver("sos").get("secretos_ilegibles"):
+            raise HTTPException(409, (
+                "La contraseña guardada de SOS Contador no se puede leer (suele "
+                "pasar si cambió SECRET_KEY). Escribila de nuevo acá arriba y "
+                "volvé a buscar."
+            )) from e
+        raise HTTPException(409, str(e)) from e
     except ErrorSOS as e:
         # 409 y no 502: lo que falla casi siempre es la credencial, y eso lo
         # arregla quien está mirando la pantalla.
