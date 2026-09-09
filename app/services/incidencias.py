@@ -31,9 +31,9 @@ from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
 
-# Sin riesgo de import circular: `materiales` no importa nada del producto,
+# Sin riesgo de import circular: ninguno de los dos importa nada del producto,
 # solo los dos motores.
-from . import materiales
+from . import fecha, materiales
 
 ESTADOS_VALIDOS = ("abierto", "en_progreso", "resuelta", "cerrado")
 
@@ -71,6 +71,55 @@ ESTADO_LABELS = {
 }
 PRIORIDAD_LABELS = {"alta": "Alta", "media": "Media", "baja": "Baja"}
 MODALIDAD_LABELS = {"on_site": "On-site", "remoto": "Remoto"}
+
+#: Los estados que ponen un reclamo en la **bandeja de pendientes**, que es lo
+#: que se imprime para armar el dia (ver `datos_listado_pendientes`).
+#:
+#: 🔑 **`resuelta` NO entra, y es la decision del listado.** En este producto
+#: `resuelta` es "el tecnico ya termino" y lo que falta es el control de
+#: oficina contra el comprobante de servicios --por eso `convertir_a_remito()`
+#: solo acepta `cerrado`--. Un reclamo `resuelta` en la bandeja manda a la
+#: cuadrilla a un domicilio donde no hay nada que hacer.
+ESTADOS_PENDIENTES = ("abierto", "en_progreso")
+
+#: Como se ordena el listado.
+#:
+#: **Es un parametro y no una constante porque no se sabe cual usan.** El
+#: relevamiento de Lagrace no lo dice: el papel sale de la oficina y el
+#: recorrido lo arma la cuadrilla mirandolo. Las tres formas cuestan una clave
+#: de ordenamiento, asi que se ofrecen las tres y el uso dira cual queda.
+ORDENES_PENDIENTES = ("antiguedad", "localidad", "prioridad")
+
+ORDEN_LABELS = {
+    "antiguedad": "Antigüedad",
+    "localidad": "Localidad",
+    "prioridad": "Prioridad",
+}
+
+#: `alta` antes que `media` antes que `baja`. Un orden alfabetico daria
+#: `alta, baja, media`, que pone lo menos urgente en el medio.
+_PESO_PRIORIDAD = {"alta": 0, "media": 1, "baja": 2}
+
+#: Los clientes sin localidad cargada van **al final** del orden por localidad,
+#: no adelante. `￿` es el ultimo punto de codigo del BMP, asi que
+#: cualquier nombre real ordena antes. Es el equivalente portable de un
+#: `NULLS LAST`, que no se escribe igual en todos los motores.
+_SIN_LOCALIDAD = "￿"
+
+#: El desempate es siempre `(fecha, id)` y nunca la fecha sola: dos reclamos
+#: cargados en el mismo segundo saldrian en orden arbitrario, y el papel de hoy
+#: no coincidiria con el de dentro de un rato aunque no haya cambiado nada.
+_CLAVES_ORDEN = {
+    "antiguedad": lambda r: (r["fecha_creacion_iso"], r["id"]),
+    "localidad": lambda r: (
+        (r["cliente_ciudad"] or _SIN_LOCALIDAD).strip().lower(),
+        r["fecha_creacion_iso"], r["id"],
+    ),
+    "prioridad": lambda r: (
+        _PESO_PRIORIDAD.get(r["prioridad"], len(_PESO_PRIORIDAD)),
+        r["fecha_creacion_iso"], r["id"],
+    ),
+}
 
 
 class Incidencia(Base):
@@ -367,6 +416,53 @@ class IncidenciaTareaTecnico(Base):
     )
 
 
+class IncidenciaTecnico(Base):
+    """Un tecnico que fue al reclamo, con su ventana de trabajo.
+
+    > *"El tecnico va, hace el reclamo y anota en el CDS desde que hora hasta
+    > que hora estuvo. Esas horas por tecnico despues se cargan en esa
+    > incidencia al otro dia, cuando ya esta cerrado el reclamo."*
+
+    🔑 **Es la brecha 5 subida un nivel: de la tarea al reclamo.** Desde la
+    revision `0034` las horas por tecnico viven en `incidencias_tareas_tecnicos`,
+    colgando de una tarea. En el circuito de Lagrace **no hay tareas**: hay un
+    reclamo, un papel con las horas de cada tecnico, y una carga posterior.
+    Colgarlas de una tarea obligaba a inventar una tarea por reclamo.
+
+    **`IncidenciaTareaTecnico` no se toca**: sigue viva para las instancias que
+    usan la grilla de tareas. Son dos formas de trabajar y el producto sostiene
+    las dos. Ver la revision `0040`.
+    """
+
+    __tablename__ = "incidencias_tecnicos"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incidencia_id: Mapped[int] = mapped_column(
+        ForeignKey("incidencias.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    #: Nullable con `SET NULL`, igual que `incidencias.tecnico_id`: las horas son
+    #: la base de lo que se cobra, asi que borrar a una persona del catalogo no
+    #: puede borrar el trabajo que hizo.
+    tecnico_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tecnicos.id", ondelete="SET NULL"), index=True,
+    )
+    #: 🔴 **Un tramo sin cargar es `None`, no `0`.** Un tecnico tildado al que
+    #: nadie le puso las horas **no trabajo cero horas**: no se sabe cuantas. Y
+    #: los totales suman solo los tramos completos -- tratar los vacios como
+    #: cero daria un total que parece cerrado y no lo esta, que es justo el
+    #: numero que alguien mira antes de facturar.
+    desde: Mapped[datetime | None] = mapped_column(DateTime)
+    hasta: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    #: Una fila por tecnico y por reclamo. Dos tramos del mismo tecnico en el
+    #: mismo reclamo son, en el circuito relevado, dos renglones del CDS que se
+    #: suman al cargarlos -- no dos filas.
+    __table_args__ = (
+        UniqueConstraint("incidencia_id", "tecnico_id", name="uq_incidencia_tecnico"),
+    )
+
+
 class IncidenciaEstadoLog(Base):
     __tablename__ = "incidencias_estados_log"
 
@@ -432,6 +528,65 @@ def _to_dict(i: Incidencia) -> dict:
         "activo": i.activo,
         "fecha_creacion": i.fecha_creacion.isoformat() if i.fecha_creacion else None,
         "fecha_cierre": i.fecha_cierre.isoformat() if i.fecha_cierre else None,
+    }
+
+
+def _fila_pendiente(i: Incidencia, c, e, ahora: datetime) -> dict:
+    """Un reclamo de la bandeja, con todo lo suyo ya resuelto a texto.
+
+    `c` es el `Cliente` y `e` el `EquipoTrabajo` de la agenda, que puede ser
+    `None`. Van sin anotar para no importarlos en tiempo de modulo: los dos
+    importan de vuelta a este.
+
+    **Las etiquetas se resuelven aca y no en el generador de PDF**, mismo
+    criterio que `datos_para_pdf`: `on_site` -> "On-site" es dominio, no
+    maqueta, y el dia que haya un segundo consumidor no tiene que copiarlas.
+    """
+    creacion = i.fecha_creacion
+    return {
+        "id": i.id,
+        # ISO para ordenar, `dd-mm-aaaa` para imprimir. Son los dos formatos de
+        # la regla del proyecto y el listado necesita los dos: ordenar por el
+        # texto `dd-mm-aaaa` pondria el 01-12 antes que el 02-03.
+        "fecha_creacion_iso": creacion.isoformat() if creacion else "",
+        "fecha_creacion": creacion.strftime("%d-%m-%Y") if creacion else "—",
+        # Cuantos dias hace que espera. Es el numero que decide a quien se
+        # atiende primero cuando la cuadrilla mira el papel, y es mas rapido de
+        # leer que restar dos fechas de cabeza.
+        #
+        # 🔴 **El `max(0, ...)` no es defensivo de mas: sin el sale `-1 d`.**
+        # `fecha_creacion` la estampa el MOTOR (`server_default=func.now()`) y
+        # este `ahora` lo da el proceso, asi que son dos relojes. Con el motor
+        # un segundo adelante, un reclamo cargado recien da un `timedelta`
+        # negativo, y `.days` de un negativo chico es **-1**, no 0 -- o sea que
+        # el reclamo MAS NUEVO del papel imprime "-1 d". Se vio con el
+        # PostgreSQL de prueba sin `TZ`, donde el desfasaje son tres horas;
+        # alcanza con un segundo para reproducirlo.
+        "dias": max(0, (ahora - creacion).days) if creacion else None,
+        "estado": i.estado,
+        "estado_label": ESTADO_LABELS.get(i.estado, i.estado),
+        "prioridad": i.prioridad,
+        "prioridad_label": PRIORIDAD_LABELS.get(i.prioridad, i.prioridad),
+        "modalidad": i.modalidad,
+        # `None` y no "—" cuando no se sabe: el listado decide si lo dibuja, y
+        # un guion metido aca lo obliga a imprimir un renglon vacio.
+        "modalidad_label": MODALIDAD_LABELS.get(i.modalidad or ""),
+        "titulo": i.titulo,
+        "descripcion": i.descripcion,
+        "reclamante": i.reclamante,
+        "nro_cds": i.nro_cds,
+        "cliente_id": i.cliente_id,
+        "cliente_nombre": c.nombre,
+        "cliente_domicilio": c.domicilio,
+        "cliente_ciudad": c.ciudad,
+        "cliente_telefono": c.telefono,
+        # Si ya esta agendado se dice, para que nadie lo planifique dos veces.
+        # No lo excluye del listado: sigue pendiente hasta que se haga.
+        "agendado": (
+            i.fecha_programada.strftime("%d-%m-%Y %H:%M")
+            if i.fecha_programada else None
+        ),
+        "equipo_trabajo": e.nombre if e is not None else None,
     }
 
 
@@ -895,6 +1050,90 @@ class IncidenciaRepository:
                 "materiales": materiales.listar(i.id),
             }
 
+    def datos_listado_pendientes(
+        self, *, orden: str = "antiguedad", ciudad: str | None = None,
+    ) -> dict:
+        """La bandeja de pendientes entera, lista para imprimir y repartir.
+
+        🔑 **La unidad es la bandeja, no `equipo x dia`.** Es lo unico que la
+        separa de la hoja de ruta (`agenda.datos_hoja_ruta`), y es el punto de
+        que exista: aquella **exige haber asignado antes** --cuadrilla y
+        `fecha_programada`-- y en el circuito de Lagrace el papel viene
+        primero. Se imprime todo lo que esta esperando, los tecnicos se
+        acomodan mirandolo, y recien ahi se arma el dia. Un listado que
+        exigiera agendar para poder imprimirse invierte el orden en que
+        trabajan, y por eso la hoja de ruta no lo cubria aunque tuviera los
+        mismos datos adelante.
+
+        Por eso lleva **telefono y reclamante**, que la hoja de ruta no tiene:
+        el papel sirve para llamar antes de salir --*"por si llegan y esta
+        cerrado"*-- y para saber a quien preguntarle por el problema al llegar.
+
+        Devuelve **datos, no PDF**, mismo corte que `datos_para_pdf`: lo que el
+        listado *dice* se testea sin abrir un binario.
+        """
+        from .clientes import Cliente
+        from .equipos_trabajo import EquipoTrabajo
+
+        if orden not in ORDENES_PENDIENTES:
+            raise ValueError(
+                f"Orden invalido: {orden!r}. "
+                f"Los validos son {', '.join(ORDENES_PENDIENTES)}."
+            )
+
+        # `fecha.ahora()` y no `datetime.now()`: los contenedores corren en UTC
+        # y la antiguedad de un reclamo cargado a la noche saldria un dia
+        # corrida. Ver `app/services/fecha.py`.
+        ahora = fecha.ahora()
+
+        with self.session_factory() as session:
+            stmt = (
+                select(Incidencia, Cliente, EquipoTrabajo)
+                .join(Cliente, Cliente.id == Incidencia.cliente_id)
+                # `outerjoin`: la mayoria de los pendientes **no** esta
+                # agendada --si lo estuviera, ya tendrian hoja de ruta-- y un
+                # join comun vaciaria el listado justo de las filas que son su
+                # razon de ser.
+                .outerjoin(
+                    EquipoTrabajo,
+                    EquipoTrabajo.id == Incidencia.equipo_trabajo_id,
+                )
+                # 🔴 **Sin `.where(Incidencia.activo)`, y no es un olvido.**
+                # La primera version lo tenia, y una mutacion mostro que no
+                # servia: el DELETE de este repositorio **borra la fila** (ver
+                # `delete()`), nada en el producto escribe `activo = False`, y
+                # ningun otro listado filtra por esa columna. O sea que era un
+                # resguardo que no resguardaba nada y ademas dejaba al papel
+                # mostrando algo distinto de la grilla el dia que la columna se
+                # empezara a usar.
+                .where(Incidencia.estado.in_(ESTADOS_PENDIENTES))
+            )
+            if ciudad:
+                # Comparacion insensible a mayusculas porque `clients.ciudad`
+                # es texto libre: en los datos reales conviven `Chivilcoy` y
+                # `CHIVILCOY`, y un filtro exacto imprime media localidad.
+                stmt = stmt.where(
+                    func.lower(Cliente.ciudad) == ciudad.strip().lower()
+                )
+            filas = session.execute(stmt).all()
+
+        reclamos = [
+            _fila_pendiente(i, c, e, ahora) for i, c, e in filas
+        ]
+        # 🔑 **El orden se resuelve en Python y no en SQL, a proposito.** Las
+        # tres claves necesitan cosas que no son portables entre motores --el
+        # `NULLS LAST` de la localidad y el `CASE` del peso de la prioridad--,
+        # y la bandeja de pendientes son decenas de filas, no la tabla entera.
+        reclamos.sort(key=_CLAVES_ORDEN[orden])
+
+        return {
+            "emitido": ahora.strftime("%d-%m-%Y %H:%M"),
+            "orden": orden,
+            "orden_label": ORDEN_LABELS[orden],
+            "ciudad": ciudad.strip() if ciudad else None,
+            "reclamos": reclamos,
+        }
+
     def update(self, incidencia_id: int, usuario_actor: str | None = None, **data) -> dict:
         """Si `data` incluye un `estado` distinto al actual, registra el
         cambio en `IncidenciaEstadoLog` y setea `fecha_cierre` al pasar a
@@ -1351,6 +1590,112 @@ class IncidenciaRepository:
             raise ValueError(
                 "El fin del tramo no puede ser anterior a su inicio."
             )
+
+    # ── Los técnicos del RECLAMO (modo simple, revisión `0040`) ─────────
+    #
+    # Los tres métodos de acá arriba son los de la tarea y siguen vivos. Éstos
+    # son la otra vía: el reclamo entero, sin tareas. Ver `IncidenciaTecnico`.
+
+    def list_tecnicos(self, incidencia_id: int) -> list[dict]:
+        """Quiénes fueron, con sus horas. Ordenado por nombre, que es como se
+        lee un CDS."""
+        from .tecnicos import Tecnico
+
+        with self.session_factory() as session:
+            filas = list(session.execute(
+                select(IncidenciaTecnico)
+                .where(IncidenciaTecnico.incidencia_id == incidencia_id)
+                .order_by(IncidenciaTecnico.id)
+            ).scalars())
+            ids = {f.tecnico_id for f in filas if f.tecnico_id}
+            nombres = {
+                t.id: t.nombre for t in session.execute(
+                    select(Tecnico).where(Tecnico.id.in_(ids))
+                ).scalars()
+            } if ids else {}
+
+        salida = [
+            {
+                "id": f.id,
+                "incidencia_id": f.incidencia_id,
+                "tecnico_id": f.tecnico_id,
+                # El técnico borrado deja su tramo: la fila dice que alguien
+                # trabajó esas horas aunque ya no esté en el catálogo.
+                "tecnico": nombres.get(f.tecnico_id) if f.tecnico_id else None,
+                "desde": f.desde.isoformat() if f.desde else None,
+                "hasta": f.hasta.isoformat() if f.hasta else None,
+                "horas": _horas_entre(f.desde, f.hasta),
+            }
+            for f in filas
+        ]
+        return sorted(salida, key=lambda a: (a["tecnico"] or "￿").lower())
+
+    def set_tecnicos(self, incidencia_id: int, tecnico_ids: list[int]) -> list[dict]:
+        """Deja asignados exactamente esos técnicos.
+
+        🔴 **Es un diff, NO un borrar-e-insertar.** Un multi-select manda la
+        lista entera cada vez que se toca, así que rehacer las filas perdería
+        las horas ya cargadas de los técnicos que siguen tildados — y las
+        perdería **en silencio**, que es lo peor: la pantalla se ve igual y los
+        tramos vuelven a `None` al recargar. Sólo se borra a quien se destildó y
+        sólo se crea a quien se agregó; a los que quedan no se los toca.
+        """
+        from .tecnicos import Tecnico
+
+        pedidos = list(dict.fromkeys(tecnico_ids))
+        with self.session_factory() as session:
+            if session.get(Incidencia, incidencia_id) is None:
+                raise KeyError(incidencia_id)
+            if pedidos:
+                existentes = {
+                    t.id for t in session.execute(
+                        select(Tecnico).where(Tecnico.id.in_(pedidos))
+                    ).scalars()
+                }
+                faltan = [t for t in pedidos if t not in existentes]
+                if faltan:
+                    raise ValueError(
+                        f"No existe el técnico {faltan[0]}."
+                    )
+
+            actuales = list(session.execute(
+                select(IncidenciaTecnico)
+                .where(IncidenciaTecnico.incidencia_id == incidencia_id)
+            ).scalars())
+            por_tecnico = {f.tecnico_id: f for f in actuales}
+
+            for tecnico_id, fila in por_tecnico.items():
+                if tecnico_id not in pedidos:
+                    session.delete(fila)
+            for tecnico_id in pedidos:
+                if tecnico_id not in por_tecnico:
+                    session.add(IncidenciaTecnico(
+                        incidencia_id=incidencia_id, tecnico_id=tecnico_id,
+                    ))
+            session.commit()
+        return self.list_tecnicos(incidencia_id)
+
+    def update_tecnico(self, asignacion_id: int, **data) -> dict:
+        """Carga o corrige el tramo de un técnico ya asignado.
+
+        Es el paso del día siguiente: el reclamo ya está cerrado y se pasan al
+        sistema las horas que el técnico anotó en el CDS.
+        """
+        with self.session_factory() as session:
+            fila = session.get(IncidenciaTecnico, asignacion_id)
+            if fila is None:
+                raise KeyError(asignacion_id)
+            desde = data.get("desde", fila.desde)
+            hasta = data.get("hasta", fila.hasta)
+            self._validar_tramo(desde, hasta)
+            for campo, valor in data.items():
+                setattr(fila, campo, valor)
+            session.commit()
+            incidencia_id = fila.incidencia_id
+        for a in self.list_tecnicos(incidencia_id):
+            if a["id"] == asignacion_id:
+                return a
+        raise KeyError(asignacion_id)
 
     def add_tarea(self, incidencia_id: int, **data) -> dict:
         """Agrega una tarea al final de la grilla.

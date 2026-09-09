@@ -37,7 +37,34 @@ def _empresa_nombre(_request) -> str | None:
 #
 # `POST /auth/change-password` viene sin flag (libraauth v0.25.0): es la unica
 # forma de cambiar la propia clave estando adentro, y no depende de SMTP.
+def _extras(_request, _user) -> dict:
+    """Los módulos habilitados de ESTA instancia, para que el frontend gatee.
+
+    🔴 **Sin esto el gateo por módulo era sólo del backend, y la UI mentía.**
+    `require_module` protege ocho routers, pero el menú no sabía nada: apagar
+    `dashboard` en una instancia dejaba la entrada en el sidebar y el click
+    daba 403. Medido el 2026-09-09 — LibraDesk no pasaba ni `get_extras` acá ni
+    `hasModule` en su `Layout`, así que `moduleVisible()` devolvía `true`
+    siempre. Contalibra sí lo tenía resuelto; esto copia su patrón.
+
+    Se lee **en cada request** y no al importar: los módulos se prenden y apagan
+    desde el backoffice, y cachearlos dejaría el menú mostrando el estado
+    anterior hasta el próximo reinicio.
+
+    🔑 **Ante cualquier falla devuelve la lista vacía, no todo prendido.** Un
+    menú de menos se nota y se reporta; uno de más lleva a pantallas que dan
+    403 y hace dudar de si el módulo está contratado.
+    """
+    try:
+        from libracore.db.modulos import get_modulos
+
+        return {"modulos": sorted(m for m, on in get_modulos().items() if on)}
+    except Exception:
+        return {"modulos": []}
+
+
 router = build_json_api_auth_router(
     incluir_verify=True, incluir_password_reset=True, incluir_demo=True,
     get_empresa_nombre=_empresa_nombre,
+    get_extras=_extras,
 )

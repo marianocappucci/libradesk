@@ -47,8 +47,27 @@ import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
 import {
   CuentaCorriente, Recibos, Ventas, VentaDetalle, VentaNueva,
 } from './pages/VentasComercial'
+import { Cotizaciones } from './pages/Cotizaciones'
 import { Sucursales } from './pages/Sucursales'
 import { SucursalProvider } from './components/sucursal'
+import { enModoSimple } from './components/Layout'
+
+/** A dónde va alguien que entra sin ruta, o a una que no existe.
+ *
+ *  🔴 **Antes era un `Navigate` fijo a `/dashboard`, y eso quedó roto el día
+ *  que el Dashboard se pudo apagar.** Con el módulo off —o con `modo_simple`
+ *  prendido, que lo esconde— el catch-all mandaba a una pantalla que la
+ *  instancia no tiene: se veía el 403 en vez del producto, y en la primera
+ *  visita después de loguear.
+ *
+ *  En modo simple el home es el listado de reclamos, que es con lo que se
+ *  arranca el día — pedido del humano, 2026-09-09.
+ */
+function Home() {
+  const { user } = useAuth()
+  return <Navigate to={enModoSimple(user) ? '/reclamos' : '/dashboard'} replace />
+}
+
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -104,6 +123,11 @@ export default function App() {
       <Route path="/equipos-trabajo/flota" element={<ProtectedRoute><Flota /></ProtectedRoute>} />
       <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
       <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
+      {/* El mismo listado, con la URL del vocabulario del modo simple. Ver el
+          comentario del menú en `components/Layout.tsx`: no es cosmético, es
+          lo que evita que libra-ui dibuje las dos entradas juntas. */}
+      <Route path="/reclamos" element={<ProtectedRoute><Incidencias simple /></ProtectedRoute>} />
+      <Route path="/reclamos/:id" element={<ProtectedRoute><IncidenciaDetalle simple /></ProtectedRoute>} />
       <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
       <Route path="/insumos" element={<ProtectedRoute><Insumos /></ProtectedRoute>} />
@@ -138,6 +162,7 @@ export default function App() {
       <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
       <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
       <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
+      <Route path="/cotizaciones" element={<ProtectedRoute><Cotizaciones /></ProtectedRoute>} />
       {/* ⚠️ **Antes que `/ventas/:id`**, por lo mismo que `/contratos/nuevo`:
           React Router v6 rankea y el segmento estático gana igual, pero
           declarado después se lee como si `nueva` pudiera caer en el
@@ -173,7 +198,7 @@ export default function App() {
           `adminOnly` sólo esconde el ítem del menú. Un staff que escriba la
           URL a mano ve la pantalla vacía con el error del 403, no los datos. */}
       <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Home />} />
     </Routes>
   )
 }

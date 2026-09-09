@@ -170,7 +170,16 @@ def _alicuota(item: dict, defecto: float) -> float:
     return float(defecto if valor is None else valor)
 
 
-def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
+#: Las dos monedas que admite un renglon. Cerrada como la lista de alicuotas y
+#: por el mismo motivo: lo que salga de aca termina en un comprobante fiscal.
+MONEDAS = ("ARS", "USD")
+
+#: La moneda de un renglon que no dice nada. Es la del comprobante emitido.
+MONEDA_DEFECTO = "ARS"
+
+
+def _normalizar_items(items: list[dict], tax_rate: float = 0.21,
+                      cotizacion: float | None = None) -> list[dict]:
     """Deja los items en la forma que espera el PDF de LibraCore
     (`description`/`qty`/`unit_price`/`subtotal`, ver `_draw_items_table`),
     con el subtotal por linea recalculado.
@@ -184,12 +193,90 @@ def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
     Y conserva `detalle` si viene: la aclaracion corta de ESE renglon, que el
     PDF imprime debajo del nombre del item. Es opcional item por item, asi que
     la clave solo se escribe cuando tiene texto.
+
+    ## La moneda por renglon (2026-09-09)
+
+    Lagrace arma una **pre-factura** donde conviven renglones en pesos y en
+    dolares --y alicuotas del 10,5 y del 21-- y la factura **sale unificada en
+    pesos**.
+
+    🔑 **Un renglon en dolares se convierte ACA, y `unit_price` sigue siendo el
+    importe EN PESOS.** Ese es el truco entero: los totales, el PDF, la cuenta
+    corriente y el adaptador de SOS leen `unit_price`/`subtotal` y **no se
+    enteran de que existen los dolares**. Guardar el dolar ahi habria obligado
+    a tocar los cuatro, y el de SOS **no tiene donde poner la moneda**: su
+    `PUT /venta` manda numeros pelados, sin `moneda` ni `ctz`.
+
+    Del renglon en dolares se guardan ademas tres claves: `moneda`,
+    `unit_price_origen` (el precio en dolares, tal como se tipeo) y
+    `cotizacion` (la que se uso). Con eso el comprobante se vuelve a mostrar en
+    su moneda original sin recalcular nada.
+
+    🔴 **La cotizacion se congela por renglon.** No se deriva al leer: si se
+    derivara, reimprimir en diciembre una factura de agosto la convertiria al
+    dolar de diciembre. Es la misma regla que gobierna `contratos_precios`, que
+    nunca sobrescribe un precio.
+
+    🔴 **Un renglon en dolares SIN cotizacion es un error, no un `x1`.** Caer a
+    1 dejaria el comprobante emitido por una fraccion de lo que vale **sin que
+    nada falle**, que es el modo de falla mas caro que puede tener esto.
+
+    Los renglones en pesos no escriben ninguna de las tres claves, misma
+    convencion que `detalle`: un comprobante sin dolares queda **igual** que
+    antes de que la moneda existiera.
     """
     salida = []
     for i in items:
         qty = float(i["qty"])
-        unit_price = float(i["unit_price"])
+        precio = float(i["unit_price"])
         alicuota = _alicuota(i, tax_rate)
+        moneda = str(i.get("moneda") or MONEDA_DEFECTO).upper()
+        if moneda not in MONEDAS:
+            raise ValueError(
+                f"Moneda invalida: {moneda!r}. Las validas son {', '.join(MONEDAS)}."
+            )
+
+        unit_price = precio
+        extra: dict = {}
+        if moneda != MONEDA_DEFECTO:
+            # 🔴 **Esta funcion tiene que ser IDEMPOTENTE, y es lo mas facil de
+            # romper de todo el cambio.** Un renglon ya normalizado vuelve a
+            # pasar por aca en tres caminos: al editar un comprobante guardado,
+            # al convertir un presupuesto en remito (`convertir_a_remito` le
+            # pasa `p["items"]` tal cual) y al reconvertir. En esos casos
+            # `unit_price` **ya viene en pesos** mientras `moneda` sigue
+            # diciendo `USD`: convertirlo otra vez lo multiplica por la
+            # cotizacion **dos veces**, y el comprobante sale por mil veces su
+            # valor sin que nada falle.
+            #
+            # Se distingue por `unit_price_origen`, que solo existe en un item
+            # que ya paso por aca. Cuando esta, se reconvierte desde el precio
+            # en dolares con la cotizacion **congelada de ese renglon** --no con
+            # la del argumento--, asi que el resultado es identico al de la
+            # primera vez y un presupuesto convertido en remito conserva su
+            # tipo de cambio original aunque el dolar se haya movido.
+            origen = i.get("unit_price_origen")
+            congelada = i.get("cotizacion")
+            if origen is not None and congelada:
+                precio = float(origen)
+                tipo_cambio = float(congelada)
+            elif cotizacion and float(cotizacion) > 0:
+                tipo_cambio = float(cotizacion)
+            else:
+                raise ValueError(
+                    f"El renglon {str(i.get('description') or '')!r} esta en "
+                    f"{moneda} y el comprobante no tiene cotizacion cargada."
+                )
+            # Se redondea a dos DESPUES de multiplicar, no antes: la cotizacion
+            # tiene cuatro decimales y redondearla primero le mueve el importe
+            # a cada renglon.
+            unit_price = round(precio * tipo_cambio, 2)
+            extra = {
+                "moneda": moneda,
+                "unit_price_origen": precio,
+                "cotizacion": tipo_cambio,
+            }
+
         item = {
             "description": str(i["description"]).strip(),
             "qty": qty,
@@ -197,6 +284,7 @@ def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
             "subtotal": round(qty * unit_price, 2),
             "tax_rate": alicuota,
             "iva_pct": round(alicuota * 100, 1),
+            **extra,
         }
         # `detalle` solo si tiene texto: la clave ausente y la clave vacia
         # significan lo mismo para el PDF, y no escribirla deja los
@@ -206,6 +294,49 @@ def _normalizar_items(items: list[dict], tax_rate: float = 0.21) -> list[dict]:
             item["detalle"] = detalle
         salida.append(item)
     return salida
+
+
+def _plata(valor: float) -> str:
+    """`1450.5` -> `1.450,50`. Formato argentino, que es el de presentacion.
+
+    Solo para el papel: la base y las APIs siguen con el numero. Ver la regla
+    de formato de fecha y hora del proyecto, que dice lo mismo.
+    """
+    return f"{valor:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def comprobante_para_pdf(comprobante: dict) -> dict:
+    """El comprobante con la conversion de cada renglon en dolares **a la vista**.
+
+    > *"Cuando la factura se genera ya muestra los valores unificados en pesos
+    > con sus respectivos calculos."*
+
+    Los importes del papel siguen siendo los pesos --eso no se toca-- y lo que
+    se agrega es de donde salieron: `USD 100,00 x $1.450,50` debajo del nombre
+    del item.
+
+    🔑 **Va en `detalle`, que el PDF de [[libracore]] ya imprime, y por eso el
+    motor no se toca.** Una columna de moneda propia seria un cambio en el
+    generador que comparten los ocho productos, con su release, para algo que
+    hoy usa uno solo. Si mañana lo pide un segundo producto, ahi si sube.
+
+    🔴 **No pisa el detalle que escribio la persona: lo appendea.** Y devuelve
+    una copia --`items` nuevo, dicts nuevos-- porque lo guardado no se modifica
+    para dibujar. Un comprobante que volviera del PDF con el detalle cambiado
+    lo iria acumulando en cada reimpresion.
+    """
+    items = []
+    for i in comprobante.get("items") or []:
+        item = dict(i)
+        if item.get("moneda") and item.get("moneda") != MONEDA_DEFECTO:
+            conversion = (
+                f"{item['moneda']} {_plata(float(item.get('unit_price_origen') or 0))}"
+                f" x ${_plata(float(item.get('cotizacion') or 0))}"
+            )
+            detalle = str(item.get("detalle") or "").strip()
+            item["detalle"] = f"{detalle} - {conversion}" if detalle else conversion
+        items.append(item)
+    return {**comprobante, "items": items}
 
 
 def datos_cliente_para_comprobante(cliente: dict, override_address: str | None = None) -> dict:
@@ -242,8 +373,8 @@ class RemitoService:
 
     def create(self, *, date, client_id, client_name, client_address="", client_cuit="",
                client_email="", client_phone="", items, tax_rate=0.21, observations="",
-               usuario_id=None) -> dict:
-        items = _normalizar_items(items, tax_rate)
+               usuario_id=None, cotizacion=None) -> dict:
+        items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
         # Lo que se guarda en la columna del comprobante es la alicuota
         # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
@@ -270,10 +401,10 @@ class RemitoService:
 
     def update(self, remito_id: int, *, date, client_id, client_name, client_address="",
                client_cuit="", client_email="", client_phone="", items, tax_rate=0.21,
-               observations="") -> dict:
+               observations="", cotizacion=None) -> dict:
         if rp.get_remito(remito_id) is None:
             raise KeyError(remito_id)
-        items = _normalizar_items(items, tax_rate)
+        items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
         # Lo que se guarda en la columna del comprobante es la alicuota
         # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
@@ -348,8 +479,9 @@ class PresupuestoService:
 
     def create(self, *, date, valid_until, client_id, client_name, client_address="",
                client_cuit="", client_email="", client_phone="", items, tax_rate=0.21,
-               observations="", status="borrador", usuario_id=None) -> dict:
-        items = _normalizar_items(items, tax_rate)
+               observations="", status="borrador", usuario_id=None,
+               cotizacion=None) -> dict:
+        items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
         # Lo que se guarda en la columna del comprobante es la alicuota
         # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
@@ -379,10 +511,11 @@ class PresupuestoService:
 
     def update(self, presupuesto_id: int, *, date, valid_until, status, client_id,
                client_name, client_address="", client_cuit="", client_email="",
-               client_phone="", items, tax_rate=0.21, observations="") -> dict:
+               client_phone="", items, tax_rate=0.21, observations="",
+               cotizacion=None) -> dict:
         if rp.get_presupuesto(presupuesto_id) is None:
             raise KeyError(presupuesto_id)
-        items = _normalizar_items(items, tax_rate)
+        items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
         # Lo que se guarda en la columna del comprobante es la alicuota
         # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no

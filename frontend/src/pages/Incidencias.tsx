@@ -32,13 +32,24 @@ import {
 } from '@/components/ui/dialog'
 import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import { FilePlus, PackageCheck, PlusCircle } from '@/components/iconos-accion'
+import { FilePlus, PackageCheck, PlusCircle, Printer } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { hoyISO } from 'libra-ui/fechas'
+import { VOCABULARIO_COMPLETO, VOCABULARIO_SIMPLE } from '../vocabulario'
 
 const NONE = '__none__'
 const TODOS = '__todos__'
+
+/** El filtro "Pendientes": lo que todavía hay que ir a hacer.
+ *
+ *  🔑 **`resuelta` NO entra**, igual que en el listado imprimible
+ *  (`ESTADOS_PENDIENTES` del backend): en este producto `resuelta` es "el
+ *  técnico ya terminó" y lo que falta es el control de oficina contra el CDS.
+ *  Meterlo mandaría a la cuadrilla a un domicilio donde no hay nada que hacer.
+ */
+const PENDIENTES = '__pendientes__'
+const ESTADOS_PENDIENTES = ['abierto', 'en_progreso']
 
 const incidenciaSchema = z.object({
   cliente_id: z.string().min(1, 'Elegí un cliente'),
@@ -53,8 +64,18 @@ const EMPTY_VALUES: IncidenciaFormValues = {
   cliente_id: '', equipo_id: NONE, titulo: '', descripcion: '',
 }
 
-export function Incidencias() {
+/** El listado de reclamos.
+ *
+ *  🔑 **El modo entra por prop y no por `useAuth`.** La ruta ya lo dice
+ *  —`/reclamos` en modo simple, `/incidencias` en el resto— así que leer la
+ *  sesión acá sería preguntar dos veces lo mismo. Y tiene una consecuencia
+ *  concreta: la pantalla **no depende de estar adentro de un `AuthProvider`**,
+ *  que es lo que la volvía imposible de montar en los seis archivos de tests
+ *  que la ejercitan por otras razones.
+ */
+export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   const navigate = useNavigate()
+  const vocabulario = simple ? VOCABULARIO_SIMPLE : VOCABULARIO_COMPLETO
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [equipos, setEquipos] = useState<Equipo[]>([])
@@ -74,7 +95,13 @@ export function Incidencias() {
   const [equipoError, setEquipoError] = useState<string | null>(null)
   const [equipoNuevo, setEquipoNuevo] = useState({ tipo: '', marca: '', modelo: '', serial: '' })
 
-  const [filtroEstado, setFiltroEstado] = useState(TODOS)
+  // En modo simple el listado arranca en **pendientes**: es el home de la
+  // instancia y con eso se arma el día. En el resto arranca en Todos, que es
+  // como venía. Se decide una sola vez, al montar: cambiarlo después es del
+  // usuario, no de la pantalla.
+  const [filtroEstado, setFiltroEstado] = useState(
+    () => (simple ? PENDIENTES : TODOS),
+  )
   const [filtroPrioridad, setFiltroPrioridad] = useState(TODOS)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
   const [filtroCategoria, setFiltroCategoria] = useState(TODOS)
@@ -85,6 +112,10 @@ export function Incidencias() {
   const [generando, setGenerando] = useState(false)
   // La salida de cuadrilla (pedido del humano, 2026-08-15).
   const [salidaAbierta, setSalidaAbierta] = useState(false)
+  // Con qué orden se imprime el listado de pendientes (pedido del humano,
+  // 2026-09-08). Es estado de pantalla y no un filtro de la grilla: la grilla
+  // ya se ordena sola por columna, y esto viaja al PDF.
+  const [ordenPendientes, setOrdenPendientes] = useState('antiguedad')
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -204,7 +235,7 @@ export function Incidencias() {
     try {
       const nueva = await api.post<Incidencia>('/api/incidencias', payload)
       setCreating(false)
-      navigate(`/incidencias/${nueva.id}`)
+      navigate(`${simple ? '/reclamos' : '/incidencias'}/${nueva.id}`)
     } catch (err) {
       setFormError(describeError(err))
     } finally {
@@ -224,7 +255,10 @@ export function Incidencias() {
   }
 
   const incidenciasFiltradas = useMemo(() => incidencias.filter((i) =>
-    (filtroEstado === TODOS || i.estado === filtroEstado)
+    (filtroEstado === TODOS
+      || (filtroEstado === PENDIENTES
+        ? ESTADOS_PENDIENTES.includes(i.estado)
+        : i.estado === filtroEstado))
     && (filtroPrioridad === TODOS || i.prioridad === filtroPrioridad)
     && (filtroCliente === TODOS || i.cliente_id === Number(filtroCliente))
     && coincideCategoria(i),
@@ -438,10 +472,37 @@ export function Incidencias() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={AlertCircle}>Incidencias</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={AlertCircle}>{vocabulario.plural}</TituloPantalla>}>
+        {/* El listado de pendientes: el papel con el que se arma el día.
+            No es la hoja de ruta —ésa vive en la Agenda, es por cuadrilla y
+            por día, y exige haber asignado antes—. Éste sale de acá porque su
+            unidad es la bandeja entera, sin asignar, que es lo que se mira
+            para asignar. El orden va al lado del botón porque cuál conviene
+            todavía no se sabe: lo va a decir el uso. */}
+        <div className="flex items-center gap-1">
+          <Select value={ordenPendientes} onValueChange={setOrdenPendientes}>
+            <SelectTrigger className="w-[9.5rem]" aria-label="Orden del listado de pendientes">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="antiguedad">Por antigüedad</SelectItem>
+              <SelectItem value="localidad">Por localidad</SelectItem>
+              <SelectItem value="prioridad">Por prioridad</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/incidencias/pendientes.pdf?orden=${ordenPendientes}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Printer />Imprimir pendientes
+            </a>
+          </Button>
+        </div>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
-            <Button onClick={startCreate}><FilePlus />Nueva incidencia</Button>
+            <Button onClick={startCreate}><FilePlus />{vocabulario.nuevo}</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
@@ -605,6 +666,9 @@ export function Incidencias() {
             <SelectTrigger className="w-40" aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todos</SelectItem>
+              {/* Arriba de los estados sueltos: es el corte con el que se
+                  trabaja, no un estado más. */}
+              <SelectItem value={PENDIENTES}>Pendientes</SelectItem>
               {(Object.keys(ESTADO_LABELS) as (keyof typeof ESTADO_LABELS)[]).map((e) => (
                 <SelectItem key={e} value={e}>{ESTADO_LABELS[e]}</SelectItem>
               ))}
@@ -664,7 +728,7 @@ export function Incidencias() {
               columns={columns}
               data={incidenciasFiltradas}
               emptyMessage="Sin incidencias todavía."
-              onRowClick={(i) => navigate(`/incidencias/${i.id}`)}
+              onRowClick={(i) => navigate(`${simple ? '/reclamos' : '/incidencias'}/${i.id}`)}
               search={{
                 // El número de ticket entra a propósito: es como se lo nombra
                 // por teléfono ("fijate el 14"), y sin él habría que acordarse

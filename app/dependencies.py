@@ -11,6 +11,7 @@ from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
 from .services.contratos_proveedor import ContratoProveedorRepository
+from .services.cotizaciones import CotizacionRepository
 from .services.cuotas import CuotaRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
@@ -71,6 +72,10 @@ def get_tecnico_repository(request: Request) -> TecnicoRepository:
 
 def get_sector_repository(request: Request) -> SectorRepository:
     return request.app.state.sectores
+
+
+def get_cotizacion_repository(request: Request) -> CotizacionRepository:
+    return request.app.state.cotizaciones
 
 
 def get_categoria_repository(request: Request) -> CategoriaRepository:

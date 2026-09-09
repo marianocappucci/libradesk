@@ -307,7 +307,11 @@ const PANTALLAS: {
   },
   {
     titulo: 'Incidencias — barra de filtros',
-    cuantos: 3,
+    // Tres de la barra de filtros más el **orden del listado de pendientes**,
+    // que vive en el encabezado y no filtra la grilla (2026-09-08). Entra en
+    // el conteo igual: este test no pregunta de qué es cada combobox, pregunta
+    // si tiene nombre accesible, y eso vale para todos.
+    cuantos: 4,
     montar: async () => {
       render(<Incidencias />, '/incidencias')
       await screen.findByRole('heading', { name: /Incidencias/ })

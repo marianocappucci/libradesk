@@ -30,6 +30,7 @@ import {
 import { SelectBuscable } from '@/components/select-buscable'
 import { MaterialesIncidencia } from '@/components/materiales-incidencia'
 import { TareasDelReclamo } from '@/components/tareas-del-reclamo'
+import { TecnicosDelReclamo } from '@/components/tecnicos-del-reclamo'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -58,7 +59,18 @@ function formatFecha(fecha: string | null): string {
   return fechaHora(fecha)
 }
 
-export function IncidenciaDetalle() {
+/** La ficha del reclamo.
+ *
+ *  🔑 **`simple` entra por prop y no por `useAuth`**, igual que el listado: la
+ *  ruta ya lo dice (`/reclamos/:id` contra `/incidencias/:id`), y leer la
+ *  sesión acá volvería la pantalla imposible de montar fuera de un
+ *  `AuthProvider` — que es lo que rompió seis archivos de tests la primera vez.
+ *
+ *  En modo simple la ficha muestra **sólo lo que Lagrace usa**: cliente,
+ *  título, detalle y quién reclamó arriba; estado, prioridad, teléfono, N° CDS
+ *  y los técnicos que fueron al costado. Lo demás no se borra: no se dibuja.
+ */
+export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {}) {
   const { id } = useParams<{ id: string }>()
   const incidenciaId = Number(id)
   const navigate = useNavigate()
@@ -339,11 +351,21 @@ export function IncidenciaDetalle() {
   )
 
   const equiposDelCliente = incidencia ? equipos.filter((e) => e.cliente_id === incidencia.cliente_id) : []
+  // El cliente de este reclamo. Se deriva una vez y lo usan las dos cosas de
+  // abajo: el teléfono de contacto del modo simple y la cobertura del abono.
+  const clienteDelReclamo = incidencia
+    ? clientes.find((c) => c.id === incidencia.cliente_id)
+    : undefined
   // Si al cliente se le factura un abono mensual en vez de cada trabajo. Es lo
   // que decide si este ticket tiene que declarar qué parte cubre el abono.
-  const clienteConAbono = incidencia
-    ? clientes.find((c) => c.id === incidencia.cliente_id)?.tipo_facturacion === 'mensual'
-    : false
+  //
+  // 🔑 **Y por eso la cobertura sigue estando en modo simple**, aunque el
+  // costado se haya reducido a cinco campos: `convertir_a_remito()` **se niega**
+  // a convertir un reclamo de cliente con abono si la cobertura está sin
+  // decidir. Sacarla dejaría al único cliente `mensual` de Lagrace sin camino a
+  // facturación. Se muestra sólo cuando aplica, que era el comportamiento desde
+  // el 2026-08-14: para los otros 14 clientes no aparece igual.
+  const clienteConAbono = clienteDelReclamo?.tipo_facturacion === 'mensual'
   // Sólo hojas: un ticket se clasifica en "Impresoras", no en "Hardware" a
   // secas. La única excepción son las raíces que todavía no tienen hijas.
   const categoriasElegibles = categoriasAsignables(categorias)
@@ -408,6 +430,112 @@ export function IncidenciaDetalle() {
       setReemplazando(false)
     }
   }
+
+  // 🔑 **La cobertura del abono se define UNA vez y la usan los dos costados.**
+  // Duplicar el JSX entre el modo completo y el simple era garantizar que se
+  // separaran: son 100 líneas de UI que decide qué se factura, y el día que
+  // cambie una regla habría que acordarse de tocar las dos.
+  // La cobertura del abono. **Sólo para clientes `mensual`**: al resto se les
+  // factura cada trabajo y ofrecerles esta decisión sería preguntar por algo
+  // que no existe. Va pegada a las horas y al CDS, porque es el mismo momento
+  // de carga — quien graba el comprobante es quien sabe qué entraba en el abono.
+  const bloqueCoberturaAbono = incidencia && clienteConAbono && (
+                  <div className="grid gap-2 rounded-md border border-dashed p-3">
+                    <Label htmlFor="cobertura-abono">Cobertura del abono</Label>
+                    <Select
+                      value={incidencia.cobertura_abono ?? NONE}
+                      onValueChange={(v) => {
+                        if (v === NONE) {
+                          actualizarCampo({
+                            cobertura_abono: null, abono_horas_cubiertas: null,
+                            abono_materiales_incluidos: null,
+                          })
+                          return
+                        }
+                        const cobertura = v as CoberturaAbono
+                        // Al elegir `parcial` los materiales arrancan **fuera**
+                        // del abono, que es el caso típico de un abono de
+                        // mantenimiento y además el default seguro: si el abono
+                        // sí los cubre, se destilda y no se cobra. Al revés, un
+                        // default en `true` no cobraría repuestos por omisión.
+                        //
+                        // Y las dos de detalle se limpian al salir de `parcial`:
+                        // el backend las normaliza igual, pero mandar la
+                        // combinación coherente evita que la pantalla muestre
+                        // "2 h al abono" en un ticket que ya es `total`.
+                        actualizarCampo(
+                          cobertura === 'parcial'
+                            ? {
+                                cobertura_abono: cobertura,
+                                abono_materiales_incluidos:
+                                  incidencia.abono_materiales_incluidos ?? false,
+                              }
+                            : {
+                                cobertura_abono: cobertura,
+                                abono_horas_cubiertas: null,
+                                abono_materiales_incluidos: null,
+                              },
+                        )
+                      }}
+                    >
+                      <SelectTrigger id="cobertura-abono" aria-label="Cobertura del abono">
+                        <SelectValue placeholder="Sin decidir" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Sin decidir</SelectItem>
+                        {(Object.keys(COBERTURA_ABONO_LABELS) as CoberturaAbono[]).map((c) => (
+                          <SelectItem key={c} value={c}>{COBERTURA_ABONO_LABELS[c]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {incidencia.cobertura_abono === null && (
+                      <p className="text-xs text-muted-foreground">
+                        Hay que elegir antes de generar el remito: sin esto no se
+                        sabe qué cobrarle además del abono.
+                      </p>
+                    )}
+                    {incidencia.cobertura_abono === 'parcial' && (
+                      <>
+                        <Label htmlFor="abono-horas" className="pt-1">
+                          Horas que cubre el abono
+                        </Label>
+                        <Input
+                          id="abono-horas"
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max={incidencia.horas_invertidas ?? undefined}
+                          defaultValue={incidencia.abono_horas_cubiertas ?? ''}
+                          onBlur={(e) => {
+                            const valor = e.target.value ? Number(e.target.value) : null
+                            if (valor !== incidencia.abono_horas_cubiertas) {
+                              actualizarCampo({ abono_horas_cubiertas: valor })
+                            }
+                          }}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {(() => {
+                            const trabajadas = incidencia.horas_invertidas ?? 0
+                            const cubiertas = incidencia.abono_horas_cubiertas ?? 0
+                            const facturables = Math.max(0, trabajadas - cubiertas)
+                            return `Se facturan ${facturables} de ${trabajadas} h.`
+                          })()}
+                        </p>
+                        <label className="flex items-center gap-2 pt-1 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4"
+                            checked={incidencia.abono_materiales_incluidos ?? false}
+                            onChange={(e) => actualizarCampo({
+                              abono_materiales_incluidos: e.target.checked,
+                            })}
+                          />
+                          Los materiales también entran en el abono
+                        </label>
+                      </>
+                    )}
+                  </div>
+  )
 
   return (
     <div className="grid gap-4">
@@ -517,20 +645,48 @@ export function IncidenciaDetalle() {
                     onBlur={(e) => e.target.value.trim() && e.target.value !== incidencia.titulo && actualizarCampo({ titulo: e.target.value.trim() })}
                   />
                 </div>
+                {/* El cliente, arriba y de sólo lectura: en modo simple el
+                    costado no tiene su selector, y cambiarle el cliente a un
+                    reclamo ya tomado no es parte del circuito. */}
+                {simple && (
+                  <div className="grid gap-2">
+                    <Label>Cliente</Label>
+                    <p className="text-sm font-medium">
+                      {clienteDelReclamo?.nombre ?? '—'}
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-2">
-                  <Label>Descripción</Label>
+                  <Label>{simple ? 'Detalle del reclamo' : 'Descripción'}</Label>
                   <Textarea
                     defaultValue={incidencia.descripcion ?? ''}
                     rows={3}
                     onBlur={(e) => e.target.value !== (incidencia.descripcion ?? '') && actualizarCampo({ descripcion: e.target.value || null })}
                   />
                 </div>
+                {/* Quién llamó. En el modo completo vive en el costado; acá
+                    sube al cuerpo porque es de los cuatro datos que se leen
+                    primero. */}
+                {simple && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="reclamante-simple">Quién hizo el reclamo</Label>
+                    <Input
+                      id="reclamante-simple"
+                      defaultValue={incidencia.reclamante ?? ''}
+                      placeholder="Nombre de quien llamó"
+                      onBlur={(e) => {
+                        const valor = e.target.value.trim() || null
+                        if (valor !== incidencia.reclamante) actualizarCampo({ reclamante: valor })
+                      }}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <TareasDelReclamo incidenciaId={incidencia.id} />
+            {!simple && <TareasDelReclamo incidenciaId={incidencia.id} />}
 
-            <Card>
+            {!simple && <Card>
               <CardHeader><CardTitle className="text-base">Actividad</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
                 {timeline.length === 0 ? (
@@ -634,14 +790,14 @@ export function IncidenciaDetalle() {
                   </Button>
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Entre Actividad y las notas: el material se carga mientras se
                 trabaja el ticket, no al final. Se renderiza solo si la
                 instancia tiene el módulo `stock`. */}
-            <MaterialesIncidencia incidenciaId={incidencia.id} />
+            {!simple && <MaterialesIncidencia incidenciaId={incidencia.id} />}
 
-            <Card>
+            {!simple && <Card>
               <CardHeader><CardTitle className="text-base">Notas internas y resolución</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
                 <div className="grid gap-2">
@@ -661,10 +817,14 @@ export function IncidenciaDetalle() {
                   />
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
           </div>
 
-          <Card className="h-fit">
+          {/* 🔑 **El costado completo se condiciona entero, no campo por
+              campo.** Son quince bloques; envolverlos de a uno era quince
+              chances de dejar uno suelto o de romper el JSX. En modo simple se
+              dibuja el de abajo, con los cinco que Lagrace usa. */}
+          {!simple && <Card className="h-fit">
             <CardHeader><CardTitle className="text-base">Propiedades</CardTitle></CardHeader>
             <CardContent className="grid gap-3">
               <div className="grid gap-2">
@@ -915,114 +1075,105 @@ export function IncidenciaDetalle() {
                   }}
                 />
               </div>
-              {/* La cobertura del abono. **Sólo para clientes `mensual`**: al
-                  resto se les factura cada trabajo y ofrecerles esta decisión
-                  sería preguntar por algo que no existe. Va acá, pegado a las
-                  horas y al CDS, porque es el mismo momento de carga — quien
-                  graba el comprobante es quien sabe qué entraba en el abono. */}
-              {clienteConAbono && (
-                <div className="grid gap-2 rounded-md border border-dashed p-3">
-                  <Label htmlFor="cobertura-abono">Cobertura del abono</Label>
-                  <Select
-                    value={incidencia.cobertura_abono ?? NONE}
-                    onValueChange={(v) => {
-                      if (v === NONE) {
-                        actualizarCampo({
-                          cobertura_abono: null, abono_horas_cubiertas: null,
-                          abono_materiales_incluidos: null,
-                        })
-                        return
-                      }
-                      const cobertura = v as CoberturaAbono
-                      // Al elegir `parcial` los materiales arrancan **fuera**
-                      // del abono, que es el caso típico de un abono de
-                      // mantenimiento y además el default seguro: si el abono
-                      // sí los cubre, se destilda y no se cobra. Al revés, un
-                      // default en `true` no cobraría repuestos por omisión.
-                      //
-                      // Y las dos de detalle se limpian al salir de `parcial`:
-                      // el backend las normaliza igual, pero mandar la
-                      // combinación coherente evita que la pantalla muestre
-                      // "2 h al abono" en un ticket que ya es `total`.
-                      actualizarCampo(
-                        cobertura === 'parcial'
-                          ? {
-                              cobertura_abono: cobertura,
-                              abono_materiales_incluidos:
-                                incidencia.abono_materiales_incluidos ?? false,
-                            }
-                          : {
-                              cobertura_abono: cobertura,
-                              abono_horas_cubiertas: null,
-                              abono_materiales_incluidos: null,
-                            },
-                      )
-                    }}
-                  >
-                    <SelectTrigger id="cobertura-abono" aria-label="Cobertura del abono">
-                      <SelectValue placeholder="Sin decidir" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Sin decidir</SelectItem>
-                      {(Object.keys(COBERTURA_ABONO_LABELS) as CoberturaAbono[]).map((c) => (
-                        <SelectItem key={c} value={c}>{COBERTURA_ABONO_LABELS[c]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {incidencia.cobertura_abono === null && (
-                    <p className="text-xs text-muted-foreground">
-                      Hay que elegir antes de generar el remito: sin esto no se
-                      sabe qué cobrarle además del abono.
-                    </p>
-                  )}
-                  {incidencia.cobertura_abono === 'parcial' && (
-                    <>
-                      <Label htmlFor="abono-horas" className="pt-1">
-                        Horas que cubre el abono
-                      </Label>
-                      <Input
-                        id="abono-horas"
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        max={incidencia.horas_invertidas ?? undefined}
-                        defaultValue={incidencia.abono_horas_cubiertas ?? ''}
-                        onBlur={(e) => {
-                          const valor = e.target.value ? Number(e.target.value) : null
-                          if (valor !== incidencia.abono_horas_cubiertas) {
-                            actualizarCampo({ abono_horas_cubiertas: valor })
-                          }
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {(() => {
-                          const trabajadas = incidencia.horas_invertidas ?? 0
-                          const cubiertas = incidencia.abono_horas_cubiertas ?? 0
-                          const facturables = Math.max(0, trabajadas - cubiertas)
-                          return `Se facturan ${facturables} de ${trabajadas} h.`
-                        })()}
-                      </p>
-                      <label className="flex items-center gap-2 pt-1 text-sm">
-                        <input
-                          type="checkbox"
-                          className="size-4"
-                          checked={incidencia.abono_materiales_incluidos ?? false}
-                          onChange={(e) => actualizarCampo({
-                            abono_materiales_incluidos: e.target.checked,
-                          })}
-                        />
-                        Los materiales también entran en el abono
-                      </label>
-                    </>
-                  )}
-                </div>
-              )}
+              {bloqueCoberturaAbono}
               <div className="grid gap-0.5 pt-1 text-xs text-muted-foreground">
                 <span>Creada: {formatFecha(incidencia.fecha_creacion)}</span>
                 {incidencia.fecha_cierre && <span>Cerrada: {formatFecha(incidencia.fecha_cierre)}</span>}
               </div>
             </CardContent>
-          </Card>
+          </Card>}
+
+          {simple && (
+            <div className="grid h-fit gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Propiedades</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <div className="grid gap-2">
+                    <Label>Estado</Label>
+                    <Select
+                      value={incidencia.estado}
+                      onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}
+                    >
+                      <SelectTrigger aria-label="Estado">
+                        <span className="flex items-center gap-2">
+                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[incidencia.estado]}`} />
+                          <SelectValue />
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(ESTADO_LABELS) as (keyof typeof ESTADO_LABELS)[]).map((e) => (
+                          <SelectItem key={e} value={e}>
+                            <span className="flex items-center gap-2">
+                              <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${ESTADO_COLOR[e]}`} />
+                              {ESTADO_LABELS[e]}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Prioridad</Label>
+                    <Select
+                      value={incidencia.prioridad}
+                      onValueChange={(prioridad) => actualizarCampo({ prioridad: prioridad as Incidencia['prioridad'] })}
+                    >
+                      <SelectTrigger aria-label="Prioridad"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(PRIORIDAD_LABELS) as (keyof typeof PRIORIDAD_LABELS)[]).map((pr) => (
+                          <SelectItem key={pr} value={pr}>{PRIORIDAD_LABELS[pr]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* 🔑 **El teléfono es del CLIENTE y va de sólo lectura.** Es
+                      el dato con el que se llama antes de salir — el mismo que
+                      lleva el listado de pendientes— y se corrige en la ficha
+                      del cliente, que es donde vive. Un campo editable acá
+                      abriría una segunda copia del teléfono por reclamo. */}
+                  <div className="grid gap-2">
+                    <Label>Número de contacto</Label>
+                    <p className="text-sm">
+                      {clienteDelReclamo?.telefono || (
+                        <span className="text-muted-foreground">
+                          sin teléfono cargado
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="nro-cds-simple">N° CDS</Label>
+                    <Input
+                      id="nro-cds-simple"
+                      defaultValue={incidencia.nro_cds ?? ''}
+                      placeholder="0001-00041996"
+                      onBlur={(e) => {
+                        const valor = e.target.value.trim() || null
+                        if (valor !== incidencia.nro_cds) actualizarCampo({ nro_cds: valor })
+                      }}
+                    />
+                  </div>
+                  {/* La MISMA cobertura que el modo completo. Sin esto el
+                      único cliente `mensual` de Lagrace no se puede facturar:
+                      `convertir_a_remito()` se niega con la cobertura sin
+                      decidir. Aparece sólo cuando el cliente es de abono. */}
+                  {bloqueCoberturaAbono}
+                  <div className="grid gap-0.5 pt-1 text-xs text-muted-foreground">
+                    <span>Creada: {formatFecha(incidencia.fecha_creacion)}</span>
+                    {incidencia.fecha_cierre && <span>Cerrada: {formatFecha(incidencia.fecha_cierre)}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <TecnicosDelReclamo
+                incidenciaId={incidencia.id}
+                dia={incidencia.fecha_creacion ?? new Date().toISOString()}
+                tecnicos={tecnicos}
+              />
+            </div>
+          )}
         </div>
       )}
 
