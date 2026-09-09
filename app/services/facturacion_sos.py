@@ -246,11 +246,14 @@ def listar_cuits(usuario: str = "", password: str = "") -> list[dict]:
     usuario = (usuario or "").strip() or cfg["usuario"]
     password = password or cfg["password"]
     if not (usuario and password):
-        falta = " ni ".join(nombre for nombre, valor
-                            in (("el usuario", usuario), ("la contraseña", password))
-                            if not valor)
+        faltan = [nombre for nombre, valor
+                  in (("el usuario", usuario), ("la contraseña", password))
+                  if not valor]
+        # Concuerda el verbo: este mensaje lo lee quien está configurando la
+        # pantalla, y es todo el valor del cambio que lo trajo.
+        verbo = "falta" if len(faltan) == 1 else "faltan"
         raise SOSNoConfigurado(
-            f"No hay con qué consultar SOS Contador: falta {falta}."
+            f"No hay con qué consultar SOS Contador: {verbo} {' y '.join(faltan)}."
         )
 
     with httpx.Client(timeout=TIMEOUT) as cliente:
