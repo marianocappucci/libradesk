@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
@@ -12,10 +12,10 @@ from ..dependencies import (
     get_remito_service,
     get_servicio_repository,
 )
-from ..services import incidencia_pdf
+from ..services import incidencia_pdf, pendientes_pdf
 from ..services.clientes import ClienteRepository
 from ..services.equipos import EquipoRepository
-from ..services.incidencias import IncidenciaRepository
+from ..services.incidencias import ORDENES_PENDIENTES, IncidenciaRepository
 from ..services.reemplazo import (
     DESTINOS,
     CierreService,
@@ -154,6 +154,46 @@ def list_incidencias(
     return incidencias.list(
         cliente_id=cliente_id, estado=estado, equipo_id=equipo_id,
         categoria_id=categoria_id, activo_id=activo_id,
+    )
+
+
+# 🔑 **Va ANTES de `/{incidencia_id}` a propósito.** FastAPI resuelve por orden
+# de declaración, y aunque hoy `incidencia_id` sea `int` —así que `pendientes`
+# no matchearía y daría 422 en vez de 404—, ese 422 dependería de un detalle de
+# tipado de la ruta de al lado. Declarada arriba, no depende de nada.
+@router.get("/pendientes.pdf")
+def listado_pendientes_pdf(
+    orden: str = Query(
+        "antiguedad",
+        description=f"Uno de: {', '.join(ORDENES_PENDIENTES)}",
+    ),
+    ciudad: str | None = Query(
+        None, description="Filtra por la localidad del cliente",
+    ),
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
+    """La bandeja de pendientes en PDF, para imprimir y armar el día.
+
+    **No es la hoja de ruta.** Aquélla es `equipo × día` y exige haber asignado
+    antes; ésta es la bandeja entera, sin asignar, que es el insumo con el que
+    se asigna. Ver `app/services/pendientes_pdf.py` para el circuito completo.
+
+    `inline` y no `attachment`, igual que la orden de trabajo y la hoja de ruta:
+    se abre y se manda a la impresora.
+    """
+    try:
+        datos = incidencias.datos_listado_pendientes(orden=orden, ciudad=ciudad)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+    return Response(
+        content=pendientes_pdf.generar_pdf_pendientes(datos),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                'inline; filename="reclamos-pendientes.pdf"'
+            ),
+        },
     )
 
 
