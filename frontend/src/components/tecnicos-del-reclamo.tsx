@@ -165,39 +165,44 @@ export function TecnicosDelReclamo({
                     campos vacíos por cada técnico del catálogo, y la lista de
                     Lagrace tiene 14. */}
                 {asignacion && (
-                  <div className="flex flex-wrap items-center gap-2 pl-6 text-sm">
-                    {/* 🔑 La fecha es de ESTE técnico. Un reclamo puede
-                        trabajarse en varios días y cada uno ir el suyo. */}
+                  /* 🔑 **La fecha arriba y las dos horas abajo** (pedido del
+                     humano, 2026-09-09). Es el orden en que se lee un CDS: qué
+                     día se fue, y recién después de qué hora a qué hora. En una
+                     sola fila las tres cajas competían por el ancho y la fecha
+                     —que es una sola por técnico— parecía otro campo del rango. */
+                  <div className="grid gap-1 pl-6 text-sm">
                     <Input
-                      type="date" className="h-8 w-36"
+                      type="date" className="h-8 w-40"
                       aria-label={`Fecha de ${t.nombre}`}
                       value={diaDe(asignacion, dia)}
                       onChange={(e) => e.target.value
                         && e.target.value !== diaDe(asignacion, dia)
                         && cargarTramo(asignacion, 'fecha', e.target.value)}
                     />
-                    <Input
-                      type="time" className="h-8 w-28"
-                      aria-label={`Hora de inicio de ${t.nombre}`}
-                      defaultValue={horaDe(asignacion.desde)}
-                      onBlur={(e) => e.target.value !== horaDe(asignacion.desde)
-                        && cargarTramo(asignacion, 'desde', e.target.value)}
-                    />
-                    <span className="text-muted-foreground">a</span>
-                    <Input
-                      type="time" className="h-8 w-28"
-                      aria-label={`Hora de fin de ${t.nombre}`}
-                      defaultValue={horaDe(asignacion.hasta)}
-                      onBlur={(e) => e.target.value !== horaDe(asignacion.hasta)
-                        && cargarTramo(asignacion, 'hasta', e.target.value)}
-                    />
-                    {/* 🔴 Un tramo sin cargar muestra un guión, **no un cero**:
-                        no se sabe cuántas horas trabajó, y un 0 se lee como que
-                        no trabajó. Es el número que alguien mira antes de
-                        facturar. */}
-                    <span className="tabular-nums text-muted-foreground">
-                      {asignacion.horas === null ? '—' : `${asignacion.horas} h`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time" className="h-8 w-28"
+                        aria-label={`Hora de inicio de ${t.nombre}`}
+                        defaultValue={horaDe(asignacion.desde)}
+                        onBlur={(e) => e.target.value !== horaDe(asignacion.desde)
+                          && cargarTramo(asignacion, 'desde', e.target.value)}
+                      />
+                      <span className="text-muted-foreground">a</span>
+                      <Input
+                        type="time" className="h-8 w-28"
+                        aria-label={`Hora de fin de ${t.nombre}`}
+                        defaultValue={horaDe(asignacion.hasta)}
+                        onBlur={(e) => e.target.value !== horaDe(asignacion.hasta)
+                          && cargarTramo(asignacion, 'hasta', e.target.value)}
+                      />
+                      {/* 🔴 Un tramo sin cargar muestra un guión, **no un cero**:
+                          no se sabe cuántas horas trabajó, y un 0 se lee como que
+                          no trabajó. Es el número que alguien mira antes de
+                          facturar. */}
+                      <span className="tabular-nums text-muted-foreground">
+                        {asignacion.horas === null ? '—' : `${asignacion.horas} h`}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
