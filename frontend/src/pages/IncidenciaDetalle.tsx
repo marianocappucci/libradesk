@@ -638,14 +638,9 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
             <Card>
               <CardHeader><CardTitle className="text-base">Detalle</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label>Título</Label>
-                  <Input
-                    defaultValue={incidencia.titulo}
-                    onBlur={(e) => e.target.value.trim() && e.target.value !== incidencia.titulo && actualizarCampo({ titulo: e.target.value.trim() })}
-                  />
-                </div>
-                {/* El cliente, arriba y de sólo lectura: en modo simple el
+                {/* 🔑 **El cliente va PRIMERO**, arriba del título (pedido del
+                    humano, 2026-09-09). Es lo primero que se lee de un reclamo:
+                    de quién es. Va de sólo lectura porque en modo simple el
                     costado no tiene su selector, y cambiarle el cliente a un
                     reclamo ya tomado no es parte del circuito. */}
                 {simple && (
@@ -656,6 +651,13 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                     </p>
                   </div>
                 )}
+                <div className="grid gap-2">
+                  <Label>{simple ? 'Título del reclamo' : 'Título'}</Label>
+                  <Input
+                    defaultValue={incidencia.titulo}
+                    onBlur={(e) => e.target.value.trim() && e.target.value !== incidencia.titulo && actualizarCampo({ titulo: e.target.value.trim() })}
+                  />
+                </div>
                 <div className="grid gap-2">
                   <Label>{simple ? 'Detalle del reclamo' : 'Descripción'}</Label>
                   <Textarea

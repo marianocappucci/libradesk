@@ -26,14 +26,30 @@ function horaDe(iso: string | null): string {
   return iso ? iso.slice(11, 16) : ''
 }
 
-/** `08:30` + el día del reclamo → el ISO que espera la API.
+/** `2026-09-08T08:30:00` → `2026-09-08`. */
+function fechaDe(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : ''
+}
+
+/** El día de ESTA asignación.
  *
- *  🔴 **La fecha sale del reclamo y no de hoy.** Las horas se cargan al día
- *  siguiente: componerlas contra `new Date()` las fecharía un día después de
- *  cuando se trabajó, y el tramo saldría de 24 horas o negativo.
+ *  🔑 **La fecha es de cada técnico, no del reclamo** (pedido del humano,
+ *  2026-09-09). Un reclamo puede trabajarse en más de un día y cada técnico ir
+ *  el suyo: uno el martes y otro el jueves es normal, y con una fecha única
+ *  para todo el reclamo el segundo quedaría fechado mal.
+ *
+ *  Sale de lo que ya tenga cargado el tramo; si no tiene nada, cae al día del
+ *  reclamo, que es la mejor aproximación disponible. 🔴 **No cae a hoy**: las
+ *  horas se cargan al día siguiente, así que `new Date()` las fecharía un día
+ *  después de cuando se trabajó.
  */
+function diaDe(a: TecnicoDelReclamo, diaDelReclamo: string): string {
+  return fechaDe(a.desde) || fechaDe(a.hasta) || diaDelReclamo.slice(0, 10)
+}
+
+/** `2026-09-08` + `08:30` → el ISO que espera la API. */
 function isoDe(dia: string, hora: string): string | null {
-  if (!hora) return null
+  if (!hora || !dia) return null
   return `${dia.slice(0, 10)}T${hora}:00`
 }
 
@@ -83,11 +99,27 @@ export function TecnicosDelReclamo({
     }
   }
 
-  async function cargarTramo(asignacion: TecnicoDelReclamo, campo: 'desde' | 'hasta', hora: string) {
-    const cuerpo = {
-      desde: campo === 'desde' ? isoDe(dia, hora) : asignacion.desde,
-      hasta: campo === 'hasta' ? isoDe(dia, hora) : asignacion.hasta,
-    }
+  /** Guarda el tramo del técnico. `campo` dice qué se tocó.
+   *
+   *  🔑 **Cambiar la FECHA mueve los dos extremos y conserva las horas.** Es lo
+   *  que espera quien se dio cuenta de que cargó el día equivocado: corrige la
+   *  fecha y las horas siguen siendo las que anotó el técnico en el CDS.
+   */
+  async function cargarTramo(
+    asignacion: TecnicoDelReclamo,
+    campo: 'desde' | 'hasta' | 'fecha',
+    valor: string,
+  ) {
+    const diaActual = diaDe(asignacion, dia)
+    const cuerpo = campo === 'fecha'
+      ? {
+          desde: isoDe(valor, horaDe(asignacion.desde)),
+          hasta: isoDe(valor, horaDe(asignacion.hasta)),
+        }
+      : {
+          desde: campo === 'desde' ? isoDe(diaActual, valor) : asignacion.desde,
+          hasta: campo === 'hasta' ? isoDe(diaActual, valor) : asignacion.hasta,
+        }
     try {
       const actualizada = await api.patch<TecnicoDelReclamo>(
         `/api/incidencias/${incidenciaId}/tecnicos/${asignacion.id}`, cuerpo,
@@ -133,7 +165,17 @@ export function TecnicosDelReclamo({
                     campos vacíos por cada técnico del catálogo, y la lista de
                     Lagrace tiene 14. */}
                 {asignacion && (
-                  <div className="flex items-center gap-2 pl-6 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 pl-6 text-sm">
+                    {/* 🔑 La fecha es de ESTE técnico. Un reclamo puede
+                        trabajarse en varios días y cada uno ir el suyo. */}
+                    <Input
+                      type="date" className="h-8 w-36"
+                      aria-label={`Fecha de ${t.nombre}`}
+                      value={diaDe(asignacion, dia)}
+                      onChange={(e) => e.target.value
+                        && e.target.value !== diaDe(asignacion, dia)
+                        && cargarTramo(asignacion, 'fecha', e.target.value)}
+                    />
                     <Input
                       type="time" className="h-8 w-28"
                       aria-label={`Hora de inicio de ${t.nombre}`}
