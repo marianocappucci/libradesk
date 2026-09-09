@@ -130,7 +130,29 @@ def modulos_de_plan(plan: str) -> set[str]:
     return set(PLAN_MODULOS.get(plan, set()))
 
 
+# Add-ons opcionales: módulos que se habilitan **por instancia** y NO
+# pertenecen a ningún plan. No entran en `PLAN_MODULOS` ni en
+# `TODOS_LOS_MODULOS`, así que ni `apply_plan` (motor) ni `aplicar_plan_en_db`
+# los tocan: un add-on prendido **sobrevive a subir o bajar de plan**.
+# `libracore.db.modulos.apply_plan` lee este set con
+# `getattr(plans, "ADDONS", set())`. Mismo patrón que `mayorista` en Contalibra.
+#
+# 🔑 **Y por eso `modo_simple` va acá y NO en un plan.** `ensure_seeded()`
+# inserta toda entrada nueva de `TODOS_LOS_MODULOS` **con `habilitado=True` en
+# todas las instancias** en el próximo arranque — es exactamente lo que pasó con
+# `alquileres`, que le apareció en el menú a un cliente que no lo había pedido.
+# Como add-on nace apagado en todos lados y se prende sólo donde se quiere.
+#
+#   - modo_simple: la experiencia reducida que pidió Lagrace (2026-09-09).
+#     Ficha de reclamo con lo mínimo, sin Agenda ni Dashboard, home en el
+#     listado de pendientes y vocabulario "Reclamos" en vez de "Incidencias".
+#     **No apaga el core de tickets**: elige cómo se dibuja, no si existe.
+ADDONS = {"modo_simple"}
+
 # Superset de todos los módulos gateables = los del plan más alto.
+#
+# ⚠️ Los add-ons quedan afuera **a propósito** (ver `ADDONS`). Sumarlos acá los
+# prendería solos en todas las instancias en el próximo arranque.
 TODOS_LOS_MODULOS = set(PLAN_MODULOS["premium"])
 
 
@@ -151,5 +173,8 @@ def aplicar_plan_en_db(db_path: str, plan: str) -> None:
 
     apply_plan_modules(
         db_path, active_modules=modulos_de_plan(plan),
-        all_modules=TODOS_LOS_MODULOS, plan=plan,
+        # `- ADDONS`: aplicar un plan nunca toca un add-on. Hoy es equivalente
+        # (ya estan afuera de `TODOS_LOS_MODULOS`), pero deja la invariante
+        # escrita — mismo criterio que Contalibra.
+        all_modules=TODOS_LOS_MODULOS - ADDONS, plan=plan,
     )

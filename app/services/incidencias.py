@@ -416,6 +416,53 @@ class IncidenciaTareaTecnico(Base):
     )
 
 
+class IncidenciaTecnico(Base):
+    """Un tecnico que fue al reclamo, con su ventana de trabajo.
+
+    > *"El tecnico va, hace el reclamo y anota en el CDS desde que hora hasta
+    > que hora estuvo. Esas horas por tecnico despues se cargan en esa
+    > incidencia al otro dia, cuando ya esta cerrado el reclamo."*
+
+    🔑 **Es la brecha 5 subida un nivel: de la tarea al reclamo.** Desde la
+    revision `0034` las horas por tecnico viven en `incidencias_tareas_tecnicos`,
+    colgando de una tarea. En el circuito de Lagrace **no hay tareas**: hay un
+    reclamo, un papel con las horas de cada tecnico, y una carga posterior.
+    Colgarlas de una tarea obligaba a inventar una tarea por reclamo.
+
+    **`IncidenciaTareaTecnico` no se toca**: sigue viva para las instancias que
+    usan la grilla de tareas. Son dos formas de trabajar y el producto sostiene
+    las dos. Ver la revision `0040`.
+    """
+
+    __tablename__ = "incidencias_tecnicos"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incidencia_id: Mapped[int] = mapped_column(
+        ForeignKey("incidencias.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    #: Nullable con `SET NULL`, igual que `incidencias.tecnico_id`: las horas son
+    #: la base de lo que se cobra, asi que borrar a una persona del catalogo no
+    #: puede borrar el trabajo que hizo.
+    tecnico_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tecnicos.id", ondelete="SET NULL"), index=True,
+    )
+    #: 🔴 **Un tramo sin cargar es `None`, no `0`.** Un tecnico tildado al que
+    #: nadie le puso las horas **no trabajo cero horas**: no se sabe cuantas. Y
+    #: los totales suman solo los tramos completos -- tratar los vacios como
+    #: cero daria un total que parece cerrado y no lo esta, que es justo el
+    #: numero que alguien mira antes de facturar.
+    desde: Mapped[datetime | None] = mapped_column(DateTime)
+    hasta: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    #: Una fila por tecnico y por reclamo. Dos tramos del mismo tecnico en el
+    #: mismo reclamo son, en el circuito relevado, dos renglones del CDS que se
+    #: suman al cargarlos -- no dos filas.
+    __table_args__ = (
+        UniqueConstraint("incidencia_id", "tecnico_id", name="uq_incidencia_tecnico"),
+    )
+
+
 class IncidenciaEstadoLog(Base):
     __tablename__ = "incidencias_estados_log"
 
@@ -1543,6 +1590,112 @@ class IncidenciaRepository:
             raise ValueError(
                 "El fin del tramo no puede ser anterior a su inicio."
             )
+
+    # ── Los técnicos del RECLAMO (modo simple, revisión `0040`) ─────────
+    #
+    # Los tres métodos de acá arriba son los de la tarea y siguen vivos. Éstos
+    # son la otra vía: el reclamo entero, sin tareas. Ver `IncidenciaTecnico`.
+
+    def list_tecnicos(self, incidencia_id: int) -> list[dict]:
+        """Quiénes fueron, con sus horas. Ordenado por nombre, que es como se
+        lee un CDS."""
+        from .tecnicos import Tecnico
+
+        with self.session_factory() as session:
+            filas = list(session.execute(
+                select(IncidenciaTecnico)
+                .where(IncidenciaTecnico.incidencia_id == incidencia_id)
+                .order_by(IncidenciaTecnico.id)
+            ).scalars())
+            ids = {f.tecnico_id for f in filas if f.tecnico_id}
+            nombres = {
+                t.id: t.nombre for t in session.execute(
+                    select(Tecnico).where(Tecnico.id.in_(ids))
+                ).scalars()
+            } if ids else {}
+
+        salida = [
+            {
+                "id": f.id,
+                "incidencia_id": f.incidencia_id,
+                "tecnico_id": f.tecnico_id,
+                # El técnico borrado deja su tramo: la fila dice que alguien
+                # trabajó esas horas aunque ya no esté en el catálogo.
+                "tecnico": nombres.get(f.tecnico_id) if f.tecnico_id else None,
+                "desde": f.desde.isoformat() if f.desde else None,
+                "hasta": f.hasta.isoformat() if f.hasta else None,
+                "horas": _horas_entre(f.desde, f.hasta),
+            }
+            for f in filas
+        ]
+        return sorted(salida, key=lambda a: (a["tecnico"] or "￿").lower())
+
+    def set_tecnicos(self, incidencia_id: int, tecnico_ids: list[int]) -> list[dict]:
+        """Deja asignados exactamente esos técnicos.
+
+        🔴 **Es un diff, NO un borrar-e-insertar.** Un multi-select manda la
+        lista entera cada vez que se toca, así que rehacer las filas perdería
+        las horas ya cargadas de los técnicos que siguen tildados — y las
+        perdería **en silencio**, que es lo peor: la pantalla se ve igual y los
+        tramos vuelven a `None` al recargar. Sólo se borra a quien se destildó y
+        sólo se crea a quien se agregó; a los que quedan no se los toca.
+        """
+        from .tecnicos import Tecnico
+
+        pedidos = list(dict.fromkeys(tecnico_ids))
+        with self.session_factory() as session:
+            if session.get(Incidencia, incidencia_id) is None:
+                raise KeyError(incidencia_id)
+            if pedidos:
+                existentes = {
+                    t.id for t in session.execute(
+                        select(Tecnico).where(Tecnico.id.in_(pedidos))
+                    ).scalars()
+                }
+                faltan = [t for t in pedidos if t not in existentes]
+                if faltan:
+                    raise ValueError(
+                        f"No existe el técnico {faltan[0]}."
+                    )
+
+            actuales = list(session.execute(
+                select(IncidenciaTecnico)
+                .where(IncidenciaTecnico.incidencia_id == incidencia_id)
+            ).scalars())
+            por_tecnico = {f.tecnico_id: f for f in actuales}
+
+            for tecnico_id, fila in por_tecnico.items():
+                if tecnico_id not in pedidos:
+                    session.delete(fila)
+            for tecnico_id in pedidos:
+                if tecnico_id not in por_tecnico:
+                    session.add(IncidenciaTecnico(
+                        incidencia_id=incidencia_id, tecnico_id=tecnico_id,
+                    ))
+            session.commit()
+        return self.list_tecnicos(incidencia_id)
+
+    def update_tecnico(self, asignacion_id: int, **data) -> dict:
+        """Carga o corrige el tramo de un técnico ya asignado.
+
+        Es el paso del día siguiente: el reclamo ya está cerrado y se pasan al
+        sistema las horas que el técnico anotó en el CDS.
+        """
+        with self.session_factory() as session:
+            fila = session.get(IncidenciaTecnico, asignacion_id)
+            if fila is None:
+                raise KeyError(asignacion_id)
+            desde = data.get("desde", fila.desde)
+            hasta = data.get("hasta", fila.hasta)
+            self._validar_tramo(desde, hasta)
+            for campo, valor in data.items():
+                setattr(fila, campo, valor)
+            session.commit()
+            incidencia_id = fila.incidencia_id
+        for a in self.list_tecnicos(incidencia_id):
+            if a["id"] == asignacion_id:
+                return a
+        raise KeyError(asignacion_id)
 
     def add_tarea(self, incidencia_id: int, **data) -> dict:
         """Agrega una tarea al final de la grilla.

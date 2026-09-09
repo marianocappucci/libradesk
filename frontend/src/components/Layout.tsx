@@ -67,6 +67,29 @@ import { LOGO, WORDMARK } from '@/branding'
  * `data-active`. El tratamiento vive en `index.css`, colgado de ese atributo —
  * es la única forma de pintar algo según un estado que este archivo no conoce.
  * Ver ahí la sección "El tile del ítem activo del sidebar". */
+/** Los módulos habilitados de la instancia, tal como los manda `/auth/me`.
+ *
+ *  🔴 **Si el campo NO viene, se muestra todo.** Es la degradación correcta:
+ *  un backend viejo —o uno al que le falló la consulta de otra manera— no
+ *  tiene por qué dejar el menú vacío. Lo que SÍ oculta es una lista presente y
+ *  vacía, que es lo que manda `get_extras` cuando algo falla: un menú de menos
+ *  se nota y se reporta; uno de más lleva a pantallas que dan 403.
+ */
+function modulosDe(u: unknown): string[] | undefined {
+  return (u as { modulos?: string[] } | null)?.modulos
+}
+
+/** Si la instancia corre el add-on `modo_simple` (ver `plans.py`).
+ *
+ *  Es la experiencia reducida que pidió Lagrace: ficha de reclamo con lo
+ *  mínimo, sin Agenda ni Dashboard, home en el listado de pendientes y
+ *  vocabulario "Reclamos". **No apaga el core de tickets** — elige cómo se
+ *  dibuja, no si existe.
+ */
+export function enModoSimple(u: unknown): boolean {
+  return (modulosDe(u) ?? []).includes('modo_simple')
+}
+
 export const Layout = createLayout({
   productName: 'LibraDesk',
   productInitial: 'L',
@@ -94,7 +117,15 @@ export const Layout = createLayout({
   navSections: [
     // Sin label: es una sola entrada y un encabezado "General" arriba de un
     // único ítem es ruido.
-    { items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
+    // `module` para el gateo por plan y `hideFor` para el modo simple: son dos
+    // razones distintas de no verlo y las dos tienen que valer. En modo simple
+    // el home es el listado de pendientes, no un tablero.
+    {
+      items: [{
+        to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard,
+        module: 'dashboard', hideFor: enModoSimple,
+      }],
+    },
 
     // El core del producto. No se gatea: un LibraDesk sin esto no es un plan
     // más barato, es otra cosa (ver `plans.py`).
@@ -107,8 +138,34 @@ export const Layout = createLayout({
         // despachar vivía detrás del catálogo de vehículos. Que encabece el
         // grupo es la otra mitad del mismo pedido: el orden del menú es el
         // orden en que se usa, y esto es lo primero que se mira.
-        { to: '/agenda', label: 'Agenda', icon: CalendarDays },
-        { to: '/incidencias', label: 'Incidencias', icon: AlertCircle },
+        // `hideFor` y no `module`: la agenda no se vende por separado, así
+        // que no es un módulo de plan. Lo que la esconde es el modo simple,
+        // donde el día se arma con el papel de pendientes y no con la grilla.
+        { to: '/agenda', label: 'Agenda', icon: CalendarDays, hideFor: enModoSimple },
+        // 🔑 **Dos entradas, una por vocabulario, y con RUTAS DISTINTAS.**
+        // `label` es un string y no una función del usuario (`NavItem` de
+        // libra-ui), así que la única forma de que el menú diga "Reclamos" en
+        // una instancia y "Incidencias" en otra es tener las dos y esconder la
+        // que no va.
+        //
+        // 🔴 **Y el `to` tiene que diferir, aunque las dos lleven a la misma
+        // pantalla.** libra-ui renderiza cada ítem con `key={item.to}`: con el
+        // mismo destino las dos comparten clave de React, la reconciliación no
+        // alcanza a sacar la que se filtró, y el menú termina mostrando
+        // "Incidencias" **y** "Reclamos" juntas. Se vio en el test antes de
+        // llegar a ninguna instancia. Arreglar la clave allá es un cambio del
+        // motor que comparten los ocho productos, con su release; acá alcanza
+        // con que la instancia en modo simple tenga su propia URL — que además
+        // es más coherente: si habla de reclamos, la barra de direcciones
+        // también.
+        {
+          to: '/incidencias', label: 'Incidencias', icon: AlertCircle,
+          hideFor: enModoSimple,
+        },
+        {
+          to: '/reclamos', label: 'Reclamos', icon: AlertCircle,
+          hideFor: (u) => !enModoSimple(u),
+        },
         { to: '/clientes', label: 'Clientes', icon: Users },
         { to: '/equipos', label: 'Equipos', icon: Monitor },
         // "Depósitos" a secas, y la desambiguación con los de stock la hace el
@@ -223,6 +280,16 @@ export const Layout = createLayout({
   // que no lo mostraban eran exactamente los cuatro que usan el router de
   // `libraauth` — que recién en v0.25.0 lo incluye. Del lado del backend lo
   // alimenta `_empresa_nombre` en `app/routers/auth.py`.
+  // 🔴 **Sin esto el gateo por módulo era sólo del backend, y el menú mentía.**
+  // `moduleVisible()` de libra-ui devuelve `true` cuando el producto no pasa
+  // `hasModule`, así que apagar un módulo dejaba su entrada en el sidebar y el
+  // click daba 403. Medido el 2026-09-09: LibraDesk era el único de la familia
+  // que no lo pasaba. Contalibra ya lo tenía; esto copia su patrón, con la
+  // degradación de `modulosDe` documentada arriba.
+  hasModule: (u, m) => {
+    const modulos = modulosDe(u)
+    return modulos === undefined ? true : modulos.includes(m)
+  },
   getUserSubtitle: (u) => (u as { empresa_nombre?: string }).empresa_nombre,
   // El selector de sucursal, en el menú del usuario (`libra-ui` v0.20.0).
   //

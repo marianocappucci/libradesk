@@ -1043,6 +1043,24 @@ export type Actividad = {
  *
  *  Los roles son banderas independientes: la misma persona puede ser técnica y
  *  vendedora, que es el caso normal en una empresa chica. */
+/** Un tecnico que fue al reclamo, con su ventana de trabajo (revision `0040`).
+ *
+ *  Es la via del modo simple: los tecnicos cuelgan del **reclamo**, no de una
+ *  tarea. `horas` lo deriva el backend y es `null` cuando el tramo esta
+ *  incompleto — que **no es cero**: un tecnico tildado al que nadie le cargo
+ *  las horas no trabajo cero horas, no se sabe cuantas. */
+export type TecnicoDelReclamo = {
+  id: number
+  incidencia_id: number
+  tecnico_id: number | null
+  /** `null` si al tecnico lo borraron del catalogo: la fila sobrevive porque
+   *  dice que alguien trabajo esas horas. */
+  tecnico: string | null
+  desde: string | null
+  hasta: string | null
+  horas: number | null
+}
+
 export type Tecnico = {
   id: number
   nombre: string
