@@ -11,6 +11,7 @@ from .services.categorias import CategoriaRepository
 from .services.clientes import ClienteRepository
 from .services.contratos import ContratoRepository
 from .services.contratos_proveedor import ContratoProveedorRepository
+from .services.cotizaciones import CotizacionRepository
 from .services.cuotas import CuotaRepository
 from .services.dashboard import DashboardService
 from .services.depositos import DepositoRepository
@@ -27,7 +28,6 @@ from .services.reemplazo import ReemplazoService
 from .services.remitos_presupuestos import PresupuestoService, RemitoService
 from .services.reparaciones import ReparacionRepository
 from .services.reportes import ReportesService
-from .services.cotizaciones import CotizacionRepository
 from .services.sectores import SectorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.tecnicos import TecnicoRepository

@@ -36,7 +36,7 @@ export type ItemDraft = {
    *  tipea. La conversión a pesos la hace el backend y el formulario sólo la
    *  muestra: tener dos números editables —el dólar y el peso— dejaría al
    *  usuario preguntándose cuál manda. */
-  moneda: string
+  moneda?: string
 }
 
 /** Las dos monedas del formulario. Cerrada, igual que las alícuotas. */

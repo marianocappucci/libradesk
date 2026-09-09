@@ -53,11 +53,13 @@ function Anfitrion({ inicial }: { inicial: ComprobanteDraft }) {
     <MemoryRouter>
       <ComprobanteForm
         tipo="remito"
+        titulo="Nuevo remito"
+        clientes={[CLIENTE] as never}
         draft={draft}
         onChange={setDraft}
-        clientes={[CLIENTE] as never}
         onSubmit={() => {}}
-        guardando={false}
+        onCancel={() => {}}
+        saving={false}
       />
     </MemoryRouter>
   )

@@ -22,6 +22,7 @@ import {
   Boxes as DepositosStock,
   Briefcase as Activos,
   Building2,
+  CalendarDays,
   Car as EquiposFlota,
   CircleAlert as AlertCircle,
   ClipboardCheck,
