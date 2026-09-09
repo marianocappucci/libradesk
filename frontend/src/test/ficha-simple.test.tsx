@@ -89,6 +89,25 @@ describe('La ficha en modo simple', () => {
     expect(screen.getByDisplayValue('FACUNDO')).toBeInTheDocument()
   })
 
+  it('🔑 el orden es cliente, título, detalle y quién llamó', async () => {
+    // Pedido textual del humano (2026-09-09). El cliente **primero**: es lo
+    // primero que se lee de un reclamo, de quién es. Un test que sólo mirara
+    // que los cuatro están pasaría con cualquier orden.
+    render(true)
+    await screen.findByDisplayValue('Central sin tono')
+
+    const texto = document.body.textContent ?? ''
+    const cliente = texto.indexOf('Metalmax Soluciones')
+    const titulo = texto.indexOf('Título del reclamo')
+    const detalle = texto.indexOf('Detalle del reclamo')
+    const quien = texto.indexOf('Quién hizo el reclamo')
+
+    expect(cliente).toBeGreaterThan(-1)
+    expect(cliente).toBeLessThan(titulo)
+    expect(titulo).toBeLessThan(detalle)
+    expect(detalle).toBeLessThan(quien)
+  })
+
   it('el costado tiene estado, prioridad, teléfono, CDS y técnicos', async () => {
     render(true)
     await screen.findByDisplayValue('Central sin tono')
