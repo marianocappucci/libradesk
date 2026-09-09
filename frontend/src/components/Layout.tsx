@@ -22,12 +22,12 @@ import {
   Boxes as DepositosStock,
   Briefcase as Activos,
   Building2,
-  CalendarDays,
   Car as EquiposFlota,
   CircleAlert as AlertCircle,
   ClipboardCheck,
   ClipboardList,
   Coins,
+  DollarSign,
   Droplets,
   FilePenLine as FileSignature,
   FileSpreadsheet,
@@ -175,6 +175,10 @@ export const Layout = createLayout({
         { to: '/ventas', label: 'Ventas', icon: ClipboardList, module: 'ventas' },
         { to: '/recibos', label: 'Recibos', icon: Coins, module: 'ventas' },
         { to: '/cuenta-corriente', label: 'Cuenta corriente', icon: Wallet, module: 'cuenta_corriente' },
+        // Sin `module`: no se gatea. El dolar no es una feature premium, es un
+        // dato que necesita cualquiera que emita un comprobante con un renglon
+        // en dolares -- igual que el router.
+        { to: '/cotizaciones', label: 'Cotización del dólar', icon: DollarSign },
         // Admin-only, igual que el router: armar un comprobante es trabajo de
         // staff; decidir que se le cobre al cliente, no.
         { to: '/facturacion', label: 'Enviar a facturar', icon: Send, adminOnly: true, module: 'facturacion_externa' },

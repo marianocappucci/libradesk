@@ -66,6 +66,7 @@ from .routers import (
     remitos,
     reparaciones,
     reportes,
+    cotizaciones,
     sectores,
     servicios,
     sucursales,
@@ -107,6 +108,7 @@ from .services.proveedores import ProveedorRepository
 from .services.reemplazo import ReemplazoService
 from .services.reparaciones import ReparacionRepository
 from .services.reportes import ReportesService
+from .services.cotizaciones import CotizacionRepository
 from .services.sectores import SectorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.tecnicos import TecnicoRepository
@@ -271,6 +273,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.state.reemplazos = ReemplazoService(sessions)
     app.state.tecnicos = TecnicoRepository(sessions)
     app.state.sectores = SectorRepository(sessions)
+    app.state.cotizaciones = CotizacionRepository(sessions)
     app.state.categorias = CategoriaRepository(sessions)
     app.state.proveedores = ProveedorRepository(sessions)
     # 🔑 **El catálogo de servicios se lee del CATÁLOGO DEL MOTOR** desde el
@@ -398,6 +401,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     app.include_router(incidencias.router, dependencies=staff_or_admin)
     app.include_router(tecnicos.router, dependencies=staff_or_admin)
     app.include_router(sectores.router, dependencies=staff_or_admin)
+    # Cotizaciones: SIN gate de modulo, igual que sectores. El dolar no es
+    # una feature premium -- es un dato que necesita cualquiera que emita un
+    # comprobante con un renglon en dolares.
+    app.include_router(cotizaciones.router, dependencies=staff_or_admin)
     # Categorias: parte del core por el mismo motivo que sectores — clasificar
     # un ticket no es una feature de plan, es como se usa una mesa de ayuda.
     app.include_router(categorias.router, dependencies=staff_or_admin)

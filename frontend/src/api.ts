@@ -1229,6 +1229,21 @@ export function opcionesCategoria(categorias: CategoriaIncidencia[]): OpcionSele
 // libracore (en ingles, ver app/services/remitos_presupuestos.py): no se
 // renombran para no divergir del dominio compartido con Contalibra/
 // Restolibra, que es el que las lee y escribe.
+/** La cotización del dólar de un día (2026-09-09).
+ *
+ *  Es la **fuente** que la pre-factura ofrece, no lo que se facturó: el
+ *  comprobante congela adentro de sus ítems la que usó. Por eso corregir o
+ *  borrar una fila de acá no le cambia el total a nada ya emitido. */
+export type Cotizacion = {
+  id: number
+  /** ISO (`aaaa-mm-dd`). Una por día: cargarla de nuevo la corrige. */
+  fecha: string
+  /** Pesos por dólar. */
+  valor: number
+  usuario: string
+  observaciones: string | null
+}
+
 export type ComprobanteItem = {
   description: string
   qty: number
@@ -1245,6 +1260,20 @@ export type ComprobanteItem = {
    *  Opcional en el tipo porque lo es en el dato — el backend no escribe la
    *  clave cuando el campo viene vacío. */
   detalle?: string
+  /** La moneda en que se cargó ESTE renglón (2026-09-09). Ausente = pesos, que
+   *  es como quedan todos los comprobantes que no usan dólares: el backend no
+   *  escribe ninguna de las tres claves cuando la línea es en pesos.
+   *
+   *  🔑 **`unit_price` sigue siendo el importe EN PESOS aunque `moneda` diga
+   *  `USD`.** Los dólares viven en `unit_price_origen` y la conversión ya está
+   *  hecha. Es lo que hace que los totales, el PDF y el puente a SOS no se
+   *  enteren de que existe otra moneda. */
+  moneda?: 'ARS' | 'USD'
+  /** El precio unitario tal como se tipeó, en la moneda de origen. */
+  unit_price_origen?: number
+  /** Los pesos por dólar con los que se convirtió ESTE renglón, **congelados**
+   *  al guardar. Corregir la cotización del día no lo mueve. */
+  cotizacion?: number
 }
 
 type ComprobanteBase = {

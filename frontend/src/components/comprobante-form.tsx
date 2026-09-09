@@ -30,7 +30,19 @@ export type ItemDraft = {
   qty: string
   unit_price: string
   tax_rate: string
+  /** La moneda de ESTE renglón (2026-09-09): `'ARS'` o `'USD'`.
+   *
+   *  🔑 **`unit_price` es el precio EN ESA MONEDA**, que es lo que la persona
+   *  tipea. La conversión a pesos la hace el backend y el formulario sólo la
+   *  muestra: tener dos números editables —el dólar y el peso— dejaría al
+   *  usuario preguntándose cuál manda. */
+  moneda: string
 }
+
+/** Las dos monedas del formulario. Cerrada, igual que las alícuotas. */
+export const MONEDAS = ['ARS', 'USD'] as const
+
+const ETIQUETA_MONEDA: Record<string, string> = { ARS: '$', USD: 'U$S' }
 
 /** Las cuatro que ARCA sabe mapear. Las devuelve `GET /api/servicios/alicuotas`
  *  como fracciones; acá se guardan ya en porcentaje porque es lo único que el
@@ -51,11 +63,18 @@ export type ComprobanteDraft = {
   client_address: string
   tax_rate: string
   observations: string
+  /** Pesos por dólar, para los renglones en `USD`. String vacío = no se cargó.
+   *
+   *  Es del documento y no del renglón porque una pre-factura se arma con
+   *  **una** cotización; el backend la congela renglón por renglón al guardar,
+   *  así que corregirla después no le mueve el total a lo ya emitido. */
+  cotizacion: string
   items: ItemDraft[]
 }
 
 export const ITEM_VACIO: ItemDraft = {
   description: '', detalle: '', qty: '1', unit_price: '0', tax_rate: '21',
+  moneda: 'ARS',
 }
 
 /** El campo de descripción, con sugerencias del catálogo de servicios.
@@ -169,6 +188,7 @@ export function draftVacio(): ComprobanteDraft {
     client_address: '',
     tax_rate: '21',
     observations: '',
+    cotizacion: '',
     items: [{ ...ITEM_VACIO }],
   }
 }
@@ -186,24 +206,39 @@ export function formatMoney(value: number): string {
  *  `app/services/iva.py`. Sumar el subtotal y aplicarle una tasa única daba
  *  mal apenas una línea era exenta, y el número de la pantalla no coincidía
  *  con el del comprobante guardado. */
-function calcularTotales(items: ItemDraft[]) {
+function calcularTotales(items: ItemDraft[], cotizacion: string) {
   let subtotal = 0
   let iva = 0
   for (const i of items) {
-    const linea = (Number(i.qty) || 0) * (Number(i.unit_price) || 0)
+    const linea = importeEnPesos(i, cotizacion)
     subtotal += linea
     iva += linea * ((Number(i.tax_rate) || 0) / 100)
   }
   return { subtotal, iva, total: subtotal + iva }
 }
 
+/** El importe de la línea **en pesos**, que es la única moneda en que se suma.
+ *
+ *  🔑 El IVA va sobre el importe convertido, no sobre el dólar: si se aplicara
+ *  antes de convertir, el 21% de USD 10 daría $2,10 en vez de $210.
+ *
+ *  Sin cotización cargada, un renglón en dólares vale **cero** acá — y no su
+ *  valor nominal. Es a propósito: el total en pantalla tiene que verse mal
+ *  mientras falta el dato, no razonable. El backend además rechaza el guardado
+ *  (422), así que no hay forma de emitirlo por menos de lo que vale. */
+function importeEnPesos(item: ItemDraft, cotizacion: string): number {
+  const bruto = (Number(item.qty) || 0) * (Number(item.unit_price) || 0)
+  if (item.moneda !== 'USD') return bruto
+  return bruto * (Number(cotizacion) || 0)
+}
+
 /** El IVA abierto por alícuota, para la caja de totales. Sólo se muestra
  *  cuando el comprobante mezcla: con una sola alícuota, un desglose de un
  *  renglón repite el total y no informa nada. */
-function ivaPorAlicuota(items: ItemDraft[]): { pct: string; monto: number }[] {
+function ivaPorAlicuota(items: ItemDraft[], cotizacion: string): { pct: string; monto: number }[] {
   const acumulado = new Map<string, number>()
   for (const i of items) {
-    const linea = (Number(i.qty) || 0) * (Number(i.unit_price) || 0)
+    const linea = importeEnPesos(i, cotizacion)
     const pct = i.tax_rate || '0'
     acumulado.set(pct, (acumulado.get(pct) ?? 0) + linea * (Number(pct) || 0) / 100)
   }
@@ -233,8 +268,22 @@ export function ComprobanteForm({
   // consulta falla se usan las cuatro conocidas: quedarse sin `<select>` haría
   // imposible cargar un comprobante, y el backend valida igual al guardar.
   const [alicuotas, setAlicuotas] = useState<string[]>(ALICUOTAS_INICIALES)
-  const totales = useMemo(() => calcularTotales(draft.items), [draft.items])
-  const desglose = useMemo(() => ivaPorAlicuota(draft.items), [draft.items])
+  // La última cotización cargada, **con su fecha**. Se ofrece; no se aplica
+  // sola: la de hoy puede no estar y la vigente ser de hace dos semanas.
+  const [cotizacionVigente, setCotizacionVigente] =
+    useState<{ fecha: string; valor: number } | null>(null)
+  const totales = useMemo(
+    () => calcularTotales(draft.items, draft.cotizacion),
+    [draft.items, draft.cotizacion],
+  )
+  const desglose = useMemo(
+    () => ivaPorAlicuota(draft.items, draft.cotizacion),
+    [draft.items, draft.cotizacion],
+  )
+  // El campo de cotización aparece **sólo cuando hace falta**: mientras no haya
+  // un renglón en dólares es una caja vacía que no explica nada. Y aparece sola
+  // al elegir USD, que es el momento en que la pregunta tiene sentido.
+  const hayDolares = draft.items.some((i) => i.moneda === 'USD')
   const clienteElegido = clientes.find((c) => String(c.id) === draft.client_id)
 
   useEffect(() => {
@@ -244,6 +293,17 @@ export function ComprobanteForm({
       .catch(() => { /* se quedan las conocidas */ })
     return () => { vigente = false }
   }, [])
+
+  // Se pide sólo cuando aparece el primer renglón en dólares: en un
+  // comprobante en pesos --que son casi todos-- es una consulta que no se usa.
+  useEffect(() => {
+    if (!hayDolares) return
+    let montado = true
+    api.get<{ fecha: string; valor: number } | null>('/api/cotizaciones/vigente')
+      .then((res) => { if (montado) setCotizacionVigente(res) })
+      .catch(() => { /* se escribe a mano; el backend valida igual */ })
+    return () => { montado = false }
+  }, [hayDolares])
 
   function set<K extends keyof ComprobanteDraft>(campo: K, valor: ComprobanteDraft[K]) {
     onChange({ ...draft, [campo]: valor })
@@ -463,6 +523,23 @@ export function ComprobanteForm({
                            aria-label={`Cantidad del ítem ${i + 1}`}
                            onChange={(e) => setItem(i, 'qty', e.target.value)} />
                   </div>
+                  <div className="grid w-20 gap-1">
+                    {/* La moneda es de la línea, igual que la alícuota: la
+                        pre-factura de Lagrace mezcla renglones en pesos y en
+                        dólares, y la factura sale unificada en pesos. */}
+                    {i === 0 && <span className="text-xs text-muted-foreground">Moneda</span>}
+                    <Select value={item.moneda}
+                            onValueChange={(v) => setItem(i, 'moneda', v)}>
+                      <SelectTrigger aria-label={`Moneda del ítem ${i + 1}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONEDAS.map((m) => (
+                          <SelectItem key={m} value={m}>{ETIQUETA_MONEDA[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="grid w-32 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Precio unit.</span>}
                     <Input type="number" min="0" step="0.01" value={item.unit_price}
@@ -489,9 +566,20 @@ export function ComprobanteForm({
                   </div>
                   <div className="grid w-32 gap-1">
                     {i === 0 && <span className="text-xs text-muted-foreground">Importe</span>}
+                    {/* Siempre en PESOS, tambien para un renglon en dolares:
+                        es la moneda en la que se suma y en la que sale la
+                        factura. Debajo, de donde salio -- sin eso el numero
+                        parece no tener nada que ver con lo que se tipeo. */}
                     <div className="flex h-9 items-center justify-end px-2 text-sm tabular-nums">
-                      {formatMoney((Number(item.qty) || 0) * (Number(item.unit_price) || 0))}
+                      {formatMoney(importeEnPesos(item, draft.cotizacion))}
                     </div>
+                    {item.moneda === 'USD' && (
+                      <span className="px-2 text-right text-xs text-muted-foreground tabular-nums">
+                        {draft.cotizacion
+                          ? `U$S ${item.unit_price} × ${draft.cotizacion}`
+                          : 'falta la cotización'}
+                      </span>
+                    )}
                   </div>
                   <Button type="button" size="icon" variant="outline"
                           className="text-destructive hover:text-destructive"
@@ -504,6 +592,37 @@ export function ComprobanteForm({
               ))}
             </div>
           </div>
+
+          {/* Aparece sola al poner un renglon en dolares, y desaparece si no
+              queda ninguno. Antes de eso es una caja vacia que no explica
+              nada. */}
+          {hayDolares && (
+            <div className="grid gap-2 sm:max-w-md">
+              <Label htmlFor="cf-cotizacion">Cotización del dólar</Label>
+              <div className="flex items-center gap-2">
+                <Input id="cf-cotizacion" type="number" min="0" step="0.01"
+                       className="w-40"
+                       placeholder="Pesos por dólar"
+                       value={draft.cotizacion}
+                       onChange={(e) => set('cotizacion', e.target.value)} />
+                {cotizacionVigente && (
+                  <Button type="button" variant="outline" size="sm"
+                          onClick={() => set('cotizacion', String(cotizacionVigente.valor))}>
+                    Usar la del {cotizacionVigente.fecha.split('-').reverse().join('-')}
+                  </Button>
+                )}
+              </div>
+              {/* 🔴 Se dice de QUE DIA es la que se ofrece, no solo el numero.
+                  Si la de hoy no se cargo, la vigente puede ser de hace dos
+                  semanas -- y presentada sin fecha nadie tendria como notarlo. */}
+              {!cotizacionVigente && (
+                <span className="text-xs text-muted-foreground">
+                  No hay ninguna cargada. Se puede escribir acá, o cargarla en
+                  Configuración para que quede para los próximos comprobantes.
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-2">
@@ -566,7 +685,11 @@ export function draftAPayload(draft: ComprobanteDraft, tipo: 'remito' | 'presupu
       description: i.description.trim(),
       detalle: i.detalle.trim(),
       qty: Number(i.qty) || 0,
+      // El precio EN LA MONEDA DE LA LINEA. El backend convierte y guarda los
+      // pesos; mandar el peso ya convertido desde acá sería tener el cálculo
+      // en dos lados.
       unit_price: Number(i.unit_price) || 0,
+      moneda: i.moneda || 'ARS',
       // La única conversión de porcentaje a fracción del formulario.
       tax_rate: (Number(i.tax_rate) || 0) / 100,
     }))
@@ -578,6 +701,9 @@ export function draftAPayload(draft: ComprobanteDraft, tipo: 'remito' | 'presupu
     client_address: draft.client_address.trim() ? draft.client_address : null,
     items,
     tax_rate: (Number(draft.tax_rate) || 0) / 100,
+    // `null` y no `0` cuando no se cargó: el backend la valida con `gt=0` y un
+    // 0 sería un 422 confuso en vez de "falta la cotización".
+    cotizacion: Number(draft.cotizacion) || null,
     observations: draft.observations,
   }
   if (tipo === 'remito') return base
@@ -599,6 +725,10 @@ export function comprobanteADraft(c: {
     client_address: c.client_address ?? '',
     tax_rate: String(Math.round(c.tax_rate * 1000) / 10),
     observations: c.observations ?? '',
+    // La cotización **congelada** del comprobante, no la de hoy: reabrir y
+    // guardar sin tocar nada tiene que dar el mismo total. Sale del primer
+    // renglón que la tenga; todos los del mismo comprobante comparten una.
+    cotizacion: String(c.items.find((i) => i.cotizacion)?.cotizacion ?? ''),
     items: c.items.length
       ? c.items.map((i) => ({
           description: i.description,
@@ -606,7 +736,13 @@ export function comprobanteADraft(c: {
           // escribe la clave vacía. `?? ''` mantiene el input controlado.
           detalle: i.detalle ?? '',
           qty: String(i.qty),
-          unit_price: String(i.unit_price),
+          // 🔴 **En un renglón en dólares se muestra el DÓLAR, no el peso.**
+          // `unit_price` viene convertido; lo que la persona tipeó está en
+          // `unit_price_origen`. Mostrar el peso y reenviarlo con
+          // `moneda: 'USD'` lo volvería a convertir, y el comprobante se
+          // guardaría por mil veces su valor.
+          unit_price: String(i.unit_price_origen ?? i.unit_price),
+          moneda: i.moneda ?? 'ARS',
           // 🔴 Un comprobante guardado antes de 2026-08-05 no tiene `iva_pct`
           // por ítem: cae a la alícuota del documento, que es la que se le
           // aplicó cuando se guardó. Sin este fallback, abrir un presupuesto

@@ -24,6 +24,7 @@ from ..dependencies import (
 from ..services.clientes import ClienteRepository
 from ..services.remitos_presupuestos import (
     RemitoService,
+    comprobante_para_pdf,
     datos_cliente_para_comprobante,
 )
 
@@ -41,6 +42,25 @@ class ItemIn(BaseModel):
     # del item, mas chica y mas clara (`pdf_generator._draw_items_table`). No es
     # `observations`, que es una sola y describe el comprobante entero.
     detalle: str = ""
+    # La moneda de ESTE renglon (2026-09-09). `ARS` por default: un payload que
+    # no la manda se comporta igual que antes de que la moneda existiera. Un
+    # renglon en `USD` se convierte a pesos con la `cotizacion` del comprobante
+    # y **falla si no hay ninguna** -- ver
+    # `remitos_presupuestos._normalizar_items`.
+    moneda: str = "ARS"
+
+    # 🔴 **Las dos claves que devuelve el servidor, aceptadas de vuelta.** Sin
+    # esto Pydantic las descarta al reenviar el item --que es lo que hace la
+    # pantalla al editar-- y el renglon en dolares se vuelve a convertir desde
+    # un `unit_price` que YA esta en pesos. Se descubrio con un test que hacia
+    # el round-trip por HTTP; el que llamaba a `_normalizar_items` directo daba
+    # verde igual, porque no pasaba por el modelo.
+    #
+    # `unit_price_origen` es el precio en dolares tal como se tipeo y
+    # `cotizacion` la que se congelo para ESE renglon. Cuando vienen, mandan
+    # sobre la del documento.
+    unit_price_origen: float | None = Field(default=None, ge=0)
+    cotizacion: float | None = Field(default=None, gt=0)
 
 
 class RemitoIn(BaseModel):
@@ -51,6 +71,10 @@ class RemitoIn(BaseModel):
     items: list[ItemIn] = Field(min_length=1)
     tax_rate: float = Field(default=0.21, ge=0, le=1)
     observations: str = ""
+    # Pesos por dolar, para los renglones en `USD`. Va a nivel documento porque
+    # la pre-factura se arma con UNA cotizacion; se congela renglon por renglon
+    # al guardar, asi que corregirla despues no le mueve el total a lo emitido.
+    cotizacion: float | None = Field(default=None, gt=0)
 
 
 def _datos_cliente(client_id: int, clientes: ClienteRepository, override_address: str | None) -> dict:
@@ -68,18 +92,25 @@ def create_remito(
     clientes: ClienteRepository = Depends(get_cliente_repository),
     user: dict = Depends(get_current_user),
 ):
-    return remitos.create(
-        date=data.date.isoformat(),
-        client_id=data.client_id,
-        client_cuit=data.client_cuit,
-        items=[i.model_dump() for i in data.items],
-        tax_rate=data.tax_rate,
-        observations=data.observations,
-        # libraauth devuelve el id como str; la columna es INTEGER y SQLite
-        # lo convertiria por afinidad, pero se explicita en vez de confiar.
-        usuario_id=int(user["id"]),
-        **_datos_cliente(data.client_id, clientes, data.client_address),
-    )
+    # 422 y no 409: un renglon en dolares sin cotizacion es un payload que no se
+    # puede procesar, no un conflicto con el estado. (`contratos.py` usa 409
+    # para sus `ValueError`, que si son conflictos de estado.)
+    try:
+        return remitos.create(
+            date=data.date.isoformat(),
+            client_id=data.client_id,
+            client_cuit=data.client_cuit,
+            items=[i.model_dump() for i in data.items],
+            tax_rate=data.tax_rate,
+            cotizacion=data.cotizacion,
+            observations=data.observations,
+            # libraauth devuelve el id como str; la columna es INTEGER y SQLite
+            # lo convertiria por afinidad, pero se explicita en vez de confiar.
+            usuario_id=int(user["id"]),
+            **_datos_cliente(data.client_id, clientes, data.client_address),
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @router.get("")
@@ -126,11 +157,14 @@ def update_remito(
             client_cuit=data.client_cuit,
             items=[i.model_dump() for i in data.items],
             tax_rate=data.tax_rate,
+            cotizacion=data.cotizacion,
             observations=data.observations,
             **_datos_cliente(data.client_id, clientes, data.client_address),
         )
     except KeyError:
         raise HTTPException(404, "remito not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @router.delete("/{remito_id}", status_code=204)
@@ -174,7 +208,12 @@ def remito_pdf(
     remito = remitos.get(remito_id)
     if remito is None:
         raise HTTPException(404, "remito not found")
-    path = pdf_generator.generate_pdf(remito, output_dir=f"{data_dir}/remitos_pdf")
+    # `comprobante_para_pdf` le agrega a cada renglon en dolares su conversion
+    # (`USD 100,00 x $1.450,50`) en el `detalle`, que el PDF del motor ya
+    # imprime. Devuelve una copia: lo guardado no se toca para dibujar.
+    path = pdf_generator.generate_pdf(
+        comprobante_para_pdf(remito), output_dir=f"{data_dir}/remitos_pdf",
+    )
     remitos.set_pdf_path(remito_id, path)
     return FileResponse(
         path, media_type="application/pdf",

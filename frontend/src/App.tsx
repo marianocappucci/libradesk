@@ -47,6 +47,7 @@ import { Egresos, OrdenesCompra, RecepcionesCompra } from './pages/Compras'
 import {
   CuentaCorriente, Recibos, Ventas, VentaDetalle, VentaNueva,
 } from './pages/VentasComercial'
+import { Cotizaciones } from './pages/Cotizaciones'
 import { Sucursales } from './pages/Sucursales'
 import { SucursalProvider } from './components/sucursal'
 
@@ -138,6 +139,7 @@ export default function App() {
       <Route path="/egresos" element={<ProtectedRoute><Egresos /></ProtectedRoute>} />
       <Route path="/proveedores" element={<ProtectedRoute><Proveedores /></ProtectedRoute>} />
       <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
+      <Route path="/cotizaciones" element={<ProtectedRoute><Cotizaciones /></ProtectedRoute>} />
       {/* ⚠️ **Antes que `/ventas/:id`**, por lo mismo que `/contratos/nuevo`:
           React Router v6 rankea y el segmento estático gana igual, pero
           declarado después se lee como si `nueva` pudiera caer en el

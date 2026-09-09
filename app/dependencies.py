@@ -27,6 +27,7 @@ from .services.reemplazo import ReemplazoService
 from .services.remitos_presupuestos import PresupuestoService, RemitoService
 from .services.reparaciones import ReparacionRepository
 from .services.reportes import ReportesService
+from .services.cotizaciones import CotizacionRepository
 from .services.sectores import SectorRepository
 from .services.servicios_repo_catalogo import ServicioCatalogoRepository
 from .services.tecnicos import TecnicoRepository
@@ -71,6 +72,10 @@ def get_tecnico_repository(request: Request) -> TecnicoRepository:
 
 def get_sector_repository(request: Request) -> SectorRepository:
     return request.app.state.sectores
+
+
+def get_cotizacion_repository(request: Request) -> CotizacionRepository:
+    return request.app.state.cotizaciones
 
 
 def get_categoria_repository(request: Request) -> CategoriaRepository:
