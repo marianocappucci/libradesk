@@ -119,6 +119,26 @@ describe('La ficha en modo simple', () => {
     expect(screen.getByText('Técnicos que fueron')).toBeInTheDocument()
   })
 
+  it('🔑 los técnicos van debajo del detalle, no en el costado', async () => {
+    // Pedido del humano (2026-09-09): el bloque necesita ancho —por técnico hay
+    // una fecha y dos horas— y en la columna angosta las cajas se apilaban.
+    // Se afirma por posición en el documento: un test que sólo mirara que el
+    // bloque existe pasaba con él en cualquier lado, que es de donde vino.
+    render(true)
+    await screen.findByDisplayValue('Central sin tono')
+
+    const texto = document.body.textContent ?? ''
+    const detalle = texto.indexOf('Detalle del reclamo')
+    const quien = texto.indexOf('Quién hizo el reclamo')
+    const tecnicos = texto.indexOf('Técnicos que fueron')
+
+    expect(detalle).toBeGreaterThan(-1)
+    expect(tecnicos).toBeGreaterThan(quien)
+    // Y **antes** del costado: si estuviera en la columna de la derecha,
+    // aparecería después de "N° CDS".
+    expect(tecnicos).toBeLessThan(texto.indexOf('N° CDS'))
+  })
+
   it('se pueden tildar varios técnicos de la lista', async () => {
     render(true)
     await screen.findByDisplayValue('Central sin tono')

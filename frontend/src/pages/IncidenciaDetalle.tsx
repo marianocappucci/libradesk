@@ -686,6 +686,20 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
               </CardContent>
             </Card>
 
+            {/* 🔑 **Los técnicos van en el CUERPO, debajo del detalle** (pedido
+                del humano, 2026-09-09), y no en el costado donde estaban. El
+                bloque necesita ancho: por cada técnico hay una fecha y dos
+                horas, y en la columna angosta las tres cajas se apilaban. Acá
+                además queda en el orden en que se carga el reclamo — primero
+                qué pasó, después quién fue. */}
+            {simple && (
+              <TecnicosDelReclamo
+                incidenciaId={incidencia.id}
+                dia={incidencia.fecha_creacion ?? new Date().toISOString()}
+                tecnicos={tecnicos}
+              />
+            )}
+
             {!simple && <TareasDelReclamo incidenciaId={incidencia.id} />}
 
             {!simple && <Card>
@@ -1168,12 +1182,6 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   </div>
                 </CardContent>
               </Card>
-
-              <TecnicosDelReclamo
-                incidenciaId={incidencia.id}
-                dia={incidencia.fecha_creacion ?? new Date().toISOString()}
-                tecnicos={tecnicos}
-              />
             </div>
           )}
         </div>
