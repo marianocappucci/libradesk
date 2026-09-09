@@ -95,7 +95,6 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
   const [error, setError] = useState<string | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
-  const [generandoRemito, setGenerandoRemito] = useState(false)
   // Estado del guardado automático, para que deje de ser invisible (pedido 40).
   // `enVuelo` es un ref y no estado porque `guardarYVolver` lo lee dentro de un
   // bucle: con `useState` leería siempre el valor del render en que se creó.
@@ -317,21 +316,6 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
    *
    * Es idempotente del lado del servidor, así que un doble click no emite dos.
    */
-  async function generarRemito() {
-    setGenerandoRemito(true)
-    setError(null)
-    try {
-      const remito = await api.post<{ id: number }>(
-        `/api/incidencias/${incidenciaId}/convertir-en-remito`, {},
-      )
-      navigate(`/remitos/${remito.id}`)
-    } catch (err) {
-      setError(describeError(err))
-    } finally {
-      setGenerandoRemito(false)
-    }
-  }
-
   // Empate de fechas: las tres tablas usan CURRENT_TIMESTAMP, que en SQLite
   // tiene resolución de un segundo, así que dos entradas de la misma
   // operación empatan seguido. Sin desempate el orden queda a merced del
@@ -594,13 +578,17 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   <PackageCheck />Ver remito
                 </Link>
               </Button>
-            ) : incidencia.estado === 'cerrado' ? (
-              <Button size="sm" variant="outline" disabled={generandoRemito}
-                      onClick={generarRemito}>
-                <PackageCheck />
-                {generandoRemito ? 'Generando…' : 'Generar remito'}
-              </Button>
             ) : null}
+            {/* 🔴 **"Generar remito" se saco de aca el 2026-09-09.** El remito
+                se arma desde "Nuevo remito", eligiendo el cliente y trayendo
+                sus reclamos cerrados: ahi los renglones entran al borrador y se
+                editan **antes** de emitir, que es lo que este boton no permitia
+                --salia emitido con lo que el sistema decidia--.
+
+                🔑 **"Ver remito" se queda**, y no es lo mismo: no es una puerta
+                a facturacion sino la forma de llegar a lo que ya se emitio.
+                Sacarlo dejaria al reclamo diciendo que tiene remito y sin como
+                abrirlo. */}
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 />Eliminar
             </Button>

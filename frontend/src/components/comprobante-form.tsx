@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Trash2 } from '@/components/iconos-accion'
 import { enDiasISO, hoyISO } from 'libra-ui/fechas'
+import { ReclamosParaRemito } from '@/components/reclamos-para-remito'
 
 /** `tax_rate` es el PORCENTAJE como string ('21', '10.5'), no la fracción: es
  *  lo que muestra el `<select>` y lo que se leía en el campo del documento
@@ -69,6 +70,14 @@ export type ComprobanteDraft = {
    *  **una** cotización; el backend la congela renglón por renglón al guardar,
    *  así que corregirla después no le mueve el total a lo ya emitido. */
   cotizacion: string
+  /** Los reclamos cerrados que este remito factura (2026-09-09).
+   *
+   *  🔴 **No es decorativo: es lo que impide el doble cobro.** Al guardar, el
+   *  backend los ata con `incidencias.remito_id`, y un reclamo atado deja de
+   *  ofrecerse y no se puede volver a facturar. Si esto no viajara, los
+   *  renglones traídos serían texto suelto y el mismo trabajo podría entrar en
+   *  dos comprobantes. Vacío en un remito tipeado a mano. */
+  incidencia_ids: number[]
   items: ItemDraft[]
 }
 
@@ -189,6 +198,7 @@ export function draftVacio(): ComprobanteDraft {
     tax_rate: '21',
     observations: '',
     cotizacion: '',
+    incidencia_ids: [],
     items: [{ ...ITEM_VACIO }],
   }
 }
@@ -593,6 +603,38 @@ export function ComprobanteForm({
             </div>
           </div>
 
+          {/* 🔑 **Sólo para remitos.** Un presupuesto no factura nada, así que
+              no ata reclamos — y ofrecerlos ahí invitaría a creer que sí.
+              Aparece recién con un cliente elegido: sin cliente no hay a quién
+              buscarle los reclamos. */}
+          {tipo === 'remito' && (
+            <ReclamosParaRemito
+              clienteId={draft.client_id}
+              onTraer={(lineas) => onChange({
+                ...draft,
+                // Se **suman** a lo que ya hay, no reemplazan: se puede traer
+                // un reclamo, escribir un renglón a mano y traer otro.
+                items: [
+                  // El ítem vacío inicial se descarta si nadie lo tocó: si no,
+                  // el remito sale con un renglón en blanco arriba de todo.
+                  ...draft.items.filter((i) => i.description.trim()),
+                  ...lineas.items.map((i) => ({
+                    description: i.description,
+                    detalle: '',
+                    qty: String(i.qty),
+                    unit_price: String(i.unit_price),
+                    tax_rate: String(Math.round((i.tax_rate ?? 0.21) * 1000) / 10),
+                    moneda: 'ARS',
+                  })),
+                ],
+                incidencia_ids: [...draft.incidencia_ids, ...lineas.incidencia_ids],
+                // Las observaciones sugeridas sólo si el usuario no escribió
+                // las suyas: pisárselas sería perderle lo que tipeó.
+                observations: draft.observations.trim() || lineas.observations,
+              })}
+            />
+          )}
+
           {/* Aparece sola al poner un renglon en dolares, y desaparece si no
               queda ninguno. Antes de eso es una caja vacia que no explica
               nada. */}
@@ -706,7 +748,8 @@ export function draftAPayload(draft: ComprobanteDraft, tipo: 'remito' | 'presupu
     cotizacion: Number(draft.cotizacion) || null,
     observations: draft.observations,
   }
-  if (tipo === 'remito') return base
+  // Sólo el remito: un presupuesto no factura nada, así que no ata reclamos.
+  if (tipo === 'remito') return { ...base, incidencia_ids: draft.incidencia_ids }
   return { ...base, valid_until: draft.valid_until, status: draft.status }
 }
 
@@ -729,6 +772,10 @@ export function comprobanteADraft(c: {
     // guardar sin tocar nada tiene que dar el mismo total. Sale del primer
     // renglón que la tenga; todos los del mismo comprobante comparten una.
     cotizacion: String(c.items.find((i) => i.cotizacion)?.cotizacion ?? ''),
+    // Vacío al editar: los reclamos ya quedaron atados cuando se emitió. Traerlos
+    // de vuelta acá los re-vincularía al mismo remito, que no rompe nada, pero
+    // deja al formulario diciendo que está por atar algo que ya está atado.
+    incidencia_ids: [],
     items: c.items.length
       ? c.items.map((i) => ({
           description: i.description,

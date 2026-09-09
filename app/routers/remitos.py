@@ -19,9 +19,11 @@ from ..auth import get_current_user
 from ..dependencies import (
     get_cliente_repository,
     get_data_dir,
+    get_incidencia_repository,
     get_remito_service,
 )
 from ..services.clientes import ClienteRepository
+from ..services.incidencias import IncidenciaRepository
 from ..services.remitos_presupuestos import (
     RemitoService,
     comprobante_para_pdf,
@@ -75,6 +77,17 @@ class RemitoIn(BaseModel):
     # la pre-factura se arma con UNA cotizacion; se congela renglon por renglon
     # al guardar, asi que corregirla despues no le mueve el total a lo emitido.
     cotizacion: float | None = Field(default=None, gt=0)
+    #: Los reclamos cerrados que este remito factura (2026-09-09).
+    #:
+    #: 🔴 **No es informativo: es lo que impide el doble cobro.** Al crear, el
+    #: remito los ata con `incidencias.remito_id`, y un reclamo atado deja de
+    #: ofrecerse en el selector y no se puede volver a facturar. Sin esta lista
+    #: los renglones que trae "Nuevo remito" serian texto suelto, y el mismo
+    #: trabajo podria entrar en dos comprobantes.
+    #:
+    #: Vacia en un remito que no sale de reclamos --uno tipeado a mano-- que es
+    #: como se comportaba todo antes de que esto existiera.
+    incidencia_ids: list[int] = Field(default_factory=list)
 
 
 def _datos_cliente(client_id: int, clientes: ClienteRepository, override_address: str | None) -> dict:
@@ -90,13 +103,14 @@ def create_remito(
     data: RemitoIn,
     remitos: RemitoService = Depends(get_remito_service),
     clientes: ClienteRepository = Depends(get_cliente_repository),
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
     user: dict = Depends(get_current_user),
 ):
     # 422 y no 409: un renglon en dolares sin cotizacion es un payload que no se
     # puede procesar, no un conflicto con el estado. (`contratos.py` usa 409
     # para sus `ValueError`, que si son conflictos de estado.)
     try:
-        return remitos.create(
+        remito = remitos.create(
             date=data.date.isoformat(),
             client_id=data.client_id,
             client_cuit=data.client_cuit,
@@ -111,6 +125,15 @@ def create_remito(
         )
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+    # 🔴 **El vinculo va DESPUES de crear, y no antes.** Mismo orden y mismo
+    # motivo que `convertir_a_remito()`: si el proceso muere en el medio queda
+    # un remito sin vinculo --que se puede rehacer-- y no un reclamo diciendo
+    # "ya se remito" contra un remito que no existe, que lo dejaria sin poder
+    # facturarse nunca.
+    if data.incidencia_ids:
+        incidencias.vincular_al_remito(data.incidencia_ids, remito["id"])
+    return remito
 
 
 @router.get("")

@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import { FilePlus, PackageCheck, PlusCircle, Printer } from '@/components/iconos-accion'
+import { FilePlus, PlusCircle, Printer } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { hoyISO } from 'libra-ui/fechas'
@@ -109,7 +109,6 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   // Los reclamos elegidos para entrar juntos al mismo remito (ver la barra de
   // abajo de la grilla).
   const [elegidos, setElegidos] = useState<number[]>([])
-  const [generando, setGenerando] = useState(false)
   // La salida de cuadrilla (pedido del humano, 2026-08-15).
   const [salidaAbierta, setSalidaAbierta] = useState(false)
   // Con qué orden se imprime el listado de pendientes (pedido del humano,
@@ -277,7 +276,6 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
    *  no ofrecer el tilde: un checkbox que siempre termina en un 409 es peor
    *  que no tenerlo. La que manda es la del backend — ésta sólo evita el viaje.
    */
-  const remitable = (i: Incidencia) => i.estado === 'cerrado' && !i.remito_id
 
   /** Un reclamo se puede agendar si todavía no se resolvió.
    *
@@ -304,35 +302,15 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
     () => incidenciasFiltradas.filter((i) => elegidos.includes(i.id)),
     [incidenciasFiltradas, elegidos],
   )
-  const clientesElegidos = new Set(seleccionadas.map((i) => i.cliente_id))
-  const mezclaClientes = clientesElegidos.size > 1
-
-  // 🔑 **La selección sirve para dos cosas opuestas**, y qué se puede hacer con
-  // ella lo decide su contenido: los cerrados se agrupan en un remito, los
-  // abiertos se arman como una salida de cuadrilla. Mezclar los dos no habilita
+  // 🔑 **La selección sirve para UNA cosa desde el 2026-09-09**: armar la
+  // salida de cuadrilla. Generar el remito se movió a "Nuevo remito".
+  //
+  // `clientesElegidos` y `mezclaClientes` se fueron con él: sólo servían para
+  // avisar que un remito se emite a nombre de un cliente solo, y una salida de
+  // cuadrilla puede tener paradas en varios.
   // ninguna de las dos acciones, y la barra dice por qué — un botón apagado sin
   // motivo manda a adivinar.
-  const todasRemitables = seleccionadas.every(remitable)
   const todasAgendables = seleccionadas.every(agendable)
-
-  async function generarRemito() {
-    setGenerando(true)
-    setError(null)
-    try {
-      const remito = await api.post<{ id: number }>(
-        '/api/incidencias/convertir-en-remito',
-        { incidencia_ids: seleccionadas.map((i) => i.id) },
-      )
-      // Al remito recién creado y no de vuelta acá, igual que el botón de a
-      // uno de la ficha del reclamo: ahí se completan los importes que el
-      // sistema no sabe, y desde ahí se edita. Sin ese paso el remito queda en
-      // cero y la bandeja de facturación lo rechaza.
-      navigate(`/remitos/${remito.id}`)
-    } catch (err) {
-      setError(describeError(err))
-      setGenerando(false)
-    }
-  }
 
   const columns = useMemo<ColumnDef<Incidencia>[]>(() => [
     {
@@ -346,11 +324,14 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
       enableSorting: false,
       cell: ({ row }) => {
         const i = row.original
-        // Se ofrece si sirve para ALGUNA de las dos acciones. Un reclamo
-        // resuelto pero no cerrado no entra en ninguna, y ahí la celda queda
-        // vacía: dice "este no va" sin un control apagado que invite a
-        // intentarlo.
-        if (!remitable(i) && !agendable(i)) return null
+        // 🔴 **Desde el 2026-09-09 el tilde sirve para UNA sola acción**:
+        // armar la salida de cuadrilla. La otra —generar el remito— se movió a
+        // "Nuevo remito", donde los renglones se editan antes de emitir.
+        //
+        // Por eso la condición ya no incluye `remitable`: un reclamo cerrado se
+        // podía tildar y ahora eso no haría nada. Un control que se deja apretar
+        // y no lleva a ninguna acción es peor que no ofrecerlo.
+        if (!agendable(i)) return null
         return (
           <input
             type="checkbox"
@@ -779,22 +760,10 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
                   ? '1 reclamo elegido'
                   : `${seleccionadas.length} reclamos elegidos`}
               </span>
-              {todasRemitables && mezclaClientes && (
-                // El motivo al lado del botón apagado, no en un tooltip: un
-                // botón que no se puede apretar y no dice por qué manda a
-                // adivinar.
-                <span className="ml-2 text-destructive">
-                  Son de {clientesElegidos.size} clientes distintos y un remito
-                  se emite a nombre de uno solo.
-                </span>
-              )}
-              {!todasRemitables && !todasAgendables && (
-                <span className="ml-2 text-destructive">
-                  Hay reclamos cerrados y abiertos mezclados: los cerrados se
-                  agrupan en un remito y los abiertos se agendan, y son dos cosas
-                  distintas.
-                </span>
-              )}
+              {/* Los dos avisos que había acá eran del remito —clientes
+                  mezclados, y cerrados con abiertos—, y se fueron con él: hoy
+                  sólo se puede tildar lo agendable, así que ninguna de las dos
+                  mezclas se puede armar. */}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setElegidos([])}>
@@ -809,15 +778,16 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
                   Armar salida
                 </Button>
               )}
-              {todasRemitables && (
-                <Button
-                  onClick={generarRemito}
-                  disabled={generando || mezclaClientes}
-                >
-                  <PackageCheck />
-                  {generando ? 'Generando…' : 'Generar remito'}
-                </Button>
-              )}
+              {/* 🔴 **"Generar remito" se saco de acá el 2026-09-09**, por
+                  decision del humano: el remito se arma ahora desde "Nuevo
+                  remito", eligiendo el cliente y trayendo sus reclamos
+                  cerrados. La diferencia no es donde esta el boton: aca el
+                  remito salia **ya emitido** con lo que el sistema decidia, y
+                  corregirlo era editar un comprobante hecho. Alla los
+                  renglones entran al borrador y se editan antes de emitir.
+
+                  El tilde NO se saco: sigue sirviendo para armar la salida de
+                  cuadrilla, que es su otra mitad. */}
             </div>
           </CardContent>
         </Card>
