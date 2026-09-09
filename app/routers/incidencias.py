@@ -406,6 +406,63 @@ def _convertir(incidencias, ids, remitos, clientes, servicios, user):
         raise HTTPException(409, str(e))
 
 
+@router.post("/lineas-para-remito", status_code=200)
+def lineas_para_remito(
+    data: ConvertirLote,
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+    remitos: RemitoService = Depends(get_remito_service),
+    clientes: ClienteRepository = Depends(get_cliente_repository),
+    servicios: ServicioCatalogoRepository = Depends(get_servicio_repository),
+):
+    """Los renglones que estos reclamos aportarían a un remito, **sin emitirlo**.
+
+    🔑 **Es lo que hace posible editar antes de emitir.** El formulario de
+    "Nuevo remito" pide esto al tildar los reclamos del cliente, mete los
+    renglones en el borrador, y la persona corrige la descripción, la cantidad
+    o el precio antes de guardar. Antes el remito nacía ya emitido con lo que
+    el sistema decidía, y corregirlo era editar un comprobante ya hecho.
+
+    **Valida lo mismo que emitir** —existencia, que ninguno esté ya remitado,
+    mismo cliente, todos `cerrado`, cobertura del abono decidida— así que un
+    lote que no se podría emitir falla acá y no después de haber tipeado.
+
+    🔴 **No escribe nada, y por eso NO vincula.** El `remito_id` lo pone
+    `POST /api/remitos` al crear; sin ese vínculo el mismo reclamo podría
+    entrar en dos remitos.
+    """
+    try:
+        preparado = incidencias.preparar_remito(
+            data.incidencia_ids, remitos, clientes, servicios,
+        )
+    except KeyError as e:
+        faltan = e.args[0]
+        if isinstance(faltan, tuple):
+            cuales = ", ".join(f"#{x}" for x in faltan)
+            raise HTTPException(404, f"No existen los reclamos {cuales}.")
+        raise HTTPException(404, "incidencia not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+    # Ya facturados: previsualizar algo que ya salio no tiene sentido, y el
+    # selector no deberia ofrecerlos. 409 y no 200 con el remito viejo, que se
+    # leeria como "estos son tus renglones".
+    if "remito_existente" in preparado:
+        raise HTTPException(
+            409,
+            f"Esos reclamos ya estan en el remito "
+            f"{preparado['remito_existente'].get('number', '')}.",
+        )
+
+    # El `trabajos` del preparado no viaja: es estado interno del armado y la
+    # pantalla no lo usa. Lo que necesita es qué renglones le van a quedar y
+    # qué observaciones se sugieren.
+    return {
+        "items": preparado["items"],
+        "observations": preparado["observations"],
+        "incidencia_ids": preparado["ids"],
+    }
+
+
 @router.post("/agendar-salida", status_code=200)
 def agendar_salida(
     data: SalidaIn,

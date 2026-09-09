@@ -1787,76 +1787,29 @@ class IncidenciaRepository:
                 "La fecha de fin de la tarea no puede ser anterior a la de inicio."
             )
 
-    def convertir_a_remito(self, incidencia_ids: list[int], remitos, clientes,
-                           servicios, usuario_id: int | None = None) -> dict:
-        """Genera **un** remito por los reclamos **cerrados** que se le pasen.
+    def preparar_remito(self, incidencia_ids: list[int], remitos, clientes,
+                        servicios) -> dict:
+        """Valida los reclamos y **arma los renglones**, sin escribir nada.
 
-        Es el camino a facturacion de un reclamo, y es el mismo que el de un
-        presupuesto aceptado: LibraDesk manda a facturar **solo remitos**,
-        porque lo que habilita a facturar es la entrega hecha (ver
-        `app/routers/facturacion.py`). Sin esto, un trabajo por servicio no
-        tenia como llegar a la bandeja.
+        🔑 **Es la mitad de `convertir_a_remito()` que no toca la base.** Se
+        separo el 2026-09-09 para que el formulario de "Nuevo remito" pueda
+        traer los reclamos cerrados de un cliente y **dejarlos editar antes de
+        emitir**, que es como Lagrace arma la pre-factura.
 
-        **Recibe una lista y no un id**, aunque el 90% de las veces traiga uno.
-        El caso real es el otro: a un cliente se le hacen tres visitas en el mes
-        y se le emite **un** remito por las tres, porque es una factura la que
-        va a salir de ahi. Con un solo camino no hay dos formas de armar un
-        remito que puedan divergir --el de a uno es este con la lista de largo
-        1--, que es como el producto termino con el mismo defecto en tres
-        pantallas la ultima vez.
+        Sin esta separacion habria **dos implementaciones** armando los
+        renglones de un reclamo, y la que quedara vieja facturaria distinto que
+        la otra -- que es como este producto ya termino con el mismo defecto en
+        tres pantallas.
 
-        **Solo `cerrado`, no `resuelta`.** Es donde cae en el circuito real de
-        [[lagrace-comunicaciones]]: el tecnico trae el comprobante de servicios
-        en papel, alguien lo controla contra la hoja de ruta y recien ahi lo
-        cierra "decidiendo si va a facturacion". Un ticket `resuelta` todavia no
-        paso ese control.
+        Devuelve `items`, `observations`, `cliente` y los `ids` deduplicados.
+        Las validaciones son las mismas y en el mismo orden: que existan, que
+        ninguno este ya remitado, que sean todos del mismo cliente, que esten
+        todos `cerrado`, y que la cobertura del abono este decidida.
 
-        **Todos del mismo cliente**: un remito se emite a nombre de uno solo.
-
-        **Idempotente por lote**: si TODOS los elegidos ya apuntan al MISMO
-        remito, devuelve ese --el doble click--. Una mezcla de remitados y no
-        remitados es un error, no una idempotencia: devolver el remito viejo
-        dejaria a los nuevos sin facturar y sin decirlo.
-
-        ## Que lleva el remito
-
-        - **Una linea de trabajo por reclamo**, encabezada por el **N° CDS** del
-          comprobante en papel cuando lo tiene. Ese numero es lo unico que ata
-          la conformidad firmada con el ticket del sistema, y con tres trabajos
-          en el mismo remito no alcanza con ponerlo en las observaciones: hay
-          que poder leer, renglon por renglon, cual es cual. `qty` son las horas
-          invertidas si estan cargadas, y `1` si no --un reclamo se cobra por
-          hora o como visita, y las dos formas entran en la misma linea--.
-        - **Los materiales de cada reclamo debajo de su trabajo**, al precio de
-          venta del catalogo (`materiales.valorizados`), con el reclamo del que
-          salieron dicho en la linea.
-
-        El PDF del remito **no imprime precios** (`_draw_items_table` con
-        `show_prices=False`): lo que se lee en el papel es la descripcion y la
-        cantidad. Por eso el CDS va en la descripcion y no en un campo aparte.
-
-        🔴 **Los precios pueden salir en cero, y esta bien.** El valor hora sale
-        del catalogo de servicios (`ServicioCatalogoRepository.valor_hora`) y puede
-        estar marcado todavia; un material sin `default_sale_price` tampoco
-        tiene precio. El remito nace con los importes que el sistema **sabe**, y
-        el operador completa el resto editandolo; inventar un numero seria peor.
-        Lo que cierra el circuito es que la bandeja de facturacion **se niega a
-        mandar un remito con total 0**, asi que un olvido no llega a facturarse.
-
-        ## Lo que NO es atomico
-
-        El remito lo escribe la conexion de LibraCore y el vinculo lo escribe
-        SQLAlchemy: son dos conexiones, asi que no hay una transaccion que las
-        cubra (mismo problema que documenta `materiales.py`). Si el proceso se
-        cae entre las dos, queda un remito emitido sin vinculo y el proximo
-        intento genera un segundo remito por los mismos tickets. Se elige este
-        orden --primero el remito, despues el vinculo-- porque el error al
-        reves es peor: un ticket que dice "ya se remitio" apuntando a un remito
-        que no existe deja el trabajo sin poder facturarse nunca.
-
-        El vinculo de los N si es una sola sentencia (`UPDATE ... WHERE id IN`),
-        asi que no hay un estado intermedio donde la mitad del lote quedo atada
-        al remito y la otra mitad no.
+        🔴 **No escribe, asi que se puede llamar para previsualizar** -- pero
+        por lo mismo **no vincula**. El `incidencias.remito_id` lo pone quien
+        crea el remito, y ponerlo no es opcional: es lo unico que impide que el
+        mismo reclamo entre en dos remitos.
         """
         from . import fecha, materiales
         from .remitos_presupuestos import datos_cliente_para_comprobante
@@ -1893,7 +1846,16 @@ class IncidenciaRepository:
                 if len(remitados) == len(ids) and len(unicos) == 1:
                     existente = remitos.get(next(iter(unicos)))
                     if existente is not None:
-                        return existente
+                        # 🔑 **Se devuelve BAJO UNA CLAVE y no pelado.** Antes
+                        # este `return` entregaba el remito directo, porque el
+                        # metodo era el que emitia; al partirlo en dos
+                        # (2026-09-09) el llamador espera renglones, y devolver
+                        # un remito acá le hacia leer `preparado["items"]` sobre
+                        # un dict que no lo tiene. Cada camino decide qué hacer:
+                        # `convertir_a_remito` lo devuelve --es el doble click--
+                        # y la previsualizacion lo rechaza, porque previsualizar
+                        # algo ya facturado no tiene sentido.
+                        return {"remito_existente": existente}
                     # El remito que se referenciaba no esta: se borro por fuera.
                     # Se sigue de largo y se genera uno nuevo en vez de devolver
                     # None, que dejaria a los tickets sin camino a facturacion.
@@ -2077,6 +2039,95 @@ class IncidenciaRepository:
                 "remito saldria sin una sola linea."
             )
 
+        return {
+            "items": items,
+            "observations": _observaciones_del_lote(trabajos),
+            "cliente": cliente,
+            "ids": ids,
+        }
+
+    def convertir_a_remito(self, incidencia_ids: list[int], remitos, clientes,
+                           servicios, usuario_id: int | None = None) -> dict:
+        """Genera **un** remito por los reclamos **cerrados** que se le pasen.
+
+        Es el camino a facturacion de un reclamo, y es el mismo que el de un
+        presupuesto aceptado: LibraDesk manda a facturar **solo remitos**,
+        porque lo que habilita a facturar es la entrega hecha (ver
+        `app/routers/facturacion.py`). Sin esto, un trabajo por servicio no
+        tenia como llegar a la bandeja.
+
+        **Recibe una lista y no un id**, aunque el 90% de las veces traiga uno.
+        El caso real es el otro: a un cliente se le hacen tres visitas en el mes
+        y se le emite **un** remito por las tres, porque es una factura la que
+        va a salir de ahi. Con un solo camino no hay dos formas de armar un
+        remito que puedan divergir --el de a uno es este con la lista de largo
+        1--, que es como el producto termino con el mismo defecto en tres
+        pantallas la ultima vez.
+
+        **Solo `cerrado`, no `resuelta`.** Es donde cae en el circuito real de
+        [[lagrace-comunicaciones]]: el tecnico trae el comprobante de servicios
+        en papel, alguien lo controla contra la hoja de ruta y recien ahi lo
+        cierra "decidiendo si va a facturacion". Un ticket `resuelta` todavia no
+        paso ese control.
+
+        **Todos del mismo cliente**: un remito se emite a nombre de uno solo.
+
+        **Idempotente por lote**: si TODOS los elegidos ya apuntan al MISMO
+        remito, devuelve ese --el doble click--. Una mezcla de remitados y no
+        remitados es un error, no una idempotencia: devolver el remito viejo
+        dejaria a los nuevos sin facturar y sin decirlo.
+
+        ## Que lleva el remito
+
+        - **Una linea de trabajo por reclamo**, encabezada por el **N° CDS** del
+          comprobante en papel cuando lo tiene. Ese numero es lo unico que ata
+          la conformidad firmada con el ticket del sistema, y con tres trabajos
+          en el mismo remito no alcanza con ponerlo en las observaciones: hay
+          que poder leer, renglon por renglon, cual es cual. `qty` son las horas
+          invertidas si estan cargadas, y `1` si no --un reclamo se cobra por
+          hora o como visita, y las dos formas entran en la misma linea--.
+        - **Los materiales de cada reclamo debajo de su trabajo**, al precio de
+          venta del catalogo (`materiales.valorizados`), con el reclamo del que
+          salieron dicho en la linea.
+
+        El PDF del remito **no imprime precios** (`_draw_items_table` con
+        `show_prices=False`): lo que se lee en el papel es la descripcion y la
+        cantidad. Por eso el CDS va en la descripcion y no en un campo aparte.
+
+        🔴 **Los precios pueden salir en cero, y esta bien.** El valor hora sale
+        del catalogo de servicios (`ServicioCatalogoRepository.valor_hora`) y puede
+        estar marcado todavia; un material sin `default_sale_price` tampoco
+        tiene precio. El remito nace con los importes que el sistema **sabe**, y
+        el operador completa el resto editandolo; inventar un numero seria peor.
+        Lo que cierra el circuito es que la bandeja de facturacion **se niega a
+        mandar un remito con total 0**, asi que un olvido no llega a facturarse.
+
+        ## Lo que NO es atomico
+
+        El remito lo escribe la conexion de LibraCore y el vinculo lo escribe
+        SQLAlchemy: son dos conexiones, asi que no hay una transaccion que las
+        cubra (mismo problema que documenta `materiales.py`). Si el proceso se
+        cae entre las dos, queda un remito emitido sin vinculo y el proximo
+        intento genera un segundo remito por los mismos tickets. Se elige este
+        orden --primero el remito, despues el vinculo-- porque el error al
+        reves es peor: un ticket que dice "ya se remitio" apuntando a un remito
+        que no existe deja el trabajo sin poder facturarse nunca.
+
+        El vinculo de los N si es una sola sentencia (`UPDATE ... WHERE id IN`),
+        asi que no hay un estado intermedio donde la mitad del lote quedo atada
+        al remito y la otra mitad no.
+        """
+        from . import fecha
+        from .remitos_presupuestos import datos_cliente_para_comprobante
+
+        preparado = self.preparar_remito(incidencia_ids, remitos, clientes, servicios)
+        # El doble click: todos los elegidos ya apuntan al mismo remito.
+        if "remito_existente" in preparado:
+            return preparado["remito_existente"]
+        items, cliente, ids = (
+            preparado["items"], preparado["cliente"], preparado["ids"]
+        )
+
         remito = remitos.create(
             # `fecha.hoy()` y no `fecha_cierre`: el cierre se guarda en UTC
             # (`update()` usa `datetime.now(timezone.utc)`), asi que un ticket
@@ -2087,7 +2138,7 @@ class IncidenciaRepository:
             client_id=cliente["id"],
             client_cuit=cliente["cuit"] or "",
             items=items,
-            observations=_observaciones_del_lote(trabajos),
+            observations=preparado["observations"],
             usuario_id=usuario_id,
             # El domicilio si el cliente lo tiene cargado, y la ciudad si no.
             # Los formularios de remito y presupuesto lo hacen tipear; aca no
@@ -2096,11 +2147,33 @@ class IncidenciaRepository:
             **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
         )
 
+        self.vincular_al_remito(ids, remito["id"])
+        return remito
+
+    def vincular_al_remito(self, incidencia_ids: list[int], remito_id: int) -> int:
+        """Ata los reclamos al remito. Devuelve cuántos ató.
+
+        🔴 **Es lo único que impide que el mismo reclamo entre en dos remitos**,
+        así que todo camino que emita un remito a partir de reclamos tiene que
+        llamarlo. Hoy son dos: `convertir_a_remito()` y el alta de remito con
+        `incidencia_ids` (`POST /api/remitos`), que es como Lagrace arma la
+        pre-factura desde el formulario.
+
+        **Una sola sentencia** (`UPDATE ... WHERE id IN`), así que no hay un
+        estado intermedio con la mitad del lote atada y la otra mitad suelta.
+
+        Vincula **sólo los que no tienen remito**: si alguno ya está atado, no
+        se lo pisa. Pisar el vínculo dejaría al remito viejo cobrando un trabajo
+        que ahora figura en otro, y a nadie enterándose.
+        """
+        ids = list(dict.fromkeys(incidencia_ids))
+        if not ids:
+            return 0
         with self.session_factory() as session:
-            session.execute(
+            resultado = session.execute(
                 update(Incidencia)
-                .where(Incidencia.id.in_(ids))
-                .values(remito_id=remito["id"])
+                .where(Incidencia.id.in_(ids), Incidencia.remito_id.is_(None))
+                .values(remito_id=remito_id)
             )
             session.commit()
-        return remito
+            return resultado.rowcount or 0

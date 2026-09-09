@@ -1,16 +1,21 @@
-// De un reclamo cerrado al remito — el camino a facturación de un servicio.
+// De un reclamo cerrado al remito — y **por qué este archivo dice ahora lo
+// contrario que antes**.
 //
-// La bandeja de "Enviar a facturar" sólo acepta remitos, así que sin este botón
-// un trabajo por servicio no tiene cómo llegar a facturarse. Lo que fijan estos
-// tests es lo que el usuario ve, que es donde se rompe:
+// Hasta el 2026-09-09 había TRES puertas para convertir un reclamo en remito: un
+// botón en la ficha, otro en la grilla, y el endpoint de a varios. El humano
+// decidió dejar **una sola**: se arma desde "Nuevo remito", eligiendo el cliente
+// y trayendo sus reclamos cerrados.
 //
-// - Que el botón **no aparezca** antes de tiempo: en el circuito real es al
-//   cerrar cuando se decide si va a facturación.
-// - Que una vez convertido deje de ofrecer generar y pase a llevar al remito.
-//   Ofrecerlo de nuevo —aunque el servidor sea idempotente— le hace creer al
-//   usuario que no se generó, y el remito emitido queda sin quién lo encuentre.
-// - Que aterrice en el remito: nace con los precios en cero y hay que cargarlos.
-import { render as renderRTL, screen, waitFor } from '@testing-library/react'
+// 🔑 **La diferencia no es dónde está el botón.** Por los caminos viejos el
+// remito salía **ya emitido** con lo que el sistema decidía, y corregirlo era
+// editar un comprobante hecho. Por el nuevo, los renglones entran al **borrador**
+// y se editan antes de emitir — que es como Lagrace arma la pre-factura.
+//
+// Lo que estos tests custodian ahora es que las puertas viejas **no vuelvan**:
+// una que reaparezca es un segundo camino que puede facturar distinto, y este
+// producto ya pagó ese error. Lo que sí se conserva —y tiene su test— es
+// **"Ver remito"**, que no es una puerta sino la forma de llegar a lo emitido.
+import { render as renderRTL, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -103,18 +108,17 @@ describe('generar el remito de un reclamo', () => {
     expect(screen.queryByRole('button', { name: /Generar remito/i })).toBeNull()
   })
 
-  it('cerrado lo ofrece, y al tocarlo lleva al remito para ponerle precios', async () => {
+  it('🔴 un reclamo CERRADO tampoco lo ofrece: la puerta se cerró', async () => {
+    // Antes este test afirmaba lo contrario —que cerrado sí lo ofrecía y
+    // llevaba al remito—. Se dio vuelta el 2026-09-09 con la decisión de dejar
+    // una sola puerta. Si vuelve a aparecer, hay dos caminos otra vez.
     montar({ ...BASE, estado: 'cerrado', fecha_cierre: '2026-08-13T18:00:00' })
     render(<IncidenciaDetalle />)
     await screen.findByDisplayValue('Central sin tono')
 
-    await userEvent.click(await screen.findByRole('button', { name: /Generar remito/i }))
-
-    await waitFor(() => expect(posts).toHaveLength(1))
-    expect(posts[0]).toContain('/api/incidencias/1/convertir-en-remito')
-    // Aterriza en el remito: nace con los importes en cero y hay que cargarlos
-    // antes de poder mandarlo a facturar.
-    await waitFor(() => expect(navegado).toContain('/remitos/7'))
+    expect(screen.queryByRole('button', { name: /Generar remito/i })).toBeNull()
+    // Y no manda nada: no es que el botón esté escondido y el POST igual salga.
+    expect(posts).toHaveLength(0)
   })
 
   it('ya convertido deja de ofrecer generar y lleva al remito que existe', async () => {
@@ -169,71 +173,34 @@ function montarGrilla(incidencias: Record<string, unknown>[]) {
 const tilde = (id: number) =>
   screen.queryByRole('checkbox', { name: new RegExp(`reclamo #${id}$`, 'i') })
 
-describe('agrupar reclamos en un remito', () => {
-  it('el tilde no aparece en un reclamo ya remitado', async () => {
-    // 🔴 **Este caso cambió el 2026-08-15**, y conviene decir en qué. Antes
-    // afirmaba que el tilde salía SÓLO en los remitables, y por eso incluía un
-    // reclamo abierto esperando que no lo tuviera. Ahora el abierto sí se
-    // tilda: es lo que se elige para armar una salida de cuadrilla.
-    //
-    // Lo que no cambió —y es lo caro— es que un reclamo YA REMITADO no se pueda
-    // volver a elegir: cobrarlo dos veces es el error que este tilde evita.
+describe('🔴 la grilla ya no genera el remito', () => {
+  it('un reclamo cerrado sin facturar ya no se puede tildar', async () => {
+    // El tilde servía para dos acciones opuestas: agendar los abiertos y
+    // remitar los cerrados. Con el remito fuera, tildar un cerrado no haría
+    // nada — y un control que se deja apretar y no lleva a ninguna acción es
+    // peor que no ofrecerlo.
     montarGrilla([
       { ...CERRADO, id: 1 },
       { ...BASE, id: 2, titulo: 'Todavía abierto' },
-      { ...CERRADO, id: 3, titulo: 'Ya remitado', remito_id: 9 },
     ])
     renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
     await screen.findByText('Todavía abierto')
 
-    expect(tilde(1)).not.toBeNull()
-    // Cerrado y ya remitado: no entra a ninguna de las dos acciones.
-    expect(tilde(3)).toBeNull()
-    // El abierto SÍ se tilda ahora, pero para agendar — y por eso con él
-    // elegido la barra no ofrece el remito.
+    expect(tilde(1)).toBeNull()
+    // El abierto sí: es lo que se elige para armar la salida de cuadrilla.
     expect(tilde(2)).not.toBeNull()
+  })
+
+  it('con un cerrado elegido no ofrece ningún botón de remito', async () => {
+    montarGrilla([{ ...BASE, id: 2, titulo: 'Todavía abierto' }])
+    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
+    await screen.findByText('Todavía abierto')
+
     await userEvent.click(tilde(2)!)
+
     expect(screen.queryByRole('button', { name: /Generar remito/i })).toBeNull()
-  })
-
-  it('manda los elegidos juntos y aterriza en el remito', async () => {
-    montarGrilla([
-      { ...CERRADO, id: 1 },
-      { ...CERRADO, id: 2, titulo: 'Sin acceso al correo' },
-      { ...CERRADO, id: 3, titulo: 'Cambio de switch' },
-    ])
-    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
-    await screen.findByText('Cambio de switch')
-
-    await userEvent.click(tilde(1)!)
-    await userEvent.click(tilde(3)!)
-
-    // Tildar no navega a la ficha: si lo hiciera, la selección se perdería
-    // antes de poder tocar el botón.
-    expect(navegado).toHaveLength(0)
-    expect(await screen.findByText('2 reclamos elegidos')).toBeTruthy()
-
-    await userEvent.click(screen.getByRole('button', { name: /Generar remito/i }))
-
-    await waitFor(() => expect(enviado).not.toBeNull())
-    expect(enviado!.url).toContain('/api/incidencias/convertir-en-remito')
-    expect(enviado!.body).toEqual({ incidencia_ids: [1, 3] })
-    await waitFor(() => expect(navegado).toContain('/remitos/7'))
-  })
-
-  it('no deja mezclar clientes, y dice por qué', async () => {
-    montarGrilla([
-      { ...CERRADO, id: 1 },
-      { ...CERRADO, id: 2, cliente_id: 2, titulo: 'Nada que ver' },
-    ])
-    renderRTL(<MemoryRouter><Incidencias /></MemoryRouter>)
-    await screen.findByText('Nada que ver')
-
-    await userEvent.click(tilde(1)!)
-    await userEvent.click(tilde(2)!)
-
-    expect(screen.getByRole('button', { name: /Generar remito/i })).toBeDisabled()
-    expect(screen.getByText(/clientes distintos/i)).toBeTruthy()
+    // La otra mitad del tilde sigue viva, y es lo que no había que romper.
+    expect(screen.getByRole('button', { name: /Armar salida/i })).toBeTruthy()
     expect(enviado).toBeNull()
   })
 })

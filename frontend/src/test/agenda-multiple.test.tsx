@@ -89,8 +89,11 @@ describe('🔴 El tilde sirve para dos acciones opuestas', () => {
 
     expect(tilde(11)).toBeInTheDocument()
     expect(tilde(12)).toBeInTheDocument()
-    // Y el cerrado lo sigue teniendo, para el remito.
-    expect(tilde(13)).toBeInTheDocument()
+    // 🔴 **El cerrado ya NO lo tiene** (2026-09-09): generar el remito se movió
+    // a "Nuevo remito", así que tildar un cerrado acá no haría nada. Esta línea
+    // decía lo contrario hasta ese día.
+    expect(screen.queryByRole('checkbox', { name: 'Elegir el reclamo #13' }))
+      .toBeNull()
   })
 
   it('🔴 un reclamo resuelto pero no cerrado no se puede tildar', async () => {
@@ -114,30 +117,22 @@ describe('🔴 El tilde sirve para dos acciones opuestas', () => {
     expect(screen.queryByRole('button', { name: /Generar remito/ })).toBeNull()
   })
 
-  it('con un cerrado elegido ofrece el remito, y NO la salida', async () => {
-    const user = userEvent.setup()
-    render(<Incidencias />)
-    await screen.findByText('Ya se hizo')
-
-    await user.click(tilde(13))
-
-    expect(await screen.findByRole('button', { name: /Generar remito/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Armar salida/ })).toBeNull()
-  })
-
-  it('🔴 mezclando abiertos y cerrados no ofrece ninguna, y dice por qué', async () => {
-    // Un botón apagado sin motivo manda a adivinar; acá directamente no está,
-    // y el texto explica que son dos cosas distintas.
+  it('🔴 ya no se puede mezclar, porque el cerrado no se tilda', async () => {
+    // Los dos tests que había acá —"con un cerrado ofrece el remito" y
+    // "mezclando no ofrece ninguna"— describían un tilde con dos acciones. Con
+    // el remito fuera de esta pantalla queda una sola, y la mezcla **deja de
+    // ser posible por construcción** en vez de estar avisada por un texto.
     const user = userEvent.setup()
     render(<Incidencias />)
     await screen.findByText('No enciende el router')
 
     await user.click(tilde(11))
-    await user.click(tilde(13))
 
-    expect(screen.queryByRole('button', { name: /Armar salida/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Armar salida/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Generar remito/ })).toBeNull()
-    expect(screen.getByText(/cerrados y abiertos mezclados/)).toBeInTheDocument()
+    // Y el cerrado no está disponible para sumarse a la selección.
+    expect(screen.queryByRole('checkbox', { name: 'Elegir el reclamo #13' }))
+      .toBeNull()
   })
 })
 
