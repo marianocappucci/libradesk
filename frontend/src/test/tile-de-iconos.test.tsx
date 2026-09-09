@@ -50,7 +50,15 @@ beforeEach(() => {
     if (u.includes('/auth/me')) {
       return Promise.resolve(json({
         id: '1', username: 'ana', name: 'Ana', role: 'admin', active: true,
-        nombre: 'Ana', modulos: [], empresa_nombre: 'Prueba', mp_pending_count: 0,
+        // 🔴 Desde el 2026-09-09 la lista importa: el Layout ya filtra por
+        // módulo (`hasModule`), así que un `[]` esconde los ítems gateados y
+        // este test —que cuenta iconos dibujados— veía 18 en vez de más de 20.
+        nombre: 'Ana', empresa_nombre: 'Prueba', mp_pending_count: 0,
+        modulos: [
+          'dashboard', 'reportes', 'remitos', 'presupuestos', 'alquileres',
+          'stock', 'compras', 'ventas', 'cuenta_corriente', 'insumos',
+          'facturacion_externa',
+        ],
       }))
     }
     if (u.includes('/api/dashboard')) return Promise.resolve(json(RESUMEN_DASHBOARD))

@@ -65,7 +65,19 @@ function conSesion() {
             id: '1', username: 'ana', name: 'Ana', role: 'admin', active: true,
             // Forma extendida de Contalibra/Restolibra: el Layout arma el
             // sidebar con `modulos`.
-            nombre: 'Ana', modulos: [], empresa_nombre: 'Prueba', mp_pending_count: 0,
+            //
+            // 🔴 **Desde el 2026-09-09 la lista importa de verdad.** Antes
+            // LibraDesk no le pasaba `hasModule` al Layout, así que
+            // `moduleVisible()` devolvía `true` siempre y un `[]` mostraba el
+            // menú entero — este test pasaba por eso, no porque el módulo
+            // estuviera. Ahora los ítems gateados sólo aparecen si su módulo
+            // está prendido, así que la instancia de prueba declara los suyos.
+            nombre: 'Ana', empresa_nombre: 'Prueba', mp_pending_count: 0,
+            modulos: [
+              'dashboard', 'reportes', 'remitos', 'presupuestos', 'alquileres',
+              'stock', 'compras', 'ventas', 'cuenta_corriente', 'insumos',
+              'facturacion_externa',
+            ],
           })
         : String(url).includes(RUTA_DASHBOARD)
           ? json(RESUMEN_DASHBOARD)
