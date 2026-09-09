@@ -278,12 +278,20 @@ def test_listar_cuits_usa_lo_tipeado_antes_de_guardar(config, sin_entorno, monke
 
 def test_sin_credenciales_no_se_consulta_nada(config, sin_entorno, monkeypatch):
     """No es un lugar para averiguar si una cuenta existe: sin credenciales ni
-    siquiera se sale a la red."""
+    siquiera se sale a la red.
+
+    Y **levanta en vez de devolver `[]`**: la lista vacía ya significa "esta
+    cuenta no tiene CUITs", así que usarla también para "no tengo con qué
+    preguntar" hace que la pantalla culpe a la cuenta del estudio.
+    """
     llamadas = []
     monkeypatch.setattr(sos.httpx, "Client",
                         lambda **kw: llamadas.append(1) or HttpFalso())
 
-    assert sos.listar_cuits() == []
+    with pytest.raises(sos.SOSNoConfigurado) as e:
+        sos.listar_cuits()
+
+    assert "la contraseña" in str(e.value), "el mensaje dice qué falta"
     assert llamadas == []
 
 
@@ -297,6 +305,24 @@ def test_un_login_sin_jwt_es_un_error_de_sos(config, sin_entorno, monkeypatch):
 
     with pytest.raises(sos.ErrorSOS):
         sos.listar_cuits()
+
+
+def test_un_secreto_ilegible_tampoco_sale_a_la_red(config, sin_entorno, monkeypatch):
+    """La contraseña guardada dejó de poder descifrarse — se rotó `SECRET_KEY`.
+
+    Es lo que le pasó a `lagrace` el 2026-09-07 y se descubrió el 2026-09-09:
+    el secreto se había cifrado el 2026-08-18 y la clave cambió en el medio.
+    """
+    config.guardar("sos", habilitado=True, valores=SOS_COMPLETO)
+    llamadas = []
+    monkeypatch.setattr(sos.httpx, "Client",
+                        lambda **kw: llamadas.append(1) or HttpFalso())
+
+    monkeypatch.setenv("SECRET_KEY", "otra-clave-larga-la-de-despues-de-rotar")
+
+    with pytest.raises(sos.SOSNoConfigurado):
+        sos.listar_cuits()
+    assert llamadas == []
 
 
 # ── 4. A través de la app, que es donde se vio el defecto ───────────────────
@@ -373,6 +399,54 @@ def test_una_credencial_mala_llega_como_409_y_no_como_lista_vacia(client, monkey
                     json={"usuario": "quien@sea", "password": "mal"})
 
     assert r.status_code == 409
+
+
+def test_una_credencial_ilegible_no_se_ve_como_una_cuenta_sin_cuits(
+        client, secret_key, monkeypatch):
+    """🔴 El síntoma del 2026-09-09 en `lagrace`, reproducido de punta a punta.
+
+    Con la contraseña guardada ilegible, el botón «Buscar en SOS» contestaba
+    **200 con lista vacía** y la pantalla decía *"ese usuario no tiene ninguna
+    CUIT asociada en SOS"* — que culpa a la cuenta del estudio contable, no a
+    la clave de esta instancia. Tres clics y ningún dato sobre la causa real.
+    """
+    _login(client)
+    client.put("/api/facturacion/config/sos",
+               json={"habilitado": True, "valores": SOS_COMPLETO})
+    llamadas = []
+    monkeypatch.setattr(sos.httpx, "Client",
+                        lambda **kw: llamadas.append(1) or HttpFalso())
+
+    monkeypatch.setenv("SECRET_KEY", "otra-clave-larga-la-de-despues-de-rotar")
+    r = client.post("/api/facturacion/config/sos/cuits", json={})
+
+    assert r.status_code == 409, r.text
+    assert "no se puede leer" in r.json()["detail"]
+    assert llamadas == [], "sin credencial no se molesta a SOS"
+
+
+def test_el_secreto_ilegible_no_borra_de_la_pantalla_lo_que_no_es_secreto(
+        client, secret_key, monkeypatch):
+    """Usuario, `idcuit` y punto de venta viven en claro en la fila.
+
+    Vaciarlos dejaba la pantalla como recién instalada —y con el botón «Buscar
+    en SOS» deshabilitado, porque se apoya en que haya un usuario— justo cuando
+    lo único que hay que hacer es volver a escribir la contraseña.
+    """
+    _login(client)
+    client.put("/api/facturacion/config/sos",
+               json={"habilitado": True, "valores": SOS_COMPLETO})
+
+    monkeypatch.setenv("SECRET_KEY", "otra-clave-larga-la-de-despues-de-rotar")
+    sos_ = [d for d in client.get("/api/facturacion/config").json()["destinos"]
+            if d["destino"] == "sos"][0]
+
+    assert sos_["secretos_ilegibles"] is True
+    assert sos_["usuario"] == SOS_COMPLETO["usuario"]
+    assert sos_["idcuit"] == SOS_COMPLETO["idcuit"]
+    assert sos_["puntoventa"] == SOS_COMPLETO["puntoventa"]
+    assert sos_["password_cargado"] is False, "la que no se puede leer no cuenta"
+    assert sos_["configurado"] is False, "y la instancia no puede emitir"
 
 
 def test_staff_no_puede_pedir_las_cuits(client):
