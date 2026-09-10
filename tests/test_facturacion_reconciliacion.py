@@ -174,6 +174,107 @@ def test_un_comprobante_que_esta_se_sigue_leyendo_igual(sos_configurado):
     assert estado["comprobante"] == "FA 0015-00000001"
 
 
+# ── 1b. El reintento ────────────────────────────────────────────────────────
+#
+# `GET /venta/detalle` de SOS es intermitente (medido el 2026-09-10: el mismo id
+# cortó a los 15,5 s y contestó a los 3,7 s). Lo que fijan estos tests es qué se
+# reintenta y qué no: el silencio sí, una respuesta nunca.
+
+CABECERA = {"cabecera": {"id": 906683730, "fcncnd": "F", "letra": "A",
+                         "puntoventa": 15, "numero": 1, "cae": None}}
+
+
+class HttpSecuencia:
+    """Como `HttpDetalle`, pero cada pregunta por `/venta/detalle` saca la
+    respuesta siguiente de la lista —un cuerpo o una excepción— y las cuenta.
+
+    Los tests dejan **una respuesta de más** al final a propósito: si el código
+    preguntara una vez más de lo debido, la consumiría y el resultado cambiaría,
+    en vez de fallar por una lista vacía que no dice nada."""
+
+    def __init__(self, *respuestas):
+        self.respuestas = list(respuestas)
+        self.preguntas = 0
+
+    def request(self, metodo, url, json=None, headers=None, timeout=None):
+        if "/login" in url or "/cuit/credentials/" in url:
+            return httpx.Response(200, json={"jwt": "J"},
+                                  request=httpx.Request("GET", "https://x"))
+        self.preguntas += 1
+        respuesta = self.respuestas.pop(0)
+        if isinstance(respuesta, Exception):
+            raise respuesta
+        return httpx.Response(200, json=respuesta,
+                              request=httpx.Request("GET", "https://x"))
+
+
+def _estado_en_secuencia(*respuestas):
+    http = HttpSecuencia(*respuestas)
+    adaptador = sos.AdaptadorSOS(cliente_http=http)
+    return adaptador, http
+
+
+def test_un_corte_de_sos_se_reintenta_y_la_segunda_respuesta_manda(sos_configurado):
+    """🔴 El caso medido: el primer intento corta, el segundo contesta bien."""
+    adaptador, http = _estado_en_secuencia(httpx.ReadTimeout("corte de SOS"),
+                                           CABECERA)
+
+    estado = adaptador.estado_venta(906683730)
+
+    assert estado["comprobante"] == "FA 0015-00000001"
+    assert http.preguntas == 2
+
+
+def test_un_corte_seguido_del_mensaje_real_es_venta_inexistente(sos_configurado):
+    """Lo que pasó con las ventas borradas de `lagrace`: timeout y después la
+    frase medida. Sin reintento esa fila quedaba en "No se pudo preguntar"."""
+    adaptador, http = _estado_en_secuencia(httpx.ReadTimeout("corte de SOS"),
+                                           {"error": MENSAJE_REAL_DE_SOS},
+                                           CABECERA)
+
+    with pytest.raises(sos.VentaInexistente):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == 2
+
+
+def test_un_error_de_sos_tambien_se_reintenta(sos_configurado):
+    adaptador, http = _estado_en_secuencia({"error": "Error interno del servidor"},
+                                           CABECERA)
+
+    assert adaptador.estado_venta(906683730)["emitido"] is False
+    assert http.preguntas == 2
+
+
+def test_venta_inexistente_no_se_reintenta(sos_configurado):
+    """🔴 "Ya no está" es SOS contestando, no SOS callado. Si se reintentara, la
+    cabecera que queda en la lista la haría aparecer como viva."""
+    adaptador, http = _estado_en_secuencia({"error": MENSAJE_REAL_DE_SOS},
+                                           CABECERA)
+
+    with pytest.raises(sos.VentaInexistente):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == 1
+
+
+def test_la_respuesta_buena_no_se_reintenta(sos_configurado):
+    adaptador, http = _estado_en_secuencia(CABECERA, CABECERA)
+
+    adaptador.estado_venta(906683730)
+
+    assert http.preguntas == 1
+
+
+def test_si_todos_los_intentos_cortan_sale_el_error_y_con_tope(sos_configurado):
+    """Con el tope fijo. La ruta recorre las filas de a una, así que cada
+    intento de más es un corte de SOS más por fila en el peor caso."""
+    cortes = [httpx.ReadTimeout("corte de SOS")] * sos.INTENTOS_ESTADO_VENTA
+    adaptador, http = _estado_en_secuencia(*cortes, CABECERA)
+
+    with pytest.raises(httpx.TransportError):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == sos.INTENTOS_ESTADO_VENTA
+
+
 # ── 2. La escritura de vuelta, sobre la base ────────────────────────────────
 
 def _envio_enviado(puente, origen_id=12, remoto=906683730):
@@ -296,6 +397,74 @@ def test_sos_caido_no_reescribe_nada(bandeja):
     assert "Token expirado" in fila["error"]
     assert fila.get("ausente") is None
     assert puente.marcados == [], "no se pudo preguntar: no se escribe nada"
+
+
+# ── 4. El presupuesto de tiempo de la ruta ──────────────────────────────────
+
+class AdaptadorContador(AdaptadorFalso):
+    """Anota por qué ventas le preguntaron."""
+
+    def __init__(self):
+        super().__init__()
+        self.preguntas = []
+
+    def estado_venta(self, idventa):
+        self.preguntas.append(idventa)
+        return super().estado_venta(idventa)
+
+
+@pytest.fixture
+def bandeja_de_tres(client, monkeypatch, sos_configurado):
+    """Tres envíos mandados, como los de `lagrace` el 2026-09-10."""
+    falso = PuenteFalso([{"origen_tipo": fe.ORIGEN_REMITO, "origen_id": i,
+                          "comprobante_remoto_id": 900 + i} for i in (1, 2, 3)])
+    client.app.state.puente_facturacion = falso
+    adaptador = AdaptadorContador()
+    monkeypatch.setattr(sos, "AdaptadorSOS", lambda *a, **k: adaptador)
+    return client, falso, adaptador
+
+
+def test_pasado_el_presupuesto_no_se_arranca_otra_fila(bandeja_de_tres, monkeypatch):
+    """🔴 El proxy corta a los 90 s y, con el reintento, tres filas con SOS lento
+    son 120 s: un 504 que se lleva también las filas que sí contestaron.
+
+    El reloj se lee al empezar y antes de cada fila; acá la primera fila "tarda"
+    más que el presupuesto entero.
+    """
+    from app.routers import facturacion as rutas
+
+    client, puente, adaptador = bandeja_de_tres
+    pasado = rutas.PRESUPUESTO_ESTADOS_SOS + 1
+    lecturas = iter([0.0, 0.0, pasado, pasado])
+    monkeypatch.setattr(rutas, "_reloj", lambda: next(lecturas))
+
+    r = client.post("/api/facturacion/estados-sos")
+
+    assert r.status_code == 200, r.text
+    assert adaptador.preguntas == [901], "después del presupuesto no se pregunta"
+    filas = r.json()["items"]
+    assert [f["origen_id"] for f in filas] == [1, 2, 3], "ninguna fila se pierde"
+    assert "error" not in filas[0]
+    for fila in filas[1:]:
+        assert "No se llegó a consultar" in fila["error"]
+        assert fila.get("ausente") is None
+    # Lo no consultado no se escribe en ninguna dirección.
+    assert puente.marcados == []
+    assert puente.desmarcados == [(fe.ORIGEN_REMITO, 1)]
+
+
+def test_dentro_del_presupuesto_se_pregunta_por_todas(bandeja_de_tres, monkeypatch):
+    """El control: con SOS rápido el presupuesto no se nota."""
+    from app.routers import facturacion as rutas
+
+    client, _, adaptador = bandeja_de_tres
+    monkeypatch.setattr(rutas, "_reloj", lambda: 0.0)
+
+    r = client.post("/api/facturacion/estados-sos")
+
+    assert r.status_code == 200, r.text
+    assert adaptador.preguntas == [901, 902, 903]
+    assert all("error" not in f for f in r.json()["items"])
 
 
 def test_una_venta_que_esta_desmarca_por_las_dudas(bandeja):

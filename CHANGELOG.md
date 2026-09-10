@@ -12,6 +12,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ## [Sin versionar] — hitos por fecha
 
 ### 2026-09-10
+- **Corregido:** "Consultar estado en el contador" dejaba filas en "No se pudo
+  preguntar" que se resolvían apretando de nuevo. `GET /venta/detalle` de SOS es
+  intermitente —el mismo id cortó a los 15,5 s y contestó bien a los 3,7 s—, así
+  que ahora se pregunta **dos veces** antes de rendirse. Sólo se reintenta lo que
+  no dice nada (un error o un corte); una respuesta, incluida "ya no está", no.
+  Y la consulta entera tiene un **tope de 40 s**: el proxy corta a los 90 y, con
+  SOS lento, tres filas reintentadas eran 120 s. Las filas que no llegan a
+  consultarse lo dicen ("No se llegó a consultar") y no se tocan.
 - **Corregido:** lo de abajo no llegaba a dispararse en producción. SOS no dice
   "no existe" en ningún idioma — contesta *"Error: Imposible cargar detalles de
   la venta"*—, así que los remitos con la venta borrada seguían mostrando "No se
@@ -26,6 +34,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   y en el primer caso **escribe de vuelta** el estado del envío
   (`ausente_remoto`, "Ya no está allá"). `/api/facturacion/estados-sos` pasa de
   `GET` a `POST` porque, además de leer, reconcilia.
+- **Corregido:** el add-on `modo_simple` no se podía administrar desde el
+  backoffice. `app/database.py` no exportaba `get_modulos` ni `set_addon` —el
+  contrato que el backoffice invoca por `docker exec`— así que la lectura moría
+  con `ImportError` y la pantalla mostraba el add-on **destildado en una
+  instancia que lo tenía prendido** (`lagrace`, con `modo_simple = true` en su
+  base). Adentro de la app el add-on siempre funcionó bien; lo que estaba roto
+  era administrarlo. Los dos shims delegan en `libracore.db.modulos`.
 
 ### 2026-08-31
 - **Añadido:** mover un equipo del depósito a un sector del cliente, e instalar un
