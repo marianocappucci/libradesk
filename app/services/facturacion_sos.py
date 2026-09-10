@@ -195,12 +195,34 @@ class VentaInexistente(ErrorSOS):
 #: contesta HTTP 200 hasta cuando falla (ver el docstring del módulo), así que
 #: el status no distingue nada y el cuerpo trae sólo `{"error": "..."}`.
 #:
-#: ⚠️ **Es una red, no una certeza**: cubre las formas conocidas, y si SOS usa
-#: otra, la fila cae en el camino genérico —"no se pudo preguntar"— y el estado
-#: local no se toca. Ese default es el correcto: equivocarse hacia *no sé* deja
-#: la fila intacta; equivocarse hacia *no está* reescribiría el estado de un
-#: comprobante que sí existe.
+#: 🔑 **La primera entrada es la única MEDIDA; el resto es la red.** SOS no dice
+#: "no existe" en ningún idioma: contesta
+#: `{"error": "Error: Imposible cargar detalles de la venta"}`, un texto que por
+#: sí solo se lee como una falla interna. Que signifique *ese id no resuelve* se
+#: estableció con un par de controles corridos en la misma cuenta y el mismo
+#: minuto (2026-09-10):
+#:
+#:   * venta viva (`900537569`, la de compulibra) → `{"cabecera": {...}}` completa
+#:   * id inventado (`999999999`)                 → ese mismo `error`
+#:   * las 3 ventas borradas de `lagrace`          → ese mismo `error`
+#:
+#: Sin el control positivo, la frase no se podía agregar: un mensaje que aparece
+#: siempre no distingue nada.
+#:
+#: ⚠️ **El resto de la tupla no está medido** — cubre formas plausibles por si
+#: SOS cambia el texto. Si usa otra que no está acá, la fila cae en el camino
+#: genérico —"no se pudo preguntar"— y el estado local no se toca. Ese default
+#: es el correcto: equivocarse hacia *no sé* deja la fila intacta; equivocarse
+#: hacia *no está* reescribiría el estado de un comprobante que sí existe.
+#:
+#: 📌 Y queda una ambigüedad que ninguna medición cierra: SOS usa **el mismo
+#: texto** para "borrada" y para cualquier otra imposibilidad de cargarla, así
+#: que un fallo interno suyo sobre una venta viva se leería como ausencia. La
+#: red de seguridad es `desmarcar_ausente_remoto`, que la devuelve a `enviado`
+#: en la consulta siguiente, y el tooltip de la pantalla, que muestra el texto
+#: crudo de SOS.
 FRASES_VENTA_INEXISTENTE = (
+    "imposible cargar detalles",
     "no existe",
     "inexistente",
     "no se encontr",
