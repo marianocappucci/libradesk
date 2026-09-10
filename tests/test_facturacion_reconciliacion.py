@@ -174,6 +174,107 @@ def test_un_comprobante_que_esta_se_sigue_leyendo_igual(sos_configurado):
     assert estado["comprobante"] == "FA 0015-00000001"
 
 
+# ── 1b. El reintento ────────────────────────────────────────────────────────
+#
+# `GET /venta/detalle` de SOS es intermitente (medido el 2026-09-10: el mismo id
+# cortó a los 15,5 s y contestó a los 3,7 s). Lo que fijan estos tests es qué se
+# reintenta y qué no: el silencio sí, una respuesta nunca.
+
+CABECERA = {"cabecera": {"id": 906683730, "fcncnd": "F", "letra": "A",
+                         "puntoventa": 15, "numero": 1, "cae": None}}
+
+
+class HttpSecuencia:
+    """Como `HttpDetalle`, pero cada pregunta por `/venta/detalle` saca la
+    respuesta siguiente de la lista —un cuerpo o una excepción— y las cuenta.
+
+    Los tests dejan **una respuesta de más** al final a propósito: si el código
+    preguntara una vez más de lo debido, la consumiría y el resultado cambiaría,
+    en vez de fallar por una lista vacía que no dice nada."""
+
+    def __init__(self, *respuestas):
+        self.respuestas = list(respuestas)
+        self.preguntas = 0
+
+    def request(self, metodo, url, json=None, headers=None, timeout=None):
+        if "/login" in url or "/cuit/credentials/" in url:
+            return httpx.Response(200, json={"jwt": "J"},
+                                  request=httpx.Request("GET", "https://x"))
+        self.preguntas += 1
+        respuesta = self.respuestas.pop(0)
+        if isinstance(respuesta, Exception):
+            raise respuesta
+        return httpx.Response(200, json=respuesta,
+                              request=httpx.Request("GET", "https://x"))
+
+
+def _estado_en_secuencia(*respuestas):
+    http = HttpSecuencia(*respuestas)
+    adaptador = sos.AdaptadorSOS(cliente_http=http)
+    return adaptador, http
+
+
+def test_un_corte_de_sos_se_reintenta_y_la_segunda_respuesta_manda(sos_configurado):
+    """🔴 El caso medido: el primer intento corta, el segundo contesta bien."""
+    adaptador, http = _estado_en_secuencia(httpx.ReadTimeout("corte de SOS"),
+                                           CABECERA)
+
+    estado = adaptador.estado_venta(906683730)
+
+    assert estado["comprobante"] == "FA 0015-00000001"
+    assert http.preguntas == 2
+
+
+def test_un_corte_seguido_del_mensaje_real_es_venta_inexistente(sos_configurado):
+    """Lo que pasó con las ventas borradas de `lagrace`: timeout y después la
+    frase medida. Sin reintento esa fila quedaba en "No se pudo preguntar"."""
+    adaptador, http = _estado_en_secuencia(httpx.ReadTimeout("corte de SOS"),
+                                           {"error": MENSAJE_REAL_DE_SOS},
+                                           CABECERA)
+
+    with pytest.raises(sos.VentaInexistente):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == 2
+
+
+def test_un_error_de_sos_tambien_se_reintenta(sos_configurado):
+    adaptador, http = _estado_en_secuencia({"error": "Error interno del servidor"},
+                                           CABECERA)
+
+    assert adaptador.estado_venta(906683730)["emitido"] is False
+    assert http.preguntas == 2
+
+
+def test_venta_inexistente_no_se_reintenta(sos_configurado):
+    """🔴 "Ya no está" es SOS contestando, no SOS callado. Si se reintentara, la
+    cabecera que queda en la lista la haría aparecer como viva."""
+    adaptador, http = _estado_en_secuencia({"error": MENSAJE_REAL_DE_SOS},
+                                           CABECERA)
+
+    with pytest.raises(sos.VentaInexistente):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == 1
+
+
+def test_la_respuesta_buena_no_se_reintenta(sos_configurado):
+    adaptador, http = _estado_en_secuencia(CABECERA, CABECERA)
+
+    adaptador.estado_venta(906683730)
+
+    assert http.preguntas == 1
+
+
+def test_si_todos_los_intentos_cortan_sale_el_error_y_con_tope(sos_configurado):
+    """Con el tope fijo. La ruta recorre las filas de a una, así que cada
+    intento de más es un corte de SOS más por fila en el peor caso."""
+    cortes = [httpx.ReadTimeout("corte de SOS")] * sos.INTENTOS_ESTADO_VENTA
+    adaptador, http = _estado_en_secuencia(*cortes, CABECERA)
+
+    with pytest.raises(httpx.TransportError):
+        adaptador.estado_venta(906683730)
+    assert http.preguntas == sos.INTENTOS_ESTADO_VENTA
+
+
 # ── 2. La escritura de vuelta, sobre la base ────────────────────────────────
 
 def _envio_enviado(puente, origen_id=12, remoto=906683730):

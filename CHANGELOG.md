@@ -12,6 +12,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ## [Sin versionar] — hitos por fecha
 
 ### 2026-09-10
+- **Corregido:** "Consultar estado en el contador" dejaba filas en "No se pudo
+  preguntar" que se resolvían apretando de nuevo. `GET /venta/detalle` de SOS es
+  intermitente —el mismo id cortó a los 15,5 s y contestó bien a los 3,7 s—, así
+  que ahora se pregunta **dos veces** antes de rendirse. Sólo se reintenta lo que
+  no dice nada (un error o un corte); una respuesta, incluida "ya no está", no.
 - **Corregido:** lo de abajo no llegaba a dispararse en producción. SOS no dice
   "no existe" en ningún idioma — contesta *"Error: Imposible cargar detalles de
   la venta"*—, así que los remitos con la venta borrada seguían mostrando "No se
