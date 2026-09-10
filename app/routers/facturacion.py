@@ -161,6 +161,11 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
         # presupuesto de arriba. Si la venta reapareciera allá, se detecta al
         # reenviar: `_enviar_a_sos` pregunta antes de estrenar un `uniqueid`.
         if envio.get("estado") == ESTADO_AUSENTE_REMOTO:
+            # Lo que sí se hace, y sin preguntarle a nadie: dejar anulada su
+            # deuda. Es local e idempotente, y es lo que arregla las marcas
+            # hechas antes de que existiera la anulación (las tres de `lagrace`
+            # del 2026-09-10).
+            puente.anular_deuda(envio.get("origen_tipo"), int(envio.get("origen_id")))
             continue
         origen_tipo = envio.get("origen_tipo")
         origen_id = int(envio.get("origen_id"))

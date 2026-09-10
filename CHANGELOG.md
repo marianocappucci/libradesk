@@ -12,6 +12,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ## [Sin versionar] — hitos por fecha
 
 ### 2026-09-10
+- **Agregado:** cuando SOS **confirma** que un comprobante mandado ya no está, la
+  deuda que había cargado en cuenta corriente **se anula sola**, con un débito
+  negativo que dice de qué comprobante es (no un pago: de un pago se emite
+  recibo). Si se vuelve a mandar, se carga de nuevo. Nada se borra: el libro del
+  comprobante muestra cargo, anulación y cargo nuevo, y la idempotencia pasó de
+  "ya hay una fila con esta referencia" al **neto** de todas. Las marcas
+  anteriores se ajustan en la próxima consulta de estado. Hasta hoy eso se
+  revertía a mano (decisión del 2026-08-13, cambiada con el humano).
 - **Corregido:** un remito cuya venta se borró en SOS Contador **no se podía
   volver a mandar**, aunque el checkbox dejara. SOS quema el `uniqueid` aunque
   la venta se borre, así que el reenvío volvía `-1` y quedaba "Resuelto allá",

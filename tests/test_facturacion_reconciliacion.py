@@ -321,6 +321,10 @@ class PuenteFalso:
         self.envios = envios
         self.marcados = []
         self.desmarcados = []
+        self.anulados = []
+
+    def anular_deuda(self, origen_tipo, origen_id):
+        self.anulados.append((origen_tipo, origen_id))
 
     def listar(self):
         return self.envios
@@ -501,6 +505,10 @@ def test_lo_ya_confirmado_ausente_no_se_vuelve_a_preguntar(client, monkeypatch,
     assert r.status_code == 200, r.text
     assert adaptador.preguntas == [902]
     assert [f["origen_id"] for f in r.json()["items"]] == [2]
+    # A SOS no se le pregunta, pero la deuda sí se deja anulada: es lo que
+    # arregla las marcas anteriores a la anulación (las tres de `lagrace`). Y
+    # sólo la del ausente — la del que está en la bandeja no se toca.
+    assert falso.anulados == [(fe.ORIGEN_REMITO, 1)]
 
 
 # ── 5. Volver a mandar lo que borraron allá ─────────────────────────────────
