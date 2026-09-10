@@ -131,6 +131,12 @@ function DestinoCard({ inicial, onGuardado }: {
    *  antes del primer Guardar — que además no se puede completar sin el id. Si
    *  el campo de contraseña está vacío significa "la guardada sirve", y el
    *  backend usa esa.
+   *
+   *  🔴 **Una lista vacía significa una sola cosa: esa cuenta no tiene CUITs.**
+   *  Cuando el backend no tiene con qué preguntar —falta la contraseña, o la
+   *  guardada quedó ilegible al rotarse `SECRET_KEY`— contesta 409 y el motivo
+   *  sale por `errorCuits`. Hasta el 2026-09-09 contestaba 200 con la lista
+   *  vacía, y la pantalla le echaba la culpa a la cuenta del estudio.
    */
   async function buscarCuits() {
     setBuscandoCuits(true)

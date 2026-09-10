@@ -190,7 +190,13 @@ class ConfiguracionFacturacion:
             datos = self.leer(destino)
             ilegible = False
         except SecretoIlegible:
-            datos = {"habilitado": False}
+            # 🔴 Los parámetros **no son secretos**: viven en claro en la fila y
+            # se pueden mostrar igual. Devolverlos vacíos dejaba la pantalla
+            # como si nunca se hubiera configurado nada —sin usuario, sin
+            # `idcuit`, sin punto de venta— justo cuando lo único que falta es
+            # volver a escribir la contraseña. Y de paso deshabilitaba el botón
+            # «Buscar en SOS», que se apoya en que haya un usuario cargado.
+            datos = self._solo_parametros(destino)
             ilegible = True
 
         salida = {"destino": destino, "habilitado": bool(datos.get("habilitado")),
@@ -202,6 +208,20 @@ class ConfiguracionFacturacion:
         salida["configurado"] = self.esta_configurado(destino)
         salida["desde_entorno"] = self._viene_del_entorno(destino)
         return salida
+
+    def _solo_parametros(self, destino: str) -> dict:
+        """La parte legible de la fila, para cuando el secreto no se puede leer.
+
+        No toca `secretos_cifrados`, así que no puede volver a fallar por lo
+        mismo. Sin fila —la instancia sigue con el entorno— no hay nada que
+        rescatar y contesta lo mismo que antes.
+        """
+        with self.session_factory() as session:
+            fila = self._fila(session, destino)
+            if fila is None:
+                return {"habilitado": False}
+            return {"habilitado": fila.habilitado,
+                    **json.loads(fila.parametros or "{}")}
 
     def _viene_del_entorno(self, destino: str) -> bool:
         with self.session_factory() as session:
