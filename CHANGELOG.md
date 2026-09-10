@@ -19,6 +19,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   y en el primer caso **escribe de vuelta** el estado del envío
   (`ausente_remoto`, "Ya no está allá"). `/api/facturacion/estados-sos` pasa de
   `GET` a `POST` porque, además de leer, reconcilia.
+- **Corregido:** el add-on `modo_simple` no se podía administrar desde el
+  backoffice. `app/database.py` no exportaba `get_modulos` ni `set_addon` —el
+  contrato que el backoffice invoca por `docker exec`— así que la lectura moría
+  con `ImportError` y la pantalla mostraba el add-on **destildado en una
+  instancia que lo tenía prendido** (`lagrace`, con `modo_simple = true` en su
+  base). Adentro de la app el add-on siempre funcionó bien; lo que estaba roto
+  era administrarlo. Los dos shims delegan en `libracore.db.modulos`.
 
 ### 2026-08-31
 - **Añadido:** mover un equipo del depósito a un sector del cliente, e instalar un
