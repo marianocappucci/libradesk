@@ -17,7 +17,7 @@ que ya existen.
 from sqlalchemy import select
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from plans import TODOS_LOS_MODULOS
+from plans import ADDONS, TODOS_LOS_MODULOS
 
 from ..database import Base
 
@@ -45,7 +45,24 @@ class ModuleRepository:
     def is_enabled(self, modulo: str) -> bool:
         """Los módulos que no son gateables (no están en `TODOS_LOS_MODULOS`,
         ej. incidencias) están siempre habilitados, aunque nunca se haya
-        sembrado una fila — no tiene sentido gatear el core."""
+        sembrado una fila — no tiene sentido gatear el core.
+
+        🔴 **Los add-ons (`plans.ADDONS`) van al revés: sin fila, apagados.**
+        Quedan afuera de `TODOS_LOS_MODULOS` a propósito —si no, `ensure_seeded`
+        los prendería en todas las instancias—, así que sin esta rama caían en
+        el "no gateable" de abajo y `require_module("resguardo_externo")` no
+        cortaba **nunca**: el enlace a la nube del cliente quedaba abierto en
+        todas las instancias, con add-on o sin él. Un add-on está prendido sólo
+        si el backoffice escribió la fila con `habilitado` verdadero
+        (`app.database.set_addon`).
+
+        Para los módulos de plan y los no gateables el comportamiento es el de
+        siempre: sin fila, habilitados.
+        """
+        if modulo in ADDONS:
+            with self.session_factory() as session:
+                row = session.get(ModuleRow, modulo)
+                return row is not None and bool(row.habilitado)
         if modulo not in TODOS_LOS_MODULOS:
             return True
         with self.session_factory() as session:
