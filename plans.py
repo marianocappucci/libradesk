@@ -147,7 +147,12 @@ def modulos_de_plan(plan: str) -> set[str]:
 #     Ficha de reclamo con lo mínimo, sin Agenda ni Dashboard, home en el
 #     listado de pendientes y vocabulario "Reclamos" en vez de "Incidencias".
 #     **No apaga el core de tickets**: elige cómo se dibuja, no si existe.
-ADDONS = {"modo_simple"}
+#   - resguardo_externo: la copia de los backups a la nube del cliente (Google
+#     Drive, Dropbox), con el enlace que monta `libracore.resguardo_enlace`
+#     (LibraCore v1.93.0) en `/api/config/resguardo-externo/enlace`. Es el
+#     único add-on que se gatea con `require_module`, y por eso
+#     `ModuleRepository.is_enabled` trata los add-ons aparte: sin fila, apagado.
+ADDONS = {"modo_simple", "resguardo_externo"}
 
 # Superset de todos los módulos gateables = los del plan más alto.
 #
