@@ -36,6 +36,10 @@ def sf(monkeypatch, url_de_base):
     el schema en head, que es el mismo que corre en produccion.
     """
     monkeypatch.setenv("SECRET_KEY", "una-clave-de-sesion-larga-para-la-prueba")
+    # Sin esto, una variable que exista en la maquina donde corre la suite le
+    # daria a `descifrar` una clave de mas y los tests de rotacion pasarian o
+    # fallarian segun el entorno.
+    monkeypatch.delenv(fc.CLAVES_ANTERIORES, raising=False)
     engine = create_engine(url_de_base)
     yield sessionmaker(engine)
     # 🔴 `dispose()` obligatorio: `url_de_base` dropea la base en su teardown y
@@ -77,7 +81,9 @@ def test_se_puede_leer_de_vuelta(config):
     assert config.leer("sos")["password"] == "la-contrasena-secreta"
 
 
-def test_con_otra_secret_key_el_secreto_no_se_recupera(config, sf, monkeypatch):
+def test_con_otra_secret_key_y_sin_declarar_la_anterior_no_se_recupera(
+    config, sf, monkeypatch
+):
     """🔴 Es el punto: un backup restaurado en otra instancia no entrega la
     credencial. Molesto a propósito."""
     config.guardar("sos", True, SOS)
@@ -192,3 +198,107 @@ def test_habilitados_devuelve_los_usables_en_orden(config):
 def test_un_destino_desconocido_no_se_guarda(config):
     with pytest.raises(ValueError):
         config.guardar("inventado", True, {})
+
+
+# ── Cerrar una rotación de SECRET_KEY ───────────────────────────────────────
+#
+# Lo que fijan estos tests es el ciclo completo: rotar, leer con la vieja
+# declarada, recifrar, y SACAR la variable sin perder nada. El último paso es el
+# único que prueba que la rotación termina.
+
+CLAVE_VIEJA = "una-clave-de-sesion-larga-para-la-prueba"
+CLAVE_NUEVA = "la-clave-rotada-que-reemplaza-a-la-anterior"
+
+
+def _rotar(monkeypatch, anteriores=CLAVE_VIEJA):
+    monkeypatch.setenv("SECRET_KEY", CLAVE_NUEVA)
+    if anteriores is None:
+        monkeypatch.delenv(fc.CLAVES_ANTERIORES, raising=False)
+    else:
+        monkeypatch.setenv(fc.CLAVES_ANTERIORES, anteriores)
+
+
+def test_declarando_la_clave_anterior_el_secreto_se_sigue_leyendo(
+    config, sf, monkeypatch
+):
+    config.guardar("sos", True, SOS)
+    _rotar(monkeypatch)
+    assert config.leer("sos")["password"] == "la-contrasena-secreta"
+    assert config.ver("sos")["secretos_ilegibles"] is False
+
+
+def test_pendientes_de_recifrado_nombra_el_destino(config, sf, monkeypatch):
+    config.guardar("sos", True, SOS)
+    assert config.pendientes_de_recifrado() == []
+    _rotar(monkeypatch)
+    assert config.pendientes_de_recifrado() == ["sos"]
+
+
+def test_recifrar_deja_el_secreto_bajo_la_clave_viva(config, sf, monkeypatch):
+    """El ciclo entero. Lo que prueba que cerró es que el secreto sobrevive a
+    SACAR la variable de transición."""
+    config.guardar("sos", True, SOS)
+    _rotar(monkeypatch)
+
+    assert config.recifrar_secretos() == ["sos"]
+    assert config.pendientes_de_recifrado() == []
+
+    _rotar(monkeypatch, anteriores=None)
+    assert config.leer("sos")["password"] == "la-contrasena-secreta"
+
+
+def test_sin_recifrar_sacar_la_variable_pierde_el_secreto(config, sf, monkeypatch):
+    """Control negativo del de arriba: sin el recifrado, el mismo escenario
+    termina con la credencial ilegible."""
+    config.guardar("sos", True, SOS)
+    _rotar(monkeypatch, anteriores=None)
+    with pytest.raises(fc.SecretoIlegible):
+        config.leer("sos")
+
+
+def test_recifrar_es_idempotente(config, sf):
+    config.guardar("sos", True, SOS)
+    assert config.recifrar_secretos() == []
+
+
+def test_recifrar_no_toca_lo_que_no_puede_leer(config, sf, monkeypatch):
+    """Pisarlo con algo cifrado con la clave nueva destruiría el único rastro
+    de lo que había."""
+    config.guardar("sos", True, SOS)
+    with sf() as s:
+        antes = s.scalar(
+            select(fc.ConfigFacturacion.secretos_cifrados).where(
+                fc.ConfigFacturacion.destino == "sos"
+            )
+        )
+    _rotar(monkeypatch, anteriores="una-clave-que-tampoco-es-la-correcta")
+
+    assert config.recifrar_secretos() == []
+    # Y tampoco figura como pendiente: eso no lo arregla ningún recifrado.
+    assert config.pendientes_de_recifrado() == []
+
+    with sf() as s:
+        assert s.scalar(
+            select(fc.ConfigFacturacion.secretos_cifrados).where(
+                fc.ConfigFacturacion.destino == "sos"
+            )
+        ) == antes
+
+
+def test_cifrar_usa_siempre_la_vigente(config, sf, monkeypatch):
+    """Si `cifrar` pudiera usar una anterior, sacar la variable de transición
+    volvería ilegible algo recién guardado."""
+    _rotar(monkeypatch)
+    config.guardar("sos", True, SOS)
+    _rotar(monkeypatch, anteriores=None)
+    assert config.leer("sos")["password"] == "la-contrasena-secreta"
+
+
+def test_las_claves_anteriores_vacias_se_ignoran(sf, monkeypatch):
+    """`"a,,b"` y `" , "` son formas normales de quedar después de editar la
+    variable a mano. Una cadena vacía deriva una clave perfectamente válida que
+    no es la de nadie: no sirve para leer nada y hace más lento cada descifrado
+    fallido."""
+    monkeypatch.setenv(fc.CLAVES_ANTERIORES, f" , ,{CLAVE_VIEJA}, ")
+    assert fc._claves_anteriores() == [fc._derivar(CLAVE_VIEJA.encode())]
+
