@@ -411,11 +411,27 @@ def id_creado(cuerpo, contexto: str = "") -> int:
     return valor
 
 
-def uniqueid_de(origen_tipo: str, origen_id: int, instancia: str) -> str:
+def uniqueid_de(origen_tipo: str, origen_id: int, instancia: str,
+                intento: int = 0) -> str:
     """El `uniqueid` del comprobante: estable entre reintentos, único por
     instancia. Es la misma clave con la que `envios_facturacion` desduplica de
-    este lado, así que las dos puntas coinciden sin guardar nada nuevo."""
+    este lado, así que las dos puntas coinciden sin guardar nada nuevo.
+
+    🔴 **`intento` existe porque SOS quema el `uniqueid` aunque borren la
+    venta** (medido: un comprobante eliminado allá no se puede reenviar con el
+    mismo id; SOS contesta `-1`). Sin una forma de cambiarlo, un remito cuya
+    venta se borró en SOS no se podía volver a mandar nunca: el reenvío volvía
+    como "ya usado" y quedaba registrado `resuelto_remoto`, en verde, sin haber
+    llegado. Sólo sube cuando SOS **confirma** que la venta anterior no está —
+    ver `PuenteFacturacion._enviar_a_sos`—, porque un `uniqueid` nuevo es
+    justamente lo que deja de proteger contra duplicar.
+
+    El intento 0 es la semilla de siempre, así que los envíos que ya existen
+    siguen teniendo el mismo `uniqueid` que tenían.
+    """
     semilla = f"{instancia}:{origen_tipo}:{origen_id}"
+    if intento:
+        semilla = f"{semilla}:{intento}"
     return str(uuid.uuid5(NAMESPACE_UNIQUEID, semilla))
 
 

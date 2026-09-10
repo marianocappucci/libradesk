@@ -176,6 +176,10 @@ class EnvioFacturacion(Base):
         String(20), default=ESTADO_ENVIADO, server_default=ESTADO_ENVIADO, index=True,
     )
     comprobante_remoto_id: Mapped[int | None] = mapped_column(default=None)
+    # Cuántas veces hubo que volver a mandarlo porque lo borraron del otro lado.
+    # Entra en el `uniqueid` de SOS —ver `facturacion_sos.uniqueid_de` y la
+    # revisión `0041`—; el 0 es el de siempre.
+    intento: Mapped[int] = mapped_column(default=0, server_default="0")
     detalle: Mapped[str] = mapped_column(String(500), default="", server_default="")
     enviado_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, server_default=func.now(),
@@ -397,6 +401,7 @@ class PuenteFacturacion:
             "destino_nombre": NOMBRES_DESTINO.get(fila.destino, fila.destino),
             "estado": fila.estado,
             "comprobante_remoto_id": fila.comprobante_remoto_id,
+            "intento": fila.intento,
             "detalle": fila.detalle,
             "enviado_at": fila.enviado_at.isoformat(sep=" ", timespec="seconds"),
             "actualizado_at": fila.actualizado_at.isoformat(sep=" ", timespec="seconds"),
@@ -406,7 +411,8 @@ class PuenteFacturacion:
 
     def _registrar(self, origen_tipo: str, origen_id: int, estado: str,
                    detalle: str = "", comprobante_remoto_id: int | None = None,
-                   destino_usado: str | None = None) -> dict:
+                   destino_usado: str | None = None,
+                   intento: int | None = None) -> dict:
         with self.session_factory.begin() as session:
             fila = session.scalar(
                 select(EnvioFacturacion).where(
@@ -421,6 +427,7 @@ class PuenteFacturacion:
                     origen_tipo=origen_tipo, origen_id=origen_id, estado=estado,
                     detalle=detalle[:500], comprobante_remoto_id=comprobante_remoto_id,
                     destino=destino_usado, enviado_at=ahora, actualizado_at=ahora,
+                    intento=intento or 0,
                 )
                 session.add(fila)
             else:
@@ -432,6 +439,12 @@ class PuenteFacturacion:
                 # en qué quedó el envío que sí llegó.
                 if comprobante_remoto_id is not None:
                     fila.comprobante_remoto_id = comprobante_remoto_id
+                # Lo mismo con el intento: sólo lo mueve quien lo sabe (el
+                # envío a SOS). Una escritura que no lo trae no lo vuelve a 0,
+                # porque eso haría que el próximo reenvío estrene un `uniqueid`
+                # que SOS ya tiene quemado.
+                if intento is not None:
+                    fila.intento = intento
                 fila.actualizado_at = ahora
             session.flush()
             return self._a_dict(fila)
@@ -458,14 +471,16 @@ class PuenteFacturacion:
         return self._registrar(origen_tipo, origen_id, ESTADO_AUSENTE_REMOTO,
                                detalle=detalle)
 
-    def desmarcar_ausente_remoto(self, origen_tipo: str, origen_id: int) -> dict | None:
+    def desmarcar_ausente_remoto(self, origen_tipo: str, origen_id: int,
+                                 detalle: str = "Volvió a aparecer en el destino",
+                                 ) -> dict | None:
         """Lo vuelve a `enviado` si estaba marcado como ausente y reapareció.
 
-        La otra mitad de la reconciliación, y no es simetría por prolijidad: sin
-        esto, un comprobante que se marcó ausente y después vuelve a estar allá
-        —lo restauraron, o el matcher de texto se equivocó una vez— quedaría con
-        el badge "Ya no está allá" al lado de un "Sin emitir" leído en vivo, o
-        sea la pantalla contradiciéndose a sí misma.
+        Lo llama el reenvío (`_enviar_a_sos`) cuando, antes de estrenar un
+        `uniqueid`, le pregunta a SOS y la venta **sí está**: SOS usa el mismo
+        texto para "la borraron" que para un fallo suyo sobre una venta viva,
+        así que la marca de ausente puede estar equivocada. Mandarlo igual lo
+        duplicaría del lado del contador.
 
         **Sólo toca ese estado.** Un `resuelto_remoto` o un `error` significan
         otra cosa y no son asunto de esta función. Devuelve `None` si no hizo
@@ -474,8 +489,7 @@ class PuenteFacturacion:
         envio = self.get_envio(origen_tipo, origen_id)
         if envio is None or envio.estado != ESTADO_AUSENTE_REMOTO:
             return None
-        return self._registrar(origen_tipo, origen_id, ESTADO_ENVIADO,
-                               detalle="Volvió a aparecer en el destino")
+        return self._registrar(origen_tipo, origen_id, ESTADO_ENVIADO, detalle=detalle)
 
     def enviar(self, origen_tipo: str, comprobante: dict) -> dict:
         """Manda un comprobante a la bandeja y devuelve el envío registrado.
@@ -642,10 +656,6 @@ class PuenteFacturacion:
         origen_id = int(comprobante["id"])
         _, _, instancia = configuracion()
         payload = armar_payload(origen_tipo, comprobante, instancia)
-        # El `uniqueid` se agrega sólo en este camino: es un campo que SOS
-        # entiende y la bandeja de Contalibra no, y meterlo en `armar_payload`
-        # le cambiaría el cuerpo a un destino que hoy funciona.
-        payload["uniqueid"] = uniqueid_de(origen_tipo, origen_id, instancia or PRODUCTO)
         # 🔴 La ficha fiscal se busca en `clients`, no se lee del comprobante.
         #
         # El remito guarda un snapshot del cliente (nombre, domicilio, CUIT)
@@ -669,6 +679,27 @@ class PuenteFacturacion:
         validar_para_facturar(payload)
 
         adaptador = self._adaptador_sos or AdaptadorSOS()
+
+        previo = self.get_envio(origen_tipo, origen_id)
+        intento = previo.intento if previo is not None else 0
+        if previo is not None and previo.estado == ESTADO_AUSENTE_REMOTO:
+            freno = self._confirmar_que_ya_no_esta(adaptador, previo)
+            if freno is not None:
+                return freno
+            # Confirmado: la venta anterior no está. Su `uniqueid` quedó quemado
+            # en SOS, así que el reenvío necesita uno nuevo.
+            intento += 1
+
+        # El `uniqueid` se agrega sólo en este camino: es un campo que SOS
+        # entiende y la bandeja de Contalibra no, y meterlo en `armar_payload`
+        # le cambiaría el cuerpo a un destino que hoy funciona.
+        payload["uniqueid"] = uniqueid_de(origen_tipo, origen_id,
+                                          instancia or PRODUCTO, intento)
+
+        # El intento se guarda en **todas** las ramas, también en las que
+        # fallan: un corte de red después de que SOS creó la venta tiene que
+        # reintentarse con el mismo `uniqueid`, para que SOS lo rechace como
+        # "ya usado" en vez de crear una segunda.
         try:
             idventa = adaptador.enviar_venta(payload)
         except SOSNoConfigurado as e:
@@ -680,16 +711,64 @@ class PuenteFacturacion:
             # Contalibra, así que se registra igual — y deja de reintentarse.
             if "uniqueid" in detalle.lower():
                 return self._registrar(origen_tipo, origen_id, ESTADO_RESUELTO_REMOTO,
-                                       detalle=detalle)
+                                       detalle=detalle, intento=intento)
             logger.warning("SOS rechazo %s %s: %s", origen_tipo, origen_id, e)
-            return self._registrar(origen_tipo, origen_id, ESTADO_ERROR, detalle=detalle)
+            return self._registrar(origen_tipo, origen_id, ESTADO_ERROR,
+                                   detalle=detalle, intento=intento)
         except httpx.HTTPError as e:
             logger.warning("Fallo el envio de %s %s a SOS: %s", origen_tipo, origen_id, e)
             return self._registrar(origen_tipo, origen_id, ESTADO_ERROR,
-                                   detalle=f"No se pudo contactar a SOS Contador: {e}")
+                                   detalle=f"No se pudo contactar a SOS Contador: {e}",
+                                   intento=intento)
 
         return self._registrar(origen_tipo, origen_id, ESTADO_ENVIADO,
-                               comprobante_remoto_id=idventa)
+                               comprobante_remoto_id=idventa, intento=intento)
+
+    def _confirmar_que_ya_no_esta(self, adaptador, previo: EnvioFacturacion) -> dict | None:
+        """Antes de reenviar algo marcado "ya no está", se lo pregunta a SOS.
+
+        Devuelve `None` si SOS confirma que la venta anterior no existe —y
+        entonces se puede reenviar con un `uniqueid` nuevo— o el resultado a
+        mostrar si no se debe mandar.
+
+        🔴 **Es la guarda contra duplicar del lado del contador.** La marca de
+        ausente sale de un texto de SOS (*"Imposible cargar detalles de la
+        venta"*) que es el mismo para una venta borrada y para un fallo suyo
+        sobre una viva, y `GET /venta/detalle` es intermitente. Con el
+        `uniqueid` viejo eso daba igual: SOS rechazaba el duplicado. Con uno
+        nuevo ya no hay nada que lo rechace, así que el único momento para
+        estar seguros es éste.
+
+        - **La venta está** → se desmarca y **no** se manda: sigue en la
+          bandeja del contador.
+        - **No se pudo preguntar** → **no** se manda y la fila queda como
+          estaba, para que el próximo intento vuelva a preguntar. El resultado
+          no se guarda: no es un envío que falló, es uno que no se hizo.
+        """
+        from .facturacion_sos import ErrorSOS, VentaInexistente
+
+        remoto = previo.comprobante_remoto_id
+        if not remoto:
+            return None
+        try:
+            adaptador.estado_venta(int(remoto))
+        except VentaInexistente:
+            return None
+        except (ErrorSOS, httpx.HTTPError) as e:
+            logger.warning(
+                "No se pudo confirmar que la venta %s ya no este en SOS; no se "
+                "reenvia %s %s: %s", remoto, previo.origen_tipo, previo.origen_id, e)
+            return {
+                "origen_id": previo.origen_id,
+                "estado": ESTADO_ERROR,
+                "detalle": "No se mandó: SOS Contador no confirmó que el envío "
+                           "anterior ya no esté, y mandarlo sin saberlo podría "
+                           "duplicarlo. Probá de nuevo en un rato.",
+            }
+        return self.desmarcar_ausente_remoto(
+            previo.origen_tipo, previo.origen_id,
+            detalle="Sigue en SOS Contador: no hacía falta mandarlo de nuevo.",
+        )
 
     def _post(self, url: str, token: str, payload: dict) -> httpx.Response:
         if self._cliente_http is not None:

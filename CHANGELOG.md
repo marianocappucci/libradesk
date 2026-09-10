@@ -12,6 +12,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ## [Sin versionar] — hitos por fecha
 
 ### 2026-09-10
+- **Corregido:** un remito cuya venta se borró en SOS Contador **no se podía
+  volver a mandar**, aunque el checkbox dejara. SOS quema el `uniqueid` aunque
+  la venta se borre, así que el reenvío volvía `-1` y quedaba "Resuelto allá",
+  en verde, sin haber llegado. Ahora el envío lleva un `intento`
+  (`envios_facturacion.intento`, revisión `0041`) que entra en el `uniqueid`
+  desde el 1; el 0 es el de siempre. Antes de estrenar uno nuevo **se le
+  pregunta a SOS**: si la venta sigue allá no se manda (sería duplicarla), y si
+  no se puede preguntar tampoco.
+- **Cambiado:** "Falló" y "Ya no está allá" dejan de quedar para siempre en la
+  columna Envío. Se muestran cuando pasan —en los resultados al enviar, en "En
+  el contador" al consultar— y después la fila vuelve a "—", como un remito
+  para mandar. La consulta ya no vuelve a preguntar por lo que SOS confirmó
+  borrado.
 - **Corregido:** "Consultar estado en el contador" dejaba filas en "No se pudo
   preguntar" que se resolvían apretando de nuevo. `GET /venta/detalle` de SOS es
   intermitente —el mismo id cortó a los 15,5 s y contestó bien a los 3,7 s—, así

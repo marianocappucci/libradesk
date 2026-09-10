@@ -13,7 +13,7 @@ import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { formatMoney } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import { CheckCircle2, Info, Send as SendAccion, TriangleAlert, XCircle } from '@/components/iconos-accion'
+import { CheckCircle2, Info, Send as SendAccion, XCircle } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
 type Envio = {
@@ -86,14 +86,9 @@ const ESTADOS: Record<string, { label: string; ayuda: (destino: string) => strin
     ayuda: (d) => `Ya lo facturaron o lo descartaron en ${d}.`,
     tono: 'ok',
   },
-  // Ámbar y no verde: "resuelto allá" es el fin del camino, esto es lo
-  // contrario — el trabajo sigue sin facturar y hay algo para hacer.
-  ausente_remoto: {
-    label: 'Ya no está allá',
-    ayuda: (d) => `Se mandó, pero hoy ya no está en ${d}: lo borraron o lo `
-      + `anularon. Si todavía hay que facturarlo, mandalo de nuevo.`,
-    tono: 'atencion',
-  },
+  // Sin entrada para `ausente_remoto`: la columna Envío lo muestra como "—"
+  // (ver la celda) y el aviso "Ya no está" vive en "En el contador", en la
+  // consulta que lo descubre.
   error: {
     label: 'Falló',
     ayuda: () => 'No llegó. Se puede reintentar: mandarlo de nuevo no duplica nada.',
@@ -198,6 +193,10 @@ export function Facturacion() {
    *  no está de su lado, el backend deja ese envío en `ausente_remoto`. Por eso
    *  después se recarga la grilla — la columna "Envío" acaba de cambiar, y sin
    *  el `cargar()` seguiría diciendo "En la bandeja" hasta el próximo F5.
+   *
+   *  El "Ya no está" de "En el contador" sale **sólo en esta consulta**: el
+   *  backend no vuelve a preguntar por lo que ya confirmó ausente, así que en
+   *  la siguiente esa fila queda en "—" como un remito para mandar.
    */
   async function consultarEstados() {
     setConsultando(true)
@@ -293,19 +292,17 @@ export function Facturacion() {
       size: 150,
       cell: ({ row }) => {
         const envio = row.original.envio
-        if (!envio) return <span className="text-muted-foreground">—</span>
-        return (
-          <span className="flex items-center gap-1.5">
-            <EstadoBadge estado={envio.estado} destino={destinoNombre} />
-            {envio.estado === 'error' && envio.detalle && (
-              // El `title` va en el `span` y no en el ícono: los de lucide no
-              // aceptan `title` como prop en esta versión y `tsc` lo rechaza.
-              <span title={envio.detalle}>
-                <TriangleAlert className="size-3.5 shrink-0 text-destructive" />
-              </span>
-            )}
-          </span>
-        )
+        // 🔑 **La columna dice lo que está pasando, no lo que pasó.** "Falló" y
+        // "Ya no está allá" son episodios: se muestran cuando ocurren —en el
+        // recuadro de resultados al enviar, en "En el contador" al consultar—
+        // y después la fila vuelve a "—", que es lo que son: remitos para
+        // mandar. Pedido del humano el 2026-09-10, mirando `lagrace`: los
+        // carteles viejos quedaban para siempre y hacían creer que esas filas
+        // estaban trabadas. El motivo sigue guardado en `envio.detalle`.
+        if (!envio || envio.estado === 'error' || envio.estado === 'ausente_remoto') {
+          return <span className="text-muted-foreground">—</span>
+        }
+        return <EstadoBadge estado={envio.estado} destino={destinoNombre} />
       },
     },
     {
