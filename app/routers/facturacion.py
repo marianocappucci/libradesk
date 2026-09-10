@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 from ..dependencies import get_puente_facturacion, get_remito_service
 from ..services.facturacion_externa import (
     DESTINO_SOS,
+    ESTADO_AUSENTE_REMOTO,
     ORIGEN_REMITO,
     ORIGENES_ENVIABLES,
     EnvioNoConfigurado,
@@ -152,6 +153,15 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
         remoto = envio.get("comprobante_remoto_id")
         if not remoto:
             continue
+        # 🔑 Lo que SOS ya confirmó que no está no se vuelve a preguntar. El
+        # aviso "Ya no está" se muestra **una vez**, en la consulta que lo
+        # descubre; volver a preguntar lo hacía reaparecer en cada click —pedido
+        # del humano el 2026-09-10: "se puede limpiar el estado una vez que ya
+        # se mostró el cartel"— y gastaba tiempo de un endpoint lento contra el
+        # presupuesto de arriba. Si la venta reapareciera allá, se detecta al
+        # reenviar: `_enviar_a_sos` pregunta antes de estrenar un `uniqueid`.
+        if envio.get("estado") == ESTADO_AUSENTE_REMOTO:
+            continue
         origen_tipo = envio.get("origen_tipo")
         origen_id = int(envio.get("origen_id"))
         fila = {"origen_tipo": origen_tipo,
@@ -179,10 +189,6 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
             # Se anota en la fila y **no se toca el estado local**: no pudimos
             # preguntar, así que no sabemos nada nuevo de ese envío.
             fila["error"] = str(e)
-        else:
-            # Está allá. Si lo teníamos anotado como ausente, se corrige — ver
-            # `desmarcar_ausente_remoto`.
-            puente.desmarcar_ausente_remoto(origen_tipo, origen_id)
         filas.append(fila)
     return {"items": filas}
 

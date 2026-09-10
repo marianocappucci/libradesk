@@ -450,7 +450,7 @@ def test_pasado_el_presupuesto_no_se_arranca_otra_fila(bandeja_de_tres, monkeypa
         assert fila.get("ausente") is None
     # Lo no consultado no se escribe en ninguna dirección.
     assert puente.marcados == []
-    assert puente.desmarcados == [(fe.ORIGEN_REMITO, 1)]
+    assert puente.desmarcados == []
 
 
 def test_dentro_del_presupuesto_se_pregunta_por_todas(bandeja_de_tres, monkeypatch):
@@ -467,15 +467,186 @@ def test_dentro_del_presupuesto_se_pregunta_por_todas(bandeja_de_tres, monkeypat
     assert all("error" not in f for f in r.json()["items"])
 
 
-def test_una_venta_que_esta_desmarca_por_las_dudas(bandeja):
-    """Si estaba anotada como ausente y reapareció, se corrige sola."""
+def test_una_venta_que_esta_no_escribe_nada(bandeja):
+    """El control del caso de arriba: SOS la tiene, la fila se lee y nada más."""
     puente, montar = bandeja
 
     r = montar(AdaptadorFalso())
 
     assert r.json()["items"][0]["emitido"] is False
-    assert puente.desmarcados == [(fe.ORIGEN_REMITO, 12)]
+    assert puente.desmarcados == []
     assert puente.marcados == []
+
+
+def test_lo_ya_confirmado_ausente_no_se_vuelve_a_preguntar(client, monkeypatch,
+                                                         sos_configurado):
+    """🔑 El aviso "Ya no está" sale una vez, en la consulta que lo descubre.
+
+    Pedido del humano el 2026-09-10: los remitos que borraron en SOS mostraban
+    "lo borraron allá" en cada consulta, para siempre. Además cada uno costaba
+    una pregunta a un endpoint lento, contra el presupuesto de 40 s.
+    """
+    falso = PuenteFalso([
+        {"origen_tipo": fe.ORIGEN_REMITO, "origen_id": 1,
+         "comprobante_remoto_id": 901, "estado": fe.ESTADO_AUSENTE_REMOTO},
+        {"origen_tipo": fe.ORIGEN_REMITO, "origen_id": 2,
+         "comprobante_remoto_id": 902, "estado": fe.ESTADO_ENVIADO},
+    ])
+    client.app.state.puente_facturacion = falso
+    adaptador = AdaptadorContador()
+    monkeypatch.setattr(sos, "AdaptadorSOS", lambda *a, **k: adaptador)
+
+    r = client.post("/api/facturacion/estados-sos")
+
+    assert r.status_code == 200, r.text
+    assert adaptador.preguntas == [902]
+    assert [f["origen_id"] for f in r.json()["items"]] == [2]
+
+
+# ── 5. Volver a mandar lo que borraron allá ─────────────────────────────────
+#
+# El caso de `lagrace` (2026-09-10): tres remitos cuyas ventas se borraron en
+# SOS. El checkbox dejaba reenviarlos, pero SOS quema el `uniqueid` aunque la
+# venta se borre: el reenvío volvía `-1` y quedaba "Resuelto allá", en verde,
+# sin haber llegado.
+
+COMPROBANTE = {
+    "id": 12,
+    "number": "REM-00000012",
+    "client_name": "Cliente de Prueba",
+    "client_cuit": "20111111112",
+    "client_iva_condition": "Responsable Inscripto",
+    "client_address": "Belgrano 448",
+    "date": "2026-08-11",
+    "items": [{"description": "Mano de obra", "qty": 2, "unit_price": 5000,
+               "tax_rate": 0.21}],
+}
+
+
+class AdaptadorDeReenvio:
+    """Contesta `estado_venta` como se le pida y anota lo que se mandó."""
+
+    def __init__(self, estado=None, excepcion=None, idventa=907000001):
+        self.estado = estado or {"emitido": False, "cae": "", "comprobante": "FA 1"}
+        self.excepcion = excepcion
+        self.idventa = idventa
+        self.preguntas = []
+        self.payloads = []
+
+    def estado_venta(self, idventa):
+        self.preguntas.append(idventa)
+        if self.excepcion:
+            raise self.excepcion
+        return dict(self.estado)
+
+    def enviar_venta(self, payload):
+        self.payloads.append(payload)
+        return self.idventa
+
+
+def _uniqueid(intento):
+    _, _, instancia = fe.configuracion()
+    return sos.uniqueid_de(fe.ORIGEN_REMITO, 12, instancia or fe.PRODUCTO, intento)
+
+
+def _ya_no_esta(puente):
+    _envio_enviado(puente)
+    puente.marcar_ausente_remoto(fe.ORIGEN_REMITO, 12, detalle="ya no está")
+
+
+def test_confirmado_que_no_esta_se_reenvia_con_uniqueid_nuevo(puente, sos_configurado):
+    """🔴 El caso pedido: se puede volver a mandar, y llega de verdad."""
+    _ya_no_esta(puente)
+    adaptador = AdaptadorDeReenvio(excepcion=sos.VentaInexistente("no está"))
+    puente._adaptador_sos = adaptador
+
+    envio = puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)
+
+    assert adaptador.preguntas == [906683730], "se pregunta por la venta vieja"
+    assert [p["uniqueid"] for p in adaptador.payloads] == [_uniqueid(1)]
+    assert _uniqueid(1) != _uniqueid(0), "el de siempre está quemado en SOS"
+    assert envio["estado"] == fe.ESTADO_ENVIADO
+    assert envio["comprobante_remoto_id"] == 907000001
+    assert envio["intento"] == 1
+
+
+def test_si_la_venta_sigue_alla_no_se_manda(puente, sos_configurado):
+    """🔴 La guarda contra duplicar. SOS usa el mismo texto para "la borraron"
+    que para un fallo suyo sobre una venta viva: si al preguntar de nuevo está,
+    un `uniqueid` nuevo crearía una segunda venta en el contador."""
+    _ya_no_esta(puente)
+    adaptador = AdaptadorDeReenvio()
+    puente._adaptador_sos = adaptador
+
+    envio = puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)
+
+    assert adaptador.payloads == []
+    assert envio["estado"] == fe.ESTADO_ENVIADO
+    assert envio["comprobante_remoto_id"] == 906683730
+    assert envio["intento"] == 0
+    assert "Sigue en SOS" in envio["detalle"]
+
+
+@pytest.mark.parametrize("excepcion", [
+    sos.ErrorSOS("detalle de la venta: Token expirado"),
+    httpx.ReadTimeout("corte de SOS"),
+])
+def test_si_no_se_puede_confirmar_no_se_manda_ni_se_toca_la_fila(
+    puente, sos_configurado, excepcion,
+):
+    """No saber no es saber que no está. La fila queda en ausente para que el
+    próximo intento vuelva a preguntar, en vez de estrenar un `uniqueid` a
+    ciegas."""
+    _ya_no_esta(puente)
+    adaptador = AdaptadorDeReenvio(excepcion=excepcion)
+    puente._adaptador_sos = adaptador
+
+    resultado = puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)
+
+    assert adaptador.payloads == []
+    assert resultado["estado"] == fe.ESTADO_ERROR
+    assert "No se mandó" in resultado["detalle"]
+    fila = puente.get_envio(fe.ORIGEN_REMITO, 12)
+    assert fila.estado == fe.ESTADO_AUSENTE_REMOTO
+    assert fila.intento == 0
+
+
+def test_un_envio_que_fallo_se_reintenta_sin_preguntar_y_con_el_mismo_uniqueid(
+    puente, sos_configurado,
+):
+    """El remito `…002` de `lagrace`: SOS lo rechazó (`-4`) y nunca creó la
+    venta. Reintentarlo no necesita `uniqueid` nuevo, y cambiárselo sacaría la
+    protección contra el duplicado sin motivo."""
+    puente._registrar(fe.ORIGEN_REMITO, 12, fe.ESTADO_ERROR, detalle="-4")
+    adaptador = AdaptadorDeReenvio()
+    puente._adaptador_sos = adaptador
+
+    envio = puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)
+
+    assert adaptador.preguntas == []
+    assert [p["uniqueid"] for p in adaptador.payloads] == [_uniqueid(0)]
+    assert envio["estado"] == fe.ESTADO_ENVIADO
+
+
+def test_si_el_reenvio_falla_el_siguiente_usa_el_mismo_intento(puente, sos_configurado):
+    """El intento se guarda también cuando el reenvío falla. Un corte después
+    de que SOS creó la venta tiene que reintentarse con el mismo `uniqueid`,
+    para que SOS lo rechace como "ya usado" en vez de crear otra."""
+    _ya_no_esta(puente)
+    cortado = AdaptadorDeReenvio(excepcion=sos.VentaInexistente("no está"))
+    cortado.enviar_venta = lambda payload: (cortado.payloads.append(payload),
+                                            (_ for _ in ()).throw(
+                                                httpx.ReadTimeout("corte")))[1]
+    puente._adaptador_sos = cortado
+    assert puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)["estado"] == fe.ESTADO_ERROR
+
+    segundo = AdaptadorDeReenvio()
+    puente._adaptador_sos = segundo
+    envio = puente.enviar(fe.ORIGEN_REMITO, COMPROBANTE)
+
+    assert segundo.preguntas == [], "ya no está en ausente: no se vuelve a preguntar"
+    assert [p["uniqueid"] for p in segundo.payloads] == [_uniqueid(1)]
+    assert envio["intento"] == 1
 
 
 def test_un_timeout_de_red_tampoco_reescribe(bandeja):
