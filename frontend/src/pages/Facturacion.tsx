@@ -20,7 +20,7 @@ type Envio = {
   id: number
   origen_tipo: string
   origen_id: number
-  estado: 'enviado' | 'resuelto_remoto' | 'error'
+  estado: 'enviado' | 'resuelto_remoto' | 'ausente_remoto' | 'error'
   comprobante_remoto_id: number | null
   detalle: string
   enviado_at: string
@@ -58,6 +58,11 @@ type EstadoSos = {
   emitido?: boolean
   cae?: string
   comprobante?: string
+  /** SOS **contestó** que ese comprobante ya no existe de su lado. Distinto de
+   *  `error`, que es no haber podido preguntar. Cuando viene en `true` el
+   *  backend además ya dejó el envío en `ausente_remoto`. */
+  ausente?: boolean
+  detalle?: string
   error?: string
 }
 
@@ -80,6 +85,14 @@ const ESTADOS: Record<string, { label: string; ayuda: (destino: string) => strin
     label: 'Resuelto allá',
     ayuda: (d) => `Ya lo facturaron o lo descartaron en ${d}.`,
     tono: 'ok',
+  },
+  // Ámbar y no verde: "resuelto allá" es el fin del camino, esto es lo
+  // contrario — el trabajo sigue sin facturar y hay algo para hacer.
+  ausente_remoto: {
+    label: 'Ya no está allá',
+    ayuda: (d) => `Se mandó, pero hoy ya no está en ${d}: lo borraron o lo `
+      + `anularon. Si todavía hay que facturarlo, mandalo de nuevo.`,
+    tono: 'atencion',
   },
   error: {
     label: 'Falló',
@@ -174,21 +187,29 @@ export function Facturacion() {
     }
   }
 
-  /** Le pregunta a SOS por cada comprobante ya mandado.
+  /** Le pregunta a SOS por cada comprobante ya mandado, y reconcilia.
    *
    *  Contesta lo que hasta ahora no se podía saber desde adentro: si el
    *  contador ya lo emitió o sigue cargado sin CAE. Es a pedido y no
    *  automático — son N requests contra un sistema de terceros, y nadie mira
    *  esta pantalla esperando que se actualice sola.
+   *
+   *  Es `POST` porque además **escribe**: si SOS confirma que un comprobante ya
+   *  no está de su lado, el backend deja ese envío en `ausente_remoto`. Por eso
+   *  después se recarga la grilla — la columna "Envío" acaba de cambiar, y sin
+   *  el `cargar()` seguiría diciendo "En la bandeja" hasta el próximo F5.
    */
   async function consultarEstados() {
     setConsultando(true)
     setError(null)
     try {
-      const r = await api.get<{ items: EstadoSos[] }>('/api/facturacion/estados-sos')
+      const r = await api.post<{ items: EstadoSos[] }>('/api/facturacion/estados-sos')
       const porOrigen: Record<number, EstadoSos> = {}
       for (const fila of r.items) porOrigen[fila.origen_id] = fila
       setEstadosSos(porOrigen)
+      // `cargar()` NO pisa `estadosSos`: sólo reemplaza `items`, así que lo
+      // recién leído en vivo sigue en pantalla al lado del estado corregido.
+      await cargar()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Error de conexión.')
     } finally {
@@ -296,10 +317,25 @@ export function Facturacion() {
         // Sin consultar todavía no se dice nada: un "—" y un "sin emitir" se
         // ven parecido, y son cosas distintas.
         if (!est) return <span className="text-muted-foreground">—</span>
+        // 🔴 Primero lo que SOS **contestó**, después lo que no se pudo
+        // preguntar. Hasta este cambio los dos casos caían en el mismo cartel
+        // ("No se pudo leer") y no se distinguía un comprobante borrado allá
+        // de SOS caído — el primero pide mandarlo de nuevo, el segundo pide
+        // esperar y volver a consultar.
+        if (est.ausente) {
+          return (
+            <span title={est.detalle} className="flex flex-col">
+              <BadgeEstado tono="atencion">Ya no está</BadgeEstado>
+              <span className="text-xs text-muted-foreground">
+                lo borraron allá
+              </span>
+            </span>
+          )
+        }
         if (est.error) {
           return (
             <span title={est.error} className="text-xs text-destructive">
-              No se pudo leer
+              No se pudo preguntar
             </span>
           )
         }

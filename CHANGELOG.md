@@ -11,6 +11,15 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-09-09
+- **Corregido:** en "Enviar a facturar", un remito cuya venta se borró o anuló
+  en SOS Contador quedaba en **"En la bandeja" para siempre**, y al consultar
+  decía sólo *"No se pudo leer"* — el mismo cartel que un SOS caído. Ahora la
+  consulta distingue *SOS contestó que no está* de *no pude preguntarle a SOS*,
+  y en el primer caso **escribe de vuelta** el estado del envío
+  (`ausente_remoto`, "Ya no está allá"). `/api/facturacion/estados-sos` pasa de
+  `GET` a `POST` porque, además de leer, reconcilia.
+
 ### 2026-08-31
 - **Añadido:** mover un equipo del depósito a un sector del cliente, e instalar un
   equipo en un sector lo deja activo (PR #294, #296, #297).
