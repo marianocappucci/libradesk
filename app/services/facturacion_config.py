@@ -29,9 +29,10 @@ import logging
 import os
 from datetime import datetime
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from libraauth.crypto import CLAVES_ANTERIORES
 from sqlalchemy import DateTime, String, Text, false, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
@@ -95,20 +96,39 @@ class ConfigFacturacion(Base):
 
 
 class SecretoIlegible(Exception):
-    """El secreto está guardado pero no se puede descifrar.
+    """El secreto está guardado pero no se puede descifrar con ninguna clave.
 
     Pasa si `SECRET_KEY` cambió después de guardarlo — por ejemplo al restaurar
     un backup en una instancia distinta. **Es el comportamiento buscado**: el
-    respaldo no alcanza para recuperar la credencial. Hay que volver a cargarla.
+    respaldo no alcanza para recuperar la credencial.
+
+    🔴 **Lo que NO era buscado es que nadie se entere.** El 2026-09-07 se rotó
+    la `SECRET_KEY` de `lagrace` como respuesta a un incidente y la credencial
+    de SOS quedó así **20 días**, con `habilitado = true` en la base todo ese
+    tiempo y sin un solo log. Por eso ahora hay dos caminos antes de darla por
+    perdida: declarar el valor anterior en `LIBRAAUTH_CLAVES_ANTERIORES` y
+    `recifrar()`, o volver a cargarla por pantalla.
     """
 
 
+def _derivar(secreto: bytes) -> bytes:
+    derivada = HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None,
+        info=b"libradesk/facturacion/secretos",
+    ).derive(secreto)
+    return base64.urlsafe_b64encode(derivada)
+
+
 def _clave() -> bytes:
-    """La clave de cifrado, derivada de `SECRET_KEY` del entorno.
+    """La clave de cifrado VIGENTE, derivada de `SECRET_KEY` del entorno.
 
     Derivada y no usada tal cual: `SECRET_KEY` firma las cookies de sesión, y
     reutilizar el mismo material para dos cosas distintas hace que comprometer
     una comprometa la otra. El `info` del HKDF separa los usos.
+
+    **Cifrar usa siempre ésta y ninguna otra.** Las claves anteriores sirven
+    para leer, nunca para escribir: si `cifrar()` pudiera usar una vieja, sacar
+    la variable de transición volvería ilegible algo recién guardado.
     """
     secreto = (os.environ.get("SECRET_KEY") or "").encode()
     if not secreto:
@@ -116,11 +136,44 @@ def _clave() -> bytes:
             "Falta SECRET_KEY en el entorno: sin ella no se pueden guardar ni "
             "leer las credenciales de facturación."
         )
-    derivada = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=None,
-        info=b"libradesk/facturacion/secretos",
-    ).derive(secreto)
-    return base64.urlsafe_b64encode(derivada)
+    return _derivar(secreto)
+
+
+def _claves_anteriores() -> list[bytes]:
+    """Las derivadas de los valores viejos declarados en el entorno.
+
+    🔴 **Por qué existen.** Hasta acá, rotar `SECRET_KEY` dejaba la credencial
+    de SOS ilegible para siempre. Pasó el 2026-09-07 en `lagrace` y se detectó
+    **20 días después**, con `habilitado = true` en la base todo ese tiempo.
+    Declarando el valor viejo, una rotación deja de ser una pérdida: se sigue
+    leyendo, se recifra, y recién ahí se saca la variable.
+
+    Los vacíos se ignoran: `"a,,b"` y `" , "` son formas normales de quedar
+    después de editar la variable a mano.
+
+    🔑 **El NOMBRE de la variable se importa de `libraauth`** para que los dos
+    mecanismos de cifrado en reposo de una misma instancia no puedan divergir en
+    cómo se llama — el operador declara **una** variable, no dos. Lo que **no**
+    se comparte es la derivación: son dos usos distintos, cada uno con su `info`
+    de HKDF, y mezclarlos sería reusar material entre propósitos.
+    """
+    crudo = os.environ.get(CLAVES_ANTERIORES, "")
+    vistos: list[bytes] = []
+    for parte in crudo.split(","):
+        limpio = parte.strip().encode()
+        if limpio and limpio not in vistos:
+            vistos.append(limpio)
+    return [_derivar(x) for x in vistos]
+
+
+def _lector() -> MultiFernet:
+    """Prueba la clave vigente y después las anteriores, en ese orden.
+
+    `MultiFernet` es exactamente esto y viene con la biblioteca: los tokens de
+    Fernet están autenticados, así que una clave equivocada falla en vez de
+    devolver texto plausible.
+    """
+    return MultiFernet([Fernet(k) for k in [_clave(), *_claves_anteriores()]])
 
 
 def cifrar(datos: dict) -> str:
@@ -129,16 +182,52 @@ def cifrar(datos: dict) -> str:
     return Fernet(_clave()).encrypt(json.dumps(datos).encode()).decode()
 
 
-def descifrar(texto: str) -> dict:
+def descifrar_al_dia(texto: str) -> tuple[dict, bool]:
+    """Como `descifrar`, pero además dice si la clave usada es la VIGENTE.
+
+    El `False` no es un error: se leyó bien, con una clave anterior declarada.
+    Lo que significa es que **falta recifrarlo**, y por lo tanto que la variable
+    de transición todavía no se puede sacar. Es la señal que hace auditable el
+    cierre de una rotación, en vez de depender de que alguien se acuerde.
+    """
     if not texto:
-        return {}
+        return {}, True
     try:
-        return json.loads(Fernet(_clave()).decrypt(texto.encode()).decode())
+        datos = json.loads(_lector().decrypt(texto.encode()).decode())
     except (InvalidToken, ValueError) as e:
         raise SecretoIlegible(
             "No se pudieron descifrar las credenciales de facturación. Suele "
-            "pasar si SECRET_KEY cambió: hay que volver a cargarlas."
+            "pasar si SECRET_KEY cambió: hay que declarar el valor anterior en "
+            f"{CLAVES_ANTERIORES} para poder recifrarlas, o volver a cargarlas."
         ) from e
+    try:
+        Fernet(_clave()).decrypt(texto.encode())
+        al_dia = True
+    except InvalidToken:
+        al_dia = False
+    return datos, al_dia
+
+
+def descifrar(texto: str) -> dict:
+    return descifrar_al_dia(texto)[0]
+
+
+def recifrar(texto: str) -> str | None:
+    """Devuelve el valor cifrado con la clave VIGENTE, o `None` si ya lo estaba.
+
+    El `None` es lo que hace que recifrar sea idempotente: quien llama no
+    escribe nada cuando no hay nada que cambiar.
+
+    Un valor que no se puede leer con ninguna clave conocida **no se toca**:
+    lanza `SecretoIlegible`. Reemplazarlo por algo cifrado con la clave nueva
+    sería destruir el único rastro de lo que había.
+    """
+    if not texto:
+        return None
+    datos, al_dia = descifrar_al_dia(texto)
+    if al_dia:
+        return None
+    return cifrar(datos)
 
 
 def _del_entorno(destino: str) -> dict:
@@ -161,6 +250,61 @@ class ConfiguracionFacturacion:
         return session.scalar(
             select(ConfigFacturacion).where(ConfigFacturacion.destino == destino)
         )
+
+    def pendientes_de_recifrado(self) -> list[str]:
+        """Los destinos cuyos secretos se leen con una clave ANTERIOR.
+
+        No es un error: se leen bien. Lo que dicen es que la rotación de
+        `SECRET_KEY` **todavía no terminó** — mientras haya alguno, sacar la
+        variable de transición dejaría esa integración sin credencial.
+
+        Un secreto ilegible **no aparece acá**: eso ya no tiene arreglo
+        automático y hay que volver a cargarlo a mano. Son dos situaciones
+        distintas y mezclarlas haría que el comando dijera "no puedo cerrar la
+        rotación" por algo que ningún recifrado va a arreglar.
+        """
+        pendientes = []
+        with self.session_factory() as session:
+            filas = [
+                (f.destino, f.secretos_cifrados)
+                for f in session.scalars(select(ConfigFacturacion))
+            ]
+        for destino, blob in filas:
+            if not blob:
+                continue
+            try:
+                if not descifrar_al_dia(blob)[1]:
+                    pendientes.append(destino)
+            except SecretoIlegible:
+                continue
+        return sorted(pendientes)
+
+    def recifrar_secretos(self) -> list[str]:
+        """Deja los secretos bajo la clave VIGENTE. Devuelve los que cambiaron.
+
+        Es el paso que cierra una rotación de `SECRET_KEY`. Idempotente: correrlo
+        de nuevo no escribe.
+
+        Un destino cuyo secreto no se puede leer con ninguna clave conocida **se
+        saltea sin tocarlo** en vez de abortar el lote: abortar dejaría a medias
+        los que sí se podían arreglar, y pisarlo destruiría el único rastro de
+        lo que había.
+        """
+        cambiados = []
+        with self.session_factory() as session:
+            for fila in session.scalars(select(ConfigFacturacion)):
+                if not fila.secretos_cifrados:
+                    continue
+                try:
+                    nuevo = recifrar(fila.secretos_cifrados)
+                except SecretoIlegible:
+                    continue
+                if nuevo is not None:
+                    fila.secretos_cifrados = nuevo
+                    cambiados.append(fila.destino)
+            if cambiados:
+                session.commit()
+        return sorted(cambiados)
 
     def leer(self, destino: str) -> dict:
         """Todo lo que hace falta para operar, secretos incluidos.
