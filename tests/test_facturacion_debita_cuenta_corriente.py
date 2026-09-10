@@ -294,6 +294,125 @@ def test_si_el_debito_falla_el_envio_igual_queda_registrado(
     assert [e["estado"] for e in envios] == [fe.ESTADO_ENVIADO]
 
 
+# ── Lo que ya no está del otro lado ──────────────────────────────────────────
+#
+# Decidido con el humano el 2026-09-10, después de revertir a mano la deuda de
+# tres remitos de prueba de `lagrace` cuyas ventas se habían borrado en SOS:
+# cuando el destino CONFIRMA que el comprobante no está, la deuda se anula; y
+# si se vuelve a mandar, se carga de nuevo. Nada se borra: el libro del
+# comprobante muestra cargo, anulación y cargo nuevo.
+
+def _enviar(client, remito):
+    r = client.post("/api/facturacion/enviar",
+                    json={"origen_tipo": "remito", "ids": [remito["id"]]})
+    assert r.status_code == 200, r.text
+    return r.json()["resultados"][0]
+
+
+def _montos(cliente_id):
+    return [float(m["monto"]) for m in _debitos_del_puente(cliente_id)]
+
+
+def test_si_el_comprobante_ya_no_esta_la_deuda_se_anula(client, configurado):
+    """🔴 El caso pedido."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso())
+    _enviar(client, remito)
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+
+    client.app.state.puente_facturacion.marcar_ausente_remoto(
+        "remito", remito["id"], detalle="SOS ya no tiene la venta")
+
+    assert _saldo(cliente_id) == 0
+    assert _montos(cliente_id) == [TOTAL_DEL_REMITO, -TOTAL_DEL_REMITO]
+    anulacion = _debitos_del_puente(cliente_id)[1]
+    assert "Anulado" in anulacion["concepto"]
+    assert remito["number"] in anulacion["concepto"], "tiene que decir de qué"
+
+
+def test_la_anulacion_no_es_un_pago(client, configurado):
+    """Un `cc_pago` es plata que entró, y de él se emite un recibo. Anular con
+    un pago dejaría emitir un recibo por algo que nadie cobró."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso())
+    _enviar(client, remito)
+
+    client.app.state.puente_facturacion.marcar_ausente_remoto("remito", remito["id"])
+
+    assert all(m["tipo"] == "debito" for m in cc.movimientos(cliente_id))
+
+
+def test_anular_dos_veces_no_deja_saldo_a_favor(client, configurado):
+    """🔴 La consulta de estado anula en cada vuelta lo que ya está marcado
+    ausente. Sin idempotencia, cada click le dejaría al cliente saldo a favor."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso())
+    _enviar(client, remito)
+    puente = client.app.state.puente_facturacion
+
+    puente.marcar_ausente_remoto("remito", remito["id"])
+    puente.marcar_ausente_remoto("remito", remito["id"])
+    puente.anular_deuda("remito", remito["id"])
+
+    assert _saldo(cliente_id) == 0
+    assert len(_debitos_del_puente(cliente_id)) == 2
+
+
+def test_reenviar_despues_de_anular_vuelve_a_cargar(client, configurado):
+    """🔴 La otra mitad. Con la idempotencia por fila de antes esto fallaba en
+    silencio: el cargo original seguía existiendo, así que el reenvío no cargaba
+    nada y el remito quedaba mandado y sin deuda."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso())
+    _enviar(client, remito)
+    client.app.state.puente_facturacion.marcar_ausente_remoto("remito", remito["id"])
+
+    _enviar(client, remito)
+
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+    assert _montos(cliente_id) == [TOTAL_DEL_REMITO, -TOTAL_DEL_REMITO,
+                                   TOTAL_DEL_REMITO]
+    assert "reenvío" in _debitos_del_puente(cliente_id)[2]["concepto"]
+
+    # Y reintentar el reenvío no fía dos veces.
+    _enviar(client, remito)
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+    assert len(_debitos_del_puente(cliente_id)) == 3
+
+
+def test_anular_lo_que_nunca_se_cargo_no_hace_nada(client, configurado):
+    """Un envío que falló no debitó: no hay nada que compensar, y compensar
+    igual dejaría saldo a favor."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso(excepcion=httpx.ConnectError("caído")))
+    _enviar(client, remito)
+
+    client.app.state.puente_facturacion.anular_deuda("remito", remito["id"])
+
+    assert _saldo(cliente_id) == 0
+    assert _debitos_del_puente(cliente_id) == []
+
+
+def test_el_libro_del_remito_9_no_se_lleva_el_del_90(client):
+    """El `LIKE` es `base-%`, con guión: sin él, anular el remito 9 sumaría
+    también la deuda del 90 y la del 91."""
+    cliente_id = _cliente_final(client)
+    base = f"{fe.REFERENCIA_DEBITO}remito-9"
+    cc.create_cc_debito(cliente_id, 100, "2026-09-10", referencia=base)
+    cc.create_cc_debito(cliente_id, 900, "2026-09-10",
+                        referencia=f"{fe.REFERENCIA_DEBITO}remito-90")
+    cc.create_cc_debito(cliente_id, -100, "2026-09-10", referencia=f"{base}-1")
+
+    referencias = [f["referencia"] for f in cc.debitos_de_referencia(base)]
+
+    assert referencias == [base, f"{base}-1"]
+
+
 # ── Comprobante sin cliente de la base ───────────────────────────────────────
 
 @pytest.mark.parametrize("comprobante, por_que", [
