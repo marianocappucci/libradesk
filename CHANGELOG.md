@@ -11,6 +11,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-09-10
+- **Corregido:** lo de abajo no llegaba a dispararse en producción. SOS no dice
+  "no existe" en ningún idioma — contesta *"Error: Imposible cargar detalles de
+  la venta"*—, así que los remitos con la venta borrada seguían mostrando "No se
+  pudo preguntar". Se agregó el texto real, medido con un par de controles (una
+  venta viva devuelve `cabecera`; un id inventado devuelve ese mismo error).
+
 ### 2026-09-09
 - **Corregido:** en "Enviar a facturar", un remito cuya venta se borró o anuló
   en SOS Contador quedaba en **"En la bandeja" para siempre**, y al consultar
