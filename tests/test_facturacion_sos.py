@@ -14,6 +14,8 @@ Lo que fijan estos tests, en orden de lo que duele si se rompe:
    lo que hace seguro reenviar.
 5. Que la numeración se lea del punto de venta correcto.
 """
+import uuid
+
 import pytest
 
 from app.services import facturacion_sos as sos
@@ -199,6 +201,23 @@ def test_el_uniqueid_cambia_por_comprobante_y_por_instancia():
     assert sos.uniqueid_de("presupuesto", 12, "compulibra") != base
     # Dos LibraDesk facturando a la misma CUIT no se pisan.
     assert sos.uniqueid_de("remito", 12, "lagrace") != base
+
+
+def test_el_intento_0_es_la_semilla_de_siempre_y_el_1_estrena_uno():
+    """🔴 El 0 tiene que dar **exactamente** el `uniqueid` con el que ya se
+    mandó todo lo que existe: si cambiara, el próximo reintento de un envío que
+    llegó estrenaría un id nuevo y SOS crearía una segunda venta.
+
+    Se compara contra la semilla escrita a mano y no contra otra llamada a la
+    función, que se cumpliría igual si la semilla cambiara para los dos lados.
+    """
+    semilla_vieja = uuid.uuid5(sos.NAMESPACE_UNIQUEID, "compulibra:remito:12")
+    assert sos.uniqueid_de("remito", 12, "compulibra") == str(semilla_vieja)
+    assert sos.uniqueid_de("remito", 12, "compulibra", 0) == str(semilla_vieja)
+
+    uno = sos.uniqueid_de("remito", 12, "compulibra", 1)
+    assert uno != str(semilla_vieja)
+    assert sos.uniqueid_de("remito", 12, "compulibra", 2) not in (uno, str(semilla_vieja))
 
 
 # ── 5. Numeración ───────────────────────────────────────────────────────────

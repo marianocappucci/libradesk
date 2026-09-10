@@ -6,7 +6,7 @@
 // invita a leerlo como "cobrar", y del otro lado todavía tiene que intervenir
 // una persona. Por eso se afirma sobre el texto que ve el usuario y no sólo
 // sobre el request que sale.
-import { render as renderRTL, screen, waitFor } from '@testing-library/react'
+import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -234,7 +234,11 @@ describe('enviar a facturar', () => {
     expect(screen.queryByText(/facturado/i)).not.toBeInTheDocument()
   })
 
-  it('un envío fallido se ve como tal y se puede reintentar', async () => {
+  it('🔑 un envío que falló antes vuelve a "—": se puede mandar como cualquiera', async () => {
+    // Pedido del humano el 2026-09-10, mirando `lagrace`: el "Falló" de un
+    // envío de agosto seguía en la grilla y hacía creer que la fila estaba
+    // trabada. El fallo se ve cuando pasa —en el recuadro de resultados, ver el
+    // test de abajo—; después la fila es lo que es, un remito para mandar.
     montar([{
       ...REMITO,
       envio: {
@@ -245,10 +249,9 @@ describe('enviar a facturar', () => {
       },
     }])
     render(<Facturacion />)
+    await screen.findByText('REM-00000001')
 
-    expect(await screen.findByText('Falló')).toBeInTheDocument()
-    // La casilla sigue habilitada: reintentar es gratis porque el destino es
-    // idempotente.
+    expect(screen.queryByText('Falló')).not.toBeInTheDocument()
     expect(screen.getAllByRole('checkbox')[0]).toBeEnabled()
   })
 
@@ -267,6 +270,8 @@ describe('enviar a facturar', () => {
     expect(
       await screen.findByText(/No se pudo contactar a Contalibra/),
     ).toBeInTheDocument()
+    // Es el único lugar donde se ve el fallo, así que tiene que decirlo.
+    expect(screen.getByText('Falló')).toBeInTheDocument()
   })
 
   it('sin nada para mandar lo dice, y dice cómo aparece algo', async () => {
@@ -425,7 +430,32 @@ describe('consultar el estado en el contador', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
 
-    expect(await screen.findByText('Ya no está allá')).toBeInTheDocument()
-    expect(screen.queryByText('En la bandeja')).not.toBeInTheDocument()
+    // El aviso sale en "En el contador", en esta consulta; Envío queda en "—".
+    expect(await screen.findByText('Ya no está')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByText('En la bandeja')).not.toBeInTheDocument())
+    expect(screen.queryByText('Ya no está allá')).not.toBeInTheDocument()
+  })
+
+  it('🔑 lo que ya se sabe borrado no vuelve a mostrar el cartel', async () => {
+    // Pedido del humano el 2026-09-10: "se puede limpiar el estado una vez que
+    // ya se mostró el cartel cuando el episodio pasó". Al entrar de nuevo, el
+    // remito borrado en SOS es una fila para mandar, sin leyendas.
+    montar([{
+      ...CON_ENVIO,
+      envio: { ...CON_ENVIO.envio, estado: 'ausente_remoto',
+               detalle: 'SOS ya no tiene la venta 906683730' },
+    }], true, [], 'SOS Contador', { destino: 'sos' })
+    render(<Facturacion />)
+    const fila = (await screen.findByText('REM-00000001')).closest('tr')!
+
+    expect(screen.queryByText(/Ya no está/i)).not.toBeInTheDocument()
+    // 🔴 Se afirma el "—" y no sólo la ausencia de un texto: con la celda
+    // mostrando el badge de nuevo, `ausente_remoto` no tiene entrada en
+    // `ESTADOS` y sale el slug crudo — que no dice "Ya no está" y dejaba este
+    // test verde por la razón equivocada. Medido por mutación. Son dos "—":
+    // Envío y "En el contador", que sin consultar tampoco dice nada.
+    expect(within(fila).getAllByText('—')).toHaveLength(2)
+    expect(screen.getAllByRole('checkbox')[0]).toBeEnabled()
   })
 })
