@@ -80,6 +80,33 @@ def _estado(cuerpo=None, excepcion=None):
 
 # ── 1. Qué es "ya no está" y qué no ─────────────────────────────────────────
 
+#: El texto **real**, copiado de la respuesta de SOS medida el 2026-09-10 contra
+#: las ventas borradas de `lagrace` y contra un id inventado. Va como constante
+#: propia porque es el único caso de la lista que existe de verdad: los demás
+#: son formas plausibles por si SOS cambia el texto.
+MENSAJE_REAL_DE_SOS = "Error: Imposible cargar detalles de la venta"
+
+
+def test_el_mensaje_real_de_sos_se_clasifica_como_venta_inexistente(sos_configurado):
+    """🔴 El caso de producción, y el que faltaba.
+
+    La primera versión de esto salió sin poder medir qué contesta SOS, con una
+    lista de frases plausibles —"no existe", "inexistente", "not found"…—. **SOS
+    no usa ninguna**: dice *"Imposible cargar detalles de la venta"*, que suena a
+    falla interna. Resultado: en `lagrace` los tres remitos cuya venta estaba
+    borrada mostraban "No se pudo preguntar" y el envío seguía en "En la
+    bandeja". El código hacía lo correcto —caer del lado seguro— sin servir para
+    nada.
+
+    Que ese texto signifique *ese id no resuelve* está establecido con un par de
+    controles, no por lectura: una venta viva devuelve `cabecera` completa y un
+    id inventado devuelve exactamente este mensaje. Ver
+    `FRASES_VENTA_INEXISTENTE`.
+    """
+    with pytest.raises(sos.VentaInexistente):
+        _estado({"error": MENSAJE_REAL_DE_SOS})
+
+
 @pytest.mark.parametrize("mensaje", [
     "La venta no existe",
     "Comprobante inexistente",
@@ -88,9 +115,9 @@ def _estado(cuerpo=None, excepcion=None):
     "El comprobante fue eliminado",
     "Comprobante anulado",
 ])
-def test_cuando_sos_dice_que_no_existe_es_venta_inexistente(sos_configurado, mensaje):
-    """SOS contesta HTTP 200 con `{"error": ...}` hasta cuando falla, así que el
-    texto es lo único que hay para clasificar."""
+def test_las_formas_plausibles_tambien_caen_ahi(sos_configurado, mensaje):
+    """La red por si SOS cambia el texto. **Ninguna de éstas está medida** — la
+    medida es `MENSAJE_REAL_DE_SOS`."""
     with pytest.raises(sos.VentaInexistente):
         _estado({"error": mensaje})
 
@@ -121,10 +148,21 @@ def test_un_cuerpo_con_contenido_pero_sin_cabecera_no_es_venta_inexistente(
     assert not isinstance(e.value, sos.VentaInexistente)
 
 
-def test_un_error_de_autenticacion_no_es_venta_inexistente(sos_configurado):
-    """Token vencido: no sabemos nada de la venta, y no saber no es saber."""
+@pytest.mark.parametrize("mensaje", [
+    "Token expirado",
+    "Usuario o clave no válidos",
+    "Error interno del servidor",
+    "Error",
+])
+def test_otros_errores_de_sos_no_son_venta_inexistente(sos_configurado, mensaje):
+    """No sabemos nada de la venta, y no saber no es saber que no está.
+
+    El `"Error"` pelado del final marca el borde: el mensaje medido **empieza**
+    con "Error:", así que un matcher que se aflojara hasta esa palabra
+    clasificaría como ausente cualquier cosa que SOS conteste.
+    """
     with pytest.raises(sos.ErrorSOS) as e:
-        _estado({"error": "Token expirado"})
+        _estado({"error": mensaje})
     assert not isinstance(e.value, sos.VentaInexistente)
 
 
