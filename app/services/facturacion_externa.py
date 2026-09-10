@@ -120,6 +120,16 @@ ORIGENES_ENVIABLES = (ORIGEN_REMITO,)
 ESTADO_ENVIADO = "enviado"
 ESTADO_RESUELTO_REMOTO = "resuelto_remoto"
 ESTADO_ERROR = "error"
+#: Se mandó, llegó, y **hoy ya no está del otro lado**: lo borraron o lo
+#: anularon allá. No lo escribe el envío —cuando se manda, está— sino la
+#: reconciliación de `POST /api/facturacion/estados-sos`, que es el único
+#: momento en que LibraDesk se entera.
+#:
+#: 🔑 **No es `resuelto_remoto`.** Ese dice "ya lo facturaron o lo descartaron,
+#: no hagas nada"; éste dice lo contrario: el trabajo sigue sin facturar y hay
+#: que volver a mandarlo. Meterlos en el mismo estado dejaría un remito
+#: entregado y no facturado escondido detrás de un cartel verde.
+ESTADO_AUSENTE_REMOTO = "ausente_remoto"
 
 
 class EnvioNoConfigurado(Exception):
@@ -425,6 +435,47 @@ class PuenteFacturacion:
                 fila.actualizado_at = ahora
             session.flush()
             return self._a_dict(fila)
+
+    def marcar_ausente_remoto(self, origen_tipo: str, origen_id: int,
+                              detalle: str = "") -> dict:
+        """Anota que el comprobante ya no está del otro lado.
+
+        Es la **única escritura que no nace de un envío**: la hace la
+        reconciliación cuando el destino confirma que el comprobante que
+        habíamos mandado no existe más allá.
+
+        🔴 **Sólo con una confirmación, nunca con un error de comunicación.**
+        Quien llama tiene que haber recibido un `VentaInexistente`, no un
+        `ErrorSOS` cualquiera: si SOS está caído o el token venció, la respuesta
+        correcta es dejar la fila como está. Reescribirla ahí diría "ya no está
+        allá" de un comprobante que sí está, y el operador lo mandaría de nuevo
+        —duplicándolo del lado del contador, que es el único lugar donde
+        duplicar cuesta plata—.
+
+        El `comprobante_remoto_id` **no se borra**: es el rastro de a dónde
+        había ido, y sirve para buscarlo allá si alguien discute qué pasó.
+        """
+        return self._registrar(origen_tipo, origen_id, ESTADO_AUSENTE_REMOTO,
+                               detalle=detalle)
+
+    def desmarcar_ausente_remoto(self, origen_tipo: str, origen_id: int) -> dict | None:
+        """Lo vuelve a `enviado` si estaba marcado como ausente y reapareció.
+
+        La otra mitad de la reconciliación, y no es simetría por prolijidad: sin
+        esto, un comprobante que se marcó ausente y después vuelve a estar allá
+        —lo restauraron, o el matcher de texto se equivocó una vez— quedaría con
+        el badge "Ya no está allá" al lado de un "Sin emitir" leído en vivo, o
+        sea la pantalla contradiciéndose a sí misma.
+
+        **Sólo toca ese estado.** Un `resuelto_remoto` o un `error` significan
+        otra cosa y no son asunto de esta función. Devuelve `None` si no hizo
+        nada, para que el que llama sepa si hubo cambio.
+        """
+        envio = self.get_envio(origen_tipo, origen_id)
+        if envio is None or envio.estado != ESTADO_AUSENTE_REMOTO:
+            return None
+        return self._registrar(origen_tipo, origen_id, ESTADO_ENVIADO,
+                               detalle="Volvió a aparecer en el destino")
 
     def enviar(self, origen_tipo: str, comprobante: dict) -> dict:
         """Manda un comprobante a la bandeja y devuelve el envío registrado.

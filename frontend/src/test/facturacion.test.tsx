@@ -43,16 +43,31 @@ let posts: { url: string; body: unknown }[]
 
 function montar(items: unknown[], configurado = true, resultados: unknown[] = [],
                 destinoNombre = 'Contalibra',
-                opciones: { destino?: string; estadosSos?: unknown[] } = {}) {
+                opciones: {
+                  destino?: string
+                  estadosSos?: unknown[]
+                  /** Lo que devuelve `/pendientes` **después** de consultar.
+                   *  La consulta ahora escribe de vuelta —un comprobante
+                   *  borrado en SOS deja el envío en `ausente_remoto`—, así que
+                   *  la grilla no vuelve igual que como estaba. */
+                  itemsTrasConsultar?: unknown[]
+                } = {}) {
   posts = []
+  let yaConsulto = false
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const u = String(url)
+    // 🔴 Va **antes** que la rama genérica de POST. `/estados-sos` es POST
+    // desde que además reconcilia, y con el orden viejo caía en el
+    // `{resultados}` de `/enviar`: la pantalla se quedaba sin estados y el
+    // test seguía verde sin probar nada.
+    if (u.includes('/api/facturacion/estados-sos')) {
+      posts.push({ url: u, body: init?.method ?? 'GET' })
+      yaConsulto = true
+      return Promise.resolve(json({ items: opciones.estadosSos ?? [] }))
+    }
     if (init?.method === 'POST') {
       posts.push({ url: u, body: JSON.parse(String(init.body)) })
       return Promise.resolve(json({ resultados }))
-    }
-    if (u.includes('/api/facturacion/estados-sos')) {
-      return Promise.resolve(json({ items: opciones.estadosSos ?? [] }))
     }
     if (u.includes('/api/facturacion/pendientes')) {
       // `destino_nombre` lo manda el backend: la pantalla no sabe a dónde
@@ -60,7 +75,10 @@ function montar(items: unknown[], configurado = true, resultados: unknown[] = []
       // slug, que es lo que decide si se ofrece consultar el estado.
       return Promise.resolve(json({
         configurado, destino: opciones.destino ?? 'contalibra',
-        destino_nombre: destinoNombre, items,
+        destino_nombre: destinoNombre,
+        items: yaConsulto && opciones.itemsTrasConsultar
+          ? opciones.itemsTrasConsultar
+          : items,
       }))
     }
     return Promise.resolve(json({}))
@@ -343,9 +361,71 @@ describe('consultar el estado en el contador', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
 
-    expect(await screen.findByText(/No se pudo leer/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No se pudo preguntar/i)).toBeInTheDocument()
     // Y la otra fila igual muestra lo suyo: con veinte comprobantes, que uno
     // falle no puede dejar la pantalla sin los diecinueve.
     expect(screen.getByText(/Emitido/i)).toBeInTheDocument()
+  })
+
+  // ── Lo que se borró del lado del contador ────────────────────────────────
+  //
+  // El caso reportado el 2026-09-09: remitos de prueba cuyas ventas se
+  // anularon y borraron en SOS. La pantalla mostraba "En la bandeja" + "No se
+  // pudo leer" y no había manera de distinguirlo de un SOS caído.
+
+  it('🔴 un comprobante borrado allá se lee distinto de uno que no se pudo leer', async () => {
+    montar([CON_ENVIO], true, [], 'SOS Contador', {
+      destino: 'sos',
+      estadosSos: [{ origen_id: 1, comprobante_remoto_id: 906683730,
+                     ausente: true, detalle: 'SOS ya no tiene la venta 906683730' }],
+    })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    expect(await screen.findByText(/Ya no está/i)).toBeInTheDocument()
+    // Y **no** el cartel del otro caso: son dos acciones distintas —mandarlo de
+    // nuevo contra esperar y volver a consultar—, y esta es la confusión que el
+    // cambio vino a sacar.
+    expect(screen.queryByText(/No se pudo preguntar/i)).not.toBeInTheDocument()
+  })
+
+  it('🔴 la consulta se manda por POST: además de leer, reconcilia', async () => {
+    montar([CON_ENVIO], true, [], 'SOS Contador', { destino: 'sos' })
+    render(<Facturacion />)
+    await screen.findByText('REM-00000001')
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    await waitFor(() => {
+      const consulta = posts.find((p) => p.url.includes('/estados-sos'))
+      expect(consulta?.body).toBe('POST')
+    })
+  })
+
+  it('🔴 después de consultar, la columna Envío deja de decir "En la bandeja"', async () => {
+    // El defecto original: el backend anotaba `ausente_remoto` y la pantalla
+    // seguía mostrando el estado viejo hasta el próximo F5.
+    const YA_NO_ESTA = {
+      ...CON_ENVIO,
+      envio: { ...CON_ENVIO.envio, estado: 'ausente_remoto',
+               detalle: 'SOS ya no tiene la venta 906683730' },
+    }
+    montar([CON_ENVIO], true, [], 'SOS Contador', {
+      destino: 'sos',
+      estadosSos: [{ origen_id: 1, comprobante_remoto_id: 906683730, ausente: true }],
+      itemsTrasConsultar: [YA_NO_ESTA],
+    })
+    render(<Facturacion />)
+    // Texto exacto y no regex: el párrafo de arriba de la pantalla también
+    // dice "queda en la bandeja de SOS Contador", así que un `/En la bandeja/i`
+    // matchea dos cosas y la que importa es el badge.
+    expect(await screen.findByText('En la bandeja')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Consultar estado/i }))
+
+    expect(await screen.findByText('Ya no está allá')).toBeInTheDocument()
+    expect(screen.queryByText('En la bandeja')).not.toBeInTheDocument()
   })
 })

@@ -179,6 +179,58 @@ class ErrorSOS(Exception):
     """La API contestó algo que no es un alta exitosa."""
 
 
+class VentaInexistente(ErrorSOS):
+    """El comprobante **ya no está en SOS**: lo borraron o lo anularon allá.
+
+    🔑 **Es una respuesta, no una falla.** Se separa de `ErrorSOS` porque las
+    dos cosas se veían iguales desde afuera y no lo son: un token vencido o SOS
+    caído significan *no pude preguntar*; esto significa *pregunté y no está*.
+    Sólo la segunda habilita a reescribir el estado local del envío —ver
+    `PuenteFacturacion.marcar_ausente_remoto`—; con la primera hay que dejar la
+    fila como está, porque no sabemos nada nuevo de ella.
+    """
+
+
+#: Cómo dice SOS que una venta no existe. Se mira el texto porque la API
+#: contesta HTTP 200 hasta cuando falla (ver el docstring del módulo), así que
+#: el status no distingue nada y el cuerpo trae sólo `{"error": "..."}`.
+#:
+#: ⚠️ **Es una red, no una certeza**: cubre las formas conocidas, y si SOS usa
+#: otra, la fila cae en el camino genérico —"no se pudo preguntar"— y el estado
+#: local no se toca. Ese default es el correcto: equivocarse hacia *no sé* deja
+#: la fila intacta; equivocarse hacia *no está* reescribiría el estado de un
+#: comprobante que sí existe.
+FRASES_VENTA_INEXISTENTE = (
+    "no existe",
+    "inexistente",
+    "no se encontr",
+    "no encontrad",
+    "not found",
+    "sin datos",
+    "eliminad",
+    "anulad",
+)
+
+
+def dice_que_no_existe(mensaje: str) -> bool:
+    """Si el texto que devolvió SOS está diciendo que ese comprobante no está."""
+    texto = (mensaje or "").lower()
+    return any(frase in texto for frase in FRASES_VENTA_INEXISTENTE)
+
+
+def _respuesta_vacia(datos) -> bool:
+    """Si SOS contestó bien pero sin nada adentro.
+
+    `{}`, `{"cabecera": null}` y `{"cabecera": null, "items": []}` son todos lo
+    mismo: contestó por ese id y no tiene nada que mostrar. Un cuerpo con
+    contenido bajo otra clave **no** entra acá: eso sería un cambio de forma de
+    la API, y hay que tratarlo como *no pude leer*, no como *no está*.
+    """
+    if not isinstance(datos, dict):
+        return False
+    return all(not valor for valor in datos.values())
+
+
 def configuracion() -> dict:
     """Lo que hace falta para operar. Valores vacíos si no está configurado.
 
@@ -804,13 +856,37 @@ class AdaptadorSOS:
 
         Lo que sí es confiable es la cabecera: `cae` en `null` es *cargado sin
         emitir*, y con valor es *emitido*.
+
+        🔴 **Levanta `VentaInexistente` cuando el comprobante ya no está allá**
+        —borrado o anulado en SOS—, que es distinto de no haber podido
+        preguntar. Antes las dos cosas salían como el mismo `ErrorSOS` y la
+        pantalla las mostraba con el mismo cartel, así que un remito cuya venta
+        se había borrado en SOS quedaba para siempre en "En la bandeja" sin que
+        nada lo dijera.
         """
-        datos = interpretar(
-            self._request("GET", f"/venta/detalle/{idventa}", token=self.token()),
-            "detalle de la venta",
-        )
+        try:
+            datos = interpretar(
+                self._request("GET", f"/venta/detalle/{idventa}", token=self.token()),
+                "detalle de la venta",
+            )
+        except ErrorSOS as e:
+            # SOS contestó, y lo que contestó es que esa venta no existe. El
+            # texto es lo único que hay: el status es 200 igual que en el éxito.
+            if dice_que_no_existe(str(e)):
+                raise VentaInexistente(
+                    f"SOS ya no tiene la venta {idventa}: {e}") from e
+            raise
         cab = datos.get("cabecera") if isinstance(datos, dict) else None
-        if not isinstance(cab, dict):
+        if not isinstance(cab, dict) or not cab:
+            # Sin cabecera hay dos casos, y confundirlos es caro en direcciones
+            # opuestas. Si la respuesta viene **vacía** —sin `error` y sin nada
+            # sustantivo— SOS está diciendo que no hay comprobante que mostrar.
+            # Si trae contenido pero no la cabecera, lo que cambió es la forma
+            # de la API: eso es "no pude leer", y no habilita a tocar nada.
+            if _respuesta_vacia(datos):
+                raise VentaInexistente(
+                    f"SOS contestó por la venta {idventa} sin ningún "
+                    f"comprobante: ya no está de su lado")
             raise ErrorSOS(f"SOS no devolvió la cabecera de la venta {idventa}")
         cae = str(cab.get("cae") or "").strip()
         return {

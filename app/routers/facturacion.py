@@ -93,7 +93,7 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
     }
 
 
-@router.get("/estados-sos")
+@router.post("/estados-sos")
 def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
     """Cómo está cada comprobante ya mandado, **preguntándoselo a SOS**.
 
@@ -101,6 +101,17 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
     contador ya lo emitió, si sigue cargado sin CAE, o si el envío quedó
     colgado. LibraDesk no lo guarda: ese estado vive del otro lado y cambia sin
     avisarnos, así que una copia local sería una foto vencida.
+
+    🔴 **Es `POST` y no `GET` porque además escribe.** Cuando SOS confirma que
+    un comprobante ya no existe de su lado, la ruta lo anota en el envío
+    (`ausente_remoto`) en vez de devolverlo y olvidarlo. Sin eso el remito
+    quedaba en "En la bandeja" para siempre: el envío es verdad histórica —se
+    mandó— y del otro lado nadie avisa cuando lo borran, así que este momento es
+    el **único** en que LibraDesk puede enterarse.
+
+    Lo que se escribe es sólo el caso confirmado. Un `ErrorSOS` común —token
+    vencido, SOS caído, un cambio de forma en la API— deja la fila como estaba:
+    no saber no es lo mismo que saber que no está.
 
     🔑 **Se lee `GET /venta/detalle` y no `GET /cae/status`.** El segundo trae un
     `cae_error` que dice *"Error indefinido obteniendo CAE"* aunque no haya
@@ -118,7 +129,7 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
             409, f"Esta instancia manda a {nombre_destino()}, que no expone el "
                  f"estado de los comprobantes.")
 
-    from ..services.facturacion_sos import AdaptadorSOS, ErrorSOS
+    from ..services.facturacion_sos import AdaptadorSOS, ErrorSOS, VentaInexistente
 
     adaptador = AdaptadorSOS()
     filas = []
@@ -126,13 +137,29 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
         remoto = envio.get("comprobante_remoto_id")
         if not remoto:
             continue
-        fila = {"origen_tipo": envio.get("origen_tipo"),
-                "origen_id": envio.get("origen_id"),
+        origen_tipo = envio.get("origen_tipo")
+        origen_id = int(envio.get("origen_id"))
+        fila = {"origen_tipo": origen_tipo,
+                "origen_id": origen_id,
                 "comprobante_remoto_id": remoto}
         try:
             fila.update(adaptador.estado_venta(int(remoto)))
+        except VentaInexistente as e:
+            # El caso que hace que esta ruta escriba. `ausente` es un campo
+            # propio y no un `error`: la pantalla tiene que poder decir "ya no
+            # está allá, mandalo de nuevo" en vez de "no se pudo leer", que es
+            # lo que decía antes y no llevaba a ninguna acción.
+            fila["ausente"] = True
+            fila["detalle"] = str(e)
+            puente.marcar_ausente_remoto(origen_tipo, origen_id, detalle=str(e))
         except (ErrorSOS, httpx.HTTPError) as e:
+            # Se anota en la fila y **no se toca el estado local**: no pudimos
+            # preguntar, así que no sabemos nada nuevo de ese envío.
             fila["error"] = str(e)
+        else:
+            # Está allá. Si lo teníamos anotado como ausente, se corrige — ver
+            # `desmarcar_ausente_remoto`.
+            puente.desmarcar_ausente_remoto(origen_tipo, origen_id)
         filas.append(fila)
     return {"items": filas}
 
