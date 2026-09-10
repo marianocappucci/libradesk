@@ -467,9 +467,14 @@ class PuenteFacturacion:
 
         El `comprobante_remoto_id` **no se borra**: es el rastro de a dónde
         había ido, y sirve para buscarlo allá si alguien discute qué pasó.
+
+        Además **anula la deuda** que había cargado el envío — ver
+        `anular_deuda`.
         """
-        return self._registrar(origen_tipo, origen_id, ESTADO_AUSENTE_REMOTO,
-                               detalle=detalle)
+        envio = self._registrar(origen_tipo, origen_id, ESTADO_AUSENTE_REMOTO,
+                                detalle=detalle)
+        self.anular_deuda(origen_tipo, origen_id)
+        return envio
 
     def desmarcar_ausente_remoto(self, origen_tipo: str, origen_id: int,
                                  detalle: str = "Volvió a aparecer en el destino",
@@ -516,13 +521,22 @@ class PuenteFacturacion:
         lo tienen", se produce **sólo al reintentar** y no distingue una factura
         emitida de un comprobante descartado. Nadie le avisa a este sistema
         cuando se emite el CAE. Debitar al enviar es la aproximación que el
-        modelo permite hoy; el precio es que un comprobante descartado allá deja
-        un débito de más, que hay que revertir a mano.
+        modelo permite hoy; el precio era que un comprobante descartado allá
+        dejaba un débito de más, que había que revertir a mano.
 
-        **Idempotente por `referencia`**: `create_cc_debito` devuelve el id que
-        ya existía en vez de insertar de nuevo, así que reintentar un envío no
-        fía dos veces lo mismo. La referencia lleva el prefijo del puente para
-        no chocar con las que arma el resto del producto (`sale-12`).
+        > 🔑 **Desde el 2026-09-10 eso tiene vuelta** (decidido con el humano,
+        > después de revertir a mano tres remitos de prueba de `lagrace`): cuando
+        > SOS **confirma** que el comprobante ya no está, `anular_deuda` agrega
+        > el débito negativo que lo compensa; y si se vuelve a mandar, esto lo
+        > carga de nuevo. Lo que sigue sin vuelta es `resuelto_remoto`, que no
+        > distingue facturado de descartado.
+
+        **Idempotente por el libro del comprobante**, no por una sola fila: se
+        suma todo lo que cuelga de su referencia (ver `_ajustar_deuda`) y sólo
+        se carga si el neto no es ya una deuda. Reintentar un envío no fía dos
+        veces, y un reenvío después de una anulación sí vuelve a cargar. La
+        referencia lleva el prefijo del puente para no chocar con las que arma
+        el resto del producto (`sale-12`).
 
         🔴 **No propaga el error.** El comprobante YA está del otro lado cuando
         esto corre: si el débito falla, tumbar acá perdería la fila del envío y
@@ -580,17 +594,101 @@ class PuenteFacturacion:
         origen_id = int(comprobante["id"])
         numero = comprobante.get("number") or origen_id
         try:
-            cuenta_corriente.create_cc_debito(
-                int(cliente_id), total, fecha.hoy(),
+            self._ajustar_deuda(
+                origen_tipo, origen_id, debe=True, cliente_id=int(cliente_id),
+                total=total,
                 concepto=f"{origen_tipo.capitalize()} {numero} enviado a facturar "
                          f"a {nombre_destino()}",
-                referencia=f"{REFERENCIA_DEBITO}{origen_tipo}-{origen_id}",
             )
         except Exception:
             logger.exception(
                 "El %s %s se envio pero no se pudo debitar en cuenta corriente",
                 origen_tipo, origen_id,
             )
+
+    def anular_deuda(self, origen_tipo: str, origen_id: int) -> None:
+        """Compensa la deuda que cargó un envío que ya no está del otro lado.
+
+        La llaman los tres lugares donde SOS **confirma** que el comprobante no
+        existe: la consulta que lo descubre (`marcar_ausente_remoto`), la
+        pregunta previa a un reenvío (`_confirmar_que_ya_no_esta`) y la consulta
+        de estado sobre lo que ya estaba marcado de antes, que es lo que arregla
+        solas a las filas anteriores a este cambio.
+
+        🔴 **Nunca con un error de comunicación**: es la misma guarda que la
+        marca de ausente, y por lo mismo. Anular sobre un SOS caído le borraría
+        la deuda a un cliente que la tiene.
+
+        Es un **débito negativo**, no un pago: un `cc_pago` es plata que entró
+        —de él se emite un recibo (`recibos.emitir_de_cobranza`)— y esto no es
+        eso. Y no borra el cargo: queda el cargo y su anulación, con el motivo,
+        que es lo que se puede auditar (mismo criterio que anular un movimiento
+        de caja).
+
+        No propaga el error, igual que el débito: la marca de ausente ya se
+        escribió, y una deuda sin anular es recuperable.
+        """
+        try:
+            self._ajustar_deuda(origen_tipo, origen_id, debe=False)
+        except Exception:
+            logger.exception(
+                "El %s %s ya no esta en el destino pero no se pudo anular su "
+                "deuda en cuenta corriente", origen_tipo, origen_id,
+            )
+
+    def _ajustar_deuda(self, origen_tipo: str, origen_id: int, *, debe: bool,
+                       cliente_id: int | None = None, total: float = 0.0,
+                       concepto: str = "") -> None:
+        """Lleva el libro del comprobante al estado que corresponde.
+
+        El libro son todos los `cc_debitos` que cuelgan de su referencia. Si el
+        comprobante **está** del otro lado (`debe=True`) el neto tiene que ser
+        la deuda; si **no está**, cero. Cada llamada agrega **a lo sumo una
+        fila** —nunca borra— y sólo si el neto no está ya donde tiene que estar.
+
+        🔑 **Por qué el neto y no "si ya hay una fila con esta referencia".** La
+        idempotencia por fila alcanzaba mientras sólo había cargos: con una
+        anulación en el medio, el cargo original sigue existiendo y un reenvío
+        no volvería a cargar nada. Mirando el neto, cualquier secuencia —cargo,
+        anulación, reenvío, otra anulación— termina en el número correcto, y
+        correr lo mismo dos veces no cambia nada.
+        """
+        base = f"{REFERENCIA_DEBITO}{origen_tipo}-{origen_id}"
+        filas = cuenta_corriente.debitos_de_referencia(base)
+        neto = round(sum(float(f["monto"]) for f in filas), 2)
+
+        if debe:
+            if neto > 0 or not cliente_id or total <= 0:
+                return
+            cuenta_corriente.create_cc_debito(
+                int(cliente_id), total, fecha.hoy(),
+                concepto=concepto + (" (reenvío)" if filas else ""),
+                referencia=self._referencia_libre(base, filas),
+            )
+            return
+
+        if neto <= 0:
+            return
+        cargo = next(f for f in reversed(filas) if float(f["monto"]) > 0)
+        cuenta_corriente.create_cc_debito(
+            int(cargo["cliente_id"]), -neto, fecha.hoy(),
+            concepto=f"Anulado: {cargo['concepto']} — ya no está en "
+                     f"{nombre_destino()}",
+            referencia=self._referencia_libre(base, filas),
+        )
+
+    @staticmethod
+    def _referencia_libre(base: str, filas: list[dict]) -> str:
+        """`base` para el primer cargo —la referencia de siempre, así lo ya
+        cargado sigue siendo el mismo libro— y `base-N` para lo que venga
+        después. `cc_debitos.referencia` es única."""
+        usadas = {f["referencia"] for f in filas}
+        if base not in usadas:
+            return base
+        n = len(filas)
+        while f"{base}-{n}" in usadas:
+            n += 1
+        return f"{base}-{n}"
 
     def _enviar(self, origen_tipo: str, comprobante: dict) -> dict:
         """El envío en sí. Lo separa de `enviar` para que el débito quede en un
@@ -753,6 +851,11 @@ class PuenteFacturacion:
         try:
             adaptador.estado_venta(int(remoto))
         except VentaInexistente:
+            # Confirmado. Si la deuda del envío anterior seguía cargada —una
+            # marca anterior al 2026-09-10—, se anula acá, antes de que el
+            # reenvío cargue la suya: así el libro muestra cargo, anulación y
+            # cargo nuevo, en ese orden.
+            self.anular_deuda(previo.origen_tipo, previo.origen_id)
             return None
         except (ErrorSOS, httpx.HTTPError) as e:
             logger.warning(

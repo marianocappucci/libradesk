@@ -33,6 +33,7 @@ from __future__ import annotations
 from functools import partial
 
 from libracore.db import cuenta_corriente as _cc
+from libracore.db.core import get_connection
 
 # Estas no dependen del origen de las ventas: se reexportan tal cual.
 from libracore.db.cuenta_corriente import (  # noqa: F401
@@ -49,6 +50,26 @@ movimientos = partial(_cc.get_cc_movimientos, origen=VENTAS_LIBRACOMMERCE)
 movimientos_periodo = partial(
     _cc.get_cc_movimientos_periodo, origen=VENTAS_LIBRACOMMERCE
 )
+
+
+def debitos_de_referencia(base: str) -> list[dict]:
+    """Los `cc_debitos` cuya referencia es `base` o empieza con `base-`.
+
+    Es el "libro" de un comprobante mandado a facturar: el cargo original
+    (`facturacion-externa-remito-9`) y los que vinieron después —una anulación,
+    un reenvío— como `…-remito-9-1`, `…-remito-9-2`. El guión del `LIKE` es lo
+    que evita que el libro del remito 9 se lleve el del 90.
+
+    El motor no tiene una consulta por referencia —sólo la usa para la
+    idempotencia de `create_cc_debito`—, así que va acá.
+    """
+    with get_connection() as conn:
+        filas = conn.execute(
+            "SELECT id, cliente_id, monto, concepto, referencia FROM cc_debitos "
+            "WHERE referencia = ? OR referencia LIKE ? ORDER BY id",
+            (base, f"{base}-%"),
+        ).fetchall()
+    return [dict(f) for f in filas]
 
 
 def clientes_con_saldo() -> list[dict]:
