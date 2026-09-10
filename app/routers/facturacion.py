@@ -25,6 +25,8 @@ uno.
 **Ninguna ruta de este módulo emite nada.** Lo peor que puede hacer es dejar una
 fila en una bandeja del otro lado, que se descarta con un click.
 """
+import time
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -48,6 +50,18 @@ router = APIRouter(prefix="/api/facturacion", tags=["facturacion"])
 # Cuántos comprobantes se ofrecen para mandar. Es el mismo tope que usa el
 # listado de remitos.
 _TOPE = 100
+
+# Cuánto tiempo, en total, se le dedica a preguntarle a SOS en `estados-sos`.
+# 🔴 El proxy corta a los **90 s** (`proxy_read_timeout` global de NPM, medido el
+# 2026-09-10) y cada fila puede costar `INTENTOS_ESTADO_VENTA` × `TIMEOUT` del
+# adaptador (2 × 20 s). Pasado este presupuesto no se arranca otra fila, así
+# que el peor caso queda en 40 s + una fila ≈ 80 s, adentro del corte. Sin él,
+# las tres filas de `lagrace` con SOS lento eran 120 s: un 504 que se llevaba
+# también las filas que sí habían contestado.
+PRESUPUESTO_ESTADOS_SOS = 40.0
+
+# El reloj del presupuesto, aparte para que los tests lo puedan intervenir.
+_reloj = time.monotonic
 
 
 class EnviarPayload(BaseModel):
@@ -133,6 +147,7 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
 
     adaptador = AdaptadorSOS()
     filas = []
+    inicio = _reloj()
     for envio in puente.listar():
         remoto = envio.get("comprobante_remoto_id")
         if not remoto:
@@ -142,6 +157,14 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
         fila = {"origen_tipo": origen_tipo,
                 "origen_id": origen_id,
                 "comprobante_remoto_id": remoto}
+        if _reloj() - inicio >= PRESUPUESTO_ESTADOS_SOS:
+            # SOS viene lento, y seguir es arriesgar que el proxy corte la
+            # respuesta entera. Esta fila no se consultó: no sabemos nada nuevo
+            # de ella, así que tampoco se escribe nada — igual que un error.
+            fila["error"] = ("No se llegó a consultar: SOS viene lento. "
+                             "Volvé a consultar en un rato.")
+            filas.append(fila)
+            continue
         try:
             fila.update(adaptador.estado_venta(int(remoto)))
         except VentaInexistente as e:

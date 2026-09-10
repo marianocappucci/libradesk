@@ -399,6 +399,74 @@ def test_sos_caido_no_reescribe_nada(bandeja):
     assert puente.marcados == [], "no se pudo preguntar: no se escribe nada"
 
 
+# ── 4. El presupuesto de tiempo de la ruta ──────────────────────────────────
+
+class AdaptadorContador(AdaptadorFalso):
+    """Anota por qué ventas le preguntaron."""
+
+    def __init__(self):
+        super().__init__()
+        self.preguntas = []
+
+    def estado_venta(self, idventa):
+        self.preguntas.append(idventa)
+        return super().estado_venta(idventa)
+
+
+@pytest.fixture
+def bandeja_de_tres(client, monkeypatch, sos_configurado):
+    """Tres envíos mandados, como los de `lagrace` el 2026-09-10."""
+    falso = PuenteFalso([{"origen_tipo": fe.ORIGEN_REMITO, "origen_id": i,
+                          "comprobante_remoto_id": 900 + i} for i in (1, 2, 3)])
+    client.app.state.puente_facturacion = falso
+    adaptador = AdaptadorContador()
+    monkeypatch.setattr(sos, "AdaptadorSOS", lambda *a, **k: adaptador)
+    return client, falso, adaptador
+
+
+def test_pasado_el_presupuesto_no_se_arranca_otra_fila(bandeja_de_tres, monkeypatch):
+    """🔴 El proxy corta a los 90 s y, con el reintento, tres filas con SOS lento
+    son 120 s: un 504 que se lleva también las filas que sí contestaron.
+
+    El reloj se lee al empezar y antes de cada fila; acá la primera fila "tarda"
+    más que el presupuesto entero.
+    """
+    from app.routers import facturacion as rutas
+
+    client, puente, adaptador = bandeja_de_tres
+    pasado = rutas.PRESUPUESTO_ESTADOS_SOS + 1
+    lecturas = iter([0.0, 0.0, pasado, pasado])
+    monkeypatch.setattr(rutas, "_reloj", lambda: next(lecturas))
+
+    r = client.post("/api/facturacion/estados-sos")
+
+    assert r.status_code == 200, r.text
+    assert adaptador.preguntas == [901], "después del presupuesto no se pregunta"
+    filas = r.json()["items"]
+    assert [f["origen_id"] for f in filas] == [1, 2, 3], "ninguna fila se pierde"
+    assert "error" not in filas[0]
+    for fila in filas[1:]:
+        assert "No se llegó a consultar" in fila["error"]
+        assert fila.get("ausente") is None
+    # Lo no consultado no se escribe en ninguna dirección.
+    assert puente.marcados == []
+    assert puente.desmarcados == [(fe.ORIGEN_REMITO, 1)]
+
+
+def test_dentro_del_presupuesto_se_pregunta_por_todas(bandeja_de_tres, monkeypatch):
+    """El control: con SOS rápido el presupuesto no se nota."""
+    from app.routers import facturacion as rutas
+
+    client, _, adaptador = bandeja_de_tres
+    monkeypatch.setattr(rutas, "_reloj", lambda: 0.0)
+
+    r = client.post("/api/facturacion/estados-sos")
+
+    assert r.status_code == 200, r.text
+    assert adaptador.preguntas == [901, 902, 903]
+    assert all("error" not in f for f in r.json()["items"])
+
+
 def test_una_venta_que_esta_desmarca_por_las_dudas(bandeja):
     """Si estaba anotada como ausente y reapareció, se corrige sola."""
     puente, montar = bandeja
