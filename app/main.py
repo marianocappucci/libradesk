@@ -30,6 +30,7 @@ from libracore.config_router import (
     build_empresa_admin_router,
     build_empresa_router,
 )
+from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 from libracore.smtp_router import build_smtp_probe_router
@@ -558,6 +559,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # admin: un backup es una copia completa de los datos del cliente.
     app.include_router(build_empresa_router(), dependencies=staff_or_admin)
     app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
+    # Una sola variable para los dos routers: la copia externa sube lo que deja
+    # el backup, y su enlace (credenciales de rclone, estado de la subida) vive
+    # en la MISMA carpeta. Dos rutas escritas por separado divergen sin error.
+    backups_dir = os.path.join(data_dir, "backups")
     app.include_router(
         build_backup_router(
             # 🔴 En PostgreSQL se pasa la URL, NO `make_url(...).database`.
@@ -590,7 +595,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
                     os.path.join(data_dir, "contratos"),
                 ],
             ),
-            os.path.join(data_dir, "backups"),
+            backups_dir,
             # 🔴 Sin estos dos el restore devuelve `ok` y **no tiene efecto**
             # hasta que alguien reinicie el contenedor: el pool sigue con el
             # archivo viejo abierto y la app sirve la base anterior. Lo
@@ -603,6 +608,30 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
             reabrir_conexiones=engine.dispose,
         ),
         dependencies=[Depends(require_admin)],
+    )
+    # Conectar, ver y desconectar la nube del cliente (Google Drive, Dropbox)
+    # para la copia externa de los backups. `GET`/`DELETE` y
+    # `POST /{proveedor}` + `GET /callback` bajo
+    # `/api/config/resguardo-externo/enlace` (LibraCore v1.93.0).
+    #
+    # Dos guardas, como el puente de facturación: admin, porque ahí se entrega
+    # un permiso sobre la cuenta del cliente, y el ADD-ON `resguardo_externo`,
+    # que viene apagado y se prende por instancia desde el backoffice. El 403
+    # del gate el frontend (libra-ui) lo lee como "sin plan".
+    #
+    # 🔴 El gate del add-on sólo corta porque `ModuleRepository.is_enabled`
+    # trata los add-ons aparte (sin fila, apagado). Antes devolvía `True` para
+    # todo lo que no estuviera en `TODOS_LOS_MODULOS`, y este router habría
+    # quedado abierto en todas las instancias.
+    #
+    # El callback queda detrás del mismo gate a propósito: la cookie de sesión
+    # es `SameSite=Lax` y viaja en la redirección del proveedor. `volver_a`
+    # queda en el default porque la pantalla está en `/configuracion`.
+    app.include_router(
+        build_resguardo_enlace_router(backups_dir, carpeta="Resguardo LibraDesk"),
+        dependencies=[
+            Depends(require_admin), Depends(require_module("resguardo_externo")),
+        ],
     )
 
     # Logs: admin y nada más. Es la pantalla que dice quién borró qué y desde
