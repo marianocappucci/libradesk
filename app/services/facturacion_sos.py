@@ -119,6 +119,12 @@ TIPO_OPERACION_DEFAULT = 2
 
 TIMEOUT = 20.0
 
+# Cuántas veces se le pregunta a SOS por el estado de una venta antes de
+# anotar "no se pudo preguntar". `GET /venta/detalle` es intermitente y el
+# segundo intento anda cuando el primero falla (medido el 2026-09-10); más de
+# dos alarga la pantalla sin sumar, porque la ruta recorre las filas de a una.
+INTENTOS_ESTADO_VENTA = 2
+
 # Tope de páginas al buscar un cliente. 100 páginas son 5.000 clientes, holgado
 # para las cuentas del parque (la de Lagrace tiene 35) y un freno para que una
 # cuenta enorme no convierta un envío en cientos de requests.
@@ -885,7 +891,38 @@ class AdaptadorSOS:
         pantalla las mostraba con el mismo cartel, así que un remito cuya venta
         se había borrado en SOS quedaba para siempre en "En la bandeja" sin que
         nada lo dijera.
+
+        🔑 **Se pregunta dos veces antes de decir "no se pudo preguntar".**
+        `GET /venta/detalle` de SOS es intermitente: medido el 2026-09-10, el
+        mismo id contestó `15,5 s → timeout`, después `3,7 s` y `0,5 s` con la
+        respuesta buena, y sobre las mismas tres ventas una vuelta resolvió 1 y
+        la siguiente 3. El resto de SOS andaba en el mismo minuto (login 1,0 s),
+        así que no es SOS caído: es ese endpoint. En pantalla eso era un botón
+        que resolvía algunas filas y otras no.
+
+        Se reintenta **sólo lo que no dice nada** —un `ErrorSOS` común o un
+        corte de transporte—. Una respuesta no se reintenta: ni la cabecera ni
+        `VentaInexistente`, que es SOS contestando. Y el tope es fijo porque la
+        ruta recorre las filas de a una: en el peor caso cada fila cuesta
+        `INTENTOS_ESTADO_VENTA` cortes de SOS.
         """
+        for intento in range(1, INTENTOS_ESTADO_VENTA + 1):
+            try:
+                return self._leer_estado_venta(idventa)
+            except VentaInexistente:
+                raise
+            except (ErrorSOS, httpx.TransportError) as e:
+                if intento == INTENTOS_ESTADO_VENTA:
+                    raise
+                logger.warning(
+                    "SOS no contestó el detalle de la venta %s (intento %d de "
+                    "%d), se reintenta: %s",
+                    idventa, intento, INTENTOS_ESTADO_VENTA, e)
+        raise AssertionError("inalcanzable")  # pragma: no cover
+
+    def _leer_estado_venta(self, idventa: int) -> dict:
+        """Una sola pregunta a SOS. La clasificación está acá; el reintento, en
+        `estado_venta`."""
         try:
             datos = interpretar(
                 self._request("GET", f"/venta/detalle/{idventa}", token=self.token()),
