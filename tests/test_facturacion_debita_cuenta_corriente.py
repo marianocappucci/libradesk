@@ -27,6 +27,7 @@ import pytest
 
 from app.services import cuenta_corriente as cc
 from app.services import facturacion_externa as fe
+from app.services import facturacion_sos as sos
 
 # `tests/` no es un paquete, así que las piezas de `test_facturacion_externa`
 # no se pueden importar de ahí. Se redefinen acá —son cuatro líneas— en vez de
@@ -396,6 +397,85 @@ def test_anular_lo_que_nunca_se_cargo_no_hace_nada(client, configurado):
 
     assert _saldo(cliente_id) == 0
     assert _debitos_del_puente(cliente_id) == []
+
+
+# ── La pregunta previa al reenvío también anula ────────────────────────────
+#
+# Es el tercero de los tres lugares donde se anula (`anular_deuda`), y el único
+# que no tenía test propio hasta el 2026-09-11. Cubre las marcas de "ya no
+# está" hechas **antes** de que existiera la anulación: el envío dice ausente
+# pero su deuda sigue cargada.
+
+class _SOSQueDice:
+    """Contesta `estado_venta`, que es lo único que usa la pregunta previa."""
+
+    def __init__(self, excepcion=None):
+        self.excepcion = excepcion
+
+    def estado_venta(self, idventa):
+        if self.excepcion:
+            raise self.excepcion
+        return {"emitido": False, "cae": "", "comprobante": "FA 0015-00000001"}
+
+
+def _marca_vieja_de_ausente(client, cliente_id, remito):
+    """El estado de una marca anterior al 2026-09-10: ausente y con la deuda."""
+    puente = client.app.state.puente_facturacion
+    puente._registrar("remito", remito["id"], fe.ESTADO_ENVIADO,
+                      comprobante_remoto_id=906683730)
+    puente._ajustar_deuda("remito", remito["id"], debe=True, cliente_id=cliente_id,
+                          total=TOTAL_DEL_REMITO, concepto=f"Remito {remito['number']}")
+    puente._registrar("remito", remito["id"], fe.ESTADO_AUSENTE_REMOTO,
+                      detalle="marca vieja, sin anulación")
+    # Control del escenario: si esto diera 0, los tests de abajo pasarían sin
+    # que la pregunta previa hubiera anulado nada.
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
+    return puente, puente.get_envio("remito", remito["id"])
+
+
+def test_la_pregunta_previa_al_reenvio_anula_la_deuda_de_una_marca_vieja(
+        client, configurado):
+    """🔴 Con la idempotencia por **neto**, un reenvío sobre una deuda vieja
+    todavía cargada no carga nada y el saldo da bien igual. Por eso se mira el
+    libro y no el saldo: tiene que decir cargo y anulación, en ese orden, antes
+    de que el reenvío cargue el suyo."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    puente, previo = _marca_vieja_de_ausente(client, cliente_id, remito)
+
+    freno = puente._confirmar_que_ya_no_esta(
+        _SOSQueDice(sos.VentaInexistente("no está")), previo)
+
+    assert freno is None, "confirmado que no está: se puede reenviar"
+    assert _saldo(cliente_id) == 0
+    assert _montos(cliente_id) == [TOTAL_DEL_REMITO, -TOTAL_DEL_REMITO]
+
+
+def test_si_la_venta_sigue_alla_la_pregunta_previa_no_anula(client, configurado):
+    """Control: la venta está —la marca de ausente era un fallo de SOS—, así que
+    la deuda es real y no se toca."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    puente, previo = _marca_vieja_de_ausente(client, cliente_id, remito)
+
+    freno = puente._confirmar_que_ya_no_esta(_SOSQueDice(), previo)
+
+    assert freno is not None, "no se reenvía lo que sigue allá"
+    assert _montos(cliente_id) == [TOTAL_DEL_REMITO]
+
+
+def test_si_no_se_puede_preguntar_la_pregunta_previa_no_anula(client, configurado):
+    """🔴 No saber no es saber que no está: anular sobre un SOS caído le borraría
+    la deuda a un cliente que la tiene."""
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    puente, previo = _marca_vieja_de_ausente(client, cliente_id, remito)
+
+    freno = puente._confirmar_que_ya_no_esta(
+        _SOSQueDice(sos.ErrorSOS("detalle de la venta: Token expirado")), previo)
+
+    assert freno["estado"] == fe.ESTADO_ERROR
+    assert _montos(cliente_id) == [TOTAL_DEL_REMITO]
 
 
 def test_el_libro_del_remito_9_no_se_lleva_el_del_90(client):

@@ -25,13 +25,18 @@ uno.
 **Ninguna ruta de este módulo emite nada.** Lo peor que puede hacer es dejar una
 fila en una bandeja del otro lado, que se descarta con un click.
 """
+import logging
 import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..dependencies import get_puente_facturacion, get_remito_service
+from ..dependencies import (
+    get_incidencia_repository,
+    get_puente_facturacion,
+    get_remito_service,
+)
 from ..services.facturacion_externa import (
     DESTINO_SOS,
     ESTADO_AUSENTE_REMOTO,
@@ -44,6 +49,7 @@ from ..services.facturacion_externa import (
     esta_configurado,
     nombre_destino,
 )
+from ..services.incidencias import IncidenciaRepository
 from ..services.remitos_presupuestos import RemitoService
 
 router = APIRouter(prefix="/api/facturacion", tags=["facturacion"])
@@ -108,8 +114,26 @@ def estado(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
     }
 
 
+def _marcar_la_fuente(incidencias: IncidenciaRepository, remito_id: int) -> int:
+    """Fase E: los reclamos de un remito que SOS ya facturó quedan `facturada`.
+
+    Un fallo acá **no** tumba la fila ni la consulta: el estado del comprobante
+    ya se leyó y es lo que la pantalla necesita, y la marca se vuelve a intentar
+    en la próxima consulta porque es idempotente.
+    """
+    try:
+        return incidencias.marcar_facturadas_por_remito(remito_id)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "No se pudieron marcar facturados los reclamos del remito %s", remito_id)
+        return 0
+
+
 @router.post("/estados-sos")
-def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
+def estados_sos(
+    puente: PuenteFacturacion = Depends(get_puente_facturacion),
+    incidencias: IncidenciaRepository = Depends(get_incidencia_repository),
+):
     """Cómo está cada comprobante ya mandado, **preguntándoselo a SOS**.
 
     Contesta la pregunta que hasta ahora no se podía hacer desde adentro: si el
@@ -182,6 +206,12 @@ def estados_sos(puente: PuenteFacturacion = Depends(get_puente_facturacion)):
             continue
         try:
             fila.update(adaptador.estado_venta(int(remoto)))
+            # 🔑 **Fase E, el marcado de la fuente** (2026-09-11). Con CAE el
+            # comprobante está emitido —es lo único que lo prueba—, así que los
+            # reclamos de ese remito dejan de figurar "sin facturar" en los
+            # reportes sin que nadie los tilde a mano.
+            if fila.get("emitido") and origen_tipo == ORIGEN_REMITO:
+                fila["reclamos_facturados"] = _marcar_la_fuente(incidencias, origen_id)
         except VentaInexistente as e:
             # El caso que hace que esta ruta escriba. `ausente` es un campo
             # propio y no un `error`: la pantalla tiene que poder decir "ya no

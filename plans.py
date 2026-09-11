@@ -27,11 +27,14 @@ PLAN_LABELS = {
 }
 
 # Precio mensual de referencia (informativo, para mostrar en el backoffice).
-# Alineado con Gestiolibra por decisión del 2026-08-02.
+# Los mismos de la landing (libradesk.com.ar) desde el 2026-08-18: el humano
+# fijó el Premium en 180.000 y los otros dos en la proporción que ya tenían.
+# Hasta el 2026-09-11 acá seguían los de antes (15.000/25.000/40.000), así que
+# la pantalla desde la que se da de alta a un cliente decía otra cosa que la web.
 PLAN_PRECIOS = {
-    "basico":   15000,
-    "estandar": 25000,
-    "premium":  40000,
+    "basico":    70000,
+    "estandar": 115000,
+    "premium":  180000,
 }
 
 # Básico: el core de tickets completo — clientes, equipos, incidencias,
