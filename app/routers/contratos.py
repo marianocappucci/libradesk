@@ -279,7 +279,7 @@ def _ruta_archivo(data_dir: str, contrato_id: int) -> str:
 
 
 @router.post("/{contrato_id}/archivo")
-async def subir_archivo(
+def subir_archivo(
     contrato_id: int,
     archivo: UploadFile = File(...),
     contratos: ContratoRepository = Depends(get_contrato_repository),
@@ -296,11 +296,17 @@ async def subir_archivo(
     `require_admin` propio — quien carga el contrato es quien lo trae firmado
     de la visita, y esconderselo al staff no protege nada que la API no le deje
     hacer igual por `PUT`.
+
+    🔴 **`def` y no `async def`, a propósito.** Lee y escribe la base (el
+    contrato, antes y después) y escribe el PDF a disco, todo sincrónico, y
+    uvicorn corre con **un solo proceso**: como `async def`, mientras se
+    guardaba un escaneo de varios MB la instancia no le contestaba a nadie,
+    `/health` incluido. Como `def`, FastAPI la corre en el threadpool.
     """
     if contratos.get(contrato_id) is None:
         raise HTTPException(404, "contrato not found")
     destino = _ruta_archivo(data_dir, contrato_id)
-    bytes_escritos = await archivos.guardar_pdf(archivo, destino)
+    bytes_escritos = archivos.guardar_pdf(archivo, destino)
     contratos.set_archivo(contrato_id, destino)
     return {"archivo_pdf": destino, "bytes": bytes_escritos}
 

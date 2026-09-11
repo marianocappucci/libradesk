@@ -45,12 +45,21 @@ _CHUNK = 1024 * 1024
 _FIRMA_PDF = b"%PDF-"
 
 
-async def guardar_pdf(archivo: UploadFile, destino: str) -> int:
+def guardar_pdf(archivo: UploadFile, destino: str) -> int:
     """Guarda `archivo` en `destino` si es un PDF y entra en el tope.
 
     Devuelve el tamaño en bytes. Los errores salen como `HTTPException` con el
     texto que la pantalla muestra tal cual: quien sube un archivo equivocado
     tiene que leer qué pasó, no un código.
+
+    🔴 **Sincrónica a propósito, y se llama desde una ruta `def`.** Todo lo que
+    hace es disco —el `makedirs`, escribir el `.parcial`, el `os.replace`— y
+    uvicorn corre con **un solo proceso**: como corrutina, cada una de esas
+    llamadas frenaba el loop entero mientras un contrato escaneado de varios MB
+    se escribía. Lee de `archivo.file` —el `SpooledTemporaryFile` que Starlette
+    ya dejó armado— en vez de `await archivo.read()`, que era lo único que la
+    hacía `async`. Las tres defensas no cambian: el tope se sigue controlando
+    bloque a bloque mientras se lee.
     """
     nombre = archivo.filename or ""
     if not nombre.lower().endswith(".pdf"):
@@ -65,7 +74,7 @@ async def guardar_pdf(archivo: UploadFile, destino: str) -> int:
         with open(temporal, "wb") as f:
             primero = True
             while True:
-                bloque = await archivo.read(_CHUNK)
+                bloque = archivo.file.read(_CHUNK)
                 if not bloque:
                     break
                 if primero:
