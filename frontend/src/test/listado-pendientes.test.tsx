@@ -30,6 +30,13 @@ beforeEach(() => {
 
 const enlace = () => screen.findByRole('link', { name: /Imprimir pendientes/ })
 
+// Las localidades salen de los clientes: se contesta esa lista y vacío el resto.
+function conClientes(clientes: unknown[]) {
+  vi.stubGlobal('fetch', vi.fn((url: string) =>
+    Promise.resolve(json(String(url).endsWith('/api/clientes') ? clientes : [])),
+  ))
+}
+
 describe('Listado de reclamos pendientes', () => {
   it('se imprime por antigüedad sin elegir nada', async () => {
     // El default importa: es el que se va a usar la mayoría de las veces, y
@@ -55,6 +62,62 @@ describe('Listado de reclamos pendientes', () => {
 
     expect(await enlace()).toHaveAttribute(
       'href', '/api/incidencias/pendientes.pdf?orden=localidad',
+    )
+  })
+
+  it('la localidad elegida viaja al PDF', async () => {
+    // Mismo modo de falla que el orden: un selector que se ve y no cambia nada.
+    conClientes([
+      { id: 1, nombre: 'Ferretería', ciudad: 'Chivilcoy', activo: true },
+      { id: 2, nombre: 'Municipio', ciudad: 'Navarro', activo: true },
+    ])
+    const user = userEvent.setup()
+    render(<Incidencias />)
+    await enlace()
+
+    await user.click(screen.getByRole('combobox', {
+      name: 'Localidad del listado de pendientes',
+    }))
+    await user.click(await screen.findByRole('option', { name: 'Navarro' }))
+
+    expect(await enlace()).toHaveAttribute(
+      'href', '/api/incidencias/pendientes.pdf?orden=antiguedad&ciudad=Navarro',
+    )
+  })
+
+  it('la misma ciudad con otras mayúsculas es una sola opción', async () => {
+    // En los datos reales conviven `Chivilcoy` y `CHIVILCOY`. El backend las
+    // compara sin distinguirlas, así que dos opciones imprimirían lo mismo.
+    conClientes([
+      { id: 1, nombre: 'A', ciudad: 'Chivilcoy', activo: true },
+      { id: 2, nombre: 'B', ciudad: 'CHIVILCOY', activo: true },
+      { id: 3, nombre: 'C', ciudad: null, activo: true },
+    ])
+    const user = userEvent.setup()
+    render(<Incidencias />)
+    await enlace()
+
+    await user.click(screen.getByRole('combobox', {
+      name: 'Localidad del listado de pendientes',
+    }))
+    const opciones = await screen.findAllByRole('option')
+    expect(opciones.map((o) => o.textContent)).toEqual(['Todas las localidades', 'Chivilcoy'])
+  })
+
+  it('una localidad con espacios viaja codificada', async () => {
+    conClientes([{ id: 1, nombre: 'A', ciudad: 'Norberto de la Riestra', activo: true }])
+    const user = userEvent.setup()
+    render(<Incidencias />)
+    await enlace()
+
+    await user.click(screen.getByRole('combobox', {
+      name: 'Localidad del listado de pendientes',
+    }))
+    await user.click(await screen.findByRole('option', { name: 'Norberto de la Riestra' }))
+
+    expect(await enlace()).toHaveAttribute(
+      'href',
+      '/api/incidencias/pendientes.pdf?orden=antiguedad&ciudad=Norberto%20de%20la%20Riestra',
     )
   })
 

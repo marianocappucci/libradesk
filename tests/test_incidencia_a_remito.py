@@ -422,6 +422,64 @@ def test_uno_ya_remitado_en_el_lote_lo_rechaza_entero(tres_reclamos):
     assert client.get(f"/api/incidencias/{ids[0]}").json()["remito_id"] == ya["id"]
 
 
+def _otro_pedido_gana(client, cliente, monkeypatch, ata):
+    """Simula el doble click con dos pedidos en paralelo: entre `preparar_remito`
+    y el vínculo de ESTE pedido, otro ya ató los reclamos `ata` a su remito."""
+    from app.services.incidencias import IncidenciaRepository
+
+    otro = client.post("/api/remitos", json={
+        "client_id": cliente["id"],
+        "items": [{"description": "Del otro pedido", "qty": 1, "unit_price": 100}],
+    })
+    assert otro.status_code == 201, otro.text
+    otro_id = otro.json()["id"]
+    original = IncidenciaRepository.vincular_al_remito
+
+    def _en_paralelo(self, incidencia_ids, remito_id):
+        original(self, ata, otro_id)
+        return original(self, incidencia_ids, remito_id)
+
+    monkeypatch.setattr(IncidenciaRepository, "vincular_al_remito", _en_paralelo)
+    return otro_id
+
+
+def test_si_otro_pedido_los_ato_en_el_medio_no_queda_un_remito_huerfano(
+        tres_reclamos, monkeypatch):
+    """🔴 El doble click con dos pedidos en paralelo. Los dos pasan
+    `preparar_remito`, los dos emiten, y el segundo no ata nada. Hasta el
+    2026-09-11 ese cero se ignoraba: quedaba un remito sin reclamos detrás, y el
+    envío a facturar lo habría mandado igual — el mismo trabajo cobrado dos
+    veces."""
+    client, cliente, reclamos, _, _ = tres_reclamos
+    ids = [r["id"] for r in reclamos]
+    otro_id = _otro_pedido_gana(client, cliente, monkeypatch, ata=ids)
+
+    r = _convertir_lote(client, ids)
+
+    assert r.status_code == 409, r.text
+    assert "al mismo tiempo" in r.json()["detail"]
+    assert [x["id"] for x in client.get("/api/remitos").json()] == [otro_id], (
+        "no quedó un segundo remito")
+    assert {client.get(f"/api/incidencias/{x}").json()["remito_id"] for x in ids} == {otro_id}
+
+
+def test_si_el_otro_ato_solo_uno_se_sueltan_los_que_este_alcanzo_a_atar(
+        tres_reclamos, monkeypatch):
+    """La variante que obliga a soltar antes de borrar: este pedido llegó a atar
+    dos, y `RemitoService.delete` se niega a borrar un remito con reclamos. Sin
+    soltarlos, el remito huérfano se queda."""
+    client, cliente, reclamos, _, _ = tres_reclamos
+    ids = [r["id"] for r in reclamos]
+    otro_id = _otro_pedido_gana(client, cliente, monkeypatch, ata=ids[:1])
+
+    r = _convertir_lote(client, ids)
+
+    assert r.status_code == 409, r.text
+    assert [x["id"] for x in client.get("/api/remitos").json()] == [otro_id]
+    vinculos = [client.get(f"/api/incidencias/{x}").json()["remito_id"] for x in ids]
+    assert vinculos == [otro_id, None, None], "los otros dos quedan libres para otro remito"
+
+
 def test_un_reclamo_del_lote_que_no_existe_da_404(tres_reclamos):
     client, _, reclamos, _, _ = tres_reclamos
 
