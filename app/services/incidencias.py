@@ -2147,8 +2147,72 @@ class IncidenciaRepository:
             **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
         )
 
-        self.vincular_al_remito(ids, remito["id"])
+        atados = self.vincular_al_remito(ids, remito["id"])
+        if atados < len(ids):
+            # 🔴 **El doble click con dos pedidos en paralelo** (2026-09-11).
+            # Los dos pasan `preparar_remito` antes de que alguno ate los
+            # reclamos, los dos emiten, y el segundo no ata nada —el vinculo
+            # solo toma los que estan sueltos—. Hasta aca ese cero se ignoraba:
+            # quedaba un remito sin reclamos que lo respalden, y el proximo
+            # envio a facturar lo habria mandado igual, cobrandole dos veces el
+            # mismo trabajo al cliente. Se deshace lo de este pedido y se
+            # contesta como el lote con uno ya remitado.
+            #
+            # Lo que esto NO cubre: que el proceso muera entre `create` y el
+            # vinculo. Eso sigue siendo lo que describe "Lo que NO es atomico".
+            self.desvincular_del_remito(remito["id"])
+            remitos.delete(remito["id"])
+            raise ValueError(
+                "Otro pedido remitó estos reclamos al mismo tiempo, así que no se "
+                "generó un segundo remito. Recargá la pantalla para ver el que "
+                "quedó."
+            )
         return remito
+
+    def desvincular_del_remito(self, remito_id: int) -> int:
+        """Suelta los reclamos atados a un remito. Devuelve cuántos soltó.
+
+        Existe para una sola cosa: deshacer un remito recién emitido que perdió
+        la carrera en `convertir_a_remito`. `RemitoService.delete` se niega a
+        borrar un remito con reclamos atados, así que hay que soltar primero lo
+        que este pedido llegó a atar.
+        """
+        with self.session_factory() as session:
+            resultado = session.execute(
+                update(Incidencia)
+                .where(Incidencia.remito_id == remito_id)
+                .values(remito_id=None)
+            )
+            session.commit()
+            return resultado.rowcount or 0
+
+    def marcar_facturadas_por_remito(self, remito_id: int) -> int:
+        """Marca `facturada` a los reclamos de un remito que ya se facturó.
+
+        Es la mitad que faltaba de la **fase E** del puente (la vuelta). Hasta el
+        2026-09-11 `estado_facturacion` era sólo una marca manual que leen los
+        reportes, así que un reclamo facturado del otro lado seguía figurando
+        "sin facturar" hasta que alguien lo tildara a mano.
+
+        Lo llama `POST /api/facturacion/estados-sos` cuando SOS devuelve el
+        comprobante **con CAE**, que es la única prueba de que se emitió: ni
+        `enviado` ni `resuelto_remoto` distinguen una factura de un comprobante
+        que el contador descartó.
+
+        Idempotente —sólo toca los que todavía no dicen `facturada`— y devuelve
+        cuántos marcó. Una sola sentencia, como `vincular_al_remito`.
+        """
+        with self.session_factory() as session:
+            resultado = session.execute(
+                update(Incidencia)
+                .where(
+                    Incidencia.remito_id == remito_id,
+                    func.coalesce(Incidencia.estado_facturacion, "") != "facturada",
+                )
+                .values(estado_facturacion="facturada")
+            )
+            session.commit()
+            return resultado.rowcount or 0
 
     def vincular_al_remito(self, incidencia_ids: list[int], remito_id: int) -> int:
         """Ata los reclamos al remito. Devuelve cuántos ató.

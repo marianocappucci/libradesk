@@ -73,6 +73,11 @@ const EMPTY_VALUES: IncidenciaFormValues = {
  *  que es lo que la volvía imposible de montar en los seis archivos de tests
  *  que la ejercitan por otras razones.
  */
+// El valor del selector de localidad que no filtra. Un `SelectItem` de Radix no
+// admite `''`, así que "todas" necesita un valor propio que no puede ser una
+// ciudad.
+const TODAS_LAS_LOCALIDADES = '__todas__'
+
 export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   const navigate = useNavigate()
   const vocabulario = simple ? VOCABULARIO_SIMPLE : VOCABULARIO_COMPLETO
@@ -115,6 +120,9 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   // 2026-09-08). Es estado de pantalla y no un filtro de la grilla: la grilla
   // ya se ordena sola por columna, y esto viaja al PDF.
   const [ordenPendientes, setOrdenPendientes] = useState('antiguedad')
+  // Y de qué localidad (2026-09-11). Opcional y por defecto en todas: si no lo
+  // usan, el papel sale igual que antes.
+  const [ciudadPendientes, setCiudadPendientes] = useState(TODAS_LAS_LOCALIDADES)
 
   const form = useForm<IncidenciaFormValues>({
     resolver: zodResolver(incidenciaSchema),
@@ -129,6 +137,24 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
     if (err instanceof ApiError) return err.detail
     return 'Error de conexión.'
   }
+
+  // Las localidades que se ofrecen para el listado de pendientes: las de los
+  // clientes, sin repetir por mayúsculas —en los datos reales conviven
+  // `Chivilcoy` y `CHIVILCOY`, y el backend las compara sin distinguirlas—. Se
+  // muestra la primera grafía que aparece.
+  const localidadesPendientes = (() => {
+    const vistas = new Map<string, string>()
+    for (const c of clientes) {
+      const ciudad = c.ciudad?.trim()
+      if (ciudad && !vistas.has(ciudad.toLowerCase())) vistas.set(ciudad.toLowerCase(), ciudad)
+    }
+    return [...vistas.values()].sort((a, b) => a.localeCompare(b, 'es'))
+  })()
+  const urlPendientes =
+    `/api/incidencias/pendientes.pdf?orden=${ordenPendientes}` +
+    (ciudadPendientes !== TODAS_LAS_LOCALIDADES
+      ? `&ciudad=${encodeURIComponent(ciudadPendientes)}`
+      : '')
 
   const clienteNombre = (id: number) => clientes.find((c) => c.id === id)?.nombre ?? `#${id}`
   const equipoNombre = (id: number | null) => id ? (equipos.find((e) => e.id === id)?.tipo ?? `#${id}`) : '—'
@@ -471,9 +497,20 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
               <SelectItem value="prioridad">Por prioridad</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={ciudadPendientes} onValueChange={setCiudadPendientes}>
+            <SelectTrigger className="w-[11rem]" aria-label="Localidad del listado de pendientes">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODAS_LAS_LOCALIDADES}>Todas las localidades</SelectItem>
+              {localidadesPendientes.map((ciudad) => (
+                <SelectItem key={ciudad} value={ciudad}>{ciudad}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" asChild>
             <a
-              href={`/api/incidencias/pendientes.pdf?orden=${ordenPendientes}`}
+              href={urlPendientes}
               target="_blank"
               rel="noreferrer"
             >
