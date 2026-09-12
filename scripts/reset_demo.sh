@@ -124,6 +124,12 @@ fi
 # `seed_dev` para no duplicar los datos de ejemplo en dos lugares que se van a
 # desincronizar; con un solo archivo adentro del contenedor —y peor, renombrado
 # a `seed.py`— la importacion muere con `ModuleNotFoundError`.
+#
+# El seed resuelve el captcha ALTCHA del login (libraauth v0.40.0) y para eso
+# importa `altcha`. `python3` aca es el del CONTENEDOR, no el del host: la
+# imagen pone `/opt/venv/bin` primero en el PATH, asi que es el venv de la app,
+# que trae `altcha` con libraauth. Si la demo todavia no tiene el captcha, el
+# seed lo detecta y loguea sin el.
 docker exec "$CONTENEDOR" mkdir -p /tmp/seed
 docker cp "$SEED_DEMO" "$CONTENEDOR:/tmp/seed/seed_demo.py"
 docker cp "$SEED_DEV" "$CONTENEDOR:/tmp/seed/seed_dev.py"

@@ -51,7 +51,14 @@ dependencies = [
     # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
     # se escribe en la misma transaccion que la operacion, asi que el KeyError
     # no perdia una linea de log, se llevaba puesta la operacion entera.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.38.0",
+    #
+    # v0.38.0 -> v0.40.0 (2026-09-12): el captcha ALTCHA del login y del
+    # forgot-password (`build_json_api_auth_router(captcha=True)`, ADR-014 de
+    # libraauth) --arrastra `altcha` como transitiva--. Y de paso v0.39.0, que
+    # arregla la IP con que cuenta el bloqueo por intentos (`ip_del_request`).
+    # **El bump NO es opcional a partir de aca**: `app/routers/auth.py` pasa
+    # `captcha=True`, y con un pin anterior el router ni se construye.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.40.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -180,7 +187,7 @@ dependencies = [
     # cuenta en cuenta corriente" terminaba en 202,2 mm en una hoja de 210.
     #
     # Es anterior a v1.37.0 y aquel arreglo no lo cubria.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.94.0",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.95.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra

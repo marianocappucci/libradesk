@@ -5,5 +5,8 @@ import { createForgotPassword, createResetPassword } from 'libra-ui/PasswordRese
 
 const branding = { productName: 'LibraDesk', productInitial: 'L' }
 
-export const ForgotPassword = createForgotPassword(branding)
+// «Olvidé mi contraseña» manda correos en nombre de la instancia, así que lleva
+// el mismo captcha que el login (captcha=True en app/routers/auth.py). El
+// reset-password no: el token del correo ya prueba que quien llega lo pidió.
+export const ForgotPassword = createForgotPassword({ ...branding, captchaPath: '/auth/captcha' })
 export const ResetPassword = createResetPassword(branding)
