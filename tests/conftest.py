@@ -67,6 +67,13 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from libraauth import session_auth as _session_auth
+
+#: La función real con que el router de libraauth obtiene el captcha de cada
+#: request. La fixture autouse `_captcha_siempre_valido` la reemplaza por un
+#: doble; los tests que miden el captcha de verdad (`test_captcha_login.py`)
+#: la restauran desde acá.
+CAPTCHA_DE_ORIGINAL = _session_auth._captcha_de
 
 # Variables que definen QUÉ instancia se construye. Se neutralizan al armar la
 # plantilla para que no dependa de lo que tenga cargado la máquina donde corre
@@ -413,3 +420,49 @@ def _terminos_ya_aceptados(request):
     mp.setattr(TerminosRepository, "esta_aceptada", lambda self: True)
     yield
     mp.undo()
+
+
+# ── Captcha ALTCHA: siempre válido para el resto de la suite ────────────────
+
+
+class _CaptchaDeLaSuite:
+    """Doble del `libraauth.captcha.Captcha` de la instancia.
+
+    `verificar()` acepta cualquier payload; `emitir()` delega en un `Captcha`
+    real con costo mínimo, así `GET /auth/captcha` sigue devolviendo un desafío
+    con la forma de verdad (`parameters` + `signature`) y no un dict inventado.
+    """
+
+    def __init__(self):
+        from libraauth.captcha import Captcha
+
+        self._real = Captcha("clave-de-prueba", costo=1, contador_min=1, contador_rango=5)
+
+    def emitir(self) -> dict:
+        return self._real.emitir()
+
+    def verificar(self, payload: str) -> bool:
+        return True
+
+
+@pytest.fixture(autouse=True)
+def _captcha_siempre_valido(monkeypatch):
+    """El login y el forgot-password no piden resolver el captcha en la suite.
+
+    Desde el 2026-09-12 el router de `/auth` va con `captcha=True` (libraauth
+    v0.40.0, ADR-014): sin una solución válida en el campo `captcha`, el login
+    contesta 400 antes de mirar la contraseña. La suite postea al login en
+    decenas de lugares —68 archivos—, y resolver una prueba de trabajo en cada
+    uno sería lento y no probaría nada de este producto: **el captcha lo prueba
+    libraauth**. Acá sólo se cablea, y el cableado lo mide
+    `test_captcha_login.py`, que restaura la función real
+    (`CAPTCHA_DE_ORIGINAL`).
+
+    Se reemplaza `libraauth.session_auth._captcha_de` y no `app.state.captcha`
+    porque el router la llama **en cada request** por su nombre de módulo: así
+    alcanza a todas las formas en que la suite construye la app
+    (`TestClient(client.app)`, `construir_app(...)`, `asgi.app`) sin tocar
+    ninguna.
+    """
+    doble = _CaptchaDeLaSuite()
+    monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request: doble)

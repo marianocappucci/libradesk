@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from seed_dev import Api, obtener_o_crear, url_no_productiva  # noqa: E402
+from seed_dev import Api, login, obtener_o_crear, url_no_productiva  # noqa: E402
 from seed_dev import sembrar as sembrar_dev
 
 #: La cartera de la demo. Una empresa de soporte técnico atiende a clientes de
@@ -93,7 +93,8 @@ def main() -> int:
         return 2
 
     api = Api(args.url)
-    api.post("/auth/login", {"username": args.usuario, "password": args.password})
+    # Con el captcha del login resuelto: ver `seed_dev.resolver_captcha`.
+    login(api, args.usuario, args.password)
     sembrar(api)
     return 0
 

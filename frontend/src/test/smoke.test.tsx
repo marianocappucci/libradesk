@@ -37,6 +37,8 @@ const RESUMEN_DASHBOARD = {
   horas_totales_invertidas: 12.5,
 }
 const RUTA_SESION = '/auth/me'
+// La sonda del captcha del login y de «olvidé mi contraseña» (libra-ui v0.69.2).
+const RUTA_CAPTCHA = '/auth/captcha'
 
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -51,9 +53,26 @@ function json(body: unknown, status = 200) {
   })
 }
 
-/** Sin sesion: la ruta de sesion responde 401, como con la cookie vencida. */
+/**
+ * Sin sesion: la ruta de sesion responde 401, como con la cookie vencida.
+ *
+ * La sonda del captcha contesta 404 --una instancia sin captcha-- y no el 401
+ * del resto: el api-client de libra-ui trata un 401 como sesion vencida, y
+ * contestarselo a una ruta publica mide otra cosa. Sin desafio, el login se
+ * dibuja como siempre y el boton queda habilitado.
+ */
 function sinSesion() {
-  fetchMock.mockImplementation(() => Promise.resolve(json({ detail: 'No autenticado' }, 401)))
+  fetchMock.mockImplementation((url: string) =>
+    Promise.resolve(
+      String(url).includes(RUTA_CAPTCHA)
+        ? json({ detail: 'Not Found' }, 404)
+        : json({ detail: 'No autenticado' }, 401),
+    ),
+  )
+}
+
+function consulto(ruta: string) {
+  return fetchMock.mock.calls.some(([u]) => String(u).includes(ruta))
 }
 
 /** Con sesion: devuelve un usuario; el resto de las llamadas, vacio. */
@@ -277,6 +296,32 @@ describe('la Agenda tiene pantalla propia', () => {
     expect(await screen.findByRole('heading', { name: 'Agenda' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Qué hay que hacer' }))
       .not.toBeInTheDocument()
+  })
+})
+
+// El captcha ALTCHA (2026-09-12): el backend lo prende con captcha=True en
+// app/routers/auth.py, pero el recuadro solo aparece si la pantalla consulta la
+// ruta del desafio. Sin `captchaPath` en el shim, el login no la consulta nunca
+// y el boton queda habilitado -- y el backend rechaza cada intento con un 400.
+describe('el login y «olvide mi contraseña» consultan el captcha', () => {
+  it('el login consulta /auth/captcha', async () => {
+    sinSesion()
+    montar('/login')
+    await waitFor(() => expect(consulto(RUTA_CAPTCHA)).toBe(true))
+  })
+
+  it('/forgot-password tambien', async () => {
+    sinSesion()
+    montar('/forgot-password')
+    await waitFor(() => expect(consulto(RUTA_CAPTCHA)).toBe(true))
+  })
+
+  it('sin desafio (404), el boton del login queda habilitado', async () => {
+    sinSesion()
+    montar('/login')
+    await waitFor(() => expect(consulto(RUTA_CAPTCHA)).toBe(true))
+    expect(screen.getByRole('button', { name: 'Ingresar' })).toBeEnabled()
+    expect(screen.queryByText(/No soy un robot/)).not.toBeInTheDocument()
   })
 })
 
