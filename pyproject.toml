@@ -51,7 +51,14 @@ dependencies = [
     # columna `name`-- y sin el arreglo el PUT y el desactivar dan 404: el log
     # se escribe en la misma transaccion que la operacion, asi que el KeyError
     # no perdia una linea de log, se llevaba puesta la operacion entera.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.38.0",
+    #
+    # v0.38.0 -> v0.40.0 (2026-09-12): el captcha ALTCHA del login y del
+    # forgot-password (`build_json_api_auth_router(captcha=True)`, ADR-014 de
+    # libraauth) --arrastra `altcha` como transitiva--. Y de paso v0.39.0, que
+    # arregla la IP con que cuenta el bloqueo por intentos (`ip_del_request`).
+    # **El bump NO es opcional a partir de aca**: `app/routers/auth.py` pasa
+    # `captcha=True`, y con un pin anterior el router ni se construye.
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.40.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra

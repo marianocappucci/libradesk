@@ -28,4 +28,9 @@ export const Login = createLogin({
   // cliente, esa misma ruta devuelve el index.html de la SPA y el boton no
   // aparece.
   demoPath: '/auth/demo',
+  // Recuadro «No soy un robot» (libra-ui v0.69.2) -- va de la mano con
+  // captcha=True en app/routers/auth.py (libraauth v0.40.0). Igual que demoPath,
+  // se dibuja sólo si GET /auth/captcha contesta con un desafío ALTCHA, y
+  // entonces «Ingresar» queda deshabilitado hasta tildarlo.
+  captchaPath: '/auth/captcha',
 })

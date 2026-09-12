@@ -227,6 +227,58 @@ class Api:
     put = lambda self, ruta, cuerpo: self._pedir("PUT", ruta, cuerpo)  # noqa: E731
 
 
+def _es_desafio(info) -> bool:
+    """La forma de un desafío ALTCHA: la misma prueba que hace libra-ui."""
+    return (isinstance(info, dict) and isinstance(info.get("parameters"), dict)
+            and isinstance(info.get("signature"), str))
+
+
+def resolver_captcha(api: Api) -> str:
+    """La solución del captcha del login, o "" si la instancia no lo tiene.
+
+    Desde libraauth v0.40.0 el login va con captcha ALTCHA (ADR-014): sin una
+    solución en el campo `captcha`, contesta 400 aunque la clave sea buena.
+    Un script lo resuelve igual que el navegador —pide el desafío y hace la
+    prueba de trabajo, alrededor de un segundo—.
+
+    Una instancia que todavía no lo prendió contesta 404, o el `index.html`
+    del catch-all de la SPA: en los dos casos se loguea sin captcha, como
+    antes. Por eso se mira la FORMA del desafío y no el código.
+
+    `altcha` se importa acá adentro: viene con libraauth, así que lo tiene el
+    python del producto y no necesariamente el del sistema.
+    """
+    try:
+        desafio = api.get("/auth/captcha")
+    except (RuntimeError, ValueError):
+        return ""
+    if not _es_desafio(desafio):
+        return ""
+    try:
+        from altcha import Challenge, Payload, solve_challenge
+    except ImportError:
+        sys.exit(
+            "ERROR: el login de esta instancia pide captcha y a este python le "
+            "falta el paquete `altcha`. Correr el seed con el python del "
+            "producto: `.venv-scripts/bin/python` del checkout, o el `python3` "
+            "del contenedor (los dos lo traen con libraauth)."
+        )
+    ch = Challenge.from_dict(desafio)
+    solucion = solve_challenge(ch)
+    if solucion is None:
+        sys.exit("ERROR: no se pudo resolver el captcha del login (se agotó el tiempo).")
+    return Payload(ch, solucion).to_base64()
+
+
+def login(api: Api, usuario: str, password: str) -> None:
+    """`POST /auth/login`, con el captcha resuelto si la instancia lo pide."""
+    cuerpo = {"username": usuario, "password": password}
+    captcha = resolver_captcha(api)
+    if captcha:
+        cuerpo["captcha"] = captcha
+    api.post("/auth/login", cuerpo)
+
+
 def buscar(items, clave, valor):
     return next((i for i in items if i.get(clave) == valor), None)
 
@@ -1916,7 +1968,7 @@ def main() -> int:
         return 2
 
     api = Api(args.url)
-    api.post("/auth/login", {"username": args.usuario, "password": args.password})
+    login(api, args.usuario, args.password)
     sembrar(api)
     return 0
 

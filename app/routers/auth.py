@@ -63,8 +63,16 @@ def _extras(_request, _user) -> dict:
         return {"modulos": []}
 
 
+# `captcha=True` (2026-09-12, libraauth v0.40.0, ADR-014): captcha ALTCHA
+# **siempre**, no recien despues de N fallos -- decision del humano del
+# 2026-09-11, la misma que ya rige en el backoffice. Agrega `GET /auth/captcha`
+# y vuelve obligatorio el campo `captcha` en `/auth/login` y en
+# `/auth/forgot-password`: sin una solucion valida, 400 antes de mirar la
+# contrasena. Se emite y se verifica en este mismo servidor, con claves
+# derivadas del SECRET_KEY: no hay proveedor externo ni variable nueva.
 router = build_json_api_auth_router(
     incluir_verify=True, incluir_password_reset=True, incluir_demo=True,
     get_empresa_nombre=_empresa_nombre,
     get_extras=_extras,
+    captcha=True,
 )
