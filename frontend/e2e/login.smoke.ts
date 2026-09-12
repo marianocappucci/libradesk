@@ -18,7 +18,12 @@ import { expect, test, type Page } from '@playwright/test'
 async function pasarElCaptcha(page: Page) {
   const ingresar = page.getByRole('button', { name: 'Ingresar' })
   await expect(ingresar).toBeDisabled()
-  await page.getByRole('checkbox', { name: /No soy un robot/ }).click()
+  // Se tilda por la ETIQUETA y no por el input: el widget dibuja encima del
+  // input el tilde (un `<svg>`) y Playwright ve que ese svg le intercepta el
+  // click. La etiqueta es el `<label for>` del input --de ahi sale el nombre
+  // accesible de la casilla--, asi que es lo mismo que hace el humano.
+  await expect(page.getByRole('checkbox', { name: /No soy un robot/ })).toBeVisible()
+  await page.getByText('No soy un robot', { exact: true }).click()
   await expect(ingresar).toBeEnabled({ timeout: 30_000 })
 }
 
