@@ -429,7 +429,7 @@ def _lista_conteos(pdf: FPDF, titulo: str, pares: list[tuple[str, int]],
 def _seccion_incidencias(pdf: FPDF, informe: dict) -> None:
     incidencias = informe["incidencias"]
     _titulo_seccion(
-        pdf, "Detalle de incidencias",
+        pdf, "Detalle de reclamos",
         "Incluye las abiertas durante el período y las resueltas en él, "
         "aunque se hubieran abierto antes.",
     )
@@ -468,7 +468,7 @@ def _seccion_incidencias(pdf: FPDF, informe: dict) -> None:
         widths=[11, 20, 62, 38, 32, 11],
         aligns=["L", "L", "L", "L", "L", "R"],
         filas=filas,
-        vacia="Sin incidencias registradas en el período.",
+        vacia="Sin reclamos registrados en el período.",
         envuelve=(2, 3),
     )
 

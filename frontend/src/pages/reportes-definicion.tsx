@@ -69,7 +69,7 @@ export const GRUPOS: { id: Grupo; titulo: string; descripcion: string; icono: Re
   },
   {
     id: 'incidencias',
-    titulo: 'Incidencias',
+    titulo: 'Reclamos',
     descripcion: 'Los tickets del período y cómo se reparte el trabajo.',
     icono: <Ticket className="size-4" />,
   },
@@ -90,7 +90,7 @@ export const REPORTES: Reporte[] = [
   {
     slug: 'equipamiento',
     titulo: 'Equipamiento',
-    descripcion: 'Parque instalado por cliente, con cantidad de incidencias y garantías vencidas resaltadas.',
+    descripcion: 'Parque instalado por cliente, con cantidad de reclamos y garantías vencidas resaltadas.',
     grupo: 'equipos',
     campos: [
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -100,8 +100,8 @@ export const REPORTES: Reporte[] = [
   },
   {
     slug: 'incidencias-periodo',
-    titulo: 'Incidencias por período',
-    descripcion: 'Detalle de incidencias del período con totales de actividades y promedio de horas de resolución.',
+    titulo: 'Reclamos por período',
+    descripcion: 'Detalle de reclamos del período con totales de actividades y promedio de horas de resolución.',
     grupo: 'incidencias',
     campos: [
       ...PERIODO,
@@ -118,7 +118,7 @@ export const REPORTES: Reporte[] = [
   {
     slug: 'facturacion',
     titulo: 'Facturación',
-    descripcion: 'Incidencias cerradas de clientes por servicio, agrupadas por cliente. Los clientes con abono mensual no aparecen.',
+    descripcion: 'Reclamos cerrados de clientes por servicio, agrupados por cliente. Los clientes con abono mensual no aparecen.',
     grupo: 'administracion',
     campos: [
       ...PERIODO,
@@ -176,7 +176,7 @@ export const REPORTES: Reporte[] = [
 export const VOLCADOS: Reporte[] = [
   { slug: 'clientes', titulo: 'Clientes', descripcion: 'La tabla de clientes completa.', grupo: 'administracion', campos: [] },
   { slug: 'equipos', titulo: 'Equipos', descripcion: 'La tabla de equipos completa.', grupo: 'equipos', campos: [] },
-  { slug: 'incidencias', titulo: 'Incidencias', descripcion: 'La tabla de incidencias completa.', grupo: 'incidencias', campos: [] },
+  { slug: 'incidencias', titulo: 'Reclamos', descripcion: 'La tabla de reclamos completa.', grupo: 'incidencias', campos: [] },
 ]
 
 export function buscarReporte(slug: string | undefined): Reporte | undefined {

@@ -278,7 +278,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
     for (let i = 0; enVuelo.current > 0 && i < 100; i++) {
       await new Promise((r) => setTimeout(r, 25))
     }
-    navigate('/incidencias')
+    navigate('/reclamos')
   }
 
   async function agregarNota() {
@@ -299,7 +299,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
   async function eliminar() {
     try {
       await api.del(`/api/incidencias/${incidenciaId}`)
-      navigate('/incidencias')
+      navigate('/reclamos')
     } catch (err) {
       setError(describeError(err))
     }
@@ -612,7 +612,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
             cuando es lo único que sirve. Va último, que es donde lo pone la
             convención de `EncabezadoDePantalla`. */}
         <Button asChild size="sm" variant="outline">
-          <Link to="/incidencias"><ArrowLeft />Volver</Link>
+          <Link to="/reclamos"><ArrowLeft />Volver</Link>
         </Button>
       </EncabezadoDePantalla>
 
@@ -1068,7 +1068,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="reclamante">Reclamante</Label>
+                <Label htmlFor="reclamante">Quién hizo el reclamo</Label>
                 <Input
                   id="reclamante"
                   placeholder="Quién llamó"
@@ -1184,7 +1184,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
             <DialogTitle>Reemplazar equipo</DialogTitle>
             <DialogDescription>
               Actualiza el estado y la ubicación de los dos equipos, registra los
-              movimientos asociados a esta incidencia y deja las intervenciones
+              movimientos asociados a este reclamo y deja las intervenciones
               en la actividad del ticket.
             </DialogDescription>
           </DialogHeader>
@@ -1372,7 +1372,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="¿Eliminar esta incidencia?"
+        title="¿Eliminar este reclamo?"
         description="Se borra también su historial de actividad y de cambios de estado. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
         onConfirm={() => { eliminar(); setConfirmDelete(false) }}

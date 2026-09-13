@@ -199,7 +199,7 @@ def test_facturacion_viene_agrupada_por_cliente(client, escenario):
     ).json()
 
     assert len(vista["grupos"]) == 1
-    assert vista["grupos"][0]["etiqueta"].startswith("Compulibra SRL — 1 incidencia")
+    assert vista["grupos"][0]["etiqueta"].startswith("Compulibra SRL — 1 reclamo")
 
 
 def test_un_reporte_sin_datos_no_rompe(client):

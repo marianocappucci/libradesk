@@ -75,7 +75,7 @@ function DialogoInforme({ clienteId, nombre }: { clienteId: number; nombre: stri
         <DialogHeader>
           <DialogTitle>Informe de servicio</DialogTitle>
           <DialogDescription>
-            Resumen del período, detalle de incidencias, parque, garantías y equipos en
+            Resumen del período, detalle de reclamos, parque, garantías y equipos en
             service de {nombre}. Es un documento para entregarle al cliente: no incluye
             costos, estado de cobro ni técnico asignado.
           </DialogDescription>
@@ -242,7 +242,7 @@ export function ClienteDetalle() {
             .map(([estado, n]) => [ESTADO_EQUIPO_LABELS[estado] ?? estado, n])}
         />
         <TarjetaConteo
-          titulo="Incidencias"
+          titulo="Reclamos"
           icono={<Ticket className="size-4" />}
           total={resumen.total_incidencias}
           pie={`${abiertas.length} sin cerrar`}
@@ -267,13 +267,13 @@ export function ClienteDetalle() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Incidencias abiertas ({abiertas.length})</CardTitle>
+            <CardTitle className="text-base">Reclamos abiertos ({abiertas.length})</CardTitle>
             <CardDescription>Abiertas y en progreso, de la más reciente a la más vieja.</CardDescription>
           </CardHeader>
           <CardContent>
             {abiertas.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                Este cliente no tiene incidencias sin cerrar.
+                Este cliente no tiene reclamos sin cerrar.
               </p>
             ) : (
               <ul className="divide-y rounded-md border">

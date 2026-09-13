@@ -7,7 +7,11 @@
 //   que el indicador aparece y —lo que importa— que al volver **espera** a que
 //   el guardado termine. Sin eso, lo último tipeado se pierde.
 // - **38** — poder cargar el equipo sin abandonar el alta del ticket, y que
-//   quede elegido.
+//   quede elegido. 🔴 **Retirado el 2026-09-13**: el alta dejó de ofrecer
+//   equipo (se asigna después, desde la ficha) y en su lugar entra "Quién hizo
+//   el reclamo". El describe de ese pedido se reemplazó por uno que afirma
+//   justamente eso — ver "Alta de reclamo — sin equipo, con quién hizo el
+//   reclamo" más abajo.
 // - **41** — cada selector ofrece sólo a quien tiene ese rol.
 import { render as renderRTL, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -78,11 +82,15 @@ function json(body: unknown) {
 
 let puts = 0
 let resolverPut: (() => void) | null = null
+// El body del POST de alta, para afirmar qué viaja al crear un reclamo
+// (pedido del usuario, 2026-09-13: sin equipo, con `reclamante`).
+let postBody: Record<string, unknown> | null = null
 
 beforeEach(() => {
   navegado.length = 0
   puts = 0
   resolverPut = null
+  postBody = null
   vi.stubGlobal('fetch', vi.fn((url: string, opciones?: RequestInit) => {
     const u = String(url)
     const metodo = opciones?.method ?? 'GET'
@@ -95,8 +103,9 @@ beforeEach(() => {
         resolverPut = () => resolve(json({ ...INCIDENCIA, titulo: 'editado' }))
       })
     }
-    if (metodo === 'POST' && u.includes('/api/equipos')) {
-      return Promise.resolve(json({ ...EQUIPO, id: 9, tipo: 'Impresora', marca: 'HP' }))
+    if (metodo === 'POST' && u.endsWith('/api/incidencias')) {
+      postBody = opciones?.body ? JSON.parse(String(opciones.body)) : null
+      return Promise.resolve(json({ ...INCIDENCIA, id: 2 }))
     }
     if (u.includes('/api/incidencias/1/actividades')) return Promise.resolve(json([]))
     if (u.includes('/api/incidencias/1/estados')) return Promise.resolve(json([]))
@@ -124,7 +133,7 @@ describe('Ficha de la incidencia — el botón que faltaba (pedido 40)', () => {
 
     await user.click(screen.getByRole('button', { name: /Guardar y volver/ }))
 
-    await waitFor(() => expect(navegado).toContain('/incidencias'))
+    await waitFor(() => expect(navegado).toContain('/reclamos'))
   })
 
   it('🔴 el botón no se deshabilita solo al tocarlo', async () => {
@@ -146,7 +155,7 @@ describe('Ficha de la incidencia — el botón que faltaba (pedido 40)', () => {
 
     await waitFor(() => expect(puts).toBe(1))
     resolverPut?.()
-    await waitFor(() => expect(navegado).toContain('/incidencias'))
+    await waitFor(() => expect(navegado).toContain('/reclamos'))
   })
 
   it('🔴 espera a que termine el guardado antes de irse', async () => {
@@ -166,10 +175,10 @@ describe('Ficha de la incidencia — el botón que faltaba (pedido 40)', () => {
     // El blur del campo disparó el PUT…
     await waitFor(() => expect(puts).toBe(1))
     // …y todavía NO navegó, porque el PUT sigue en vuelo.
-    expect(navegado).not.toContain('/incidencias')
+    expect(navegado).not.toContain('/reclamos')
 
     resolverPut?.()
-    await waitFor(() => expect(navegado).toContain('/incidencias'))
+    await waitFor(() => expect(navegado).toContain('/reclamos'))
   })
 
   it('ofrece imprimir el ticket (pedido 39)', async () => {
@@ -215,45 +224,68 @@ describe('Ficha de la incidencia — los tres papeles (pedido 41)', () => {
   })
 })
 
-describe('Alta de incidencia — cargar el equipo ahí mismo (pedido 38)', () => {
-  it('el atajo aparece recién con un cliente elegido', async () => {
+describe('Alta de reclamo — sin equipo, con quién hizo el reclamo (decisión del usuario, 2026-09-13)', () => {
+  it('el modal ya no ofrece elegir ni cargar un equipo', async () => {
     const user = userEvent.setup()
     render(<Incidencias />, '/incidencias')
     await screen.findByText('No arranca')
 
-    await user.click(screen.getByRole('button', { name: /Nueva incidencia/ }))
+    await user.click(screen.getByRole('button', { name: /Nuevo reclamo/ }))
+    const alta = await screen.findByRole('dialog', { name: /Nuevo reclamo/ })
 
-    // Sin cliente no se puede: el equipo se carga en el parque de alguien.
-    const atajo = await screen.findByRole('button', { name: /Elegí un cliente/ })
-    expect(atajo).toBeDisabled()
+    // El campo desapareció, y con él el atajo del pedido 38 que lo cargaba
+    // ahí mismo. El equipo se sigue asignando — pero desde la ficha de
+    // detalle, no acá.
+    expect(within(alta).queryByRole('combobox', { name: 'Equipo' })).not.toBeInTheDocument()
+    expect(within(alta).queryByRole('button', { name: /no está en la lista/ })).not.toBeInTheDocument()
   })
 
-  it('el equipo creado queda elegido, sin salir del alta', async () => {
+  it('tiene "Quién hizo el reclamo", texto libre y opcional', async () => {
     const user = userEvent.setup()
     render(<Incidencias />, '/incidencias')
     await screen.findByText('No arranca')
-    await user.click(screen.getByRole('button', { name: /Nueva incidencia/ }))
 
-    // Dentro del diálogo del alta: "Estudio Sur" también aparece en el filtro
-    // de la pantalla de atrás, así que una búsqueda global encuentra dos.
-    const alta = await screen.findByRole('dialog', { name: /Nueva incidencia/ })
+    await user.click(screen.getByRole('button', { name: /Nuevo reclamo/ }))
+    const alta = await screen.findByRole('dialog', { name: /Nuevo reclamo/ })
+
+    expect(within(alta).getByLabelText('Quién hizo el reclamo')).toBeInTheDocument()
+  })
+
+  it('"quién hizo el reclamo" viaja en el POST del alta', async () => {
+    const user = userEvent.setup()
+    render(<Incidencias />, '/incidencias')
+    await screen.findByText('No arranca')
+
+    await user.click(screen.getByRole('button', { name: /Nuevo reclamo/ }))
+    const alta = await screen.findByRole('dialog', { name: /Nuevo reclamo/ })
+
     await user.click(within(alta).getByRole('combobox', { name: 'Cliente' }))
     await user.click(await within(alta).findByText('Estudio Sur'))
+    await escribirEn(within(alta).getByLabelText('Título'), 'No prende')
+    await escribirEn(within(alta).getByLabelText('Quién hizo el reclamo'), 'Juana Pérez')
 
-    await user.click(await screen.findByRole('button', { name: /no está en la lista/ }))
+    await user.click(within(alta).getByRole('button', { name: /Crear reclamo/ }))
 
-    const dialogo = await screen.findByRole('dialog', { name: /Nuevo equipo/ })
-    // Por el placeholder: los cuatro inputs del diálogo son textboxes sin
-    // label asociado, así que buscar por rol encuentra los cuatro.
-    await escribirEn(within(dialogo).getByPlaceholderText(/Notebook, Impresora/), 'Impresora')
-    await user.click(within(dialogo).getByRole('button', { name: /Crear y elegir/ }))
+    await waitFor(() => expect(postBody).not.toBeNull())
+    expect(postBody).toMatchObject({ reclamante: 'Juana Pérez', equipo_id: null })
+  })
 
-    // Vuelve al alta del ticket con el equipo nuevo puesto — que es la mitad
-    // del problema que el atajo viene a sacar.
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /Nuevo equipo/ })).not.toBeInTheDocument()
-    })
-    expect(await screen.findByText(/Impresora HP/)).toBeInTheDocument()
+  it('sin nada tipeado, "reclamante" viaja null y no una cadena vacía', async () => {
+    const user = userEvent.setup()
+    render(<Incidencias />, '/incidencias')
+    await screen.findByText('No arranca')
+
+    await user.click(screen.getByRole('button', { name: /Nuevo reclamo/ }))
+    const alta = await screen.findByRole('dialog', { name: /Nuevo reclamo/ })
+
+    await user.click(within(alta).getByRole('combobox', { name: 'Cliente' }))
+    await user.click(await within(alta).findByText('Estudio Sur'))
+    await escribirEn(within(alta).getByLabelText('Título'), 'No prende')
+
+    await user.click(within(alta).getByRole('button', { name: /Crear reclamo/ }))
+
+    await waitFor(() => expect(postBody).not.toBeNull())
+    expect(postBody?.reclamante).toBeNull()
   })
 })
 

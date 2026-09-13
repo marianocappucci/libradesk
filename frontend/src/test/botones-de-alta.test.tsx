@@ -121,8 +121,8 @@ describe('Reparaciones no tiene alta a propósito, y ahora lo dice', () => {
     // El texto y el link, por separado: sin el link el cartel manda al usuario
     // a buscar la pantalla a mano, que es media solución.
     expect(screen.getByText(/Se abren desde el ticket/)).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: /Ir a Incidencias/ })
-    expect(link).toHaveAttribute('href', '/incidencias')
+    const link = screen.getByRole('link', { name: /Ir a Reclamos/ })
+    expect(link).toHaveAttribute('href', '/reclamos')
   })
 
   it('sigue sin ofrecer un alta suelta', async () => {

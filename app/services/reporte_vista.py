@@ -204,7 +204,7 @@ def equipamiento(data: list[dict], filtros: list[str]) -> Vista:
         # mostraba el sector del que habia salido hace meses.
         Columna("Sector / Depósito", 20),
         Columna("Ubicación", 16), Columna("Estado", 14),
-        Columna("Garantía vence", 14), Columna("Inc.", 6, numerica=True),
+        Columna("Garantía vence", 14), Columna("Rec.", 6, numerica=True),
         Columna("Alta", 12),
     ]
 
@@ -282,11 +282,11 @@ def incidencias_periodo(data: list[dict], filtros: list[str]) -> Vista:
     prom = f"{round(sum(con_horas) / len(con_horas))}h prom" if con_horas else None
     totales = _fila([
         None, None, None, None, None, None, None, None, None,
-        f"{len(data)} incidencias", None, total_act, prom, None,
+        f"{len(data)} reclamos", None, total_act, prom, None,
     ])
 
     return Vista(
-        "incidencias-periodo", "Incidencias", filtros, columnas, _plano(filas),
+        "incidencias-periodo", "Reclamos", filtros, columnas, _plano(filas),
         totales=totales,
     )
 
@@ -306,7 +306,7 @@ def facturacion(data: list[dict], filtros: list[str]) -> Vista:
         cantidad = len(filas_cliente)
         etiqueta = (
             f"{filas_cliente[0]['cliente']} — {cantidad} "
-            f"incidencia{'s' if cantidad != 1 else ''}"
+            f"reclamo{'s' if cantidad != 1 else ''}"
         )
         filas = []
         for r in filas_cliente:

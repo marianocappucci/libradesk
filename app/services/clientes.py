@@ -302,7 +302,11 @@ class ClienteRepository:
         with self.session_factory() as session:
             return {
                 "equipos": _contar(session, Equipo, Equipo.cliente_id == cliente_id),
-                "incidencias": _contar(session, Incidencia, Incidencia.cliente_id == cliente_id),
+                # La clave es la palabra que termina viendo el usuario en el
+                # 409 de `delete_cliente` (`f"{n} {k}"`, router de clientes) —
+                # "reclamos" y no "incidencias" desde la unificación de
+                # vocabulario del 2026-09-13.
+                "reclamos": _contar(session, Incidencia, Incidencia.cliente_id == cliente_id),
                 "sectores": _contar(session, Sector, Sector.cliente_id == cliente_id),
                 # Las dos columnas de `contratos`: el cliente puede ser el
                 # titular o el propietario del equipamiento, y las dos son FK.

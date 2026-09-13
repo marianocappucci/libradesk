@@ -326,7 +326,7 @@ def test_el_pdf_dice_lo_mismo_que_el_resumen(client, escenario):
     assert "Compulibra SRL" in texto
     assert "01-01-2026" in texto and "31-01-2026" in texto
     # Los cuatro títulos de sección, que son el índice implícito del informe.
-    for seccion in ("Resumen del período", "Detalle de incidencias",
+    for seccion in ("Resumen del período", "Detalle de reclamos",
                     "Parque de equipos", "Garantías", "Equipos en service"):
         assert seccion in texto, f"falta la sección {seccion!r}"
     # Y los asuntos de los tickets del período.
@@ -358,7 +358,7 @@ def test_un_cliente_sin_movimiento_igual_produce_un_informe(client, escenario):
 
     assert r.status_code == 200
     texto = _texto_pdf(r.content)
-    assert "Sin incidencias registradas en el período." in texto
+    assert "Sin reclamos registrados en el período." in texto
     assert "Sin garantías próximas a vencer." in texto
     assert "Ningún equipo pasó por service en el período." in texto
 

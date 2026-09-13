@@ -60,12 +60,37 @@ import { enModoSimple } from './components/Layout'
  *  instancia no tiene: se veía el 403 en vez del producto, y en la primera
  *  visita después de loguear.
  *
- *  En modo simple el home es el listado de reclamos, que es con lo que se
- *  arranca el día — pedido del humano, 2026-09-09.
+ *  🔴 **Desde el 2026-09-13 el home es `/reclamos` para TODAS las instancias**
+ *  (antes: sólo en modo simple; el resto caía en `/dashboard`). Sigue
+ *  respetando la lección de arriba: `/reclamos` es el listado de tickets, que
+ *  es el núcleo del producto y **no se gatea por módulo** (ver el comentario
+ *  del grupo "Mesa de ayuda" en `components/Layout.tsx`) — a diferencia del
+ *  Dashboard, no hay forma de que esté apagado. Si algún día dejara de ser
+ *  así, este destino tiene que volver a decidirse con `enModoSimple` y un
+ *  fallback, igual que el Dashboard.
  */
 function Home() {
+  return <Navigate to="/reclamos" replace />
+}
+
+/** El listado de reclamos y su ficha, en cualquiera de sus dos URLs.
+ *
+ *  `/incidencias` y `/reclamos` son la misma pantalla — la segunda es la
+ *  canónica desde que el vocabulario se unificó (2026-09-13), la primera
+ *  sigue viva para no romper links guardados. Lo que sí tiene que variar con
+ *  la URL visitada es la ficha **simplificada** de `modo_simple`: eso no es
+ *  vocabulario, es layout, y sigue dependiendo del usuario real y no de qué
+ *  URL se tecleó — por eso se calcula acá con `enModoSimple(user)` en vez de
+ *  quedar hardcodeado por ruta.
+ */
+function ReclamosRoute() {
   const { user } = useAuth()
-  return <Navigate to={enModoSimple(user) ? '/reclamos' : '/dashboard'} replace />
+  return <Incidencias simple={enModoSimple(user)} />
+}
+
+function ReclamoDetalleRoute() {
+  const { user } = useAuth()
+  return <IncidenciaDetalle simple={enModoSimple(user)} />
 }
 
 
@@ -122,13 +147,15 @@ export default function App() {
       <Route path="/equipos-trabajo/agenda" element={<Navigate to="/agenda" replace />} />
       <Route path="/equipos-trabajo/flota" element={<ProtectedRoute><Flota /></ProtectedRoute>} />
       <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
-      <Route path="/incidencias" element={<ProtectedRoute><Incidencias /></ProtectedRoute>} />
-      {/* El mismo listado, con la URL del vocabulario del modo simple. Ver el
-          comentario del menú en `components/Layout.tsx`: no es cosmético, es
-          lo que evita que libra-ui dibuje las dos entradas juntas. */}
-      <Route path="/reclamos" element={<ProtectedRoute><Incidencias simple /></ProtectedRoute>} />
-      <Route path="/reclamos/:id" element={<ProtectedRoute><IncidenciaDetalle simple /></ProtectedRoute>} />
-      <Route path="/incidencias/:id" element={<ProtectedRoute><IncidenciaDetalle /></ProtectedRoute>} />
+      {/* `/reclamos` es la canónica (2026-09-13); `/incidencias` sigue
+          funcionando para no romper links guardados. Las dos montan la misma
+          pantalla — `ReclamosRoute`/`ReclamoDetalleRoute` deciden el modo
+          simple desde el usuario real, no desde cuál de las dos URLs trajo
+          hasta acá. Ver el comentario ahí arriba. */}
+      <Route path="/incidencias" element={<ProtectedRoute><ReclamosRoute /></ProtectedRoute>} />
+      <Route path="/reclamos" element={<ProtectedRoute><ReclamosRoute /></ProtectedRoute>} />
+      <Route path="/reclamos/:id" element={<ProtectedRoute><ReclamoDetalleRoute /></ProtectedRoute>} />
+      <Route path="/incidencias/:id" element={<ProtectedRoute><ReclamoDetalleRoute /></ProtectedRoute>} />
       <Route path="/reparaciones" element={<ProtectedRoute><Reparaciones /></ProtectedRoute>} />
       <Route path="/insumos" element={<ProtectedRoute><Insumos /></ProtectedRoute>} />
       <Route path="/contratos-proveedor" element={<ProtectedRoute><ContratosProveedor /></ProtectedRoute>} />

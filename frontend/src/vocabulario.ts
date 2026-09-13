@@ -1,49 +1,49 @@
 /** Cómo llama esta instancia a las cosas.
  *
- *  Sale del pedido del humano del 2026-09-09: *"quiero que también pueda
+ *  Salió del pedido del humano del 2026-09-09: *"quiero que también pueda
  *  parametrizar el nombre incidencias, que en la instancia de Lagrace sea
- *  tratado como reclamos"*.
+ *  tratado como reclamos"*. Se armó con dos vocabularios (`VOCABULARIO_COMPLETO`
+ *  / `VOCABULARIO_SIMPLE`) elegidos por el add-on `modo_simple`.
  *
- *  🔑 **El vocabulario viaja con el modo, no como texto libre.** Un campo de
- *  configuración por instancia obligaría a tipear el singular y el plural bien
- *  en cada alta, admitiría quedar vacío, y en la práctica nadie pondría otra
- *  cosa que "Reclamos". Acá son dos juegos cerrados y agregar un tercero
- *  —"Tickets", si aparece— es una entrada más en este archivo.
+ *  🔴 **Decisión del humano, 2026-09-13: LibraDesk pasa a decir «Reclamo» en
+ *  TODAS las instancias.** Lagrace —la única razón de que existiera un segundo
+ *  vocabulario— ya no va. No queda ninguna instancia que hable de
+ *  "Incidencias", así que los dos juegos de palabras colapsan en uno solo.
  *
- *  Si algún día hace falta de verdad que cada instancia escriba el suyo, esto
- *  es el único lugar que cambia: todas las pantallas ya preguntan acá.
+ *  **Por qué queda una constante y no se borra el archivo.** El add-on
+ *  `modo_simple` sigue vivo — sigue reduciendo la ficha, ocultando Agenda y
+ *  Dashboard, y cambiando el home (ver `components/Layout.tsx` y
+ *  `pages/Incidencias.tsx`) — sólo el VOCABULARIO dejó de depender de él. Y
+ *  `vocabularioDe(user)` se mantiene con la misma firma —recibe el usuario y no
+ *  lo consulta por su cuenta— por si algún otro punto del código (o un test)
+ *  todavía la llama: hoy devuelve siempre el mismo valor, pero ningún llamador
+ *  tiene que cambiar para enterarse.
  */
 
-/** El juego de palabras de una instancia. */
+/** El juego de palabras del producto. */
 export type Vocabulario = {
-  /** "Incidencia" / "Reclamo". Para títulos de ficha y mensajes en singular. */
+  /** "Reclamo". Para títulos de ficha y mensajes en singular. */
   singular: string
-  /** "Incidencias" / "Reclamos". Para el menú y los títulos de listado. */
+  /** "Reclamos". Para el menú y los títulos de listado. */
   plural: string
-  /** "Nueva incidencia" / "Nuevo reclamo". El género cambia el artículo, así
-   *  que la frase entera se guarda armada en vez de componerla. */
+  /** "Nuevo reclamo". Frase entera y no compuesta: si algún día vuelve a
+   *  hacer falta un vocabulario cuyo género cambie el artículo, esta forma ya
+   *  lo soporta sin tocar a quien la consume. */
   nuevo: string
 }
 
-export const VOCABULARIO_COMPLETO: Vocabulario = {
-  singular: 'Incidencia',
-  plural: 'Incidencias',
-  nuevo: 'Nueva incidencia',
-}
-
-export const VOCABULARIO_SIMPLE: Vocabulario = {
+export const VOCABULARIO: Vocabulario = {
   singular: 'Reclamo',
   plural: 'Reclamos',
   nuevo: 'Nuevo reclamo',
 }
 
-/** El vocabulario de esta instancia, según corra o no el add-on `modo_simple`.
+/** El vocabulario de esta instancia.
  *
- *  Recibe el usuario de la sesión —donde viajan los módulos— y no lo consulta
- *  por su cuenta: así la misma función sirve en un componente, en un test y en
- *  un helper que no está adentro de un `AuthProvider`.
+ *  Ya no depende del usuario —todas las instancias hablan de "Reclamos"— pero
+ *  conserva la firma `(user: unknown) => Vocabulario` para no obligar a
+ *  reescribir a quien todavía la llama así.
  */
-export function vocabularioDe(user: unknown): Vocabulario {
-  const modulos = (user as { modulos?: string[] } | null)?.modulos ?? []
-  return modulos.includes('modo_simple') ? VOCABULARIO_SIMPLE : VOCABULARIO_COMPLETO
+export function vocabularioDe(_user: unknown): Vocabulario {
+  return VOCABULARIO
 }
