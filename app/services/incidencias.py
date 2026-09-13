@@ -1210,7 +1210,7 @@ class IncidenciaRepository:
         recien aparecería en el proximo alta.
         """
         if not incidencia_ids:
-            raise ValueError("No se eligió ninguna incidencia.")
+            raise ValueError("No se eligió ningún reclamo.")
         # Sin esto, mandar el mismo id dos veces daria una salida con menos
         # paradas de las que se pidieron, en silencio: el motor descarta el
         # choque de un turno consigo mismo comparando ids.

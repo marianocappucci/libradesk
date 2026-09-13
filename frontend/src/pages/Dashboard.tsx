@@ -411,7 +411,7 @@ export function Dashboard() {
               <CardHeader className="pb-3">
                 <CardDescription className="flex items-center gap-2">
                   <AlarmClock className="h-4 w-4" />
-                  Incidencias abiertas, por cuánto llevan esperando
+                  Reclamos abiertos, por cuánto llevan esperando
                 </CardDescription>
                 <CardTitle className="text-3xl">
                   <Numero valor={backlog.total_abiertas} a="/incidencias" />
@@ -447,7 +447,7 @@ export function Dashboard() {
 
                 <div className="grid gap-2 text-sm">
                   {backlog.mas_viejas.length === 0 ? (
-                    <p className="text-muted-foreground">No hay incidencias abiertas.</p>
+                    <p className="text-muted-foreground">No hay reclamos abiertos.</p>
                   ) : (
                     <>
                       <p className="text-xs text-muted-foreground">Las que más esperan</p>
@@ -505,7 +505,7 @@ export function Dashboard() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader>
-                <CardDescription>Incidencias</CardDescription>
+                <CardDescription>Reclamos</CardDescription>
                 <CardTitle className="text-3xl">
                   <Numero valor={summary.incidencias_en_rango} a="/incidencias" />
                 </CardTitle>

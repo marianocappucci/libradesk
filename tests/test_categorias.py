@@ -158,7 +158,7 @@ def test_no_se_borra_una_categoria_con_subcategorias(client, catalogo):
 def test_no_se_borra_una_categoria_en_uso_sin_forzar(client, catalogo, tickets):
     r = client.delete(f"{RUTA}/{catalogo['impresoras']}")
     assert r.status_code == 409
-    assert "1 incidencias" in r.json()["detail"]
+    assert "1 reclamos" in r.json()["detail"]
     # Y no se borró nada: ni la categoría ni el ticket.
     assert any(c["id"] == catalogo["impresoras"] for c in client.get(RUTA).json())
     assert client.get(f"/api/incidencias/{tickets['impresora']}").json()["categoria_id"] == catalogo["impresoras"]

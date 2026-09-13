@@ -218,7 +218,7 @@ export function CategoriasCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Tipos de incidencia</CardTitle>
+        <CardTitle className="text-base">Tipos de reclamo</CardTitle>
         <CardDescription>
           Dos niveles: una categoría general y sus subcategorías (Hardware →
           Impresoras). Los tickets se clasifican en la subcategoría, y los
@@ -279,7 +279,7 @@ export function CategoriasCard() {
         open={aBorrar !== null}
         onOpenChange={(open) => !open && setABorrar(null)}
         title={`¿Eliminar "${aBorrar?.nombre}"?`}
-        description="Si alguna incidencia la usa, o si tiene subcategorías, no se borra y te avisa cuántas son."
+        description="Si algún reclamo la usa, o si tiene subcategorías, no se borra y te avisa cuántas son."
         onConfirm={() => { const c = aBorrar; setABorrar(null); if (c) borrar(c) }}
       />
     </Card>
@@ -932,7 +932,7 @@ export const Configuracion = createConfiguracion({
   },
   propias: [
     { clave: 'servicios', label: 'Servicios', icono: ListChecks, contenido: <ServiciosCard /> },
-    { clave: 'categorias', label: 'Tipos de incidencia', icono: Tags, contenido: <CategoriasCard /> },
+    { clave: 'categorias', label: 'Tipos de reclamo', icono: Tags, contenido: <CategoriasCard /> },
   ],
   pie: <CreditosIconos />,
 })

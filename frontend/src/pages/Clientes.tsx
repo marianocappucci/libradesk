@@ -481,7 +481,7 @@ export function Clientes() {
             <DialogTitle>Sectores</DialogTitle>
             <DialogDescription>
               {sectoresDe?.nombre} — las áreas del cliente, para clasificar
-              las incidencias por sector de origen.
+              los reclamos por sector de origen.
             </DialogDescription>
           </DialogHeader>
 
@@ -550,7 +550,7 @@ export function Clientes() {
         // Es lo que hace el backend de verdad: el ondelete="SET NULL" del
         // modelo no corre (el pragma está apagado), así que la desasignación
         // se hace explícita en el repositorio.
-        description="Las incidencias que lo tengan asignado quedan sin sector. No se borra ninguna incidencia."
+        description="Los reclamos que lo tengan asignado quedan sin sector. No se borra ningún reclamo."
         onConfirm={() => { const s = aBorrar; setABorrar(null); if (s) borrarSector(s) }}
       />
 
@@ -562,7 +562,7 @@ export function Clientes() {
         // Contalibra titula "¿Eliminar a X?" aunque desactive; acá se prefiere
         // nombrar la operación real, porque el botón de al lado ofrece
         // reactivar y "eliminar" haría dudar de si eso es posible.
-        description="Deja de aparecer en los selectores de equipos e incidencias nuevas. Su historial queda intacto y podés reactivarlo cuando quieras."
+        description="Deja de aparecer en los selectores de equipos y reclamos nuevos. Su historial queda intacto y podés reactivarlo cuando quieras."
         confirmLabel="Desactivar"
         onConfirm={() => { const c = clienteADesactivar; setClienteADesactivar(null); if (c) toggleActivo(c) }}
       />

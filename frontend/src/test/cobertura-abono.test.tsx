@@ -159,7 +159,7 @@ describe('cobertura del abono', () => {
     render(<IncidenciaDetalle />)
     await screen.findByDisplayValue('Central sin tono')
 
-    await userEvent.type(screen.getByLabelText('Reclamante'), 'Facundo')
+    await userEvent.type(screen.getByLabelText('Quién hizo el reclamo'), 'Facundo')
     await userEvent.tab()
 
     await waitFor(() => expect(puts).toHaveLength(1))

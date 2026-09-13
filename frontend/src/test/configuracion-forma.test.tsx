@@ -64,7 +64,7 @@ describe('la Configuración de LibraDesk', () => {
 
     const pestanias = (await screen.findAllByRole('tab')).map((t) => t.textContent)
     expect(pestanias).toEqual([
-      'Empresa', 'Integraciones', 'Servicios', 'Tipos de incidencia', 'Datos / Backup',
+      'Empresa', 'Integraciones', 'Servicios', 'Tipos de reclamo', 'Datos / Backup',
     ])
   })
 

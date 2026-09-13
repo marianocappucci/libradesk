@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import type { ColumnDef } from 'libra-ui/data-table'
 import {
-  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_TONO, PRIORIDAD_LABELS, PRIORIDAD_TONO, opcionesCliente, opcionesEquipo,
+  api, ApiError, ESTADO_COLOR, ESTADO_LABELS, ESTADO_TONO, PRIORIDAD_LABELS, PRIORIDAD_TONO, opcionesCliente,
   opcionesCategoria,
   type CategoriaIncidencia, type Cliente, type Equipo, type EquipoTrabajo,
   type Incidencia,
@@ -30,15 +30,14 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { CircleAlert as AlertCircle, CircleAlert, Monitor } from 'lucide-react'
+import { CircleAlert as AlertCircle, CircleAlert } from 'lucide-react'
 import { fechaDeDate } from '@/lib/format'
-import { FilePlus, PlusCircle, Printer } from '@/components/iconos-accion'
+import { FilePlus, Printer } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { hoyISO } from 'libra-ui/fechas'
-import { VOCABULARIO_COMPLETO, VOCABULARIO_SIMPLE } from '../vocabulario'
+import { VOCABULARIO } from '../vocabulario'
 
-const NONE = '__none__'
 const TODOS = '__todos__'
 
 /** El filtro "Pendientes": lo que todavía hay que ir a hacer.
@@ -53,15 +52,19 @@ const ESTADOS_PENDIENTES = ['abierto', 'en_progreso']
 
 const incidenciaSchema = z.object({
   cliente_id: z.string().min(1, 'Elegí un cliente'),
-  equipo_id: z.string().optional(),
   titulo: z.string().trim().min(1, 'El título es obligatorio'),
   descripcion: z.string().trim().optional(),
+  // Texto libre y opcional: no todo reclamo llega por un tercero que haga
+  // falta identificar. El tope de 120 es el de la columna del backend
+  // (`reclamante`, String(120)) — coherente con lo que el servidor acepta, y
+  // sin cortar en silencio lo que se tipeó.
+  reclamante: z.string().trim().max(120, 'Máximo 120 caracteres').optional(),
 })
 
 type IncidenciaFormValues = z.infer<typeof incidenciaSchema>
 
 const EMPTY_VALUES: IncidenciaFormValues = {
-  cliente_id: '', equipo_id: NONE, titulo: '', descripcion: '',
+  cliente_id: '', titulo: '', descripcion: '', reclamante: '',
 }
 
 /** El listado de reclamos.
@@ -80,7 +83,7 @@ const TODAS_LAS_LOCALIDADES = '__todas__'
 
 export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   const navigate = useNavigate()
-  const vocabulario = simple ? VOCABULARIO_SIMPLE : VOCABULARIO_COMPLETO
+  const vocabulario = VOCABULARIO
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [equipos, setEquipos] = useState<Equipo[]>([])
@@ -93,12 +96,6 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   const [saving, setSaving] = useState(false)
   // El error del formulario va DENTRO del modal; el de la página quedaría tapado.
   const [formError, setFormError] = useState<string | null>(null)
-
-  // Alta de equipo sin salir del alta de la incidencia (pedido 38).
-  const [altaEquipo, setAltaEquipo] = useState(false)
-  const [creandoEquipo, setCreandoEquipo] = useState(false)
-  const [equipoError, setEquipoError] = useState<string | null>(null)
-  const [equipoNuevo, setEquipoNuevo] = useState({ tipo: '', marca: '', modelo: '', serial: '' })
 
   // En modo simple el listado arranca en **pendientes**: es el home de la
   // instancia y con eso se arma el día. En el resto arranca en Todos, que es
@@ -167,47 +164,6 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
     (c) => c.activo || String(c.id) === form.watch('cliente_id'),
   )
 
-  const equiposDelCliente = equipos.filter(
-    (e) => String(e.cliente_id) === form.watch('cliente_id'),
-  )
-
-  // --- Alta de equipo desde el propio formulario del ticket (pedido 38) -----
-
-  function abrirAltaEquipo() {
-    setEquipoError(null)
-    setEquipoNuevo({ tipo: '', marca: '', modelo: '', serial: '' })
-    setAltaEquipo(true)
-  }
-
-  async function crearEquipo() {
-    const clienteId = form.watch('cliente_id')
-    if (!clienteId || !equipoNuevo.tipo.trim()) {
-      setEquipoError('El tipo es obligatorio.')
-      return
-    }
-    setCreandoEquipo(true)
-    setEquipoError(null)
-    try {
-      const creado = await api.post<Equipo>('/api/equipos', {
-        cliente_id: Number(clienteId),
-        tipo: equipoNuevo.tipo.trim(),
-        marca: equipoNuevo.marca.trim() || null,
-        modelo: equipoNuevo.modelo.trim() || null,
-        serial: equipoNuevo.serial.trim() || null,
-      })
-      // Se suma a la lista y queda **elegido**: si sólo se recargara, el
-      // usuario tendría que volver a buscarlo, que es la mitad del problema
-      // que este atajo viene a sacar.
-      setEquipos((previos) => [...previos, creado])
-      form.setValue('equipo_id', String(creado.id))
-      setAltaEquipo(false)
-    } catch (err) {
-      setEquipoError(describeError(err))
-    } finally {
-      setCreandoEquipo(false)
-    }
-  }
-
   async function loadAll() {
     setLoading(true)
     setError(null)
@@ -241,14 +197,19 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
     setFormError(null)
     const payload = {
       cliente_id: Number(values.cliente_id),
-      equipo_id: values.equipo_id && values.equipo_id !== NONE ? Number(values.equipo_id) : null,
+      // El equipo ya no se elige en el alta: se asigna después desde la ficha
+      // de detalle. El alta quedó en cliente, título, descripción y quién
+      // hizo el reclamo — el resto (equipo, categoría, técnico, sector) se
+      // asigna después desde el ticket (decisión del usuario, 2026-09-13,
+      // que reemplaza la de dejarlo en 4 campos con equipo incluido del
+      // 2026-07-29).
+      equipo_id: null,
       tecnico_id: null,
       sector_id: null,
-      // Se clasifica desde el ticket, igual que técnico y sector: el alta se
-      // dejó en 4 campos a propósito (decisión del usuario, 2026-07-29).
       categoria_id: null,
       titulo: values.titulo,
       descripcion: values.descripcion || null,
+      reclamante: values.reclamante?.trim() || null,
       estado: 'abierto' as const,
       prioridad: 'media' as const,
       horas_invertidas: null,
@@ -525,11 +486,11 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CircleAlert className="size-4" />Nueva incidencia
+                <CircleAlert className="size-4" />{vocabulario.nuevo}
               </DialogTitle>
               <DialogDescription>
-                El resto de los campos —categoría, prioridad, técnico, sector,
-                horas— se asignan después desde el ticket.
+                El resto de los campos —equipo, categoría, prioridad, técnico,
+                sector, horas— se asignan después desde el ticket.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -551,41 +512,17 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="equipo_id" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Equipo</FormLabel>
+                {/* El equipo se sacó de acá (decisión del usuario,
+                    2026-09-13): sigue siendo asignable, pero desde la ficha
+                    de detalle, no en el alta. En su lugar entra quién hizo el
+                    reclamo, que es un dato de la llamada, no del ticket ya
+                    armado. */}
+                <FormField control={form.control} name="reclamante" render={({ field }) => (
+                  <FormItem className="w-56">
+                    <FormLabel>Quién hizo el reclamo</FormLabel>
                     <FormControl>
-                      <SelectBuscable
-                        value={field.value ?? NONE}
-                        onChange={field.onChange}
-                        // Sólo los equipos del cliente elegido: ofrecer el
-                        // parque entero de todos los clientes es lo que hacía
-                        // esta lista inmanejable, y además deja elegir un
-                        // equipo que no es de ese cliente.
-                        opciones={[
-                          { value: NONE, label: 'Sin equipo' },
-                          ...opcionesEquipo(equiposDelCliente),
-                        ]}
-                        ariaLabel="Equipo"
-                        className="w-44"
-                        emptyMessage="Ese cliente no tiene equipos."
-                      />
+                      <Input {...field} maxLength={120} placeholder="Nombre de quien llamó" />
                     </FormControl>
-                    {/* Pedido 38: el equipo con el que se trabajó puede no
-                        estar cargado todavía, y hasta ahora eso obligaba a
-                        abandonar el alta, ir a Equipos, cargarlo y volver a
-                        empezar. Se carga acá mismo y queda elegido. */}
-                    <Button
-                      type="button" variant="link" size="sm"
-                      className="h-auto justify-start p-0 text-xs"
-                      disabled={!form.watch('cliente_id')}
-                      onClick={abrirAltaEquipo}
-                    >
-                      <PlusCircle className="size-3" />
-                      {form.watch('cliente_id')
-                        ? 'El equipo no está en la lista'
-                        : 'Elegí un cliente para poder agregar un equipo'}
-                    </Button>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -607,73 +544,13 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
                 )} />
                 <DialogFooter className="w-full">
                   <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                  <Button type="submit" disabled={saving}>{saving ? 'Creando…' : 'Crear incidencia'}</Button>
+                  <Button type="submit" disabled={saving}>{saving ? 'Creando…' : 'Crear reclamo'}</Button>
                 </DialogFooter>
               </form>
             </Form>
           </DialogContent>
         </Dialog>
       </EncabezadoDePantalla>
-
-      {/* El alta de equipo vive FUERA del Dialog de la incidencia: anidar dos
-          Dialog de Radix cierra el de adentro al hacer foco en el de afuera, y
-          el formulario del ticket se perdería. Los dos abiertos a la vez es
-          justo lo que se quiere — se vuelve al ticket con el equipo elegido. */}
-      <Dialog open={altaEquipo} onOpenChange={setAltaEquipo}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Monitor className="size-4" />Nuevo equipo
-            </DialogTitle>
-            <DialogDescription>
-              Se agrega al parque de{' '}
-              {clientes.find((c) => String(c.id) === form.watch('cliente_id'))?.nombre ?? 'el cliente'}
-              {' '}y queda elegido en la incidencia.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            {equipoError && <p className="text-sm text-destructive">{equipoError}</p>}
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Tipo</span>
-              <Input
-                autoFocus
-                value={equipoNuevo.tipo}
-                onChange={(e) => setEquipoNuevo({ ...equipoNuevo, tipo: e.target.value })}
-                placeholder="Notebook, Impresora, Router…"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <span className="text-sm font-medium">Marca</span>
-                <Input
-                  value={equipoNuevo.marca}
-                  onChange={(e) => setEquipoNuevo({ ...equipoNuevo, marca: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <span className="text-sm font-medium">Modelo</span>
-                <Input
-                  value={equipoNuevo.modelo}
-                  onChange={(e) => setEquipoNuevo({ ...equipoNuevo, modelo: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Número de serie</span>
-              <Input
-                value={equipoNuevo.serial}
-                onChange={(e) => setEquipoNuevo({ ...equipoNuevo, serial: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-            <Button type="button" onClick={crearEquipo} disabled={creandoEquipo}>
-              {creandoEquipo ? 'Creando…' : 'Crear y elegir'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -745,7 +622,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
             <DataTable
               columns={columns}
               data={incidenciasFiltradas}
-              emptyMessage="Sin incidencias todavía."
+              emptyMessage="Sin reclamos todavía."
               onRowClick={(i) => navigate(`${simple ? '/reclamos' : '/incidencias'}/${i.id}`)}
               search={{
                 // El número de ticket entra a propósito: es como se lo nombra

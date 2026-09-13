@@ -319,7 +319,7 @@ export function EquipoDetalle() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tarjeta
-              titulo="Incidencias"
+              titulo="Reclamos"
               icono={<Ticket className="size-4" />}
               valor={resumen.total_incidencias}
               pie={`${resumen.incidencias_abiertas} sin cerrar · ${resumen.horas_invertidas} hs`}
@@ -346,7 +346,7 @@ export function EquipoDetalle() {
 
           <Card className="evitar-corte">
             <CardHeader>
-              <CardTitle className="text-base">Incidencias ({incidencias.length})</CardTitle>
+              <CardTitle className="text-base">Reclamos ({incidencias.length})</CardTitle>
               <CardDescription>Todos los tickets en los que apareció este equipo.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -415,7 +415,7 @@ export function EquipoDetalle() {
                             to={`/incidencias/${r.incidencia_id}`}
                             className="text-xs underline underline-offset-2"
                           >
-                            Incidencia #{r.incidencia_id}
+                            Reclamo #{r.incidencia_id}
                           </Link>
                         )}
                       </div>
@@ -568,7 +568,7 @@ export function EquipoDetalle() {
                             <>
                               {' · '}
                               <Link to={`/incidencias/${m.incidencia_id}`} className="underline">
-                                Incidencia #{m.incidencia_id}
+                                Reclamo #{m.incidencia_id}
                               </Link>
                             </>
                           )}

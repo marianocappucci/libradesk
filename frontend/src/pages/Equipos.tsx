@@ -690,7 +690,7 @@ export function Equipos() {
         // Describe lo que el repositorio hace de verdad: los `ondelete` de los
         // modelos no corren (el pragma está apagado), así que el borrado del
         // historial y la desasignación se hacen explícitos en el backend.
-        description="Se borra también su historial de movimientos. Las incidencias que lo tengan asignado quedan sin equipo, no se borran. Esta acción no se puede deshacer."
+        description="Se borra también su historial de movimientos. Los reclamos que lo tengan asignado quedan sin equipo, no se borran. Esta acción no se puede deshacer."
         onConfirm={() => { const e = aBorrar; setABorrar(null); if (e) handleDelete(e) }}
       />
     </div>

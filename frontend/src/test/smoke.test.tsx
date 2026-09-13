@@ -165,6 +165,36 @@ describe('guard de rutas', () => {
   })
 })
 
+// Decisión del humano (2026-09-13): LibraDesk pasa a decir "Reclamo/Reclamos"
+// en TODAS las instancias, y el home del catch-all (`Home()` en App.tsx) pasa
+// a ser `/reclamos` para todas — antes sólo en modo simple, el resto caía en
+// `/dashboard`. `/reclamos` es el núcleo del producto y no se gatea por
+// módulo (a diferencia del Dashboard, que sí puede estar apagado), así que es
+// un destino seguro sin distinguir el modo.
+describe('Home: adonde va quien entra sin ruta', () => {
+  it('sin modo_simple, el catch-all lleva a /reclamos', async () => {
+    conSesion()
+    montar('/')
+    expect(await screen.findByRole('heading', { name: 'Reclamos' })).toBeInTheDocument()
+  })
+
+  it('con modo_simple, tambien lleva a /reclamos', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).includes(RUTA_SESION)
+          ? json({
+              id: '1', username: 'ana', name: 'Ana', role: 'admin', active: true,
+              nombre: 'Ana', empresa_nombre: 'Prueba', mp_pending_count: 0,
+              modulos: ['modo_simple'],
+            })
+          : json([]),
+      ),
+    )
+    montar('/')
+    expect(await screen.findByRole('heading', { name: 'Reclamos' })).toBeInTheDocument()
+  })
+})
+
 // Reporte del usuario (2026-08-13): entrar por Compras -> Proveedores mostraba
 // la pantalla de Configuracion. El item del menu apuntaba a
 // `/configuracion/proveedores`, que era una pestaña, asi que traia el titulo y
@@ -281,7 +311,7 @@ describe('la Agenda tiene pantalla propia', () => {
       .map((a) => a.getAttribute('href') ?? '')
       .filter((h) => /^\/[a-z-]+$/.test(h))
     expect(rutas.indexOf('/agenda')).toBe(rutas.indexOf('/dashboard') + 1)
-    expect(rutas.indexOf('/agenda')).toBeLessThan(rutas.indexOf('/incidencias'))
+    expect(rutas.indexOf('/agenda')).toBeLessThan(rutas.indexOf('/reclamos'))
   })
 
   it('la ruta vieja redirige en vez de caer en el dashboard', async () => {

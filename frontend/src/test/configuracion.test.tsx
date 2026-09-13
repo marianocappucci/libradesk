@@ -93,7 +93,7 @@ describe('Configuración en pestañas', () => {
 
     const nombres = screen.getAllByRole('tab').map((t) => t.textContent)
     expect(nombres).toEqual([
-      'Empresa', 'Integraciones', 'Servicios', 'Tipos de incidencia', 'Datos / Backup',
+      'Empresa', 'Integraciones', 'Servicios', 'Tipos de reclamo', 'Datos / Backup',
     ])
     // 🔴 "Facturación" ya NO es de primer nivel: este producto no emite
     // comprobantes —manda lo facturable a Contalibra o a SOS Contador—, así que
@@ -110,10 +110,10 @@ describe('Configuración en pestañas', () => {
     // conmutador sería decorativo y la pantalla seguiría siendo igual de larga.
     render(<Configuracion />, '/configuracion')
     await screen.findByText('Datos de la empresa')
-    expect(screen.queryByText('Tipos de incidencia', { selector: 'div' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Tipos de reclamo', { selector: 'div' })).not.toBeInTheDocument()
   })
 
-  it('la pestaña de tipos de incidencia muestra sólo el catálogo', async () => {
+  it('la pestaña de tipos de reclamo muestra sólo el catálogo', async () => {
     render(<CategoriasCard />, '/configuracion/categorias')
     await screen.findByText('Hardware')
     expect(screen.queryByText('Datos de la empresa')).not.toBeInTheDocument()
@@ -127,7 +127,7 @@ describe('Configuración en pestañas', () => {
     render(<Configuracion />, '/configuracion?seccion=categorias')
     await screen.findByText('Hardware')
 
-    expect(pestania(/Tipos de incidencia/)).toHaveAttribute('aria-selected', 'true')
+    expect(pestania(/Tipos de reclamo/)).toHaveAttribute('aria-selected', 'true')
     expect(pestania('Empresa')).toHaveAttribute('aria-selected', 'false')
   })
 })

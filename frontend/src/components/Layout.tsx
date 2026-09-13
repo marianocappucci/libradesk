@@ -33,6 +33,7 @@ import {
   FilePenLine as FileSignature,
   FileSpreadsheet,
   FileText,
+  HardHat,
   Handshake,
   LayoutDashboard,
   MapPin,
@@ -142,30 +143,19 @@ export const Layout = createLayout({
         // que no es un módulo de plan. Lo que la esconde es el modo simple,
         // donde el día se arma con el papel de pendientes y no con la grilla.
         { to: '/agenda', label: 'Agenda', icon: CalendarDays, hideFor: enModoSimple },
-        // 🔑 **Dos entradas, una por vocabulario, y con RUTAS DISTINTAS.**
-        // `label` es un string y no una función del usuario (`NavItem` de
-        // libra-ui), así que la única forma de que el menú diga "Reclamos" en
-        // una instancia y "Incidencias" en otra es tener las dos y esconder la
-        // que no va.
+        // 🔴 **Una sola entrada desde el 2026-09-13** — decisión del humano:
+        // LibraDesk pasa a decir "Reclamo/Reclamos" en TODAS las instancias, y
+        // "Incidencia" deja de usarse en lo visible. Antes había dos ítems, uno
+        // por vocabulario (`VOCABULARIO_COMPLETO` / `VOCABULARIO_SIMPLE` de
+        // `vocabulario.ts`), con rutas distintas para que libra-ui no
+        // reconciliara mal las dos claves de React (`key={item.to}`) y las
+        // mostrara juntas — ver el historial de este archivo si hace falta el
+        // detalle. Con un solo vocabulario esa razón desaparece.
         //
-        // 🔴 **Y el `to` tiene que diferir, aunque las dos lleven a la misma
-        // pantalla.** libra-ui renderiza cada ítem con `key={item.to}`: con el
-        // mismo destino las dos comparten clave de React, la reconciliación no
-        // alcanza a sacar la que se filtró, y el menú termina mostrando
-        // "Incidencias" **y** "Reclamos" juntas. Se vio en el test antes de
-        // llegar a ninguna instancia. Arreglar la clave allá es un cambio del
-        // motor que comparten los ocho productos, con su release; acá alcanza
-        // con que la instancia en modo simple tenga su propia URL — que además
-        // es más coherente: si habla de reclamos, la barra de direcciones
-        // también.
-        {
-          to: '/incidencias', label: 'Incidencias', icon: AlertCircle,
-          hideFor: enModoSimple,
-        },
-        {
-          to: '/reclamos', label: 'Reclamos', icon: AlertCircle,
-          hideFor: (u) => !enModoSimple(u),
-        },
+        // La ruta apunta a `/reclamos`, la canónica; `/incidencias` sigue
+        // funcionando (no se rompen links guardados) pero ya no vive en el
+        // menú.
+        { to: '/reclamos', label: 'Reclamos', icon: AlertCircle },
         { to: '/clientes', label: 'Clientes', icon: Users },
         { to: '/equipos', label: 'Equipos', icon: Monitor },
         // "Depósitos" a secas, y la desambiguación con los de stock la hace el
@@ -262,7 +252,7 @@ export const Layout = createLayout({
       items: [
         { to: '/reportes', label: 'Reportes', icon: FileSpreadsheet, module: 'reportes' },
         { to: '/sucursales', label: 'Sucursales', icon: MapPin },
-        { to: '/tecnicos', label: 'Técnicos', icon: UserCog, adminOnly: true },
+        { to: '/tecnicos', label: 'Técnicos', icon: HardHat, adminOnly: true },
         { to: '/usuarios', label: 'Usuarios', icon: UserCog, adminOnly: true },
         // Junto a Usuarios y no en Configuración: se mira para responder "quién
         // hizo esto", que es una pregunta sobre la gente, no sobre los ajustes.
