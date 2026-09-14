@@ -58,7 +58,7 @@ dependencies = [
     # arregla la IP con que cuenta el bloqueo por intentos (`ip_del_request`).
     # **El bump NO es opcional a partir de aca**: `app/routers/auth.py` pasa
     # `captcha=True`, y con un pin anterior el router ni se construye.
-    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.40.0",
+    "libraauth @ git+https://github.com/marianocappucci/libraauth.git@v0.43.1",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
