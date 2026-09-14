@@ -245,7 +245,7 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
     pdf.ln(_LINEA)
     # Quien llamó, cuando no es el contacto habitual. Va en Personal y no en
     # Ticket porque es una persona, no un atributo del reclamo.
-    _campo(pdf, "Reclamante", datos.get("reclamante"), _CW)
+    _campo(pdf, "Quién hizo el reclamo", datos.get("reclamante"), _CW)
     pdf.ln(_LINEA + 1)
 
     _titulo_seccion(pdf, "Descripción")

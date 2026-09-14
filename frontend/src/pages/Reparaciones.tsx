@@ -260,8 +260,8 @@ export function Reparaciones() {
             (reporte del usuario, 2026-08-13). */}
         <p className="text-right text-xs text-muted-foreground">
           Se abren desde el ticket, con “Reemplazar equipo”.{' '}
-          <Link to="/incidencias" className="underline underline-offset-2">
-            Ir a Incidencias
+          <Link to="/reclamos" className="underline underline-offset-2">
+            Ir a Reclamos
           </Link>
         </p>
       </EncabezadoDePantalla>

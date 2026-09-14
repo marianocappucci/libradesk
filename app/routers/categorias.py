@@ -80,6 +80,6 @@ def delete_categoria(
             )
         raise HTTPException(
             409,
-            f"La usan {colgando['incidencias']} incidencias, que quedarían sin categoría.",
+            f"La usan {colgando['incidencias']} reclamos, que quedarían sin categoría.",
         )
     return Response(status_code=204)

@@ -139,7 +139,7 @@ services:
     # lee el `CMD` del Dockerfile y exige que esté acá adentro.
     command: sh -c "libracommerce-migrar upgrade --prefijo libradesk && alembic upgrade head && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
     ports:
-      - "8086:8000"
+      - "127.0.0.1:8086:8000"
     volumes:
       # El `.db` se sigue montando DESPUES del corte a PostgreSQL, y no es un
       # descuido: ahi viven los logos, los backups y el `.db` anterior, que es

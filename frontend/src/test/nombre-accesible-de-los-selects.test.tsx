@@ -306,7 +306,7 @@ const PANTALLAS: {
     },
   },
   {
-    titulo: 'Incidencias — barra de filtros',
+    titulo: 'Reclamos — barra de filtros',
     // Tres de la barra de filtros más el **orden del listado de pendientes**,
     // que vive en el encabezado y no filtra la grilla (2026-09-08), y desde el
     // 2026-09-11 su **localidad**. Entran en el conteo igual: este test no
@@ -315,15 +315,19 @@ const PANTALLAS: {
     cuantos: 5,
     montar: async () => {
       render(<Incidencias />, '/incidencias')
-      await screen.findByRole('heading', { name: /Incidencias/ })
+      await screen.findByRole('heading', { name: /Reclamos/ })
     },
   },
   {
-    titulo: 'Incidencias — alta',
-    cuantos: 2,
+    titulo: 'Reclamos — alta',
+    // 🔴 **2→1 el 2026-09-13**: el alta dejó de ofrecer el combobox de Equipo
+    // (se saca del alta, se asigna después desde la ficha). Sólo queda el de
+    // Cliente — "Quién hizo el reclamo", que entró en su lugar, es un input de
+    // texto, no un combobox.
+    cuantos: 1,
     montar: async (user) => {
       render(<Incidencias />, '/incidencias')
-      await user.click(await screen.findByRole('button', { name: /Nueva incidencia/ }))
+      await user.click(await screen.findByRole('button', { name: /Nuevo reclamo/ }))
       await screen.findByRole('dialog')
     },
   },

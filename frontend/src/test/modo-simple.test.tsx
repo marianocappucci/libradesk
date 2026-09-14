@@ -15,9 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Layout, enModoSimple } from '../components/Layout'
 import { AuthProvider } from '../context/AuthContext'
 import { SucursalProvider } from '../components/sucursal'
-import {
-  VOCABULARIO_COMPLETO, VOCABULARIO_SIMPLE, vocabularioDe,
-} from '../vocabulario'
+import { VOCABULARIO, vocabularioDe } from '../vocabulario'
 
 const BASE = {
   id: '1', username: 'admin', name: 'Ana', nombre: 'Ana',
@@ -56,28 +54,35 @@ const render = (ui: ReactElement) =>
   )
 
 // ── El vocabulario ─────────────────────────────────────────────────────────
+//
+// 🔴 **Un solo vocabulario desde el 2026-09-13** — decisión del humano:
+// LibraDesk dice "Reclamo/Reclamos" en TODAS las instancias, con o sin
+// `modo_simple`. Antes había dos juegos (`VOCABULARIO_COMPLETO` con
+// "Incidencia" y `VOCABULARIO_SIMPLE` con "Reclamo"), elegidos por el
+// add-on — armado para Lagrace, que ya no va. Lo que sigue afirma que
+// `vocabularioDe` da lo mismo pase lo que pase en `modulos`.
 
 describe('Vocabulario', () => {
-  it('sin el add-on, la instancia habla de incidencias', () => {
-    expect(vocabularioDe({ modulos: [] })).toEqual(VOCABULARIO_COMPLETO)
+  it('siempre habla de reclamos, con o sin el add-on', () => {
+    expect(vocabularioDe({ modulos: [] })).toEqual(VOCABULARIO)
+    expect(vocabularioDe({ modulos: ['modo_simple'] })).toEqual(VOCABULARIO)
   })
 
-  it('con el add-on, habla de reclamos', () => {
-    expect(vocabularioDe({ modulos: ['modo_simple'] })).toEqual(VOCABULARIO_SIMPLE)
+  it('un usuario nulo o sin módulos no rompe', () => {
+    // Es el caso de un backend que todavía no manda el campo, o de un
+    // llamador que no tiene sesión a mano.
+    expect(vocabularioDe({})).toEqual(VOCABULARIO)
+    expect(vocabularioDe(null)).toEqual(VOCABULARIO)
+    expect(vocabularioDe(undefined)).toEqual(VOCABULARIO)
   })
 
-  it('un usuario sin módulos no rompe', () => {
-    // Es el caso de un backend que todavía no manda el campo. Cae al
-    // vocabulario de siempre, que es la degradación correcta.
-    expect(vocabularioDe({})).toEqual(VOCABULARIO_COMPLETO)
-    expect(vocabularioDe(null)).toEqual(VOCABULARIO_COMPLETO)
-  })
-
-  it('el género viaja armado y no se compone', () => {
-    // "Nueva incidencia" vs "Nuevo reclamo": componer `Nuev@ ${singular}`
-    // obligaría a saber el género en cada pantalla.
-    expect(VOCABULARIO_COMPLETO.nuevo).toBe('Nueva incidencia')
-    expect(VOCABULARIO_SIMPLE.nuevo).toBe('Nuevo reclamo')
+  it('la frase de alta viaja armada y no se compone', () => {
+    // "Nuevo reclamo": la forma entera y no `Nuev@ ${singular}` compuesto —
+    // así, si algún día vuelve a hacer falta un vocabulario cuyo género
+    // cambie el artículo, ya está soportado sin tocar a quien lo consume.
+    expect(VOCABULARIO.nuevo).toBe('Nuevo reclamo')
+    expect(VOCABULARIO.singular).toBe('Reclamo')
+    expect(VOCABULARIO.plural).toBe('Reclamos')
   })
 })
 
@@ -138,17 +143,20 @@ describe('El menú en modo simple', () => {
 })
 
 describe('El menú sin el add-on no cambia', () => {
-  it('sigue diciendo "Incidencias" y muestra Agenda', async () => {
+  it('dice "Reclamos" igual, y muestra Agenda', async () => {
     // 🔑 **La garantía que pidió el humano**: prender el modo en una instancia
-    // no le toca nada a las otras.
+    // no le toca nada a las otras. Desde el 2026-09-13 el menú dice "Reclamos"
+    // en las dos —antes decía "Incidencias" acá y "Reclamos" en modo simple—,
+    // así que lo que sigue siendo distinto es Agenda y Dashboard, no el
+    // vocabulario.
     usuario = { ...BASE, modulos: ['dashboard'] }
     render(<Layout><div /></Layout>)
     await sesionCargada()
 
-    expect(screen.getByRole('link', { name: /Incidencias/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Reclamos/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Incidencias$/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Agenda/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^Reclamos$/ })).not.toBeInTheDocument()
   })
 })
 
@@ -172,7 +180,7 @@ describe('El gateo por módulo en el menú', () => {
     render(<Layout><div /></Layout>)
     await sesionCargada()
 
-    expect(screen.getByRole('link', { name: /Incidencias/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Reclamos/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Clientes/ })).toBeInTheDocument()
   })
 

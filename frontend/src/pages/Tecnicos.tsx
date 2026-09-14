@@ -18,7 +18,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { UserCog, Wrench } from 'lucide-react'
+import { HardHat, Wrench } from 'lucide-react'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -215,7 +215,7 @@ export function Tecnicos() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={UserCog}>Técnicos</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={HardHat}>Técnicos</TituloPantalla>}>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo técnico</Button>
@@ -291,7 +291,7 @@ export function Tecnicos() {
         open={aBorrar !== null}
         onOpenChange={(open) => !open && setABorrar(null)}
         title={`¿Eliminar a ${aBorrar?.nombre}?`}
-        description="Las incidencias que lo tengan asignado quedan sin técnico. Esta acción no se puede deshacer."
+        description="Los reclamos que lo tengan asignado quedan sin técnico. Esta acción no se puede deshacer."
         onConfirm={() => { const t = aBorrar; setABorrar(null); if (t) handleDelete(t) }}
       />
     </div>

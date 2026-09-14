@@ -3,7 +3,7 @@
 // El módulo comercial puso "Proveedores" dentro de Compras, pero apuntando a
 // `/configuracion/proveedores`, que era una **pestaña de Configuración**. El
 // efecto: entrar por Compras → Proveedores mostraba el título "Configuración" y
-// el conmutador completo (Empresa, Servicios, Tipos de incidencia, Facturación,
+// el conmutador completo (Empresa, Servicios, Tipos de reclamo, Facturación,
 // Datos / Backup), con el listado colgando al pie. Era, literalmente, la misma
 // pantalla que Configuración general.
 //
