@@ -38,7 +38,7 @@ from sqlalchemy.engine import make_url
 
 from . import database, schema
 from .auditoria import AUDITABLES
-from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
+from .auth import build_session_auth, require_admin, require_staff
 from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import (
@@ -382,7 +382,10 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # exigiendo sesión de un usuario del producto. El backoffice no tiene por
     # qué poder tocar el resto del dominio, y colgar la dependencia de
     # `admin_only` sería ampliar el permiso sin necesidad.
-    app.include_router(users.router, dependencies=[Depends(require_admin_o_servicio)])
+    #
+    # El guard ya NO se pasa acá (ADR-018, libraauth v0.43.0): vive dentro
+    # del router que arma `build_users_router()` en `app/routers/users.py`.
+    app.include_router(users.router)
 
     # El core de tickets NO se gatea: un LibraDesk sin incidencias no es un
     # plan más barato, es otra cosa. Mismo criterio que "turnos" en Contalibra.

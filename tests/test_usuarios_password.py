@@ -72,20 +72,30 @@ def test_la_contrasena_vacia_se_rechaza_y_no_cambia_nada(client):
         "username": "cristina", "password": "vieja123"}).status_code == 200
 
 
-def test_no_hay_minimo_de_longitud(client):
-    """Deliberado, y por eso tiene test: el endpoint existe para destrabar a
-    alguien que quedó afuera, y un mínimo que el administrador no puede cumplir
-    en el momento lo manda de vuelta a la base de datos. Si algún día se agrega
-    una política de complejidad, que sea una decisión y no un descuido — este
-    test se va a poner rojo."""
+def test_ahora_hay_un_minimo_de_seis(client):
+    """🔴 Cambio de comportamiento visible (ADR-018, libraauth v0.43.1).
+
+    Hasta la adopción de `build_users_router()` este test se llamaba
+    `test_no_hay_minimo_de_longitud` y afirmaba justo lo contrario: que una
+    contraseña de un solo carácter SÍ se aceptaba acá, a propósito ("el
+    endpoint existe para destrabar a alguien que quedó afuera"). La factory
+    unifica el mínimo de 6 caracteres (`MIN_PASSWORD_LENGTH`) para el alta Y
+    el reset -- este producto no exigía nada en ninguna de las dos. Sigue sin
+    haber política de complejidad, sólo longitud."""
     _login(client)
     creado = _alta_de_staff(client)
 
+    r = client.put(f"/api/usuarios/{creado['id']}/password", json={"password": "corta"})
+    assert r.status_code == 422, r.text
+    # la vieja sigue entrando: el 422 no hasheó nada a mitad de camino
+    assert _otro_cliente(client).post("/auth/login", json={
+        "username": "cristina", "password": "vieja123"}).status_code == 200
+
     assert client.put(
-        f"/api/usuarios/{creado['id']}/password", json={"password": "x"},
+        f"/api/usuarios/{creado['id']}/password", json={"password": "seis66"},
     ).status_code == 204
     assert _otro_cliente(client).post("/auth/login", json={
-        "username": "cristina", "password": "x"}).status_code == 200
+        "username": "cristina", "password": "seis66"}).status_code == 200
 
 
 def test_contrasena_de_usuario_inexistente_devuelve_404(client):
@@ -100,7 +110,9 @@ def test_contrasena_de_usuario_inexistente_devuelve_404(client):
     _login(client)
     r = client.put("/api/usuarios/9999/password", json={"password": "loquesea"})
     assert r.status_code == 404
-    assert r.json() == {"detail": "usuario not found"}
+    # Mensaje de `build_users_router()` (ADR-018, libraauth v0.43.1) — antes
+    # decía "usuario not found", el router propio de este producto.
+    assert r.json() == {"detail": "no existe el usuario 9999"}
 
 
 def test_staff_no_puede_cambiarle_la_contrasena_a_nadie(client):
