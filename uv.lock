@@ -672,6 +672,11 @@ dependencies = [
     { name = "starlette" },
 ]
 
+[package.optional-dependencies]
+migrations = [
+    { name = "alembic" },
+]
+
 [[package]]
 name = "libracommerce"
 version = "0.16.4.dev4"
@@ -718,7 +723,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "itsdangerous" },
-    { name = "libraauth" },
+    { name = "libraauth", extra = ["migrations"] },
     { name = "libracommerce", extra = ["migrations"] },
     { name = "libracore" },
     { name = "libragenda" },
@@ -745,7 +750,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
-    { name = "libraauth", git = "https://github.com/marianocappucci/libraauth.git?rev=v0.43.1" },
+    { name = "libraauth", extras = ["migrations"], git = "https://github.com/marianocappucci/libraauth.git?rev=v0.43.1" },
     { name = "libracommerce", extras = ["migrations"], git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.16.4" },
     { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.102.0" },
     { name = "libragenda", git = "https://github.com/marianocappucci/libragenda.git?rev=v0.11.0" },
