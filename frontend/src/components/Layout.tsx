@@ -35,7 +35,6 @@ import {
   FileText,
   HardHat,
   Handshake,
-  LayoutDashboard,
   MapPin,
   Monitor,
   Package as Productos,
@@ -83,9 +82,9 @@ function modulosDe(u: unknown): string[] | undefined {
 /** Si la instancia corre el add-on `modo_simple` (ver `plans.py`).
  *
  *  Es la experiencia reducida que pidió Lagrace: ficha de reclamo con lo
- *  mínimo, sin Agenda ni Dashboard, home en el listado de pendientes y
- *  vocabulario "Reclamos". **No apaga el core de tickets** — elige cómo se
- *  dibuja, no si existe.
+ *  mínimo, sin Agenda, home en el listado de pendientes y vocabulario
+ *  "Reclamos". **No apaga el core de tickets** — elige cómo se dibuja, no si
+ *  existe.
  */
 export function enModoSimple(u: unknown): boolean {
   return (modulosDe(u) ?? []).includes('modo_simple')
@@ -116,29 +115,18 @@ export const Layout = createLayout({
   // linea de la empresa. Si cambia cualquiera de los dos, este cambia.
   wordmarkClassName: `${WORDMARK} text-[15px]/[21px]`,
   navSections: [
-    // Sin label: es una sola entrada y un encabezado "General" arriba de un
-    // único ítem es ruido.
-    // `module` para el gateo por plan y `hideFor` para el modo simple: son dos
-    // razones distintas de no verlo y las dos tienen que valer. En modo simple
-    // el home es el listado de pendientes, no un tablero.
-    {
-      items: [{
-        to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard,
-        module: 'dashboard', hideFor: enModoSimple,
-      }],
-    },
-
     // El core del producto. No se gatea: un LibraDesk sin esto no es un plan
     // más barato, es otra cosa (ver `plans.py`).
     {
       label: 'Mesa de ayuda',
       items: [
-        // **Primero de todo, apenas debajo del Dashboard** — pedido del humano
-        // (2026-08-14). Ítem propio desde ese día: era la pestaña del medio de
-        // "Equipos y flota", o sea que lo que se abre todas las mañanas para
-        // despachar vivía detrás del catálogo de vehículos. Que encabece el
-        // grupo es la otra mitad del mismo pedido: el orden del menú es el
-        // orden en que se usa, y esto es lo primero que se mira.
+        // **Primero de todo el menú** — pedido del humano (2026-08-14; y el
+        // 2026-09-16 se sacó el Dashboard que todavía quedaba arriba). Ítem
+        // propio desde el 2026-08-14: era la pestaña del medio de "Equipos y
+        // flota", o sea que lo que se abre todas las mañanas para despachar
+        // vivía detrás del catálogo de vehículos. Que encabece el grupo es la
+        // otra mitad del mismo pedido: el orden del menú es el orden en que
+        // se usa, y esto es lo primero que se mira.
         // `hideFor` y no `module`: la agenda no se vende por separado, así
         // que no es un módulo de plan. Lo que la esconde es el modo simple,
         // donde el día se arma con el papel de pendientes y no con la grilla.

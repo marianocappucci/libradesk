@@ -130,14 +130,11 @@ describe('El menú en modo simple', () => {
     })
   })
 
-  it('esconde Agenda y Dashboard', async () => {
-    usuario = { ...BASE, modulos: ['modo_simple', 'dashboard'] }
+  it('esconde Agenda', async () => {
+    usuario = { ...BASE, modulos: ['modo_simple'] }
     render(<Layout><div /></Layout>)
     await sesionCargada()
 
-    // Dashboard está en los módulos y se esconde igual: son dos razones
-    // distintas de no verlo y basta con una.
-    expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Agenda/ })).not.toBeInTheDocument()
   })
 })
@@ -147,8 +144,9 @@ describe('El menú sin el add-on no cambia', () => {
     // 🔑 **La garantía que pidió el humano**: prender el modo en una instancia
     // no le toca nada a las otras. Desde el 2026-09-13 el menú dice "Reclamos"
     // en las dos —antes decía "Incidencias" acá y "Reclamos" en modo simple—,
-    // así que lo que sigue siendo distinto es Agenda y Dashboard, no el
-    // vocabulario.
+    // así que lo que sigue siendo distinto es Agenda, no el vocabulario. El
+    // Dashboard dejó de ser parte de la comparación el 2026-09-16: no aparece
+    // en ningún caso, con o sin el add-on.
     usuario = { ...BASE, modulos: ['dashboard'] }
     render(<Layout><div /></Layout>)
     await sesionCargada()
@@ -156,7 +154,7 @@ describe('El menú sin el add-on no cambia', () => {
     expect(screen.getByRole('link', { name: /Reclamos/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Incidencias$/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Agenda/ })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
   })
 })
 
@@ -166,11 +164,13 @@ describe('El gateo por módulo en el menú', () => {
   it('🔴 un módulo apagado ya no deja su entrada en el menú', async () => {
     // Antes de esto la entrada quedaba y el click daba 403: LibraDesk no le
     // pasaba `hasModule` al layout, así que `moduleVisible()` devolvía `true`.
+    // El ejemplo era `dashboard`/Dashboard hasta que esa pantalla se sacó del
+    // producto (2026-09-16); `reportes` sigue siendo un módulo real gateado.
     usuario = { ...BASE, modulos: [] }
     render(<Layout><div /></Layout>)
     await sesionCargada()
 
-    expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Reportes/ })).not.toBeInTheDocument()
   })
 
   it('el core de tickets se ve igual con la lista vacía', async () => {
@@ -186,11 +186,12 @@ describe('El gateo por módulo en el menú', () => {
 
   it('sin el campo `modulos` se muestra todo', async () => {
     // La degradación para un backend que todavía no lo manda: un menú vacío
-    // sería peor que uno de más.
+    // sería peor que uno de más. Mismo cambio de ejemplo que el test de
+    // arriba: Dashboard ya no es una entrada del menú bajo ninguna condición.
     usuario = { ...BASE }
     render(<Layout><div /></Layout>)
     await sesionCargada()
 
-    expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Reportes/ })).toBeInTheDocument()
   })
 })

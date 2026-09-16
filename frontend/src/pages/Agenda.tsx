@@ -90,12 +90,12 @@ export function Agenda() {
   }, [])
 
   const { desde, dias } = rangoDeVista(vista, dia)
-  // Sin `cargando`: el hook lo expone (el Dashboard sí lo usa) pero acá no
-  // hay dónde mostrarlo. La única caja que lo leía era el cartel de abajo, que
-  // sólo se dibuja con `activos.length === 0` — y sin cuadrillas activas el
-  // hook corta antes de pedir nada y `cargando` no llega a prenderse nunca.
-  // Leído ahí valía siempre `false`: era el `equipos.length === 0` de al lado,
-  // el que no distingue vacío de en vuelo, el que sostenía el cartel entero.
+  // Sin `cargando`: el hook lo expone pero acá no hay dónde mostrarlo. La
+  // única caja que lo leía era el cartel de abajo, que sólo se dibuja con
+  // `activos.length === 0` — y sin cuadrillas activas el hook corta antes de
+  // pedir nada y `cargando` no llega a prenderse nunca. Leído ahí valía
+  // siempre `false`: era el `equipos.length === 0` de al lado, el que no
+  // distingue vacío de en vuelo, el que sostenía el cartel entero.
   const { porDia, activos, error } = useAgendaRango(equipos, desde, dias)
 
   /** Los parámetros de la pantalla con algunos cambiados. Los demás se

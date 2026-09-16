@@ -11,9 +11,10 @@
  *  "Incidencias", así que los dos juegos de palabras colapsan en uno solo.
  *
  *  **Por qué queda una constante y no se borra el archivo.** El add-on
- *  `modo_simple` sigue vivo — sigue reduciendo la ficha, ocultando Agenda y
- *  Dashboard, y cambiando el home (ver `components/Layout.tsx` y
- *  `pages/Incidencias.tsx`) — sólo el VOCABULARIO dejó de depender de él. Y
+ *  `modo_simple` sigue vivo — sigue reduciendo la ficha y ocultando Agenda
+ *  (ver `components/Layout.tsx` y `pages/Incidencias.tsx`) — sólo el
+ *  VOCABULARIO dejó de depender de él. El Dashboard, que hasta el 2026-09-16
+ *  también escondía, se sacó del producto entero. Y
  *  `vocabularioDe(user)` se mantiene con la misma firma —recibe el usuario y no
  *  lo consulta por su cuenta— por si algún otro punto del código (o un test)
  *  todavía la llama: hoy devuelve siempre el mismo valor, pero ningún llamador

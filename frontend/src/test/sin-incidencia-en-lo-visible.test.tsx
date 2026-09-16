@@ -68,7 +68,6 @@ const ARCHIVOS = [
   '../pages/Configuracion.tsx',
   '../pages/ClienteDetalle.tsx',
   '../pages/EquipoDetalle.tsx',
-  '../pages/Dashboard.tsx',
   '../pages/Clientes.tsx',
   '../pages/Tecnicos.tsx',
   '../pages/Equipos.tsx',
