@@ -140,80 +140,108 @@ export function TecnicosDelReclamo({
       <CardContent className="grid gap-3">
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="grid gap-2">
-          {elegibles.map((t) => {
-            const asignacion = asignados.find((a) => a.tecnico_id === t.id)
-            return (
-              <div key={t.id} className="grid gap-1">
-                <div className="flex items-center gap-2">
-                  {/* `<input type="checkbox">` pelado, igual que el tilde de
-                      la grilla de reclamos: este producto no tiene un
-                      `ui/checkbox` y agregarlo por un caso sería traerse un
-                      componente para mantener. */}
-                  <input
-                    type="checkbox"
-                    id={`tecnico-${t.id}`}
-                    checked={!!asignacion}
-                    disabled={guardando}
-                    onChange={(e) => alternar(t.id, e.target.checked)}
-                  />
-                  <Label htmlFor={`tecnico-${t.id}`} className="font-normal">
-                    {t.nombre}
-                  </Label>
-                </div>
-                {/* Las horas aparecen **sólo al tildar**: antes de eso son dos
-                    campos vacíos por cada técnico del catálogo, y la lista de
-                    Lagrace tiene 14. */}
-                {asignacion && (
-                  /* 🔑 **La fecha arriba y las dos horas abajo** (pedido del
-                     humano, 2026-09-09). Es el orden en que se lee un CDS: qué
-                     día se fue, y recién después de qué hora a qué hora. En una
-                     sola fila las tres cajas competían por el ancho y la fecha
-                     —que es una sola por técnico— parecía otro campo del rango. */
-                  <div className="grid gap-1 pl-6 text-sm">
-                    <Input
-                      type="date" className="h-8 w-40"
-                      aria-label={`Fecha de ${t.nombre}`}
-                      value={diaDe(asignacion, dia)}
-                      onChange={(e) => e.target.value
-                        && e.target.value !== diaDe(asignacion, dia)
-                        && cargarTramo(asignacion, 'fecha', e.target.value)}
-                    />
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="time" className="h-8 w-28"
-                        aria-label={`Hora de inicio de ${t.nombre}`}
-                        defaultValue={horaDe(asignacion.desde)}
-                        onBlur={(e) => e.target.value !== horaDe(asignacion.desde)
-                          && cargarTramo(asignacion, 'desde', e.target.value)}
-                      />
-                      <span className="text-muted-foreground">a</span>
-                      <Input
-                        type="time" className="h-8 w-28"
-                        aria-label={`Hora de fin de ${t.nombre}`}
-                        defaultValue={horaDe(asignacion.hasta)}
-                        onBlur={(e) => e.target.value !== horaDe(asignacion.hasta)
-                          && cargarTramo(asignacion, 'hasta', e.target.value)}
-                      />
-                      {/* 🔴 Un tramo sin cargar muestra un guión, **no un cero**:
-                          no se sabe cuántas horas trabajó, y un 0 se lee como que
-                          no trabajó. Es el número que alguien mira antes de
-                          facturar. */}
-                      <span className="tabular-nums text-muted-foreground">
-                        {asignacion.horas === null ? '—' : `${asignacion.horas} h`}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {elegibles.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No hay técnicos cargados en el catálogo.
-            </p>
-          )}
-        </div>
+        {elegibles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay técnicos cargados en el catálogo.
+          </p>
+        ) : (
+          /* 🔑 **Una fila por técnico, con sus columnas al lado** (pedido del
+             humano, 2026-09-16). Antes la fecha y las horas aparecían debajo
+             del nombre al tildarlo, y la lista se estiraba hacia abajo con el
+             ancho del cuerpo desaprovechado. En columnas se lee como el CDS:
+             quién, qué día, de qué hora a qué hora.
+
+             Los dos pasos del circuito siguen siendo dos: las cajas de un
+             técnico sin tildar están **deshabilitadas**, no ocultas, para que
+             las columnas no salten al tildar. */
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="w-10 py-2 pr-2 font-medium">Fue</th>
+                  <th className="py-2 pr-4 font-medium">Técnico</th>
+                  <th className="py-2 pr-4 font-medium">Fecha</th>
+                  <th className="py-2 pr-4 font-medium">Inicio</th>
+                  <th className="py-2 pr-4 font-medium">Fin</th>
+                  <th className="py-2 text-right font-medium">Horas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {elegibles.map((t) => {
+                  const asignacion = asignados.find((a) => a.tecnico_id === t.id)
+                  const apagado = !asignacion
+                  return (
+                    <tr key={t.id} className="border-b last:border-0">
+                      <td className="py-1.5 pr-2">
+                        {/* `<input type="checkbox">` pelado, igual que el tilde
+                            de la grilla de reclamos: este producto no tiene un
+                            `ui/checkbox` y agregarlo por un caso sería traerse
+                            un componente para mantener. */}
+                        <input
+                          type="checkbox"
+                          id={`tecnico-${t.id}`}
+                          checked={!!asignacion}
+                          disabled={guardando}
+                          onChange={(e) => alternar(t.id, e.target.checked)}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        <Label htmlFor={`tecnico-${t.id}`} className="font-normal">
+                          {t.nombre}
+                        </Label>
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        <Input
+                          type="date" className="h-8 w-40"
+                          aria-label={`Fecha de ${t.nombre}`}
+                          disabled={apagado}
+                          value={asignacion ? diaDe(asignacion, dia) : ''}
+                          onChange={(e) => asignacion && e.target.value
+                            && e.target.value !== diaDe(asignacion, dia)
+                            && cargarTramo(asignacion, 'fecha', e.target.value)}
+                        />
+                      </td>
+                      {/* `key` con el id de la asignación: las horas son
+                          `defaultValue`, y sin remontar la caja no tomaría el
+                          valor al tildar a alguien que ya tenía horas. */}
+                      <td className="py-1.5 pr-4">
+                        <Input
+                          key={`desde-${asignacion?.id ?? 'no'}`}
+                          type="time" className="h-8 w-28"
+                          aria-label={`Hora de inicio de ${t.nombre}`}
+                          disabled={apagado}
+                          defaultValue={asignacion ? horaDe(asignacion.desde) : ''}
+                          onBlur={(e) => asignacion
+                            && e.target.value !== horaDe(asignacion.desde)
+                            && cargarTramo(asignacion, 'desde', e.target.value)}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        <Input
+                          key={`hasta-${asignacion?.id ?? 'no'}`}
+                          type="time" className="h-8 w-28"
+                          aria-label={`Hora de fin de ${t.nombre}`}
+                          disabled={apagado}
+                          defaultValue={asignacion ? horaDe(asignacion.hasta) : ''}
+                          onBlur={(e) => asignacion
+                            && e.target.value !== horaDe(asignacion.hasta)
+                            && cargarTramo(asignacion, 'hasta', e.target.value)}
+                        />
+                      </td>
+                      {/* 🔴 Un tramo sin cargar muestra un guión, **no un
+                          cero**: no se sabe cuántas horas trabajó, y un 0 se lee
+                          como que no trabajó. Es el número que alguien mira
+                          antes de facturar. */}
+                      <td className="py-1.5 text-right tabular-nums text-muted-foreground">
+                        {!asignacion || asignacion.horas === null ? '—' : `${asignacion.horas} h`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
