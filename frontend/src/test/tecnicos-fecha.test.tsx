@@ -50,6 +50,21 @@ beforeEach(() => {
   }))
 })
 
+/** El campo, **ya habilitado**. Desde que los campos están siempre (técnico
+ *  sin tildar = campo deshabilitado), `findByLabelText` los encuentra antes de
+ *  que llegue la respuesta de la API; esperar el tilde es esperar la carga.
+ *
+ *  🔴 **Se vuelve a buscar en cada intento**: las horas llevan `key` con el id
+ *  de la asignación y se remontan al llegar, así que el elemento que se
+ *  encontró primero ya no es el de la pantalla y nunca se habilita. */
+async function habilitado(etiqueta: string) {
+  return waitFor(() => {
+    const input = screen.getByLabelText(etiqueta)
+    expect(input).toBeEnabled()
+    return input
+  })
+}
+
 const montar = (dia = '2026-09-08T10:00:00') =>
   render(
     <TecnicosDelReclamo incidenciaId={7} dia={dia} tecnicos={[ANA, BETO] as never} />,
@@ -63,7 +78,7 @@ describe('La fecha de cada técnico', () => {
     }]
     montar()
 
-    expect(await screen.findByLabelText('Fecha de Ana Gómez')).toBeInTheDocument()
+    expect(await habilitado('Fecha de Ana Gómez')).toBeInTheDocument()
   })
 
   it('🔑 cada técnico muestra SU fecha, no una del reclamo', async () => {
@@ -80,7 +95,7 @@ describe('La fecha de cada técnico', () => {
     ]
     montar()
 
-    expect(await screen.findByLabelText('Fecha de Ana Gómez')).toHaveValue('2026-09-08')
+    expect(await habilitado('Fecha de Ana Gómez')).toHaveValue('2026-09-08')
     expect(screen.getByLabelText('Fecha de Beto Ruiz')).toHaveValue('2026-09-10')
   })
 
@@ -93,7 +108,7 @@ describe('La fecha de cada técnico', () => {
     }]
     montar('2026-09-08T10:00:00')
 
-    expect(await screen.findByLabelText('Fecha de Ana Gómez')).toHaveValue('2026-09-08')
+    expect(await habilitado('Fecha de Ana Gómez')).toHaveValue('2026-09-08')
   })
 
   it('🔑 cambiar la fecha mueve los dos extremos y conserva las horas', async () => {
@@ -109,7 +124,7 @@ describe('La fecha de cada técnico', () => {
     // carácter por carácter produce valores intermedios inválidos, y el
     // navegador entrega la fecha **completa** de una cuando se elige del
     // calendario. Esto reproduce eso.
-    const fecha = await screen.findByLabelText('Fecha de Ana Gómez')
+    const fecha = await habilitado('Fecha de Ana Gómez')
     fireEvent.change(fecha, { target: { value: '2026-09-11' } })
 
     await waitFor(() => expect(patches.length).toBeGreaterThan(0))
@@ -128,7 +143,7 @@ describe('La fecha de cada técnico', () => {
     }]
     montar('2026-09-08T10:00:00')
 
-    const hora = await screen.findByLabelText('Hora de inicio de Beto Ruiz')
+    const hora = await habilitado('Hora de inicio de Beto Ruiz')
     await user.clear(hora)
     await user.type(hora, '13:30')
     await user.tab()
@@ -137,14 +152,32 @@ describe('La fecha de cada técnico', () => {
     expect(patches[patches.length - 1].cuerpo.desde).toBe('2026-09-10T13:30:00')
   })
 
-  it('un técnico sin tildar no muestra ni fecha ni horas', async () => {
-    // Antes de tildar son tres campos vacíos por cada técnico del catálogo, y
-    // la lista de Lagrace tiene 14.
+  it('un técnico sin tildar tiene fecha y horas deshabilitadas y vacías', async () => {
+    // Desde el 2026-09-16 cada técnico es una fila con sus columnas: los campos
+    // están siempre, para que las columnas no salten al tildar, pero **no se
+    // pueden cargar** hasta tildar — las horas siguen siendo el segundo paso.
     asignaciones = []
     montar()
 
     await screen.findByLabelText('Ana Gómez')
-    expect(screen.queryByLabelText('Fecha de Ana Gómez')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Hora de inicio de Ana Gómez')).not.toBeInTheDocument()
+    for (const campo of ['Fecha', 'Hora de inicio', 'Hora de fin']) {
+      const input = screen.getByLabelText(`${campo} de Ana Gómez`)
+      expect(input).toBeDisabled()
+      expect(input).toHaveValue('')
+    }
+  })
+
+  it('un técnico tildado tiene fecha y horas habilitadas', async () => {
+    asignaciones = [{
+      id: 10, incidencia_id: 7, tecnico_id: 1, tecnico: 'Ana Gómez',
+      desde: '2026-09-08T08:00:00', hasta: '2026-09-08T12:00:00', horas: 4,
+    }]
+    montar()
+
+    expect(await habilitado('Hora de inicio de Ana Gómez')).toHaveValue('08:00')
+    expect(screen.getByLabelText('Fecha de Ana Gómez')).toBeEnabled()
+    expect(screen.getByLabelText('Hora de fin de Ana Gómez')).toHaveValue('12:00')
+    // Beto no está tildado: su fila sigue apagada.
+    expect(screen.getByLabelText('Hora de inicio de Beto Ruiz')).toBeDisabled()
   })
 })
