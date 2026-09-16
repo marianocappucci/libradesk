@@ -112,8 +112,9 @@ function DialogoInforme({ clienteId, nombre }: { clienteId: number; nombre: stri
   )
 }
 
-/** Tarjeta de conteo con el desglose debajo, mismo formato que el Dashboard
- *  global para que las dos pantallas se lean igual. */
+/** Tarjeta de conteo con el desglose debajo. El formato calca al que tenía el
+ *  Dashboard global (retirado el 2026-09-16); se mantiene el estilo acá aunque
+ *  ya no quede esa segunda pantalla con la que igualarse. */
 function TarjetaConteo({ titulo, total, pie, desglose, icono }: {
   titulo: string
   total: number
