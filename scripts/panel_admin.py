@@ -86,6 +86,8 @@ configure(
     # declaran `libragenda-migrar upgrade` primero.
     migraciones=(
         ("libracommerce-migrar", "upgrade", "--prefijo", "libradesk"),
+        # libraauth: sus seis tablas viven en la base del dominio (medido 2026-09-16), por eso --base dominio.
+        ("libraauth-migrar", "upgrade", "--prefijo", "libradesk", "--base", "dominio"),
         ("alembic", "upgrade", "head"),
     ),
     # `health_path` tampoco se pasa acá — ver el comentario largo en
