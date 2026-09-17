@@ -35,7 +35,9 @@ test('entra por /login, acepta los Términos y ve la primera pantalla', async ({
   await page.locator('#password').fill(process.env.SMOKE_PASSWORD ?? '')
   await pasarElCaptcha(page)
   await page.getByRole('button', { name: 'Ingresar' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  // Desde el 2026-09-16 no hay Dashboard (decisión del humano): el login entra
+  // directo a Reclamos.
+  await expect(page).toHaveURL(/\/reclamos$/)
 
   // Una instancia recién nacida pone el gate de Términos y Condiciones delante
   // de todo (libraauth v0.34.0, libra-ui GateTerminos): es lo que ve un cliente
@@ -46,7 +48,7 @@ test('entra por /login, acepta los Términos y ve la primera pantalla', async ({
   await page.getByRole('button', { name: 'Aceptar y continuar' }).click()
 
   await expect(page.locator('[data-sidebar="sidebar"]').first()).toBeVisible()
-  await expect(page.getByText('Qué hay que hacer', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Reclamos', exact: true })).toBeVisible()
   await expect(page.locator('#username')).toHaveCount(0)
 })
 

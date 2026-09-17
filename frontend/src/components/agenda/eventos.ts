@@ -13,8 +13,8 @@
  *  - En el **día** la columna ya *es* la cuadrilla, así que ese renglón se
  *    libera para el cliente, y sobra lugar para una tercera línea con el
  *    domicilio.
- *  - En el **chip** (la celda del mes y la franja del dashboard) entra un
- *    renglón y medio, así que va lo mínimo para reconocerlo.
+ *  - En el **chip** (la celda del mes) entra un renglón y medio, así que va
+ *    lo mínimo para reconocerlo.
  */
 import { claseChip, type EventoRejilla } from 'libra-ui/agenda'
 import { MODALIDAD_LABELS } from '../../api'
@@ -76,7 +76,7 @@ export function eventoDeDia(t: TrabajoConEquipo): EventoRejilla {
   }
 }
 
-/** Para el chip del mes y la franja del dashboard: cuadrilla y cliente. */
+/** Para el chip del mes: cuadrilla y cliente. */
 export function eventoDeChip(t: TrabajoConEquipo): EventoRejilla {
   return {
     ...base(t),

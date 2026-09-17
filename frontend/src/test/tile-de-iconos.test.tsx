@@ -23,15 +23,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { AuthProvider } from '../context/AuthContext'
 
-const RESUMEN_DASHBOARD = {
-  incidencias_por_estado: { abierta: 2, cerrada: 1 },
-  incidencias_por_prioridad_abiertas: { alta: 1, media: 1 },
-  incidencias_en_rango: 3,
-  total_clientes_activos: 4,
-  total_equipos: 7,
-  horas_totales_invertidas: 12.5,
-}
-
 const CLIENTE = {
   id: 1, nombre: 'Clínica del Sol', empresa: null, email: null, telefono: null,
   ciudad: null, cuit: null, condicion_iva: null, domicilio: null,
@@ -61,7 +52,6 @@ beforeEach(() => {
         ],
       }))
     }
-    if (u.includes('/api/dashboard')) return Promise.resolve(json(RESUMEN_DASHBOARD))
     if (u.includes('/api/clientes/condiciones-iva')) return Promise.resolve(json([]))
     if (u.includes('/api/clientes')) return Promise.resolve(json([CLIENTE]))
     return Promise.resolve(json([]))

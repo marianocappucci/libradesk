@@ -37,13 +37,7 @@ function conSesion() {
             id: '1', username: 'ana', name: 'Ana', nombre: 'Ana', role: 'admin',
             active: true, modulos: [], empresa_nombre: 'Prueba', mp_pending_count: 0,
           })
-        : String(url).includes('/api/dashboard')
-          ? json({
-              incidencias_por_estado: {}, incidencias_por_prioridad_abiertas: {},
-              incidencias_en_rango: 0, total_clientes_activos: 0, total_equipos: 0,
-              horas_totales_invertidas: 0,
-            })
-          : json([]),
+        : json([]),
     ),
   )
 }
@@ -96,8 +90,11 @@ describe('el login', () => {
 
 describe('la sidebar', () => {
   it('🔴 muestra el logo y el nombre con las mismas clases de marca', async () => {
+    // `/reclamos` y no `/dashboard`: el Dashboard se sacó del producto
+    // (2026-09-16). Cualquier pantalla protegida real sirve para este test,
+    // que mide el shell autenticado y no la pantalla en sí.
     conSesion()
-    montar('/dashboard')
+    montar('/reclamos')
     await waitFor(() => expect(screen.getByText('Prueba')).toBeInTheDocument())
     expect(logoDelEncabezado()).toHaveAttribute('src', expect.stringContaining('logo-libradesk'))
     const nombre = screen.getByText('LibraDesk')
@@ -111,7 +108,7 @@ describe('la sidebar', () => {
     // lo pone un atributo del provider y jsdom no aplica Tailwind, asi que lo
     // que se afirma es que la regla condicional este declarada.
     conSesion()
-    montar('/dashboard')
+    montar('/reclamos')
     await waitFor(() => expect(screen.getByText('Prueba')).toBeInTheDocument())
     const clases = logoDelEncabezado().className
     expect(clases).toContain('h-9')

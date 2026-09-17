@@ -98,8 +98,8 @@ describe('el encabezado de una pantalla sale del componente compartido', () => {
     ].join('\n'))).toEqual([1])
 
     // Y que NO se lleve puesto un `justify-between` que no es un encabezado:
-    // la fila interna del Dashboard y el `<h2>` de subsección de Inventario son
-    // legítimos y tienen que seguir pasando.
+    // una fila interna de resumen (clave/valor) y el `<h2>` de subsección de
+    // Inventario son legítimos y tienen que seguir pasando.
     expect(encabezadosAMano([
       '      <div className="flex items-center justify-between text-sm">',
       '        <span>{clave}</span><strong>{valor}</strong>',

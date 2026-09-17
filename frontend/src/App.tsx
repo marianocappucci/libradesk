@@ -4,7 +4,6 @@ import { useAuth } from './context/AuthContext'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { ForgotPassword, ResetPassword } from './pages/PasswordReset'
-import { Dashboard } from './pages/Dashboard'
 import { Clientes } from './pages/Clientes'
 import { ClienteDetalle } from './pages/ClienteDetalle'
 import { Equipos } from './pages/Equipos'
@@ -64,10 +63,13 @@ import { enModoSimple } from './components/Layout'
  *  (antes: sólo en modo simple; el resto caía en `/dashboard`). Sigue
  *  respetando la lección de arriba: `/reclamos` es el listado de tickets, que
  *  es el núcleo del producto y **no se gatea por módulo** (ver el comentario
- *  del grupo "Mesa de ayuda" en `components/Layout.tsx`) — a diferencia del
- *  Dashboard, no hay forma de que esté apagado. Si algún día dejara de ser
- *  así, este destino tiene que volver a decidirse con `enModoSimple` y un
- *  fallback, igual que el Dashboard.
+ *  del grupo "Mesa de ayuda" en `components/Layout.tsx`).
+ *
+ *  🔴 **El 2026-09-16 el Dashboard se sacó del todo** (decisión del humano),
+ *  así que la comparación de arriba ya no tiene con qué contrastar: no queda
+ *  ninguna pantalla de la instancia que pueda estar apagada. La ruta
+ *  `/dashboard` sigue existiendo más abajo, pero como redirect a `/reclamos`
+ *  — no rompe marcadores ni links viejos.
  */
 function Home() {
   return <Navigate to="/reclamos" replace />
@@ -126,7 +128,11 @@ export default function App() {
       {/* Públicas a propósito: quien las necesita no puede iniciar sesión. */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      {/* El Dashboard se sacó del producto (decisión del humano, 2026-09-16):
+          arranca directo en Reclamos. La ruta vieja redirige en vez de
+          desaparecer, mismo criterio que `/configuracion/proveedores` — no
+          rompe marcadores ni links guardados. */}
+      <Route path="/dashboard" element={<Navigate to="/reclamos" replace />} />
       <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
       <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalle /></ProtectedRoute>} />
       <Route path="/equipos" element={<ProtectedRoute><Equipos /></ProtectedRoute>} />
@@ -142,7 +148,7 @@ export default function App() {
           vieja redirige en vez de desaparecer, mismo criterio que
           `/configuracion/proveedores`: es la pantalla que se abre todas las
           mañanas, y estuvo linkeada así en el wiki y en favoritos. Sin el
-          redirect el `*` de abajo la mandaría al dashboard, que es peor que un
+          redirect el `*` de abajo la mandaría a Reclamos, que es peor que un
           404 — la pantalla carga y no es la que se fue a buscar. */}
       <Route path="/equipos-trabajo/agenda" element={<Navigate to="/agenda" replace />} />
       <Route path="/equipos-trabajo/flota" element={<ProtectedRoute><Flota /></ProtectedRoute>} />

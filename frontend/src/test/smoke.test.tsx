@@ -12,30 +12,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { AuthProvider } from '../context/AuthContext'
 
-const RUTA_PROTEGIDA = '/dashboard'
+// `/reclamos` y no `/dashboard`: el Dashboard se sacó del producto entero
+// (decisión del humano, 2026-09-16). `/reclamos` es la pantalla protegida que
+// lo reemplaza como primer destino real de la app.
+const RUTA_PROTEGIDA = '/reclamos'
 const PRODUCTO = 'LibraDesk'
 
-// El dashboard es la primera pantalla protegida y NO tolera un resumen al que
-// le falten campos: hace Object.entries() sobre ellos y revienta con "Cannot
-// convert undefined or null to object", tumbando el arbol de React entero.
-//
-// Con el mock generico (`json([])` para todo lo que no fuera la sesion) eso
-// pasaba en silencio: el error cae FUERA del await del test, asi que los 6
-// tests seguian en verde y lo unico que lo delataba era la cobertura, que
-// saltaba entre corridas identicas segun si la pantalla alcanzaba a montar.
-//
-// La forma sale del tipo DashboardSummary de src/api.ts. Si ese tipo cambia y
-// esto no, el dashboard vuelve a reventar aca -- que es exactamente lo que se
-// quiere que pase, en el CI y no en el navegador.
-const RUTA_DASHBOARD = '/api/dashboard'
-const RESUMEN_DASHBOARD = {
-  incidencias_por_estado: { abierta: 2, cerrada: 1 },
-  incidencias_por_prioridad_abiertas: { alta: 1, media: 1 },
-  incidencias_en_rango: 3,
-  total_clientes_activos: 4,
-  total_equipos: 7,
-  horas_totales_invertidas: 12.5,
-}
 const RUTA_SESION = '/auth/me'
 // La sonda del captcha del login y de «olvidé mi contraseña» (libra-ui v0.69.2).
 const RUTA_CAPTCHA = '/auth/captcha'
@@ -98,9 +80,7 @@ function conSesion() {
               'facturacion_externa',
             ],
           })
-        : String(url).includes(RUTA_DASHBOARD)
-          ? json(RESUMEN_DASHBOARD)
-          : json([]),
+        : json([]),
     ),
   )
 }
@@ -169,8 +149,9 @@ describe('guard de rutas', () => {
 // en TODAS las instancias, y el home del catch-all (`Home()` en App.tsx) pasa
 // a ser `/reclamos` para todas — antes sólo en modo simple, el resto caía en
 // `/dashboard`. `/reclamos` es el núcleo del producto y no se gatea por
-// módulo (a diferencia del Dashboard, que sí puede estar apagado), así que es
-// un destino seguro sin distinguir el modo.
+// módulo, así que es un destino seguro sin distinguir el modo. (El Dashboard,
+// que en ese momento era la comparación —sí se gateaba y podía estar
+// apagado—, se sacó del producto entero el 2026-09-16.)
 describe('Home: adonde va quien entra sin ruta', () => {
   it('sin modo_simple, el catch-all lleva a /reclamos', async () => {
     conSesion()
@@ -295,12 +276,16 @@ describe('la Agenda tiene pantalla propia', () => {
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/agenda'])
   })
 
-  it('encabeza el menu: va apenas debajo de Dashboard', async () => {
+  it('encabeza el menu: es la primera entrada', async () => {
     // Pedido del usuario (2026-08-14), corrigiendo la primera version, que la
     // dejaba al pie de "Mesa de ayuda" junto a Equipos y flota. El orden del
     // menu es el orden en que se usa, y esto es lo primero que se mira a la
     // manana. Sin este test, "primero de todo" es un comentario que el proximo
     // item nuevo puede correr sin que nadie se entere.
+    //
+    // Hasta el 2026-09-16 esto se medía contra `/dashboard` ("apenas debajo
+    // de Dashboard"): con el Dashboard afuera del todo, Agenda pasa a ser
+    // directamente la primera entrada del menú entero, sin nada arriba.
     conSesion()
     montar('/agenda')
     await screen.findAllByRole('link', { name: 'Agenda' })
@@ -310,13 +295,13 @@ describe('la Agenda tiene pantalla propia', () => {
     const rutas = screen.getAllByRole('link')
       .map((a) => a.getAttribute('href') ?? '')
       .filter((h) => /^\/[a-z-]+$/.test(h))
-    expect(rutas.indexOf('/agenda')).toBe(rutas.indexOf('/dashboard') + 1)
+    expect(rutas[0]).toBe('/agenda')
     expect(rutas.indexOf('/agenda')).toBeLessThan(rutas.indexOf('/reclamos'))
   })
 
-  it('la ruta vieja redirige en vez de caer en el dashboard', async () => {
+  it('la ruta vieja redirige en vez de caer en Reclamos', async () => {
     // Quedo linkeada en el wiki y en favoritos desde que era pestaña. Y sin el
-    // redirect no daria 404: el `*` de App.tsx la mandaria al dashboard, que es
+    // redirect no daria 404: el `*` de App.tsx la mandaria a Reclamos, que es
     // peor -- la pantalla carga y no es la que se fue a buscar.
     conSesion()
     montar('/equipos-trabajo/agenda')
@@ -324,8 +309,34 @@ describe('la Agenda tiene pantalla propia', () => {
     // item esta en el sidebar en TODAS las rutas, asi que buscarlo daria verde
     // aunque el redirect no existiera.
     expect(await screen.findByRole('heading', { name: 'Agenda' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Qué hay que hacer' }))
+    expect(screen.queryByRole('heading', { name: 'Reclamos' }))
       .not.toBeInTheDocument()
+  })
+})
+
+// Decisión del humano (2026-09-16): se saca el Dashboard del producto. La ruta
+// vieja no desaparece —quedó linkeada en favoritos y en el wiki— y el ítem de
+// menú tampoco puede reaparecer si el backend todavía manda el módulo
+// `dashboard` prendido (una instancia vieja, o una que no se reconfiguró).
+describe('el Dashboard se saco del producto', () => {
+  it('/dashboard redirige a /reclamos', async () => {
+    conSesion()
+    montar('/dashboard')
+    expect(await screen.findByRole('heading', { name: 'Reclamos' })).toBeInTheDocument()
+  })
+
+  it('el menu no tiene ningun link a /dashboard, aun con el modulo habilitado', async () => {
+    // `conSesion()` ya declara 'dashboard' en `modulos` (linea de arriba en
+    // este archivo) -- el modulo puede seguir prendido en el backend porque
+    // sigue gateando `/api/dashboard/cliente/{id}` y `/api/dashboard/equipo/{id}`
+    // (ver ClienteDetalle.tsx y EquipoDetalle.tsx), pero eso ya no tiene que
+    // producir un item de menu: el Dashboard como pantalla no existe mas.
+    conSesion()
+    montar('/reclamos')
+    await screen.findAllByRole('link', { name: 'Reclamos' })
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+    expect(hrefs).not.toContain('/dashboard')
+    expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
   })
 })
 

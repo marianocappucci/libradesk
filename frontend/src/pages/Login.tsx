@@ -5,7 +5,9 @@ import { LOGO, WORDMARK } from '@/branding'
 export const Login = createLogin({
   productName: 'LibraDesk',
   productInitial: 'L',
-  redirectTo: '/dashboard',
+  // Se saco el Dashboard (decision del humano, 2026-09-16): tras el login se
+  // entra directo a Reclamos.
+  redirectTo: '/reclamos',
   // El logo y el nombre en Montserrat Bold (libra-ui v0.23.0). `productInitial`
   // sigue arriba porque es el fallback del motor: si algun dia el asset no
   // resuelve, la pantalla muestra la "L" en vez de un hueco.
