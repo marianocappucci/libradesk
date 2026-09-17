@@ -98,11 +98,20 @@ configure(
     # que no tiene la `alembic_version` del motor al lado de la propia.
     # Gestiolibra y MedLibra usan `libragenda.sqlalchemy_repository` y por eso
     # declaran `libragenda-migrar upgrade` primero.
+    # 🔴 **`alembic` va PRIMERO** (2026-09-17). Sobre una base VACIA el orden
+    # anterior —libracommerce, libraauth, alembic— moria con `DuplicateTable:
+    # relation "actividad_log" already exists`: `libracommerce-migrar` la crea con
+    # `CREATE TABLE IF NOT EXISTS` (`libracommerce/db/auditoria.py`) y la revision
+    # `0010_log_de_actividad` de este repo la crea sin `IF NOT EXISTS`. Al reves no
+    # choca. Sobre las instancias vivas el orden no cambia nada: las tres cadenas
+    # estan en su cabeza. Lo que se rompia era **el alta de un cliente nuevo** (y
+    # cualquier base de cero), desde que se declaro libracommerce el 2026-09-06.
+    # Que `actividad_log` tenga dos duenos es un pendiente de libracommerce.
     migraciones=(
+        ("alembic", "upgrade", "head"),
         ("libracommerce-migrar", "upgrade", "--prefijo", "libradesk"),
         # libraauth: sus seis tablas viven en la base del dominio (medido 2026-09-16), por eso --base dominio.
         ("libraauth-migrar", "upgrade", "--prefijo", "libradesk", "--base", "dominio"),
-        ("alembic", "upgrade", "head"),
     ),
     product_name="LIBRADESK",
     image_name="libradesk:latest",
