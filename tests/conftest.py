@@ -274,7 +274,7 @@ def data_dir(_plantilla, tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def url_de_base(request, _plantilla) -> str:
+def url_de_base(request, _plantilla, data_dir, monkeypatch) -> str:
     """La base propia del test: una PostgreSQL nueva, copiada de la plantilla.
 
     Antes devolvía `None` en modo SQLite, para que `construir_app` armara una
@@ -298,6 +298,13 @@ def url_de_base(request, _plantilla) -> str:
         f'CREATE DATABASE "{nombre}" TEMPLATE "{_PLANTILLA_PG}"',
     )
 
+    # 🔴 **La URL de la base del test va también al entorno**, como en una
+    # instancia real. La app la recibe por parámetro, pero el restore de
+    # LibraCore (v1.106.1) reescribe las variables de entorno para migrar la
+    # base temporal, y frena si ninguna nombra la base: sin variable, la cadena
+    # correría contra otra cosa. Pide `data_dir` para correr DESPUÉS de él, que
+    # borra `DATABASE_URL` para que no se cuele la de la máquina.
+    monkeypatch.setenv("DATABASE_URL", _url_de(nombre))
     yield _url_de(nombre)
 
     # Cerrar ANTES de borrar: una base con conexiones vivas no se puede
