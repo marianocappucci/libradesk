@@ -231,6 +231,12 @@ def _plantilla(tmp_path_factory) -> Path:
                 f'DROP DATABASE IF EXISTS "{_PLANTILLA_PG}"',
                 f'CREATE DATABASE "{_PLANTILLA_PG}"',
             )
+            # Desde libraauth v0.45 el arranque exige la cadena de auth en vez de
+            # crear sus tablas: la plantilla la corre antes de construir la app, y
+            # cada base por test la hereda por `TEMPLATE`.
+            from libraauth.testing import crear_schema_de_auth
+
+            crear_schema_de_auth(_url_de(_PLANTILLA_PG))
             construir_app(destino, _url_de(_PLANTILLA_PG))
             _soltar_conexiones()
         else:

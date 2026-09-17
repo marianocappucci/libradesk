@@ -15,7 +15,7 @@ from libraauth.auditoria import (
 from libraauth.auth_events import AuthEventRepository
 from libraauth.bootstrap import ensure_demo_user
 from libraauth.demo_codigos import DemoCodigoRepository
-from libraauth.models import Base as AuthBase
+from libraauth.migrar import exigir_schema_al_dia
 from libraauth.password_reset import PasswordResetService
 from libraauth.repository import UserRepository
 from libraauth.session_auth import (
@@ -139,9 +139,13 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    Una base anterior a Alembic se adopta sola en el primer arranque; ver
     #    app/schema.py.
     schema.ensure_schema(engine)
-    # 2. `libraauth` (tabla `usuarios`) sigue con `create_all()`: su schema lo
-    #    versiona el motor, no este producto.
-    AuthBase.metadata.create_all(engine)
+    # 2. `libraauth` (tabla `usuarios`): su schema lo versiona el motor, con su
+    #    propia cadena (`libraauth-migrar upgrade --prefijo libradesk --base
+    #    dominio`, declarada en `scripts/panel_admin.py`). Desde libraauth v0.45
+    #    (2026-09-17) el arranque la EXIGE en vez de crear las tablas: si no corrió,
+    #    la app no levanta y el error dice el comando. Tiene que ir antes del paso
+    #    3, cuyas tablas declaran FK a `usuarios`.
+    exigir_schema_al_dia(engine, prefijo="libradesk", base="dominio")
 
     # 3. `libracore.db` en sqlite3 crudo, para reusar el dominio de remitos/
     #    presupuestos tal cual. Va ultimo a proposito — `remitos`/`presupuestos`
@@ -580,7 +584,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
                 nombre="libradesk",
                 # Una sola base: a diferencia de Gestiolibra, MedLibra y
                 # VentaLibra, aca `usuarios` vive en el MISMO archivo que el
-                # dominio (`AuthBase.metadata.create_all(engine)`, arriba).
+                # dominio (la cadena de libraauth, exigida arriba).
                 bases=(
                     [] if _es_postgres(database_url)
                     else [make_url(database_url).database]
