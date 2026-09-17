@@ -154,6 +154,11 @@ def app_arriba(tmp_path_factory):
     base = "ld_healthcheck_contenedor"
     _sql_admin(f'DROP DATABASE IF EXISTS "{base}"', f'CREATE DATABASE "{base}"')
     os.environ["DATABASE_URL"] = _url_de(base)
+    # El arranque exige la cadena de auth (libraauth v0.45) en vez de crear las
+    # tablas, y esta base no sale de la plantilla: se la corre acá.
+    from libraauth.testing import crear_schema_de_auth
+
+    crear_schema_de_auth(_url_de(base))
 
     sys.modules.pop("app.asgi", None)
     asgi = importlib.import_module("app.asgi")

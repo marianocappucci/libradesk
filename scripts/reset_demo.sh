@@ -81,29 +81,71 @@ URL_BASE=$(docker exec "$CONTENEDOR" sh -c 'echo "${DATABASE_URL:-}"')
 
 if [ -n "$URL_BASE" ]; then
   log "backend PostgreSQL detectado"
-  # Se vacia el SCHEMA, no la base: borrar la base pide desconectar a todos y
-  # el contenedor de la app esta conectado. El arranque la reconstruye entera
-  # -- `create_app()` corre Alembic y los create_all -- que es exactamente el
-  # mismo camino que ya se usaba con SQLite.
-  docker exec "$CONTENEDOR" sh -c '
-    python3 - <<PY
-import os, psycopg
-url = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
-with psycopg.connect(url, autocommit=True) as c:
-    c.execute("DROP SCHEMA public CASCADE")
-    c.execute("CREATE SCHEMA public")
-print("schema public recreado")
-PY
-  '
+  # Se vacia el SCHEMA, no la base: borrar la base pide desconectar a todos.
+  # 🔴 Hasta el 2026-09-17 el ARRANQUE reconstruia todo (`create_app()` corre
+  # Alembic del dominio y el `create_all` de auth). Desde que el arranque exige
+  # la cadena de LibraAuth en vez de crearla, se migra ANTES de arrancar, con
+  # las cadenas declaradas y la app parada -- el patron de los otros productos.
+  SIDECAR=${URL_BASE#*@}; SIDECAR=${SIDECAR%%:*}; SIDECAR=${SIDECAR%%/*}
+  BASE=${URL_BASE##*/}; BASE=${BASE%%\?*}
+  docker ps --format '{{.Names}}' | grep -qx "$SIDECAR" \
+    || { log "ABORTA: el sidecar '$SIDECAR' no esta corriendo."; exit 10; }
+  # La app se para ANTES del DROP: con conexiones abiertas el `DROP SCHEMA`
+  # queda esperando un lock (le paso a LibraCargo: veinte minutos en silencio).
+  docker stop "$CONTENEDOR" >/dev/null
+  log "app parada para soltar las conexiones"
+  docker exec -e BASE="$BASE" "$SIDECAR" sh -c '
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$BASE" \
+      -c "DROP SCHEMA IF EXISTS public CASCADE" \
+      -c "CREATE SCHEMA public" \
+      -c "GRANT ALL ON SCHEMA public TO \"$POSTGRES_USER\""
+  ' >/dev/null || { log "ABORTA: no se pudo recrear el schema."; docker start "$CONTENEDOR" >/dev/null; exit 10; }
   log "base PostgreSQL vaciada"
+# Las migraciones que corresponden a ESTA demo: las que declara
+# `scripts/panel_admin.py` **en el commit de la imagen que corre** (label
+# `org.libra.commit`), leídas con `libracore.provisioning.migraciones_de_la_imagen`
+# (libracore v1.105.0). No las del checkout: el checkout está en `develop` y la
+# demo corre la imagen de `main` -- es el defecto que se cerró en `actualizar`
+# el 2026-09-16. Corren con la app PARADA y en un contenedor efímero, igual que
+# el deploy. Desde el 2026-09-17 el arranque ya no crea las tablas de auth
+# (`exigir_schema_al_dia`): sin este paso la demo no levantaría.
+IMAGEN=$(docker inspect --format '{{.Config.Image}}' "$CONTENEDOR")
+CADENAS=$("$REPO/.venv-scripts/bin/python" - "$REPO" "$IMAGEN" <<'PY' || true
+import sys
+from pathlib import Path
+from libracore.provisioning import SCRIPT_DEL_PANEL, migraciones_de_la_imagen
+migraciones, commit = migraciones_de_la_imagen(Path(sys.argv[1]), sys.argv[2], script=SCRIPT_DEL_PANEL)
+print("\n".join(" ".join(c) for c in migraciones))
+PY
+)
+if [ -z "${CADENAS:-}" ]; then
+  log "ABORTA: no se pudieron leer las migraciones de la imagen $IMAGEN."
+  docker start "$CONTENEDOR" >/dev/null
+  exit 11
+fi
+COMPOSE="$REPO/clientes/demo/docker-compose.yml"
+[ -f "$COMPOSE" ] || { log "ABORTA: no encontre $COMPOSE."; docker start "$CONTENEDOR" >/dev/null; exit 11; }
+while IFS= read -r cmd; do
+  [ -z "$cmd" ] && continue
+  log "migraciones: $cmd"
+  # `-T` y `</dev/null`: sin ellos `compose run` abre una TTY y se come el resto
+  # del heredoc que alimenta este `while` (medido en el reset de Contalibra).
+  # shellcheck disable=SC2086 -- $cmd se splitea en argumentos a proposito.
+  docker compose -p "$CONTENEDOR" -f "$COMPOSE" run --rm -T "$CONTENEDOR" $cmd >/dev/null 2>&1 </dev/null \
+    || { log "ABORTA: fallo \`$cmd\`."; docker start "$CONTENEDOR" >/dev/null; exit 11; }
+done <<CADENAS_EOF
+$CADENAS
+CADENAS_EOF
+
+  docker start "$CONTENEDOR" >/dev/null
 else
   # Se borran tambien los `-wal` y `-shm`: sin eso SQLite puede reconstruir
   # parte de lo borrado desde el journal, y el reset queda a medias.
   docker exec "$CONTENEDOR" sh -c 'rm -f /app/data/*.db /app/data/*.db-wal /app/data/*.db-shm'
   log "base SQLite borrada"
+  docker restart "$CONTENEDOR" >/dev/null
 fi
 
-docker restart "$CONTENEDOR" >/dev/null
 for _ in $(seq 1 40); do
   estado=$(docker inspect -f '{{.State.Health.Status}}' "$CONTENEDOR" 2>/dev/null || echo starting)
   [ "$estado" = "healthy" ] && break

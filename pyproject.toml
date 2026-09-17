@@ -65,7 +65,7 @@ dependencies = [
     # Trae ademas la sesion de 8h con renovacion deslizante (ADR-017): llega
     # sola con este bump porque `app/auth.py` re-exporta las dependencias de
     # `libraauth.session_auth` sin envolverlas.
-    "libraauth[migrations] @ git+https://github.com/marianocappucci/libraauth.git@v0.44.0",
+    "libraauth[migrations] @ git+https://github.com/marianocappucci/libraauth.git@v0.45.1",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
