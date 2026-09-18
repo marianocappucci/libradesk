@@ -65,7 +65,7 @@ dependencies = [
     # Trae ademas la sesion de 8h con renovacion deslizante (ADR-017): llega
     # sola con este bump porque `app/auth.py` re-exporta las dependencias de
     # `libraauth.session_auth` sin envolverlas.
-    "libraauth[migrations] @ git+https://github.com/marianocappucci/libraauth.git@v0.45.1",
+    "libraauth[migrations] @ git+https://github.com/marianocappucci/libraauth.git@v0.46.0",
     # Remitos y presupuestos: se reusa el dominio completo de LibraCore
     # (libracore.db.remitos_presupuestos, ~20 funciones) y sus PDF
     # (RemitoPDF / PresupuestoPDF), en vez de escribir nada nuevo. Arrastra
@@ -194,7 +194,7 @@ dependencies = [
     # cuenta en cuenta corriente" terminaba en 202,2 mm en una hoja de 210.
     #
     # Es anterior a v1.37.0 y aquel arreglo no lo cubria.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.106.1",
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.108.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
