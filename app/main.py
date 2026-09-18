@@ -196,6 +196,18 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #    fallaría en la primera nueva.
 
     sessions = get_session_factory()
+
+    # Engancha `config_manager` al almacen cifrado de secretos de terceros y
+    # migra lo que `config.json` tenga en claro (ver `app/database.py`). Va
+    # ACA porque `sessions` recien se armo y es el mismo session factory que
+    # recibe `UserRepository` dos lineas abajo -- la base donde viven las
+    # tablas de libraauth. Y va DESPUES de `exigir_schema_al_dia(...)` (paso 2
+    # de mas arriba): la tabla `secretos_instancia` es de la revision `0002`
+    # de libraauth, y escribir antes de saber que existe convertiria un
+    # schema viejo en un 500 en vez del error que da ese chequeo.
+    database.enganchar_secretos()
+    database.migrar_secretos()
+
     user_repository = UserRepository(sessions)
     ensure_default_admin(user_repository)
     # Crea al visitante de la demo, **solo si esta instancia es una demo**: se

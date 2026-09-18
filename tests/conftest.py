@@ -397,6 +397,28 @@ def _sin_configuracion_de_facturacion_colgada():
     configurar_lectura(None)
 
 
+@pytest.fixture(autouse=True)
+def _sin_almacen_de_secretos_colgado():
+    """El almacen de secretos de `config_manager` no se filtra entre tests.
+
+    Mismo problema que el de arriba, con otro global: `create_app()` llama a
+    `config_manager.usar_almacen_de_secretos(...)` (libracore v1.108.0) con un
+    repositorio atado a la base de ESE test. Cuando `url_de_base` la dropea, el
+    almacen queda apuntando a una base que no existe, y el primer test posterior
+    que llame a `config_manager.load()` sin levantar su propia app —el informe
+    PDF lee el membrete de ahi— muere con un error de conexion que no tiene nada
+    que ver con lo que mide. Paso con dos tests de `test_informe_cliente.py`.
+
+    Antes y despues, por la misma razon que la fixture de arriba. Sin almacen,
+    `config_manager` lee el JSON, que es lo que esos tests esperan.
+    """
+    from libracore import config_manager
+
+    config_manager.usar_almacen_de_secretos(None)
+    yield
+    config_manager.usar_almacen_de_secretos(None)
+
+
 # ── Términos y Condiciones: aceptados para el resto de la suite ─────────────
 #
 # Desde libraauth v0.31.0 el motor corta con 403 **cualquier** llamada gateada
