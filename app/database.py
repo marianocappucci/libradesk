@@ -2,8 +2,12 @@
 por depender de libragenda) — un solo engine compartido por el
 dominio propio (clientes/equipos/incidencias/tecnicos/sectores) y por
 `libraauth` (tabla `usuarios`), ver `create_app()` en `main.py`."""
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
+_log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -12,6 +16,10 @@ class Base(DeclarativeBase):
 
 _engine = None
 _session_factory: sessionmaker | None = None
+#: El almacen cifrado de secretos de terceros (`mp_access_token`,
+#: `mp_webhook_secret`, `email_smtp_password`), una vez enganchado por
+#: `enganchar_secretos()`. `None` hasta que `create_app()` corre.
+_secretos = None
 
 
 def configure(database_url: str) -> None:
@@ -60,6 +68,67 @@ def get_engine():
 
 def get_session_factory() -> sessionmaker:
     return _session_factory
+
+
+# 🔴 Los secretos de terceros de `config.json` —el access token y la firma de
+# webhook de MercadoPago (LibraDesk no monta `mp_config_router`, pero
+# `config_manager` sí guarda esas claves por consistencia con el resto de la
+# familia) y la contraseña SMTP de presupuestos, resuelta por
+# `libracore.facturas_router.smtp_efectivo()`— dejan de vivir en texto plano
+# (libracore v1.108.0 + libraauth v0.46.0, 2026-09-17). Se enganchan ACA, justo
+# después de `_session_factory`, porque es el mismo session factory que recibe
+# `UserRepository` en `create_app()` — la base donde viven las tablas de
+# libraauth (tabla `usuarios`). La tabla `secretos_instancia` la crea la
+# revisión `0002` de la cadena de libraauth, no un `create_all`; por eso
+# `enganchar_secretos()`/`migrar_secretos()` se llaman en `create_app()`
+# DESPUÉS de `exigir_schema_al_dia(...)` (ver `main.py`), nunca antes.
+#
+# LibraCore no importa libraauth: recibe el almacén. Por eso el enganche es
+# del producto, que es el único que tiene los dos paquetes.
+def enganchar_secretos() -> None:
+    """Conecta `config_manager` al almacén cifrado. Idempotente: llamarla de
+    nuevo (cada `create_app()`, ej. en tests) sólo reemplaza el almacén por
+    uno que apunta al mismo session factory."""
+    global _secretos
+    from libraauth.secretos import SecretosRepository
+    from libracore import config_manager as _lc_config_manager
+
+    _secretos = SecretosRepository(_session_factory)
+    _lc_config_manager.usar_almacen_de_secretos(_secretos)
+
+
+def migrar_secretos() -> dict:
+    """Saca de `config.json` los secretos que quedaron en claro. Idempotente.
+
+    Corre en cada arranque (dentro de `create_app()`, después de
+    `enganchar_secretos()`), así que la migración de una instancia viva **es
+    su deploy**. Loguea NOMBRES de claves, nunca valores: un log con el
+    secreto lo muda del archivo a una superficie peor, porque los logs se
+    copian y se mandan.
+
+    Si cifrar falla, el `config.json` **no se toca** —la instancia sigue
+    mandando el mail con la credencial que tiene— y se loguea como error, que
+    es lo que después ve la sonda `auditar_secretos.py`.
+    """
+    from libracore import config_manager as _lc_config_manager
+
+    informe = _lc_config_manager.migrar_secretos_al_almacen()
+    if informe["migradas"]:
+        _log.warning(
+            "secretos movidos de config.json al almacen cifrado: %s",
+            ", ".join(informe["migradas"]),
+        )
+    if informe["ya_estaban"]:
+        _log.warning(
+            "config.json tenia una copia vieja de %s; se vacio (el almacen manda)",
+            ", ".join(informe["ya_estaban"]),
+        )
+    if informe["fallaron"]:
+        _log.error(
+            "no se pudieron cifrar y QUEDAN EN CLARO en config.json: %s",
+            ", ".join(f"{k} ({v})" for k, v in informe["fallaron"].items()),
+        )
+    return informe
 
 
 # ── módulos y add-ons: el contrato que espera el backoffice ─────────────────────
