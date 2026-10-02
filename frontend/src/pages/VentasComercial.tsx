@@ -986,7 +986,7 @@ function DetalleCuenta({ cliente, onCerrar, onCambio }: {
                 { clave: 'concepto', titulo: 'Concepto', render: (m) => m.concepto },
                 { clave: 'monto', titulo: 'Monto', ancho: '130px', alinear: 'derecha',
                   render: (m) => (
-                    <span className={m.tipo === 'debito' ? '' : 'text-emerald-600'}>
+                    <span className={m.tipo === 'debito' ? '' : 'text-exito'}>
                       {m.tipo === 'debito' ? '' : '−'}{pesos(m.monto)}
                     </span>
                   ) },
