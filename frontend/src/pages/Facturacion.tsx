@@ -416,7 +416,7 @@ export function Facturacion() {
               <p key={`${r.origen_id}-${r.estado}`} className="flex items-start gap-2">
                 {r.estado === 'error' || r.estado === 'no_facturable'
                   ? <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                  : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
+                  : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-exito" />}
                 <span>
                   <EstadoBadge estado={r.estado} destino={destinoNombre} />
                   {r.detalle ? <span className="ml-2 text-muted-foreground">{r.detalle}</span> : null}
