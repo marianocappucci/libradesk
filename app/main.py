@@ -34,11 +34,12 @@ from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 from libracore.smtp_router import build_smtp_probe_router
+from libracore.tema_router import build_tema_admin_router, build_tema_router
 from sqlalchemy.engine import make_url
 
 from . import database, schema
 from .auditoria import AUDITABLES
-from .auth import build_session_auth, require_admin, require_staff
+from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
 from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
 from .routers import (
@@ -578,6 +579,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # admin: un backup es una copia completa de los datos del cliente.
     app.include_router(build_empresa_router(), dependencies=staff_or_admin)
     app.include_router(build_empresa_admin_router(), dependencies=[Depends(require_admin)])
+
+    # El tema de la suite (libracore ADR-012, libra-ui ADR-007/008): los colores que el backoffice de la suite empuja a esta instancia. La
+    # lectura es PÚBLICA a propósito (el login también va con los colores de la suite y no expone nada sensible). La escritura es del admin O
+    # del token de servicio del backoffice: 🔴 con `require_admin` a secas el backoffice NO entraría (esa guarda no conoce el token).
+    app.include_router(build_tema_router())
+    app.include_router(build_tema_admin_router(), dependencies=[Depends(require_admin_o_servicio)])
     # Una sola variable para los dos routers: la copia externa sube lo que deja
     # el backup, y su enlace (credenciales de rclone, estado de la subida) vive
     # en la MISMA carpeta. Dos rutas escritas por separado divergen sin error.
