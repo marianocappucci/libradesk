@@ -22,4 +22,4 @@ export const LOGO = logoLibraDesk
  * preferible a que el wordmark cambie de color solo cuando alguien toque la
  * paleta.
  */
-export const WORDMARK = 'font-montserrat font-bold text-[#2d2d2d]'
+export const WORDMARK = 'font-montserrat font-bold text-[#2d2d2d] dark:text-neutral-100'
