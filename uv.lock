@@ -691,8 +691,8 @@ migrations = [
 
 [[package]]
 name = "libracore"
-version = "1.118.0"
-source = { git = "https://github.com/marianocappucci/libracore.git?rev=v1.118.0#d1977f1a881030249171e6738612c6dfd66ae223" }
+version = "1.123.0"
+source = { git = "https://github.com/marianocappucci/libracore.git?rev=v1.123.0#2afac1a607f0a9f357e119320b9739a84688f8c9" }
 dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
@@ -752,7 +752,7 @@ requires-dist = [
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "libraauth", extras = ["migrations"], git = "https://github.com/marianocappucci/libraauth.git?rev=v0.46.0" },
     { name = "libracommerce", extras = ["migrations"], git = "https://github.com/marianocappucci/libracommerce.git?rev=v0.16.4" },
-    { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.118.0" },
+    { name = "libracore", git = "https://github.com/marianocappucci/libracore.git?rev=v1.123.0" },
     { name = "libragenda", git = "https://github.com/marianocappucci/libragenda.git?rev=v0.11.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },

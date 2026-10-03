@@ -41,7 +41,7 @@ backend/prisma/migrations/
 .claude/
 
 # Instancias de cliente: datos, .env y compose propios (solo viven en el VPS)
-clientes/
+/clientes
 data-dev/
 data-compulibra/
 backup-*.tar.gz
