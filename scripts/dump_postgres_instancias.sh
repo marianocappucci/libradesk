@@ -25,8 +25,13 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 log "=== dump de instancias PostgreSQL ==="
 encontradas=0
 fallo=0
+revisadas=0
+CLIENTES="${CLIENTES_DIR:-${LIBRA_CLIENTES_DIR:-/root/libradesk/clientes}}"
 
-for dir in /root/libradesk/clientes/*/; do
+for dir in "$CLIENTES"/*/; do
+    # Sin instancias el glob no se expande y llega literal: se salta.
+    [ -d "$dir" ] || continue
+    revisadas=$((revisadas + 1))
     slug=$(basename "$dir")
     cont="libradesk-${slug}"
     docker ps --format '{{.Names}}' | grep -qx "$cont" || continue
@@ -77,6 +82,14 @@ for dir in /root/libradesk/clientes/*/; do
     docker exec "$cont" sh -c \
         "find /app/data -name 'postgres-*.dump' -mtime +${RETENCION_DIAS} -delete"
 done
+
+# Cero directorios iterados no es "nada que respaldar": es casi seguro un
+# CLIENTES_DIR mal apuntado (p. ej. tras mover los datos). Salir en 0 dejaria al
+# cron en verde sin haber respaldado nada.
+if [ "$revisadas" -eq 0 ]; then
+    echo "ERROR: no hay ninguna instancia en ${CLIENTES}/*/ — revisar CLIENTES_DIR." >&2
+    exit 1
+fi
 
 log "=== listo: ${encontradas} instancia(s) sobre PostgreSQL ==="
 if [ "$fallo" != "0" ]; then

@@ -101,6 +101,34 @@ def test_los_dos_scripts_configuran_LO_MISMO():
     assert not distintos, f"los dos scripts configuran distinto: {distintos}"
 
 
+@pytest.mark.parametrize("script", ["nuevo_cliente", "panel_admin"])
+def test_los_scripts_toman_clientes_dir_del_motor(script, monkeypatch, tmp_path):
+    """`CLIENTES_DIR` sale de `get_config().clientes_dir`, no de `REPO_ROOT / "clientes"`.
+
+    Es lo que deja mover `clientes/` fuera del árbol del repo con sólo
+    `LIBRA_CLIENTES_DIR` (libracore >= v1.123.0), sin que `nuevo_cliente.py` y
+    `panel_admin.py` —ni `libracore.admin.services`— vean directorios distintos.
+    Sin la variable el default es el de siempre: `<repo>/clientes`.
+    """
+    from libracore.provisioning import get_config
+
+    raiz = pathlib.Path(__file__).parent.parent.resolve()
+    modulo = f"scripts.{script}"
+
+    monkeypatch.delenv("LIBRA_CLIENTES_DIR", raising=False)
+    assert importlib.reload(importlib.import_module(modulo)).CLIENTES_DIR == raiz / "clientes"
+
+    monkeypatch.setenv("LIBRA_CLIENTES_DIR", str(tmp_path))
+    recargado = importlib.reload(importlib.import_module(modulo))
+    assert recargado.CLIENTES_DIR == tmp_path
+    assert get_config().clientes_dir == tmp_path
+
+    fuente = (raiz / "scripts" / f"{script}.py").read_text(encoding="utf-8")
+    assert 'REPO_ROOT / "clientes"' not in fuente, (
+        f"scripts/{script}.py recompone `REPO_ROOT / \"clientes\"` por su cuenta: "
+        "tiene que leer `get_config().clientes_dir`.")
+
+
 def _bloque_del_servicio_de_dev() -> str:
     """El bloque del servicio `*-dev` del compose del repo, como texto.
 
