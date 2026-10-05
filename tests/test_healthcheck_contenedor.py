@@ -187,6 +187,11 @@ def app_arriba(tmp_path_factory):
             os.environ[var] = valor
     if creado:
         shutil.rmtree(dist, ignore_errors=True)
+    # La base del módulo también: con nombre fijo, quedaba en el servidor después de cada corrida (así apareció
+    # `ld_healthcheck_contenedor` en `libradesk-demo-db`, dos meses después de la corrida que la dejó).
+    from conftest import _borrar_base
+
+    _borrar_base(base)
 
 
 def test_la_spa_contesta_200_en_cualquier_ruta(app_arriba):
