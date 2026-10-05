@@ -111,10 +111,18 @@ def test_crear_listar_y_restaurar(client):
     r = client.post("/api/config/restore",
                     files={"backup_file": ("b.zip", zip_bytes, "application/zip")})
     assert r.status_code == 200, r.text
+    # El restore del motor conserva la base de antes (`<base>_antes_restore…`) para poder volver: en una
+    # instancia es la red de seguridad, en el test es una base más que quedaría en el servidor.
+    from conftest import _borrar_base
 
-    nombres = [c["nombre"] for c in client.get("/api/clientes").json()]
-    assert "Antes del backup" in nombres
-    assert "Después del backup" not in nombres
+    anteriores = r.json().get("antes_restore") or []
+    try:
+        nombres = [c["nombre"] for c in client.get("/api/clientes").json()]
+        assert "Antes del backup" in nombres
+        assert "Después del backup" not in nombres
+    finally:
+        for base in anteriores:
+            _borrar_base(base)
 
 
 # ── Empresa y logo ────────────────────────────────────────────────────────
