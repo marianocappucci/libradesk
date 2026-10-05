@@ -43,3 +43,12 @@ data-compulibra
 
 # Scratch
 scripts_temp
+
+# Lo que NO tiene que entrar a ninguna imagen: el checkout del servidor guarda datos de
+# clientes reales (`clientes/<slug>/data`) y sus respaldos. Medido el 2026-10-02: la imagen
+# de dev llevaba `clientes/compulibra` y los `compulibra_backup_*.tar.gz` adentro.
+clientes/
+*_backup*
+*.tar.gz
+*.bak*
+*.dump
