@@ -106,6 +106,27 @@ _NOMBRES_AJENOS = set(_TABLAS_AJENAS) | _TABLAS_AJENAS_YA_CREADAS
 
 # --- helpers -----------------------------------------------------------------
 
+#: Las bases que creó `_engine` en el test en curso, con su engine: las borra `_borrar_las_bases_del_test`.
+_CREADAS: list[tuple[str, object]] = []
+
+
+@pytest.fixture(autouse=True)
+def _borrar_las_bases_del_test():
+    """Cada base que crea `_engine` se borra al terminar el test, pase lo que pase.
+
+    🔴 Antes no se borraban: sólo un `DROP IF EXISTS` antes de crear. En el CI no se nota (el servidor se
+    descarta), pero el 2026-08-12 la suite corrió contra `libradesk-demo-db` y dejó 13 bases `lda_*` que
+    nadie vio durante dos meses. Ahora además el conftest se niega a correr contra una instancia.
+    """
+    from conftest import _borrar_base
+
+    yield
+    while _CREADAS:
+        base, engine = _CREADAS.pop()
+        engine.dispose()
+        _borrar_base(base)
+
+
 def _engine(tmp_path, nombre="libradesk"):
     """Una PostgreSQL vacia por llamada.
 
@@ -122,7 +143,9 @@ def _engine(tmp_path, nombre="libradesk"):
     crudo = re.sub(r"[^a-z0-9_]", "_", f"{tmp_path.name}_{nombre}".lower())
     base = f"lda_{zlib.crc32(crudo.encode()):08x}_{crudo[-28:]}"[:60]
     _sql_admin(f'DROP DATABASE IF EXISTS "{base}"', f'CREATE DATABASE "{base}"')
-    return create_engine(_url_de(base))
+    engine = create_engine(_url_de(base))
+    _CREADAS.append((base, engine))
+    return engine
 
 
 def _upgrade(engine, hasta="head") -> None:

@@ -136,6 +136,29 @@ if not _SUITE_PG_URL:
     )
 
 
+def _es_postgres_de_instancia(url: str) -> bool:
+    """Si la URL apunta al PostgreSQL de una instancia de LibraDesk (dev, demo o un cliente).
+
+    Todos los sidecars se llaman `libradesk-…` (`libradesk-postgres`, `libradesk-demo-db`,
+    `libradesk-compulibra-db`, `libradesk-lagrace-postgres`); el CI y una máquina local usan `localhost`.
+    """
+    from sqlalchemy.engine import make_url
+
+    return (make_url(url).host or "").startswith("libradesk-")
+
+
+# 🔴 **La suite crea y borra bases en el servidor de esta URL**: una plantilla por worker, una base por test y
+# las de `test_alembic`. El 2026-08-12 se corrió apuntada a `libradesk-demo-db` y dejó 18 bases en el servidor
+# de la demo —una con datos reales de un cliente de La Grace— que se encontraron recién el 2026-10-05. Contra el
+# PostgreSQL de una instancia no se corre: se levanta uno descartable.
+if _es_postgres_de_instancia(_SUITE_PG_URL):
+    raise RuntimeError(
+        "LIBRADESK_SUITE_POSTGRES_URL apunta al PostgreSQL de una instancia "
+        f"({_SUITE_PG_URL.split('@')[-1]}): la suite crea y borra bases en ese servidor. "
+        "Usá uno descartable (el CI usa localhost)."
+    )
+
+
 # 🔴 `str(url)` de SQLAlchemy ENMASCARA la contraseña como `***`, así que una
 # URL reconstruida con `str()` falla con "password authentication failed" —
 # que se lee como un problema de credenciales y es un problema de renderizado.
@@ -171,6 +194,20 @@ def _sql_admin(*sentencias: str) -> None:
     with psycopg.connect(_url_admin(), autocommit=True) as conn:
         for sentencia in sentencias:
             conn.execute(sentencia)
+
+
+def _borrar_base(nombre: str) -> None:
+    """Borra una base que creó un test, **y verifica que ya no esté**.
+
+    `WITH (FORCE)` (PostgreSQL 13+) corta las conexiones que hayan quedado —un engine sin `dispose()`—: sin eso el
+    `DROP` falla con `ObjectInUse` y la base queda en el servidor, que es justo lo que esto existe para evitar.
+    """
+    import psycopg
+
+    _sql_admin(f'DROP DATABASE IF EXISTS "{nombre}" WITH (FORCE)')
+    with psycopg.connect(_url_admin(), autocommit=True) as conn:
+        quedo = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (nombre,)).fetchone()
+    assert quedo is None, f"la base {nombre} sigue en el servidor después de borrarla"
 
 
 def _soltar_conexiones() -> None:

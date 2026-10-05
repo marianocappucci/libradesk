@@ -12,6 +12,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 ## [Sin versionar] — hitos por fecha
 
 ### 2026-10-05
+- **Corregido (tests):** la suite **ya no deja bases en el servidor** ni corre contra el PostgreSQL de una instancia. `test_alembic`, `test_healthcheck_contenedor` y el test del restore borran al terminar las bases que crean (`_borrar_base`, con `WITH (FORCE)` y verificando que no quede). El `conftest` **se niega a arrancar** si `LIBRADESK_SUITE_POSTGRES_URL` apunta a un host `libradesk-*` (los sidecars de dev, demo y clientes). Motivo: el 2026-08-12 la suite corrió contra `libradesk-demo-db` y dejó 18 bases, una con datos reales de un cliente de La Grace; se encontraron y borraron el 2026-10-05.
 - **Cambiado:** **libracore `v1.131.0`** (2026-10-05; antes `v1.127.0`). Trae la **nota de crédito parcial** con tope acumulado (v1.130.0: `{"importe": ...}` en `POST /api/facturas/{id}/nota-credito`; sin él, la total de siempre), la marca de cada nota en la cuenta corriente (v1.128.0), `build_nota_de_credito_router` (v1.129.0) y la nota total de una FCE frenada antes de ir a ARCA (v1.131.0). Cambia sólo `notas_de_credito` y `facturas_router`. Sin migración.
 
 ### 2026-09-10
