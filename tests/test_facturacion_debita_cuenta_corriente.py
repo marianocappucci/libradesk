@@ -125,7 +125,7 @@ def test_mandar_un_remito_a_facturar_lo_carga_en_la_cuenta_corriente(
 
 
 def test_el_debito_tambien_queda_en_el_libro_de_clientes(client, configurado):
-    """ADR-027 de LibraCore, en sombra: el libro del motor da lo mismo que el cálculo."""
+    """ADR-027 y ADR-029 de LibraCore: el débito queda en el libro, que es de donde se lee el saldo."""
     from libracore.db import libro_de_clientes
 
     cliente_id = _cliente_final(client)
@@ -136,7 +136,7 @@ def test_el_debito_tambien_queda_en_el_libro_de_clientes(client, configurado):
     assert r.status_code == 200, r.text
 
     assert libro_de_clientes.saldos_del_libro() == {cliente_id: TOTAL_DEL_REMITO}
-    assert libro_de_clientes.comparar() == []
+    assert _saldo(cliente_id) == TOTAL_DEL_REMITO
 
 
 def test_el_movimiento_dice_de_que_comprobante_salio(client, configurado):
