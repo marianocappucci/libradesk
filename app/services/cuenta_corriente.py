@@ -33,6 +33,7 @@ from __future__ import annotations
 from functools import partial
 
 from libracore.db import cuenta_corriente as _cc
+from libracore.db import libro_de_clientes
 from libracore.db.core import get_connection
 
 # Estas no dependen del origen de las ventas: se reexportan tal cual.
@@ -44,6 +45,11 @@ from libracore.db.cuenta_corriente import (  # noqa: F401
     delete_cc_pago,
     get_cc_pago,
 )
+
+# El libro de clientes del motor (ADR-027 de LibraCore, en sombra) asienta las
+# ventas fiadas desde el mismo origen. LibraDesk no monta
+# `build_cuenta_corriente_router`, que es el que lo registra solo.
+libro_de_clientes.registrar_origen_de_ventas(VENTAS_LIBRACOMMERCE)
 
 saldo = partial(_cc.get_cc_saldo, origen=VENTAS_LIBRACOMMERCE)
 movimientos = partial(_cc.get_cc_movimientos, origen=VENTAS_LIBRACOMMERCE)

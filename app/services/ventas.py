@@ -65,6 +65,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base, get_session_factory
 from . import comercial, iva
+# Desde el servicio de cuenta corriente, que registra el origen de las ventas
+# (`sales`) para el libro de clientes del motor.
+from .cuenta_corriente import libro_de_clientes
 from .fecha import ahora as _ahora
 
 #: Como se cobro. `cuenta_corriente` es el unico que genera deuda; los demas
@@ -354,12 +357,15 @@ def crear(cliente_id: int | None, items: list[dict], pagos: list[dict], *,
                     validar_stock=False,
                 )
                 for p in pagos:
-                    conn.execute(
+                    cur = conn.execute(
                         "INSERT INTO ventas_pagos (venta_id, medio, monto, referencia) "
                         "VALUES (?,?,?,?)",
                         (venta.id, p["medio"], float(p["monto"]),
                          p.get("referencia", "")),
                     )
+                    # La venta fiada va al libro de clientes del motor, en esta
+                    # transaccion (ADR-027 de LibraCore).
+                    libro_de_clientes.al_libro_venta_pago(conn, cur.lastrowid, p["medio"])
         except StockInsuficienteError as e:
             raise ValueError(
                 f"Stock insuficiente en el deposito (disponible: {float(e.disponible)})."
