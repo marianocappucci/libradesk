@@ -242,6 +242,30 @@ CREATE TABLE IF NOT EXISTS cc_debitos (
     created_at  TEXT DEFAULT (datetime('now','-3 hours'))
 );
 
+-- El libro de cuenta corriente de terceros del motor (ADR-026 y ADR-027 de
+-- LibraCore): ahi se asienta, en sombra, la cuenta corriente de clientes.
+CREATE TABLE IF NOT EXISTS cc_asientos (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha            TEXT NOT NULL,
+    tercero_id       INTEGER NOT NULL,
+    rol              TEXT NOT NULL CHECK (rol <> ''),
+    concepto         TEXT NOT NULL,
+    descripcion      TEXT,
+    debe             REAL NOT NULL DEFAULT 0,
+    haber            REAL NOT NULL DEFAULT 0,
+    factura_id       INTEGER REFERENCES facturas(id) ON DELETE RESTRICT,
+    contrapartida_de INTEGER REFERENCES cc_asientos(id) ON DELETE RESTRICT,
+    origen_legado    TEXT,
+    usuario_id       INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at       TEXT DEFAULT (datetime('now','-3 hours')),
+    origen           TEXT,
+    CHECK (debe >= 0 AND haber >= 0),
+    CHECK ((debe > 0 AND haber = 0) OR (haber > 0 AND debe = 0)
+           OR origen_legado IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_cc_asientos_cuenta ON cc_asientos(tercero_id, rol, fecha);
+CREATE INDEX IF NOT EXISTS idx_cc_asientos_origen ON cc_asientos(origen) WHERE origen IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     cliente_id    INTEGER NOT NULL,

@@ -124,6 +124,21 @@ def test_mandar_un_remito_a_facturar_lo_carga_en_la_cuenta_corriente(
     assert _saldo(cliente_id) == TOTAL_DEL_REMITO
 
 
+def test_el_debito_tambien_queda_en_el_libro_de_clientes(client, configurado):
+    """ADR-027 de LibraCore, en sombra: el libro del motor da lo mismo que el cálculo."""
+    from libracore.db import libro_de_clientes
+
+    cliente_id = _cliente_final(client)
+    remito = _remito(client, cliente_id)
+    _con_puente_falso(client, ClienteFalso())
+    r = client.post("/api/facturacion/enviar",
+                    json={"origen_tipo": "remito", "ids": [remito["id"]]})
+    assert r.status_code == 200, r.text
+
+    assert libro_de_clientes.saldos_del_libro() == {cliente_id: TOTAL_DEL_REMITO}
+    assert libro_de_clientes.comparar() == []
+
+
 def test_el_movimiento_dice_de_que_comprobante_salio(client, configurado):
     """El saldo sin el porqué no sirve: quien lo mira tiene que poder rastrear
     cada peso hasta su comprobante."""
