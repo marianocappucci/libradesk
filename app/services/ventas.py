@@ -65,6 +65,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base, get_session_factory
 from . import comercial, iva
+
 # Desde el servicio de cuenta corriente, que registra el origen de las ventas
 # (`sales`) para el libro de clientes del motor.
 from .cuenta_corriente import libro_de_clientes
