@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
-import { Receipt } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/components/comprobante-form'
@@ -51,6 +51,8 @@ type Props = {
 
 const RUTA = { remito: '/remitos', presupuesto: '/presupuestos' } as const
 const TITULO = { remito: 'Remito', presupuesto: 'Presupuesto' } as const
+// El ícono del título es el del catálogo para ese comprobante (libra-ui ADR-035): era `Receipt`, que es el de los comprobantes emitidos.
+const ICONO = { remito: ICONOS.remitos, presupuesto: ICONOS.presupuestos } as const
 
 export function ComprobanteDetalle({
   tipo, comprobante: c, datosExtra, insignia, accionesEncabezado, acciones,
@@ -70,7 +72,7 @@ export function ComprobanteDetalle({
       <EncabezadoDePantalla
         titulo={
           <>
-            <TituloPantalla icono={Receipt}>
+            <TituloPantalla icono={ICONO[tipo]}>
               {TITULO[tipo]} <span className="font-mono">{c.number}</span>
             </TituloPantalla>
             {insignia}

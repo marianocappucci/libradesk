@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { MapPin, Monitor, Users } from 'lucide-react'
+import { MapPin, Monitor } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { fecha } from '@/lib/format'
 import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
@@ -214,7 +215,7 @@ export function ClienteDetalle() {
       <EncabezadoDePantalla
         titulo={
           <div>
-            <TituloPantalla icono={Users}>
+            <TituloPantalla icono={ICONOS.clientes}>
               {cliente.nombre}
               {!cliente.activo && <BadgeEstado tono="neutro">Inactivo</BadgeEstado>}
             </TituloPantalla>

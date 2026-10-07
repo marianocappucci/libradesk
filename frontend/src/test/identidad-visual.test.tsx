@@ -57,13 +57,14 @@ function marcaDelEncabezado() {
   return screen.getByRole('img', { name: 'LibraDesk' })
 }
 
-/** El color de marca de LibraDesk en `libra-ui/identidad`. La marca la pinta en `style`, no en una clase. */
+/** El color de marca de LibraDesk en `libra-ui/identidad`. Desde libra-ui v0.124.0 (ADR-034) la marca es un SVG propio: el color es el `fill` del
+ *  primer `<rect>` (el cuadrado de fondo), ya no un `style` del contenedor. */
 function esLaMarcaDeLibraDesk(marca: HTMLElement) {
-  // No es una <img> con un asset: es un cuadrado con un icono SVG adentro.
+  // No es una <img> con un asset: es un SVG incrustado, con el cuadrado de su color y el dibujo propio encima.
   expect(marca.tagName).toBe('DIV')
   expect(marca).not.toHaveAttribute('src')
   expect(marca.querySelector('svg')).not.toBeNull()
-  expect(marca).toHaveStyle({ backgroundColor: '#4f46e5' })
+  expect(marca.querySelector('svg > rect')!.getAttribute('fill')).toBe('#4f46e5')
 }
 
 describe('el login', () => {
@@ -88,12 +89,12 @@ describe('el login', () => {
     expect(nombre.className).not.toContain('text-xl')
   })
 
-  it('la marca mide 40 px', async () => {
+  it('la marca mide 48 px', async () => {
     sinSesion()
     montar('/login')
     await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeInTheDocument())
-    // `Login` la dibuja a `h-10 w-10`; el default del cuadrado (32 px) tiene que haber PERDIDO el merge.
-    expect(marcaDelEncabezado().className).toContain('h-10')
+    // `Login` la dibuja a `h-12 w-12` (libra-ui v0.124.0: antes `h-10`); el default del cuadrado (32 px) tiene que haber PERDIDO el merge.
+    expect(marcaDelEncabezado().className).toContain('h-12')
     expect(marcaDelEncabezado().className).not.toContain('h-8')
   })
 })
