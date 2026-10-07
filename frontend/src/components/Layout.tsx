@@ -54,7 +54,7 @@ import {
 } from 'lucide-react'
 import { createLayout } from 'libra-ui/Layout'
 import { SelectorDeSucursal } from '@/components/sucursal'
-import { LOGO, WORDMARK } from '@/branding'
+import { WORDMARK } from '@/branding'
 
 /* El TILE del sidebar abarca el ítem entero —icono y texto—, y marca la sección
  * elegida. Pedido del humano el 2026-08-14, cambiando la primera versión, que le
@@ -93,27 +93,18 @@ export function enModoSimple(u: unknown): boolean {
 export const Layout = createLayout({
   productName: 'LibraDesk',
   productInitial: 'L',
-  // El logo y el nombre en Montserrat Bold (libra-ui v0.23.0). Las clases
-  // salen de `@/branding`, el mismo archivo que usa el login: es lo que
-  // garantiza que las dos pantallas escriban "LibraDesk" igual.
-  //
-  // 36 px es eleccion del humano (2026-08-16). El override de colapsado NO es
-  // decorativo: con la sidebar en modo icono el ancho util son 32 px, y sin
-  // bajarlo el logo se sale de la barra.
-  logo: {
-    src: LOGO,
-    className: 'h-9 w-9 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8',
-  },
-  // 🔴 El interlineado va PEGADO al tamano (`/[21px]`) y no como `leading-*`
+  // La marca (el icono de LibraDesk sobre un cuadrado de su color, libra-ui ADR-033) y el nombre en Montserrat Bold. Las clases del nombre
+  // salen de `@/branding`, el mismo archivo que usa el login: es lo que garantiza que las dos pantallas escriban "LibraDesk" igual.
+  // `MarcaProducto` ya viene con `h-8 w-8 shrink-0`, que es lo que cabe en la sidebar colapsada (32 px): no hace falta ningun override.
+  producto: 'libradesk',
+  // 🔴 El interlineado va PEGADO al tamano (`/[17px]`) y no como `leading-*`
   // aparte. En Tailwind v4 una utilidad de tamano emite tambien `line-height`,
   // asi que el `leading-none` que libra-ui pone por defecto pierde contra este
-  // `text-[15px]` y el nombre se queda con 22,5 px de caja. Medido en el
-  // navegador el 2026-08-16: con `leading-none` suelto el bloque daba 37,5
-  // contra los 36 del logo, y con esto da 36 exactos.
+  // `text-[15px]` y el nombre se queda con 22,5 px de caja.
   //
-  // 21 no es un numero magico: es 36 (el alto del logo) menos los 15 de la
+  // 17 no es un numero magico: es 32 (el alto de la marca) menos los 15 de la
   // linea de la empresa. Si cambia cualquiera de los dos, este cambia.
-  wordmarkClassName: `${WORDMARK} text-[15px]/[21px]`,
+  wordmarkClassName: `${WORDMARK} text-[15px]/[17px]`,
   navSections: [
     // El core del producto. No se gatea: un LibraDesk sin esto no es un plan
     // más barato, es otra cosa (ver `plans.py`).
