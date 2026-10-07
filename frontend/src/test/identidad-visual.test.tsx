@@ -1,8 +1,10 @@
-// La identidad de LibraDesk en las dos pantallas que la muestran: el logo y el
-// nombre en Montserrat Bold #2d2d2d. Pedido del humano el 2026-08-16.
+// La identidad de LibraDesk en las dos pantallas que la muestran: la marca (el
+// icono sobre un cuadrado de su color, libra-ui ADR-033) y el nombre en
+// Montserrat Bold #2d2d2d. Pedido del humano el 2026-08-16 (el nombre) y el
+// 2026-10-07 (la marca plana en lugar del logo ilustrado).
 //
-// El MECANISMO (que `logo` reemplace al box de la inicial, que `cn` mergee las
-// clases) esta cubierto por los 12 tests de libra-ui v0.23.0. Lo de aca es el
+// El MECANISMO (que `producto` reemplace al box de la inicial, que `cn` mergee las
+// clases) esta cubierto por los tests de libra-ui. Lo de aca es el
 // CABLEADO de este producto, que es lo que libra-ui no puede ver: que las dos
 // superficies lo pasen, y que lo pasen IGUAL.
 import { render, screen, waitFor } from '@testing-library/react'
@@ -50,20 +52,27 @@ function montar(ruta: string) {
   )
 }
 
-/** El logo del encabezado. En el login es la unica imagen; en el shell autenticado también. */
-function logoDelEncabezado() {
+/** La marca del encabezado. En el login es la unica con rol `img`; en el shell autenticado también. */
+function marcaDelEncabezado() {
   return screen.getByRole('img', { name: 'LibraDesk' })
 }
 
+/** El color de marca de LibraDesk en `libra-ui/identidad`. La marca la pinta en `style`, no en una clase. */
+function esLaMarcaDeLibraDesk(marca: HTMLElement) {
+  // No es una <img> con un asset: es un cuadrado con un icono SVG adentro.
+  expect(marca.tagName).toBe('DIV')
+  expect(marca).not.toHaveAttribute('src')
+  expect(marca.querySelector('svg')).not.toBeNull()
+  expect(marca).toHaveStyle({ backgroundColor: '#4f46e5' })
+}
+
 describe('el login', () => {
-  it('🔴 muestra el logo en lugar de la inicial', async () => {
+  it('🔴 muestra la marca del producto en lugar de la inicial', async () => {
     sinSesion()
     montar('/login')
     await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeInTheDocument())
-    // El asset lo hashea Vite, asi que se afirma el nombre base y no la ruta
-    // entera: fijar el hash haria fallar el test en cada rebuild.
-    expect(logoDelEncabezado()).toHaveAttribute('src', expect.stringContaining('logo-libradesk'))
-    // La contracara: si el logo no se hubiera pasado, libra-ui pintaria la "L".
+    esLaMarcaDeLibraDesk(marcaDelEncabezado())
+    // La contracara: si `producto` no se hubiera pasado, libra-ui pintaria la "L".
     expect(screen.queryByText('L')).not.toBeInTheDocument()
   })
 
@@ -79,41 +88,40 @@ describe('el login', () => {
     expect(nombre.className).not.toContain('text-xl')
   })
 
-  it('el logo mide 72 px', async () => {
+  it('la marca mide 40 px', async () => {
     sinSesion()
     montar('/login')
     await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeInTheDocument())
-    expect(logoDelEncabezado().className).toContain('h-[72px]')
-    expect(logoDelEncabezado().className).not.toContain('h-10')
+    // `Login` la dibuja a `h-10 w-10`; el default del cuadrado (32 px) tiene que haber PERDIDO el merge.
+    expect(marcaDelEncabezado().className).toContain('h-10')
+    expect(marcaDelEncabezado().className).not.toContain('h-8')
   })
 })
 
 describe('la sidebar', () => {
-  it('🔴 muestra el logo y el nombre con las mismas clases de marca', async () => {
+  it('🔴 muestra la marca y el nombre con las mismas clases de marca', async () => {
     // `/reclamos` y no `/dashboard`: el Dashboard se sacó del producto
     // (2026-09-16). Cualquier pantalla protegida real sirve para este test,
     // que mide el shell autenticado y no la pantalla en sí.
     conSesion()
     montar('/reclamos')
     await waitFor(() => expect(screen.getByText('Prueba')).toBeInTheDocument())
-    expect(logoDelEncabezado()).toHaveAttribute('src', expect.stringContaining('logo-libradesk'))
+    esLaMarcaDeLibraDesk(marcaDelEncabezado())
     const nombre = screen.getByText('LibraDesk')
     for (const clase of WORDMARK.split(' ')) expect(nombre.className).toContain(clase)
     expect(nombre.className).toContain('text-[15px]')
   })
 
-  it('🔴 el logo baja a 32 px cuando la sidebar se colapsa', async () => {
-    // Sin este override el logo de 36 px se sale de la barra de iconos, donde
-    // el ancho util son 32. No se puede medir renderizando: el estado colapsado
-    // lo pone un atributo del provider y jsdom no aplica Tailwind, asi que lo
-    // que se afirma es que la regla condicional este declarada.
+  it('🔴 la marca mide 32 px, que es lo que cabe cuando la sidebar se colapsa', async () => {
+    // Con la sidebar en modo icono el ancho util son 32 px. `MarcaProducto` ya viene con `h-8 w-8 shrink-0`, asi que no hace falta ningun
+    // override de colapsado (el logo de 36 px si lo necesitaba). No se puede medir renderizando: jsdom no aplica Tailwind.
     conSesion()
     montar('/reclamos')
     await waitFor(() => expect(screen.getByText('Prueba')).toBeInTheDocument())
-    const clases = logoDelEncabezado().className
-    expect(clases).toContain('h-9')
-    expect(clases).toContain('group-data-[collapsible=icon]:h-8')
-    expect(clases).toContain('group-data-[collapsible=icon]:w-8')
+    const clases = marcaDelEncabezado().className
+    expect(clases).toContain('h-8')
+    expect(clases).toContain('w-8')
+    expect(clases).toContain('shrink-0')
   })
 })
 
