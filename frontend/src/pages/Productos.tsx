@@ -21,7 +21,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Package as IconoProductos } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import {
   AlertTriangle, ArrowLeftRight, FilePlus, Pencil,
 } from '@/components/iconos-accion'
@@ -91,7 +91,7 @@ export function Productos() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Productos" icono={IconoProductos} error={error}
+    <Pagina titulo="Productos" icono={ICONOS.productos} error={error}
             acciones={<FormProducto categorias={categorias} onGuardar={conError} />}>
       <div className="flex items-center gap-3 flex-wrap">
         <Input placeholder="Buscar por nombre, código o categoría…"

@@ -21,7 +21,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { ReceiptText } from 'lucide-react'
+import { CalendarRange } from 'lucide-react'
 import { FilePlus, PackageCheck } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -315,7 +315,7 @@ export function Cuotas() {
   return (
     <div className="space-y-4">
       <EncabezadoDePantalla
-        titulo={<TituloPantalla icono={ReceiptText}>Cuotas de contratos</TituloPantalla>}
+        titulo={<TituloPantalla icono={CalendarRange}>Cuotas de contratos</TituloPantalla>}
       >
         <div className="flex items-end gap-2">
           <div className="grid gap-2">
@@ -534,7 +534,7 @@ export function Cuotas() {
             <>
               <DialogHeader>
                 <DialogTitle className="flex flex-wrap items-center gap-2">
-                  <ReceiptText className="size-4" />
+                  <CalendarRange className="size-4" />
                   {detalle.contrato_numero ?? `Contrato #${detalle.contrato_id}`}
                   <BadgeEstado tono={detalle.estado === 'anulada' ? 'negativo' : 'neutro'}>
                     {ESTADO_CUOTA_LABELS[detalle.estado] ?? detalle.estado}

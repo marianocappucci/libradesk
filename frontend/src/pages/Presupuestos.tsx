@@ -20,7 +20,7 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import { FileText } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { Download, FileCheck, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -294,7 +294,7 @@ export function Presupuestos() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={FileText}>Presupuestos</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ICONOS.presupuestos}>Presupuestos</TituloPantalla>}>
         {!editando && <Button onClick={startCreate}>+ Nuevo presupuesto</Button>}
       </EncabezadoDePantalla>
 

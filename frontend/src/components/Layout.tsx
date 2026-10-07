@@ -11,47 +11,32 @@
 // cliente) y "Recepción de mercadería" en Compras (entra stock de un
 // proveedor), aunque las dos sean "recepciones". Agruparlas juntas por el
 // nombre sería juntar dos cosas que nunca hace la misma persona.
-// Seis se importan con ALIAS de dominio (`Activos`, `DepositosStock`,
-// `EquiposFlota`, `ListasPrecio`, `OrdenesCompra`, `Productos`) porque el nombre
-// lucide no dice qué ítem del menú es. La regla que los ordena es que **dos
-// ítems del mismo menú no pueden compartir dibujo**: por eso Activos es
-// `Briefcase` y no la caja que ya usa Depósitos de stock, y Proveedores es
-// `Truck` y no un edificio que chocaría con Sucursales.
+// Lo que tiene concepto en el catálogo de la familia (libra-ui ADR-035) toma el
+// ícono de `ICONOS.<concepto>`: Clientes, Productos, Stock, Presupuestos, Remitos,
+// Egresos, Reportes… Lo propio de LibraDesk se importa con ALIAS de dominio
+// (`Activos`, `EquiposFlota`, `Cuotas`) porque el nombre lucide no dice qué ítem
+// del menú es. La regla que los ordena es que **dos ítems del mismo menú no
+// pueden compartir dibujo** —salvo los que son el mismo concepto del catálogo—:
+// por eso Activos es `Briefcase`, y Cuotas es `CalendarRange` y no `ReceiptText`,
+// que el catálogo le da a Recibos. `test/iconos-del-catalogo.test.ts` lo cuida.
 import {
   ArrowDownToLine,
-  Boxes as DepositosStock,
   Briefcase as Activos,
   Building2,
-  CalendarDays,
+  CalendarRange as Cuotas,
   Car as EquiposFlota,
   CircleAlert as AlertCircle,
   ClipboardCheck,
-  ClipboardList,
-  Coins,
   DollarSign,
   Droplets,
   FilePenLine as FileSignature,
-  FileSpreadsheet,
-  FileText,
   HardHat,
   Handshake,
-  MapPin,
   Monitor,
-  Package as Productos,
-  PackageSearch,
-  Receipt,
-  ReceiptText,
-  ScrollText,
   Send,
-  Settings,
-  ShoppingCart as OrdenesCompra,
-  Tags as ListasPrecio,
-  Truck,
-  UserCog,
-  Users,
-  Wallet,
   Wrench,
 } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { createLayout } from 'libra-ui/Layout'
 import { SelectorDeSucursal } from '@/components/sucursal'
 import { WORDMARK } from '@/branding'
@@ -121,7 +106,7 @@ export const Layout = createLayout({
         // `hideFor` y no `module`: la agenda no se vende por separado, así
         // que no es un módulo de plan. Lo que la esconde es el modo simple,
         // donde el día se arma con el papel de pendientes y no con la grilla.
-        { to: '/agenda', label: 'Agenda', icon: CalendarDays, hideFor: enModoSimple },
+        { to: '/agenda', label: 'Agenda', icon: ICONOS.agenda, hideFor: enModoSimple },
         // 🔴 **Una sola entrada desde el 2026-09-13** — decisión del humano:
         // LibraDesk pasa a decir "Reclamo/Reclamos" en TODAS las instancias, y
         // "Incidencia" deja de usarse en lo visible. Antes había dos ítems, uno
@@ -135,7 +120,7 @@ export const Layout = createLayout({
         // funcionando (no se rompen links guardados) pero ya no vive en el
         // menú.
         { to: '/reclamos', label: 'Reclamos', icon: AlertCircle },
-        { to: '/clientes', label: 'Clientes', icon: Users },
+        { to: '/clientes', label: 'Clientes', icon: ICONOS.clientes },
         { to: '/equipos', label: 'Equipos', icon: Monitor },
         // "Depósitos" a secas, y la desambiguación con los de stock la hace el
         // **grupo**: éste cuelga de Mesa de ayuda y el otro de Inventario, con
@@ -170,25 +155,25 @@ export const Layout = createLayout({
     {
       label: 'Inventario',
       items: [
-        { to: '/productos', label: 'Productos', icon: Productos, module: 'stock' },
-        { to: '/stock', label: 'Stock', icon: PackageSearch, module: 'stock' },
-        { to: '/depositos-stock', label: 'Depósitos de stock', icon: DepositosStock, module: 'stock' },
-        { to: '/listas-precio', label: 'Listas de precios', icon: ListasPrecio, module: 'cuenta_corriente' },
+        { to: '/productos', label: 'Productos', icon: ICONOS.productos, module: 'stock' },
+        { to: '/stock', label: 'Stock', icon: ICONOS.stock, module: 'stock' },
+        { to: '/depositos-stock', label: 'Depósitos de stock', icon: ICONOS.depositos, module: 'stock' },
+        { to: '/listas-precio', label: 'Listas de precios', icon: ICONOS.listasDePrecio, module: 'cuenta_corriente' },
       ],
     },
 
     {
       label: 'Compras',
       items: [
-        { to: '/ordenes-compra', label: 'Órdenes de compra', icon: OrdenesCompra, module: 'compras' },
+        { to: '/ordenes-compra', label: 'Órdenes de compra', icon: ICONOS.ordenesDeCompra, module: 'compras' },
         { to: '/recepciones-compra', label: 'Recepción de mercadería', icon: ArrowDownToLine, module: 'compras' },
-        { to: '/egresos', label: 'Egresos', icon: Wallet, module: 'compras' },
+        { to: '/egresos', label: 'Egresos', icon: ICONOS.egresos, module: 'compras' },
         // Proveedores vive en Compras y no en Configuración: es a quien se le
         // compra, y es donde lo busca quien carga una orden. Y tiene pantalla
         // propia — mientras apuntó a `/configuracion/proveedores`, entrar por
         // acá mostraba el título y el conmutador de Configuración, o sea la
         // pantalla de ajustes con el listado colgando al pie.
-        { to: '/proveedores', label: 'Proveedores', icon: Truck },
+        { to: '/proveedores', label: 'Proveedores', icon: ICONOS.proveedores },
       ],
     },
 
@@ -197,11 +182,11 @@ export const Layout = createLayout({
     {
       label: 'Ventas',
       items: [
-        { to: '/presupuestos', label: 'Presupuestos', icon: FileText, module: 'presupuestos' },
-        { to: '/remitos', label: 'Remitos', icon: Receipt, module: 'remitos' },
-        { to: '/ventas', label: 'Ventas', icon: ClipboardList, module: 'ventas' },
-        { to: '/recibos', label: 'Recibos', icon: Coins, module: 'ventas' },
-        { to: '/cuenta-corriente', label: 'Cuenta corriente', icon: Wallet, module: 'cuenta_corriente' },
+        { to: '/presupuestos', label: 'Presupuestos', icon: ICONOS.presupuestos, module: 'presupuestos' },
+        { to: '/remitos', label: 'Remitos', icon: ICONOS.remitos, module: 'remitos' },
+        { to: '/ventas', label: 'Ventas', icon: ICONOS.ventas, module: 'ventas' },
+        { to: '/recibos', label: 'Recibos', icon: ICONOS.recibos, module: 'ventas' },
+        { to: '/cuenta-corriente', label: 'Cuenta corriente', icon: ICONOS.cuentaCorriente, module: 'cuenta_corriente' },
         // Sin `module`: no se gatea. El dolar no es una feature premium, es un
         // dato que necesita cualquiera que emita un comprobante con un renglon
         // en dolares -- igual que el router.
@@ -221,7 +206,7 @@ export const Layout = createLayout({
         { to: '/contratos', label: 'Equipos en alquiler', icon: FileSignature, module: 'alquileres' },
         // El devengado. Va DESPUES de los contratos porque se lee en ese
         // orden: primero que hay contratos, despues que devengan.
-        { to: '/cuotas', label: 'Cuotas', icon: ReceiptText, module: 'alquileres' },
+        { to: '/cuotas', label: 'Cuotas', icon: Cuotas, module: 'alquileres' },
         { to: '/activos', label: 'Activos', icon: Activos, module: 'alquileres' },
       ],
     },
@@ -229,14 +214,14 @@ export const Layout = createLayout({
     {
       label: 'Administración',
       items: [
-        { to: '/reportes', label: 'Reportes', icon: FileSpreadsheet, module: 'reportes' },
-        { to: '/sucursales', label: 'Sucursales', icon: MapPin },
+        { to: '/reportes', label: 'Reportes', icon: ICONOS.reportes, module: 'reportes' },
+        { to: '/sucursales', label: 'Sucursales', icon: ICONOS.sucursales },
         { to: '/tecnicos', label: 'Técnicos', icon: HardHat, adminOnly: true },
-        { to: '/usuarios', label: 'Usuarios', icon: UserCog, adminOnly: true },
+        { to: '/usuarios', label: 'Usuarios', icon: ICONOS.usuarios, adminOnly: true },
         // Junto a Usuarios y no en Configuración: se mira para responder "quién
         // hizo esto", que es una pregunta sobre la gente, no sobre los ajustes.
-        { to: '/logs', label: 'Logs', icon: ScrollText, adminOnly: true },
-        { to: '/configuracion', label: 'Configuración', icon: Settings },
+        { to: '/logs', label: 'Logs', icon: ICONOS.logDeActividad, adminOnly: true },
+        { to: '/configuracion', label: 'Configuración', icon: ICONOS.configuracion },
       ],
     },
   ],

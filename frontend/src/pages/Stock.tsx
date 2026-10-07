@@ -28,7 +28,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { PackageSearch as IconoStock } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { ArrowLeftRight, Building2, FilePlus, Minus, Plus } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { useSucursal } from '@/components/sucursal'
@@ -136,7 +136,7 @@ export function Stock() {
 
   return (
     <div className="space-y-6">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={IconoStock}>Stock de consumibles</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ICONOS.stock}>Stock de consumibles</TituloPantalla>}>
         <div className="flex gap-2">
           <NuevoConsumible onListo={(fn) => conError(fn)} />
           <NuevoDeposito onListo={(fn) => conError(fn)} />
