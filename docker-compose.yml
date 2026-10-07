@@ -137,7 +137,12 @@ services:
     #
     # Así que el comando se copia, y lo que impide que se desvíe es un test que
     # lee el `CMD` del Dockerfile y exige que esté acá adentro.
-    command: sh -c "alembic upgrade head && libracommerce-migrar upgrade --prefijo libradesk && libraauth-migrar upgrade --prefijo libradesk --base dominio && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
+    #
+    # `libracore-migrar` va ULTIMO de las cadenas (2026-10-07): la cadena del motor no
+    # la corria ningun camino de este producto. El orden y el motivo estan en
+    # `scripts/panel_admin.py`; `test_provisioning.py` exige que este `command:` diga
+    # lo mismo que lo que declara el deploy. Ver DECISIONS.md (ADR-012).
+    command: sh -c "alembic upgrade head && libracommerce-migrar upgrade --prefijo libradesk && libraauth-migrar upgrade --prefijo libradesk --base dominio && libracore-migrar upgrade --prefijo libradesk && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
     ports:
       - "127.0.0.1:8086:8000"
     volumes:

@@ -94,11 +94,31 @@ configure(
     # estan en su cabeza. Lo que se rompia era **el alta de un cliente nuevo** (y
     # cualquier base de cero), desde que se declaro libracommerce el 2026-09-06.
     # Que `actividad_log` tenga dos duenos es un pendiente de libracommerce.
+    #
+    # 🔴 **`libracore-migrar` va ULTIMO** (2026-10-07). Hasta entonces este producto
+    # no corria la cadena del motor: sus bases (dev, demo, compulibra, lagrace) no
+    # tenian `alembic_version` del motor ni tablas como `arca_credenciales_servicio`
+    # (0022) y quedaron fuera de la pre factura (0021). Corre al final por tres
+    # motivos medidos sobre una base vacia y sobre la copia de la demo:
+    #   1. **Despues de `alembic`.** Si va antes, el motor crea `modulos`, `clients`,
+    #      `depositos`, `proveedores`... y la `0001` de este repo muere con
+    #      `DuplicateTable: relation "modulos" already exists`. Estas tablas tienen
+    #      dueno propio aca; el motor las encuentra hechas y las respeta
+    #      (`CREATE TABLE IF NOT EXISTS`).
+    #   2. **Despues de `libraauth-migrar`.** El motor declara `usuarios` y FK hacia
+    #      ella; la duena de esa tabla es libraauth.
+    #   3. Despues de `libracommerce-migrar` para no cambiar el orden con que ya
+    #      viven las instancias (con el motor antes o despues de commerce el
+    #      resultado es el mismo; se probaron las dos).
+    # La tabla de version del motor es `alembic_version` a secas: no choca con
+    # `alembic_version_libradesk`, `_libracommerce` ni `_libraauth`.
+    # Ver DECISIONS.md (ADR-012): una base SIN depositos exige libracore >= v1.142.1.
     migraciones=(
         ("alembic", "upgrade", "head"),
         ("libracommerce-migrar", "upgrade", "--prefijo", "libradesk"),
         # libraauth: sus seis tablas viven en la base del dominio (medido 2026-09-16), por eso --base dominio.
         ("libraauth-migrar", "upgrade", "--prefijo", "libradesk", "--base", "dominio"),
+        ("libracore-migrar", "upgrade", "--prefijo", "libradesk"),
     ),
     # `health_path` tampoco se pasa acá — ver el comentario largo en
     # `nuevo_cliente.py`. Este producto ya sirve su salud en `/health`, el

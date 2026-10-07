@@ -139,3 +139,57 @@ wiki (entidad `libradesk`).
   acepta `?referencia=` para resolver por ese número.
 - Consecuencias: la referencia del proveedor es consultable por quien atiende; no
   es dato sensible que ocultar.
+
+## ADR-012 — LibraDesk corre también la cadena de migraciones del motor (`libracore-migrar`)
+
+- Estado: aceptada. **Exige `libracore >= v1.142.1`** para una base sin depósitos (ver
+  Consecuencias): hasta v1.142.0 el motor sembraba sobre la `depositos` de este producto.
+- Fecha: 2026-10-07
+- Contexto: el deploy declaraba `alembic`, `libracommerce-migrar` y `libraauth-migrar`,
+  pero no `libracore-migrar`. Las bases de dev, demo, compulibra y lagrace no tenían la
+  tabla de versión del motor (`alembic_version`) ni las tablas de las revisiones del motor
+  posteriores a lo que LibraDesk copiaba a mano: `arca_credenciales_servicio` (0022),
+  la pre factura (0021), el libro de terceros (0019), los cierres diarios (0009)... Medido
+  el 2026-10-07: las cuatro bases tienen 82 tablas, ninguna con versión del motor.
+  El ADR-005 y la página de migraciones del wiki habían dejado a LibraDesk «fuera del
+  alcance del motor» cuando su `clients` tenía 19 columnas propias; desde la `0017` de este
+  repo `clients` es la del motor y esa razón dejó de valer.
+- Decisión: `("libracore-migrar", "upgrade", "--prefijo", "libradesk")` se declara en
+  `scripts/panel_admin.py` y `scripts/nuevo_cliente.py` (lo que usan `actualizar`, el alta de
+  un cliente y `reset_demo.sh`, que lee la lista de la imagen) y en el `command:` de `dev` del
+  `docker-compose.yml`, **al final**: `alembic`, `libracommerce-migrar`, `libraauth-migrar`,
+  `libracore-migrar`. Los composes de las instancias de cliente no listan migraciones (las
+  corre el deploy con `compose run --rm`), así que no cambian. `libradesk` figura en
+  `_UNA_SOLA_BASE` del motor, por eso `--prefijo libradesk` migra la base de `DATABASE_URL`.
+- Por qué al final (medido, no supuesto): el motor antes de `alembic` crea `modulos`,
+  `clients`, `depositos`, `proveedores`... y la `0001` de este repo muere con
+  `DuplicateTable`; antes de `libraauth-migrar` crea una `usuarios` que es de libraauth.
+  Respecto de `libracommerce-migrar` el orden es indiferente (se probaron los dos) y se dejó
+  el que ya tienen las instancias.
+- Consecuencias:
+  - **Sobre una instancia viva** la cadena termina sin error y es idempotente. Copia de la
+    demo (82 tablas, 372 filas): +19 tablas (18 del motor, todas vacías, y su
+    `alembic_version`), 21 columnas de dinero de tablas ya existentes pasan de `double
+    precision` a `numeric` (la lectura sigue devolviendo `float`), `facturas` +19 columnas,
+    `cajas` +3, `ventas_pagos` +2, `caja_movimientos` +1, y las 368 filas comparadas
+    (todas las que no son de las dos tablas sembradas) conservan sus valores. Lo único que cambia de conteo es lo que el motor siembra:
+    `cajas` 0 -> 1 («Caja Principal») y `categorias_egreso` 4 -> 13 (visible en la pantalla de
+    egresos).
+  - 🔴 **Sobre una base SIN depósitos fallaba (libracore <= v1.142.0), resuelto en v1.142.1 (ADR-033 del motor)**: la baseline del motor siembra `Depósito
+    Principal` con `INSERT INTO depositos (nombre, descripcion, es_default) VALUES (?,?,1)` y
+    la `depositos` de este producto (propia, con `es_default` y `activo` BOOLEAN) lo rechaza
+    (`column "es_default" is of type boolean but expression is of type integer`). Hoy las
+    cuatro bases tienen depósitos (1 a 4), así que el deploy sobre ellas anda, pero quedan
+    rotos los tres caminos que parten de una base sin depósitos y corren las cadenas
+    declaradas: **el alta de un cliente nuevo**, **el reset nocturno de la demo** (`DROP
+    SCHEMA` + las cadenas) y **restaurar un backup** desde la pantalla de Backups
+    (`libracore.respaldo_postgres.correr_migraciones`; `tests/test_config_backup.py::
+    test_crear_listar_y_restaurar` queda en rojo, y el smoke de navegador también). La falla es transaccional: no deja nada a medias. El arreglo
+    de fondo es del motor (que no siembre sobre una `depositos` que no es la suya), no de este
+    producto: v1.142.1 sólo siembra si `depositos.es_default` es entera, así que una base nueva
+    de LibraDesk nace **sin depósitos** (como antes de este ADR) y su pantalla los crea.
+    `test_sobre_una_base_vacia_la_cadena_entera_termina_sin_error` lo fija y ya no es `xfail`:
+    queda rojo con un pin menor a v1.142.1.
+  - En una base nueva `remitos` y `presupuestos` los crea el motor (con la FK `client_id ->
+    clients` y `status` por defecto `pendiente`) en vez de la copia de `rp_service`: la FK es
+    inocua (`ON DELETE SET NULL`) y el default no se usa (el alta pasa el estado).
