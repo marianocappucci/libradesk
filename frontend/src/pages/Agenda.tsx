@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
-import { CalendarDays } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { api, ApiError, type EquipoTrabajo } from '../api'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import {
@@ -115,7 +115,7 @@ export function Agenda() {
     clave: v,
     to: href({ vista: v }),
     label: LABEL_VISTA[v],
-    icono: CalendarDays,
+    icono: ICONOS.agenda,
   }))
 
   // El filtro no toca el fetch (ver `datos.ts`): se aplica acá, al dibujar.
@@ -139,7 +139,7 @@ export function Agenda() {
         className="items-end"
         titulo={
           <div>
-            <TituloPantalla icono={CalendarDays}>Agenda</TituloPantalla>
+            <TituloPantalla icono={ICONOS.agenda}>Agenda</TituloPantalla>
             <p className="text-sm text-muted-foreground">
               Qué tiene cada cuadrilla y en qué sale. Entrá a un día para ver el
               detalle e imprimir la hoja de ruta.

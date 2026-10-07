@@ -27,7 +27,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Truck } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -134,7 +134,7 @@ export function Proveedores() {
           dentro de la tarjeta, debajo de un `CardDescription` de cuatro
           líneas, y en una notebook había que bajar la vista para encontrarla
           (reporte del usuario, 2026-08-13). */}
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={Truck}>Proveedores</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ICONOS.proveedores}>Proveedores</TituloPantalla>}>
         <Button
           onClick={() => setNuevo({ nombre: '', contacto: '', telefono: '', email: '' })}
         >

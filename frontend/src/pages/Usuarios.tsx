@@ -14,10 +14,11 @@
 // `usuarioActualId` sale del contexto de auth: oculta el botón en la fila
 // propia, que el backend rechaza igual pero mejor no ofrecer.
 //
+// Sin `icono`: el kit usa el del catálogo de la familia (`ICONOS.usuarios`, libra-ui ADR-035).
+//
 // Sin `roles`: LibraDesk no tiene un rol de login propio -- los técnicos son
 // una tabla de personal aparte (`app/services/tecnicos.py`), sin cuenta de
 // acceso -- así que el default de libra-ui (`staff`/`admin`) ya es correcto.
-import { UserCog } from 'lucide-react'
 import { Usuarios as UsuariosBase } from 'libra-ui/Usuarios'
 import { useAuth } from '../context/AuthContext'
 
@@ -25,7 +26,6 @@ export function Usuarios() {
   const { user } = useAuth()
   return (
     <UsuariosBase
-      icono={UserCog}
       basePath="/api/usuarios"
       permitirEliminar
       usuarioActualId={user?.id}

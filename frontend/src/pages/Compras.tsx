@@ -25,7 +25,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowDownToLine, ShoppingCart as IconoOrdenesCompra, Wallet } from 'lucide-react'
+import { ArrowDownToLine } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { FilePlus, Trash2 } from '@/components/iconos-accion'
 import { hoyISO } from 'libra-ui/fechas'
 
@@ -66,7 +67,7 @@ export function OrdenesCompra() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Órdenes de compra" icono={IconoOrdenesCompra} error={error}
+    <Pagina titulo="Órdenes de compra" icono={ICONOS.ordenesDeCompra} error={error}
             acciones={<FormOrden proveedores={proveedores} productos={productos}
                                  onGuardar={conError} />}>
       {activa && (
@@ -176,7 +177,7 @@ export function Egresos() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Egresos" icono={Wallet} error={error}
+    <Pagina titulo="Egresos" icono={ICONOS.egresos} error={error}
             acciones={<FormEgreso proveedores={proveedores} onGuardar={conError} />}>
       <Cifras items={[
         { label: 'Total del período', valor: pesos(resumen.total_periodo) },

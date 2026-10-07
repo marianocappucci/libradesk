@@ -21,7 +21,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Boxes as IconoDepositosStock, Tags as IconoListasPrecio } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { FilePlus, Pencil, Percent, Trash2 } from '@/components/iconos-accion'
 
 // ── Depósitos de stock ─────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export function DepositosStock() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Depósitos de stock" icono={IconoDepositosStock} error={error}
+    <Pagina titulo="Depósitos de stock" icono={ICONOS.depositos} error={error}
             acciones={<FormDeposito sucursales={sucursales} onGuardar={conError} />}>
       <p className="text-sm text-muted-foreground">
         Dónde hay existencias por cantidad. No confundir con los{' '}
@@ -213,7 +213,7 @@ export function ListasPrecio() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Listas de precios" icono={IconoListasPrecio} error={error}
+    <Pagina titulo="Listas de precios" icono={ICONOS.listasDePrecio} error={error}
             acciones={<FormLista onGuardar={conError} />}>
       <Tabla<Lista>
         vacio="Todavía no hay listas de precios."

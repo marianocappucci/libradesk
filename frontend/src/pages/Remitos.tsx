@@ -13,7 +13,7 @@ import {
   type ComprobanteDraft,
 } from '@/components/comprobante-form'
 import { fecha } from '@/lib/format'
-import { Receipt } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { Download, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -178,7 +178,7 @@ export function Remitos() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={Receipt}>Remitos</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ICONOS.remitos}>Remitos</TituloPantalla>}>
         {!editando && <Button onClick={startCreate}>+ Nuevo remito</Button>}
       </EncabezadoDePantalla>
 

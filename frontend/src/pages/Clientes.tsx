@@ -25,7 +25,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // Los de IDENTIDAD (el icono del título, que etiqueta de qué se habla y no
 // cambia nunca) se importan directo de lucide; los de ACCIÓN salen del
 // vocabulario de `components/iconos-accion`.
-import { Users } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { Check, FilePlus, MapPin, Pencil, Trash2, Undo2, X } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -327,7 +327,7 @@ export function Clientes() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={Users}>Clientes</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={ICONOS.clientes}>Clientes</TituloPantalla>}>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={abrirNuevo}><FilePlus />Nuevo cliente</Button>
@@ -335,7 +335,7 @@ export function Clientes() {
             <DialogContent className="sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Users className="size-4" />
+                  <ICONOS.clientes className="size-4" />
                   {editando === null ? 'Nuevo cliente' : `Editar cliente — ${editando.nombre}`}
                 </DialogTitle>
               </DialogHeader>

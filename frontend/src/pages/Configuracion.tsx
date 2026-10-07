@@ -44,7 +44,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Check, CornerDownRight, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
 } from '@/components/iconos-accion'
-import { ListChecks, Send, Settings } from 'lucide-react'
+import { ListChecks, Send } from 'lucide-react'
 import { Tags } from '@/components/iconos-accion'
 import { CONDICIONES_IVA, createConfiguracion } from 'libra-ui/Configuracion'
 import {
@@ -915,8 +915,7 @@ export function ServiciosCard() {
  *  estaba montado: el SMTP sólo entraba por el backoffice de la suite.
  */
 export const Configuracion = createConfiguracion({
-  // El icono que el sidebar de este producto le da a /configuracion.
-  icono: Settings,
+  // Sin `icono`: el kit usa el del catálogo (`ICONOS.configuracion`, libra-ui ADR-035), el mismo que el sidebar le da a /configuracion.
   // Sale en el tutorial de Gmail: es el nombre que hay que ponerle a la
   // contraseña de aplicación que se crea en la cuenta de Google.
   producto: 'LibraDesk',

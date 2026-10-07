@@ -26,7 +26,7 @@ import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/impri
 import {
   TODOS, buscarReporte, queryDeValores, valoresIniciales, type Campo,
 } from './reportes-definicion'
-import { FileSpreadsheet } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 // `DownloadPlano`/`SearchPlano` son alias exactos de `Download`/`Search`: nacieron
 // cuando el botón primario era un caso especial y ya no lo es. Se mantienen sólo
 // para no tocar estos imports — ver la nota en `iconos-accion.tsx`.
@@ -151,7 +151,7 @@ export function ReporteDetalle() {
         className="no-imprimir"
         titulo={
           <div>
-            <TituloPantalla icono={FileSpreadsheet}>{reporte.titulo}</TituloPantalla>
+            <TituloPantalla icono={ICONOS.reportes}>{reporte.titulo}</TituloPantalla>
             <p className="text-sm text-muted-foreground">{reporte.descripcion}</p>
           </div>
         }

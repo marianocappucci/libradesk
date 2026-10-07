@@ -12,6 +12,7 @@
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileSpreadsheet, Table2 } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
 import { ChevronRight } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
@@ -38,7 +39,7 @@ export function Reportes() {
   return (
     <div className="grid gap-4">
       <div>
-        <TituloPantalla icono={FileSpreadsheet}>
+        <TituloPantalla icono={ICONOS.reportes}>
           Reportes
         </TituloPantalla>
         <p className="text-sm text-muted-foreground">

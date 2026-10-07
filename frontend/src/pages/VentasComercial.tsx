@@ -35,7 +35,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ClipboardList, Coins, Wallet } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 // `Eye` llegó de develop (el PDF del recibo se abre con un ojo, PR #127) y es
 // una ACCIÓN, así que entra por el módulo de acciones como el resto.
 import { ArrowLeft, Eye, FilePlus, Trash2 } from '@/components/iconos-accion'
@@ -151,7 +151,7 @@ export function Ventas() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Ventas" icono={ClipboardList} error={error}
+    <Pagina titulo="Ventas" icono={ICONOS.ventas} error={error}
             acciones={
               <Button onClick={() => navigate('/ventas/nueva')}>
                 <FilePlus />Nueva venta
@@ -449,7 +449,7 @@ export function VentaNueva() {
   return (
     <Pagina
       titulo="Nueva venta"
-      icono={ClipboardList}
+      icono={ICONOS.ventas}
       error={[error, errorClientes, errorProductos, errorDepositos].find(Boolean) ?? ''}
       acciones={
         <>
@@ -760,7 +760,7 @@ export function VentaDetalle() {
   return (
     <Pagina
       titulo={`Venta ${datos.numero}`}
-      icono={ClipboardList}
+      icono={ICONOS.ventas}
       acciones={
         <>
           <BadgeEstado tono={estado.tono}>{estado.label}</BadgeEstado>
@@ -859,7 +859,7 @@ export function Recibos() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Recibos" icono={Coins} error={error}>
+    <Pagina titulo="Recibos" icono={ICONOS.recibos} error={error}>
       <p className="text-sm text-muted-foreground">
         El comprobante de que entró plata. Se emite desde una venta o desde un
         pago de cuenta corriente, y <strong>no se borra: se anula</strong>.
@@ -922,7 +922,7 @@ export function CuentaCorriente() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Cuenta corriente" icono={Wallet} error={error}>
+    <Pagina titulo="Cuenta corriente" icono={ICONOS.cuentaCorriente} error={error}>
       <Cifras items={[
         { label: 'Clientes con saldo', valor: datos.resumen.clientes_con_saldo },
         { label: 'Total adeudado', valor: pesos(datos.resumen.total_adeudado) },

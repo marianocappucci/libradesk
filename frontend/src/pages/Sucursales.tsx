@@ -20,7 +20,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { MapPin } from 'lucide-react'
+import { ICONOS } from 'libra-ui/iconos-identidad'
 import { FilePlus, Pencil, Trash2, Undo2 } from '@/components/iconos-accion'
 
 //: La respuesta trae además cuántos depósitos de stock activos cuelgan de cada
@@ -44,7 +44,7 @@ export function Sucursales() {
   if (cargando) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
   return (
-    <Pagina titulo="Sucursales" icono={MapPin} error={error}
+    <Pagina titulo="Sucursales" icono={ICONOS.sucursales} error={error}
             acciones={<FormSucursal onGuardar={guardarYRefrescar} />}>
       <p className="text-sm text-muted-foreground">
         El stock, los depósitos, las ventas, las compras y las listas de precio
