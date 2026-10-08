@@ -3,14 +3,17 @@
 // 🔴 **Lee el FUENTE del `Layout.tsx`**, no el DOM: el menú no se exporta y lo que hay que impedir es que vuelva a divergir. Es el mismo criterio
 // que `titulos-con-icono.test.ts`, que cubre la otra mitad (el título de cada pantalla = el ícono de su entrada).
 //
-// `RUTA_A_CONCEPTO` es la tabla de ESTE producto: qué concepto del catálogo es cada entrada del menú. Una entrada que no está acá es un concepto
-// propio de LibraDesk (Reclamos, Equipos, Reparaciones, Insumos, Activos, Cuotas…): su ícono no es del catálogo, pero tampoco puede ser uno que el
-// catálogo le da a otro concepto, ni repetirse con otra entrada del menú (la regla de `Layout.tsx`: dos ítems no comparten dibujo).
+// `RUTA_A_CONCEPTO` es la tabla de ESTE producto: qué concepto del catálogo de identidad es cada entrada del menú. `RUTA_A_INDICADOR` es la de los
+// conceptos que sólo existen en el catálogo de indicadores (`libra-ui/iconos-indicador`, ADR-038): Reclamos es `incidencias` y Técnicos es `tecnicos`,
+// y se escriben `INDICADORES.incidencias` para que el guard de títulos los lea. Una entrada que no está en ninguna es un concepto propio de LibraDesk
+// (Equipos, Reparaciones, Insumos, Activos, Cuotas…): su ícono no es del catálogo, pero tampoco puede ser uno que el catálogo le da a otro concepto,
+// ni repetirse con otra entrada del menú (la regla de `Layout.tsx`: dos ítems no comparten dibujo).
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as lucide from 'lucide-react'
 import { ICONOS, type Concepto } from 'libra-ui/iconos-identidad'
+import { INDICADORES, iconoDelIndicador, type ConceptoIndicador } from 'libra-ui/iconos-indicador'
 import { auditarMenuContraCatalogo, iconosDelNav, resolverAlias } from 'libra-ui/auditoria-de-titulos'
 
 const SRC = join(process.cwd(), 'src')
@@ -39,11 +42,22 @@ const RUTA_A_CONCEPTO: Record<string, Concepto> = {
   '/configuracion': 'configuracion',
 }
 
+/** Las entradas del menú cuyo concepto sale del catálogo de indicadores (ADR-038), con el ícono de lucide que el catálogo les da. */
+const RUTA_A_INDICADOR: Record<string, { concepto: ConceptoIndicador; lucide: string }> = {
+  '/reclamos': { concepto: 'incidencias', lucide: 'Ticket' },
+  '/tecnicos': { concepto: 'tecnicos', lucide: 'Headset' },
+}
+
 /** El nombre de lucide al que apunta el `icon:` de una entrada del menú (resuelve el `as` del import y el `ICONOS.x` del catálogo). */
 function iconoDe(expresion: string): string {
   const miembro = /^ICONOS\.([a-z][A-Za-z0-9]*)$/.exec(expresion)
-  const nombre = miembro ? '' : resolverAlias(LAYOUT, expresion)
-  const componente = miembro ? ICONOS[miembro[1] as Concepto] : (lucide as unknown as Record<string, unknown>)[nombre]
+  const indicador = /^INDICADORES\.([a-z][A-Za-z0-9]*)$/.exec(expresion)
+  const nombre = miembro || indicador ? '' : resolverAlias(LAYOUT, expresion)
+  const componente = miembro
+    ? ICONOS[miembro[1] as Concepto]
+    : indicador
+      ? INDICADORES[indicador[1] as ConceptoIndicador]
+      : (lucide as unknown as Record<string, unknown>)[nombre]
   return (componente as { displayName?: string } | undefined)?.displayName ?? expresion
 }
 
@@ -71,10 +85,20 @@ describe('el menú usa los íconos del catálogo de la familia', () => {
     }
     for (const [icono, rutas] of porIcono) {
       // Dos entradas pueden compartir ícono sólo si son el mismo concepto del catálogo (en este menú no hay ninguna).
-      const conceptos = new Set(rutas.map((r) => RUTA_A_CONCEPTO[r] ?? r))
+      const conceptos = new Set(rutas.map((r) => RUTA_A_CONCEPTO[r] ?? RUTA_A_INDICADOR[r]?.concepto ?? r))
       if (conceptos.size > 1) choques.push(`${icono} se repite en ${rutas.join(', ')}`)
     }
     expect(choques).toEqual([])
     expect(propias).toBeGreaterThan(0)
+  })
+})
+
+describe('Reclamos y Técnicos toman el ícono del catálogo de indicadores', () => {
+  it.each(Object.entries(RUTA_A_INDICADOR))('🔴 %s lleva INDICADORES.<concepto> y es el ícono que el catálogo le da', (ruta, { concepto, lucide: esperado }) => {
+    // El `icon:` se escribe `INDICADORES.concepto` (no `iconoDelIndicador('concepto')`) porque es la forma que lee `auditarTitulos`.
+    expect(iconosDelNav(LAYOUT).get(ruta)).toBe(`INDICADORES.${concepto}`)
+    // Para un concepto propio del catálogo las dos formas son el mismo componente: no hay excepciones por producto.
+    expect(INDICADORES[concepto]).toBe(iconoDelIndicador(concepto))
+    expect(iconoDe(`INDICADORES.${concepto}`)).toBe((lucide as unknown as Record<string, { displayName?: string }>)[esperado].displayName)
   })
 })

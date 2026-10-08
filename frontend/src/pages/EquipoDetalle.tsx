@@ -31,9 +31,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BotonImprimir, EncabezadoImpreso, Imprimible } from '@/components/imprimible'
 import { Building2, RotateCcwClock as History, MapPin, Monitor, Wrench } from 'lucide-react'
 import { fecha, fechaHora } from '@/lib/format'
-import { AlertTriangle, ArrowLeft, ArrowLeftRight, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, ShieldCheck } from '@/components/iconos-accion'
 import { MoverEquipo } from '@/components/mover-equipo'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { IconoIndicador } from 'libra-ui/IconoIndicador'
 
 function formatFecha(valor: string | null): string {
   // Ver `ClienteDetalle`: la guarda subio a `lib/format`.
@@ -320,7 +321,7 @@ export function EquipoDetalle() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tarjeta
               titulo="Reclamos"
-              icono={<Ticket className="size-4" />}
+              icono={<IconoIndicador concepto="incidencias" />}
               valor={resumen.total_incidencias}
               pie={`${resumen.incidencias_abiertas} sin cerrar · ${resumen.horas_invertidas} hs`}
             />

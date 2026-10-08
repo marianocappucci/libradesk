@@ -13,7 +13,9 @@
 // nombre sería juntar dos cosas que nunca hace la misma persona.
 // Lo que tiene concepto en el catálogo de la familia (libra-ui ADR-035) toma el
 // ícono de `ICONOS.<concepto>`: Clientes, Productos, Stock, Presupuestos, Remitos,
-// Egresos, Reportes… Lo propio de LibraDesk se importa con ALIAS de dominio
+// Egresos, Reportes… Reclamos y Técnicos salen del catálogo de indicadores
+// (`INDICADORES.incidencias` / `INDICADORES.tecnicos`, libra-ui ADR-038): el
+// mismo ícono que llevan en los reportes y en el título de su pantalla. Lo propio de LibraDesk se importa con ALIAS de dominio
 // (`Activos`, `EquiposFlota`, `Cuotas`) porque el nombre lucide no dice qué ítem
 // del menú es. La regla que los ordena es que **dos ítems del mismo menú no
 // pueden compartir dibujo** —salvo los que son el mismo concepto del catálogo—:
@@ -25,18 +27,17 @@ import {
   Building2,
   CalendarRange as Cuotas,
   Car as EquiposFlota,
-  CircleAlert as AlertCircle,
   ClipboardCheck,
   DollarSign,
   Droplets,
   FilePenLine as FileSignature,
-  HardHat,
   Handshake,
   Monitor,
   Send,
   Wrench,
 } from 'lucide-react'
 import { ICONOS } from 'libra-ui/iconos-identidad'
+import { INDICADORES } from 'libra-ui/iconos-indicador'
 import { createLayout } from 'libra-ui/Layout'
 import { SelectorDeSucursal } from '@/components/sucursal'
 import { WORDMARK } from '@/branding'
@@ -119,7 +120,7 @@ export const Layout = createLayout({
         // La ruta apunta a `/reclamos`, la canónica; `/incidencias` sigue
         // funcionando (no se rompen links guardados) pero ya no vive en el
         // menú.
-        { to: '/reclamos', label: 'Reclamos', icon: AlertCircle },
+        { to: '/reclamos', label: 'Reclamos', icon: INDICADORES.incidencias },
         { to: '/clientes', label: 'Clientes', icon: ICONOS.clientes },
         { to: '/equipos', label: 'Equipos', icon: Monitor },
         // "Depósitos" a secas, y la desambiguación con los de stock la hace el
@@ -216,7 +217,7 @@ export const Layout = createLayout({
       items: [
         { to: '/reportes', label: 'Reportes', icon: ICONOS.reportes, module: 'reportes' },
         { to: '/sucursales', label: 'Sucursales', icon: ICONOS.sucursales },
-        { to: '/tecnicos', label: 'Técnicos', icon: HardHat, adminOnly: true },
+        { to: '/tecnicos', label: 'Técnicos', icon: INDICADORES.tecnicos, adminOnly: true },
         { to: '/usuarios', label: 'Usuarios', icon: ICONOS.usuarios, adminOnly: true },
         // Junto a Usuarios y no en Configuración: se mira para responder "quién
         // hizo esto", que es una pregunta sobre la gente, no sobre los ajustes.
