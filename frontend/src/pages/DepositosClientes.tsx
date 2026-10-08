@@ -164,6 +164,7 @@ export function DepositosClientes() {
             onChange={setFiltro}
             opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
             ariaLabel="Filtrar por cliente"
+            limpiable={false}
           />
         </CardContent>
       </Card>

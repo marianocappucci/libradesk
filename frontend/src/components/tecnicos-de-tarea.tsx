@@ -18,9 +18,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import { PlusCircle, Trash2, Users } from '@/components/iconos-accion'
 
 export type AsignacionTecnico = {
@@ -215,18 +213,14 @@ export function TecnicosDeTarea({
             <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="grid gap-1">
                 <Label htmlFor={`asignar-${tareaId}`}>Asignar técnico</Label>
-                <Select value={aAgregar} onValueChange={setAAgregar}>
-                  <SelectTrigger id={`asignar-${tareaId}`}>
-                    <SelectValue placeholder={
-                      libres.length ? 'Elegir' : 'Ya están todos asignados'
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libres.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectBuscable
+                  id={`asignar-${tareaId}`}
+                  value={aAgregar}
+                  onChange={setAAgregar}
+                  opciones={libres.map((t) => ({ value: String(t.id), label: t.nombre }))}
+                  placeholder={libres.length ? 'Elegir' : 'Ya están todos asignados'}
+                  emptyMessage="Ya están todos asignados."
+                />
               </div>
               <Button onClick={() => void agregar()} disabled={!aAgregar}>
                 <PlusCircle /> Asignar

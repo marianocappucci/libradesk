@@ -344,6 +344,7 @@ export function Cuotas() {
 
       <div className="grid gap-2 sm:w-64">
         <Label htmlFor="cuotas-estado">Estado</Label>
+        {/* select-cerrado: los 5 estados de la constante ESTADO_CUOTA_LABELS */}
         <Select value={estado} onValueChange={setEstado}>
           <SelectTrigger id="cuotas-estado"><SelectValue /></SelectTrigger>
           <SelectContent>

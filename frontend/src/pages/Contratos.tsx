@@ -143,6 +143,7 @@ export function Contratos() {
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-2">
             <Label>Estado</Label>
+            {/* select-cerrado: los 6 estados de la constante ESTADO_CONTRATO_LABELS, más «Todos» */}
             <Select value={estado} onValueChange={setEstado}>
               <SelectTrigger aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -155,6 +156,7 @@ export function Contratos() {
           </div>
           <div className="grid gap-2">
             <Label>Modalidad</Label>
+            {/* select-cerrado: las 7 modalidades de la constante TIPO_CONTRATO_LABELS, más «Todas» */}
             <Select value={tipo} onValueChange={setTipo}>
               <SelectTrigger aria-label="Filtrar por modalidad"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -173,6 +175,7 @@ export function Contratos() {
               opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
               placeholder="Todos los clientes"
               ariaLabel="Filtrar por cliente"
+              limpiable={false}
             />
           </div>
         </CardContent>

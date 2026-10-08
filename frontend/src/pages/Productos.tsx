@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -171,7 +172,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
   const [minimo, setMinimo] = useState(String(producto?.stock_minimo ?? ''))
   const [unidad, setUnidad] = useState(producto?.unidad ?? 'u')
   const [categoriaId, setCategoriaId] = useState(
-    producto?.categoria_id ? String(producto.categoria_id) : 'ninguna',
+    producto?.categoria_id ? String(producto.categoria_id) : '',
   )
   // `String(0.105)` da "0.105", que es exactamente el valor de la opción. Sin
   // producto (el alta) arranca en 21%, que es el default del backend.
@@ -189,7 +190,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
       precio: Number(precio) || 0,
       stock_minimo: Number(minimo) || 0,
       unidad,
-      categoria_id: categoriaId === 'ninguna' ? null : Number(categoriaId),
+      categoria_id: categoriaId === '' ? null : Number(categoriaId),
       activo: producto?.activo ?? true,
       // Siempre viaja, también al editar: el PUT reconstruye el producto
       // entero del lado del motor, y mandarlo sólo cuando cambió dejaría la
@@ -254,6 +255,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="p-iva">IVA</Label>
+            {/* select-cerrado: las 4 alícuotas de la constante ALICUOTAS (21, 10,5, 27 % y exento) */}
             <Select value={ivaRate} onValueChange={setIvaRate}>
               <SelectTrigger id="p-iva"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -296,6 +298,7 @@ function FormProducto({ producto, categorias, onGuardar }: {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="p-unidad">Unidad</Label>
+              {/* select-cerrado: las 4 unidades de la constante UNIDADES (unidad, metro, caja, rollo) */}
               <Select value={unidad} onValueChange={setUnidad}>
                 <SelectTrigger id="p-unidad"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -308,15 +311,15 @@ function FormProducto({ producto, categorias, onGuardar }: {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="p-categoria">Categoría</Label>
-            <Select value={categoriaId} onValueChange={setCategoriaId}>
-              <SelectTrigger id="p-categoria"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ninguna">Sin categoría</SelectItem>
-                {categorias.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="p-categoria"
+              value={categoriaId}
+              onChange={setCategoriaId}
+              opciones={[
+                { value: '', label: 'Sin categoría' },
+                ...categorias.map((c) => ({ value: String(c.id), label: c.nombre })),
+              ]}
+            />
           </div>
         </div>
         <DialogFooter>
@@ -388,16 +391,13 @@ function FormActivoDesdeStock({ producto, onGuardar }: {
         <div className="grid gap-3">
           <div className="grid gap-2">
             <Label htmlFor="a-deposito">Sale del depósito</Label>
-            <Select value={depositoId} onValueChange={setDepositoId}>
-              <SelectTrigger id="a-deposito">
-                <SelectValue placeholder="Elegí el depósito" />
-              </SelectTrigger>
-              <SelectContent>
-                {depositos.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="a-deposito"
+              value={depositoId}
+              onChange={setDepositoId}
+              opciones={depositos.map((d) => ({ value: String(d.id), label: d.nombre }))}
+              placeholder="Elegí el depósito"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="a-serial">Número de serie</Label>

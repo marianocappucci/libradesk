@@ -28,9 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -479,14 +477,14 @@ export function VentaNueva() {
         <CardContent className="grid items-start gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="v-cliente">Cliente</Label>
-            <Select value={clienteId} onValueChange={setClienteId}>
-              <SelectTrigger id="v-cliente"><SelectValue placeholder="Consumidor final" /></SelectTrigger>
-              <SelectContent>
-                {clientes.filter((c) => c.activo).map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="v-cliente"
+              value={clienteId}
+              onChange={setClienteId}
+              opciones={clientes.filter((c) => c.activo).map((c) => ({ value: String(c.id), label: c.nombre }))}
+              placeholder="Consumidor final"
+              limpiable
+            />
             <p className="text-xs text-muted-foreground">
               Sin cliente es una venta de mostrador. El precio de cada ítem sale
               de la lista del cliente elegido, así que conviene elegirlo antes de
@@ -495,14 +493,13 @@ export function VentaNueva() {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="v-dep">Depósito</Label>
-            <Select value={depositoId} onValueChange={setDepositoId}>
-              <SelectTrigger id="v-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-              <SelectContent>
-                {depositos.filter((d) => d.activo).map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="v-dep"
+              value={depositoId}
+              onChange={setDepositoId}
+              opciones={depositos.filter((d) => d.activo).map((d) => ({ value: String(d.id), label: d.nombre }))}
+              placeholder="Elegir…"
+            />
             <p className="text-xs text-muted-foreground">
               De acá se descuenta el stock de los productos.
             </p>
@@ -516,18 +513,13 @@ export function VentaNueva() {
           <div className="flex flex-wrap items-end gap-2">
             <div className="grid min-w-64 flex-1 gap-2">
               <Label htmlFor="v-producto">Producto del catálogo</Label>
-              <Select value={productoId} onValueChange={setProductoId}>
-                <SelectTrigger id="v-producto">
-                  <SelectValue placeholder="Elegir producto…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {productos.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.nombre} · stock {p.stock}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                id="v-producto"
+                value={productoId}
+                onChange={setProductoId}
+                opciones={productos.map((p) => ({ value: String(p.id), label: `${p.nombre} · stock ${p.stock}` }))}
+                placeholder="Elegir producto…"
+              />
             </div>
             <Button variant="outline" onClick={() => void agregar()} disabled={!productoId}>
               Agregar
@@ -605,14 +597,14 @@ export function VentaNueva() {
         <CardContent className="flex flex-wrap items-end justify-between gap-3">
           <div className="grid gap-2">
             <Label htmlFor="v-medio">Cómo se cobra</Label>
-            <Select value={medio} onValueChange={setMedio}>
-              <SelectTrigger id="v-medio" className="w-56"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {medios.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="v-medio"
+              className="w-56"
+              value={medio}
+              onChange={setMedio}
+              opciones={medios.map((m) => ({ value: m.id, label: m.label }))}
+              limpiable={false}
+            />
           </div>
           <div className="flex items-baseline gap-4">
             <span className="text-sm text-muted-foreground">Total</span>
@@ -711,18 +703,13 @@ function AccionRemito({ venta, clientes, onGenerado }: {
         </p>
         <div className="grid gap-2">
           <Label htmlFor="cliente-remito">Cliente</Label>
-          <Select value={elegido} onValueChange={setElegido}>
-            <SelectTrigger id="cliente-remito">
-              <SelectValue placeholder="Elegí un cliente" />
-            </SelectTrigger>
-            <SelectContent>
-              {clientes.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.empresa || c.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectBuscable
+            id="cliente-remito"
+            value={elegido}
+            onChange={setElegido}
+            opciones={clientes.map((c) => ({ value: String(c.id), label: c.empresa || c.nombre }))}
+            placeholder="Elegí un cliente"
+          />
         </div>
         <DialogFooter>
           <DialogClose asChild>

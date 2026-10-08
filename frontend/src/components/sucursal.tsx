@@ -23,9 +23,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import { MapPin } from 'lucide-react'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 
 export type Sucursal = { id: number; nombre: string; codigo: string; direccion: string }
 
@@ -131,28 +129,29 @@ export function SelectorDeSucursal() {
   const { sucursales, activa, elegir } = useSucursal()
   if (sucursales.length < 2) return null
   return (
-    <div className="grid gap-2">
+    // 🔴 `onKeyDown` + `stopPropagation`: el selector vive adentro de un `DropdownMenuContent` de Radix, que lleva una búsqueda por letras
+    // (typeahead) sobre sus ítems. Sin esto, escribir «Centro» en el campo manda el foco a «Cambiar contraseña» a la primera «C» y el campo
+    // pierde lo escrito (medido con el menú real, `sucursal-en-el-menu.test.tsx`). El `Escape` y el click afuera no pasan por acá: Radix los
+    // escucha en `document`, así que el menú se cierra igual. Desde libra-ui v0.129.1 el slot `userMenu` de `libra-ui/Layout` también corta el teclado: esto queda como defensa, y es lo que hace pasar el test que monta el selector con un `DropdownMenu` pelado.
+    <div className="grid gap-2" onKeyDown={(e) => e.stopPropagation()}>
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <MapPin className="h-3.5 w-3.5" />
         Sucursal activa
       </span>
-      <Select value={activa ? String(activa.id) : 'todas'}
-              onValueChange={(v) => elegir(v === 'todas' ? null : Number(v))}>
-        <SelectTrigger className="h-8 w-full" aria-label="Sucursal activa">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {/* "Todas" es el default y va primero: es lo que ve alguien que
-              todavía no eligió, y en una empresa de dos sucursales es la vista
-              que más se usa. */}
-          <SelectItem value="todas">Todas las sucursales</SelectItem>
-          {sucursales.map((s) => (
-            <SelectItem key={s.id} value={String(s.id)}>
-              {s.codigo ? `${s.codigo} · ${s.nombre}` : s.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* "Todas" es el default y va primero: es lo que ve alguien que todavía
+          no eligió, y en una empresa de dos sucursales es la vista que más se
+          usa. Su valor es `''` —la opción de «ninguna»—, así que el campo la
+          muestra como etiqueta y no ofrece la × (ADR-039 del kit). */}
+      <SelectBuscable
+        ariaLabel="Sucursal activa"
+        value={activa ? String(activa.id) : ''}
+        onChange={(v) => elegir(v === '' ? null : Number(v))}
+        opciones={[
+          { value: '', label: 'Todas las sucursales' },
+          ...sucursales.map((s) => ({ value: String(s.id), label: s.codigo ? `${s.codigo} · ${s.nombre}` : s.nombre })),
+        ]}
+        placeholder="Buscar sucursal…"
+      />
     </div>
   )
 }

@@ -289,6 +289,7 @@ export function DepositoDetalle() {
                   ...opcionesDeposito(destinosPosibles),
                 ]}
                 ariaLabel="Depósito destino"
+                limpiable={false}
               />
               {destinosPosibles.every((d) => d.cliente_id === null) && (
                 <p className="text-xs text-muted-foreground">

@@ -427,6 +427,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
   const bloqueCoberturaAbono = incidencia && clienteConAbono && (
                   <div className="grid gap-2 rounded-md border border-dashed p-3">
                     <Label htmlFor="cobertura-abono">Cobertura del abono</Label>
+                    {/* select-cerrado: las 3 coberturas de la constante COBERTURA_ABONO_LABELS, más «Sin decidir» */}
                     <Select
                       value={incidencia.cobertura_abono ?? NONE}
                       onValueChange={(v) => {
@@ -834,6 +835,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
             <CardContent className="grid gap-3">
               <div className="grid gap-2">
                 <Label>Estado</Label>
+                {/* select-cerrado: los 4 estados de la constante ESTADO_LABELS */}
                 <Select value={incidencia.estado} onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}>
                   {/* El punto también en el trigger y en cada opción: al
                       cambiar el estado se ve a qué color se está pasando, que
@@ -858,6 +860,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
               </div>
               <div className="grid gap-2">
                 <Label>Prioridad</Label>
+                {/* select-cerrado: las 3 prioridades de la constante PRIORIDAD_LABELS */}
                 <Select value={incidencia.prioridad} onValueChange={(prioridad) => actualizarCampo({ prioridad: prioridad as Incidencia['prioridad'] })}>
                   <SelectTrigger aria-label="Prioridad"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -882,6 +885,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                     ]}
                     ariaLabel="Categoría"
                     className="w-full"
+                    limpiable={false}
                   />
                 </div>
               )}
@@ -893,6 +897,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   opciones={opcionesCliente(clientes)}
                   ariaLabel="Cliente"
                   className="w-full"
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
@@ -904,6 +909,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   ariaLabel="Equipo"
                   className="w-full"
                   emptyMessage="Ese cliente no tiene equipos."
+                  limpiable={false}
                 />
               </div>
               {/* Los tres papeles (pedido 41). Cada selector ofrece sólo a
@@ -918,6 +924,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   ariaLabel="Recepcionó"
                   className="w-full"
                   emptyMessage="Nadie tiene el rol de recepcionista."
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
@@ -928,6 +935,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   opciones={[{ value: NONE, label: 'Sin asignar' }, ...opcionesPorNombre(conRol('tecnico'))]}
                   ariaLabel="Técnico"
                   className="w-full"
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
@@ -939,10 +947,12 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   ariaLabel="Vendedor"
                   className="w-full"
                   emptyMessage="Nadie tiene el rol de vendedor."
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
                 <Label>Modalidad</Label>
+                {/* select-cerrado: las 2 modalidades de la constante MODALIDAD_LABELS, más «Sin definir» */}
                 <Select
                   value={incidencia.modalidad ?? NONE}
                   onValueChange={(v) => actualizarCampo({
@@ -1008,6 +1018,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   ariaLabel="Equipo de trabajo"
                   className="w-full"
                   emptyMessage="No hay equipos de trabajo cargados."
+                  limpiable={false}
                 />
                 {(() => {
                   const equipo = equiposTrabajo.find(
@@ -1034,6 +1045,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   ariaLabel="Sector"
                   className="w-full"
                   emptyMessage="Ese cliente no tiene sectores."
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
@@ -1097,6 +1109,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                 <CardContent className="grid gap-3">
                   <div className="grid gap-2">
                     <Label>Estado</Label>
+                    {/* select-cerrado: los 4 estados de la constante ESTADO_LABELS */}
                     <Select
                       value={incidencia.estado}
                       onValueChange={(estado) => actualizarCampo({ estado: estado as Incidencia['estado'] })}
@@ -1121,6 +1134,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   </div>
                   <div className="grid gap-2">
                     <Label>Prioridad</Label>
+                    {/* select-cerrado: las 3 prioridades de la constante PRIORIDAD_LABELS */}
                     <Select
                       value={incidencia.prioridad}
                       onValueChange={(prioridad) => actualizarCampo({ prioridad: prioridad as Incidencia['prioridad'] })}
@@ -1193,20 +1207,23 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
           <div className="grid gap-3">
             <div className="grid gap-2">
               <Label>Equipo que se retira</Label>
-              <Select value={reemplazo.retirado} onValueChange={(v) => setReemplazo({ ...reemplazo, retirado: v })}>
-                <SelectTrigger aria-label="Equipo que se retira"><SelectValue placeholder="Elegí el equipo…" /></SelectTrigger>
-                <SelectContent>
-                  {equiposDelCliente.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {describirEquipo(e)} — {ubicacionTexto(e.sector, e.ubicacion_oficina)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* `limpiable={false}`: el estado vacío de este campo es `NONE`, no `''`; la × mandaría `''` y `reemplazar()` lo trataría como un equipo. */}
+              <SelectBuscable
+                value={reemplazo.retirado}
+                onChange={(v) => setReemplazo({ ...reemplazo, retirado: v })}
+                opciones={equiposDelCliente.map((e) => ({
+                  value: String(e.id),
+                  label: `${describirEquipo(e)} — ${ubicacionTexto(e.sector, e.ubicacion_oficina)}`,
+                }))}
+                placeholder="Elegí el equipo…"
+                ariaLabel="Equipo que se retira"
+                limpiable={false}
+              />
             </div>
 
             <div className="grid gap-2">
               <Label>Destino del equipo retirado</Label>
+              {/* select-cerrado: los 3 destinos de la constante DESTINO_REEMPLAZO_LABELS */}
               <Select value={reemplazo.destino} onValueChange={(v) => setReemplazo({ ...reemplazo, destino: v as DestinoReemplazo })}>
                 <SelectTrigger aria-label="Destino del equipo retirado"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1219,19 +1236,21 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
 
             <div className="grid gap-2">
               <Label>Equipo sustituto (opcional)</Label>
-              <Select value={reemplazo.sustituto} onValueChange={(v) => setReemplazo({ ...reemplazo, sustituto: v })}>
-                <SelectTrigger aria-label="Equipo sustituto"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Sin reemplazo</SelectItem>
-                  {equiposDelCliente
+              <SelectBuscable
+                value={reemplazo.sustituto}
+                onChange={(v) => setReemplazo({ ...reemplazo, sustituto: v })}
+                opciones={[
+                  { value: NONE, label: 'Sin reemplazo' },
+                  ...equiposDelCliente
                     .filter((e) => String(e.id) !== reemplazo.retirado)
-                    .map((e) => (
-                      <SelectItem key={e.id} value={String(e.id)}>
-                        {describirEquipo(e)} — {ubicacionTexto(e.sector, e.ubicacion_oficina)}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                    .map((e) => ({
+                      value: String(e.id),
+                      label: `${describirEquipo(e)} — ${ubicacionTexto(e.sector, e.ubicacion_oficina)}`,
+                    })),
+                ]}
+                ariaLabel="Equipo sustituto"
+                limpiable={false}
+              />
               <span className="text-xs text-muted-foreground">
                 Queda en el lugar exacto que deja el equipo retirado.
               </span>
@@ -1266,6 +1285,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                     ]}
                     placeholder="Elegí el proveedor…"
                     ariaLabel="Proveedor"
+                    limpiable={false}
                   />
                   <span className="text-xs text-muted-foreground">
                     {proveedores.length === 0
