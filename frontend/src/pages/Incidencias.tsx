@@ -30,7 +30,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { CircleAlert as AlertCircle, CircleAlert } from 'lucide-react'
+import { INDICADORES } from 'libra-ui/iconos-indicador'
+import { IconoIndicador } from 'libra-ui/IconoIndicador'
 import { fechaDeDate } from '@/lib/format'
 import { FilePlus, Printer } from '@/components/iconos-accion'
 import { CalendarPlus } from 'lucide-react'
@@ -440,7 +441,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={AlertCircle}>{vocabulario.plural}</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={INDICADORES.incidencias}>{vocabulario.plural}</TituloPantalla>}>
         {/* El listado de pendientes: el papel con el que se arma el día.
             No es la hoja de ruta —ésa vive en la Agenda, es por cuadrilla y
             por día, y exige haber asignado antes—. Éste sale de acá porque su
@@ -486,7 +487,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CircleAlert className="size-4" />{vocabulario.nuevo}
+                <IconoIndicador concepto="incidencias" />{vocabulario.nuevo}
               </DialogTitle>
               <DialogDescription>
                 El resto de los campos —equipo, categoría, prioridad, técnico,
