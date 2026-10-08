@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PlusCircle, Trash2 } from '@/components/iconos-accion'
 import { TecnicosDeTarea, type AsignacionTecnico } from '@/components/tecnicos-de-tarea'
@@ -207,6 +208,7 @@ export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
                       />
                     </td>
                     <td className="py-2 pr-2">
+                      {/* select-cerrado: los estados de una tarea son los 3 de la constante ESTADOS (pendiente, en progreso, terminada) */}
                       <Select
                         value={t.estado}
                         onValueChange={(v) => void editar(t, 'estado', v)}
@@ -276,16 +278,14 @@ export function TareasDelReclamo({ incidenciaId }: { incidenciaId: number }) {
           </div>
           <div className="grid gap-1">
             <Label htmlFor="tarea-tipo">Tipo de servicio</Label>
-            <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger id="tarea-tipo">
-                <SelectValue placeholder="Opcional" />
-              </SelectTrigger>
-              <SelectContent>
-                {servicios.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="tarea-tipo"
+              value={tipo}
+              onChange={setTipo}
+              opciones={servicios.map((s) => ({ value: String(s.id), label: s.nombre }))}
+              placeholder="Opcional"
+              limpiable
+            />
           </div>
           <Button onClick={() => void agregar()} disabled={!detalle.trim()}>
             <PlusCircle /> Agregar

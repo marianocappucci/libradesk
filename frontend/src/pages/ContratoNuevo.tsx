@@ -191,6 +191,7 @@ export function ContratoNuevo() {
               <FormField control={form.control} name="tipo_contrato" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Modalidad</FormLabel>
+                  {/* select-cerrado: las 7 modalidades de la constante TIPO_CONTRATO_LABELS */}
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
@@ -240,6 +241,7 @@ export function ContratoNuevo() {
               <FormField control={form.control} name="estado" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Estado</FormLabel>
+                  {/* select-cerrado: los 6 estados de la constante ESTADO_CONTRATO_LABELS */}
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
@@ -292,6 +294,7 @@ export function ContratoNuevo() {
                 <FormField control={form.control} name="periodicidad" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Periodicidad</FormLabel>
+                    {/* select-cerrado: las 5 periodicidades de la constante PERIODICIDAD_LABELS */}
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
@@ -308,6 +311,7 @@ export function ContratoNuevo() {
                 <FormField control={form.control} name="frecuencia_visita" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Visita de mantenimiento</FormLabel>
+                    {/* select-cerrado: las 5 periodicidades de la constante PERIODICIDAD_LABELS */}
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
@@ -345,6 +349,7 @@ export function ContratoNuevo() {
                 <FormField control={form.control} name="metodo_actualizacion" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Actualización del precio</FormLabel>
+                    {/* select-cerrado: los 6 métodos de la constante METODO_ACTUALIZACION_LABELS */}
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>

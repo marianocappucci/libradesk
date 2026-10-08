@@ -226,6 +226,7 @@ export function Presupuestos() {
           )
         }
         return (
+          // select-cerrado: los 4 estados de presupuesto que se eligen a mano (borrador, enviado, aceptado, rechazado); «vencido» lo pone LibraCore
           <Select value={p.status}
                   onValueChange={(v) => cambiarEstado(p, v as EstadoPresupuesto)}>
             <SelectTrigger className="h-8 w-full" aria-label={`Estado del presupuesto ${p.number}`}>
@@ -345,6 +346,7 @@ export function Presupuestos() {
                   onChange={(e) => setBusqueda(e.target.value)}
                   className="max-w-md"
                 />
+                {/* select-cerrado: los 5 estados de la constante ESTADOS, más «Todos los estados» */}
                 <Select value={filtroEstado} onValueChange={setFiltroEstado}>
                   <SelectTrigger className="w-40" aria-label="Filtrar por estado">
                     <SelectValue />

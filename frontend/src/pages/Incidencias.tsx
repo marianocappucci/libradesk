@@ -459,17 +459,17 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
               <SelectItem value="prioridad">Por prioridad</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={ciudadPendientes} onValueChange={setCiudadPendientes}>
-            <SelectTrigger className="w-[11rem]" aria-label="Localidad del listado de pendientes">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODAS_LAS_LOCALIDADES}>Todas las localidades</SelectItem>
-              {localidadesPendientes.map((ciudad) => (
-                <SelectItem key={ciudad} value={ciudad}>{ciudad}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectBuscable
+            className="w-44"
+            value={ciudadPendientes}
+            onChange={setCiudadPendientes}
+            opciones={[
+              { value: TODAS_LAS_LOCALIDADES, label: 'Todas las localidades' },
+              ...localidadesPendientes.map((ciudad) => ({ value: ciudad, label: ciudad })),
+            ]}
+            ariaLabel="Localidad del listado de pendientes"
+            limpiable={false}
+          />
           <Button variant="outline" asChild>
             <a
               href={urlPendientes}
@@ -558,6 +558,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Estado</span>
+          {/* select-cerrado: los 4 estados de la constante ESTADO_LABELS, más «Todos» y «Pendientes» */}
           <Select value={filtroEstado} onValueChange={setFiltroEstado}>
             <SelectTrigger className="w-40" aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -573,6 +574,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
         </div>
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Prioridad</span>
+          {/* select-cerrado: las 3 prioridades de la constante PRIORIDAD_LABELS, más «Todas» */}
           <Select value={filtroPrioridad} onValueChange={setFiltroPrioridad}>
             <SelectTrigger className="w-36" aria-label="Filtrar por prioridad"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -591,6 +593,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
             opciones={[{ value: TODOS, label: 'Todos' }, ...opcionesCliente(clientes)]}
             ariaLabel="Filtrar por cliente"
             className="w-48"
+            limpiable={false}
           />
         </div>
         {/* Acá se ofrecen TODAS las categorías, raíces incluidas: elegir una
@@ -605,6 +608,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
               opciones={[{ value: TODOS, label: 'Todas' }, ...opcionesCategoria(categorias)]}
               ariaLabel="Filtrar por categoría"
               className="w-48"
+              limpiable={false}
             />
           </div>
         )}
@@ -806,16 +810,13 @@ function ArmarSalida({ abierto, onCerrar, reclamos, onListo }: {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="salida-cuadrilla">Cuadrilla</Label>
-            <Select value={equipoId} onValueChange={setEquipoId}>
-              <SelectTrigger id="salida-cuadrilla">
-                <SelectValue placeholder="Elegí una cuadrilla" />
-              </SelectTrigger>
-              <SelectContent>
-                {cuadrillas.filter((c) => c.activo).map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="salida-cuadrilla"
+              value={equipoId}
+              onChange={setEquipoId}
+              opciones={cuadrillas.filter((c) => c.activo).map((c) => ({ value: String(c.id), label: c.nombre }))}
+              placeholder="Elegí una cuadrilla"
+            />
             {/* Con qué sale y con quiénes, como confirmación: son datos de la
                 cuadrilla y se muestran para no tener que ir a buscarlos. */}
             {cuadrilla && (

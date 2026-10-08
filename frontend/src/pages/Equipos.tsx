@@ -543,6 +543,7 @@ export function Equipos() {
                         ]}
                         ariaLabel="Depósito"
                         className="w-52"
+                        limpiable={false}
                       />
                     </FormControl>
                     <FormMessage />
@@ -564,6 +565,7 @@ export function Equipos() {
                         ]}
                         ariaLabel="Es de un tercero"
                         className="w-52"
+                        limpiable={false}
                       />
                     </FormControl>
                     <FormMessage />
@@ -579,6 +581,7 @@ export function Equipos() {
                 <FormField control={form.control} name="estado" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estado</FormLabel>
+                    {/* select-cerrado: los 4 estados de la constante ESTADOS_EQUIPO */}
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger className="w-40">
@@ -626,6 +629,7 @@ export function Equipos() {
             opciones={[{ value: TODOS, label: 'Todos' }, ...opcionesCliente(clientes)]}
             ariaLabel="Filtrar por cliente"
             className="w-56"
+            limpiable={false}
           />
         </div>
         {filtroCliente !== TODOS && (

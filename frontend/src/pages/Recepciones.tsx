@@ -339,6 +339,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   opciones={opcionesCliente(clientes)}
                   ariaLabel="Cliente"
                   className="w-full"
+                  limpiable={false}
                 />
               </div>
               <div className="grid gap-2">
@@ -353,6 +354,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                   ariaLabel="Equipo del inventario"
                   className="w-full"
                   emptyMessage="Ese cliente no tiene equipos cargados."
+                  limpiable={false}
                 />
                 <p className="text-xs text-muted-foreground">
                   Si está, sus datos se copian al comprobante. Quedan
@@ -452,6 +454,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                     ]}
                     ariaLabel="Técnico receptor"
                     className="w-full"
+                    limpiable={false}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -525,6 +528,7 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
                 ]}
                 ariaLabel="Técnico que entrega"
                 className="w-full"
+                limpiable={false}
               />
             </div>
             <DialogFooter>

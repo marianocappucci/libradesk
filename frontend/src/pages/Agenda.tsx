@@ -42,9 +42,7 @@ import {
 import { Conmutador, type Pestania } from '@/components/conmutador'
 import { GenerarVisitas } from '@/components/generar-visitas'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import { useAgendaRango } from '@/components/agenda/datos'
 import { eventoDeChip, eventoDeSemana, porDiaComoEventos } from '@/components/agenda/eventos'
 import { VistaDia } from '@/components/agenda/vista-dia'
@@ -162,20 +160,18 @@ export function Agenda() {
             <label htmlFor="filtro-cuadrilla" className="text-sm font-medium">
               Cuadrilla
             </label>
-            <Select
+            {/* `TODAS` queda como valor propio (viaja en la URL, `?equipo=__todas__`), no `''`: por eso `limpiable={false}` —la × mandaría `''`. */}
+            <SelectBuscable
+              id="filtro-cuadrilla"
+              className="w-52"
               value={filtro}
-              onValueChange={(v) => setParams(con({ equipo: v }))}
-            >
-              <SelectTrigger id="filtro-cuadrilla" className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS}>Todas las cuadrillas</SelectItem>
-                {activos.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => setParams(con({ equipo: v }))}
+              opciones={[
+                { value: TODAS, label: 'Todas las cuadrillas' },
+                ...activos.map((e) => ({ value: String(e.id), label: e.nombre })),
+              ]}
+              limpiable={false}
+            />
           </div>
           {/* Generar las visitas de mantenimiento va acá y no en una pantalla
               propia: lo que produce **son** entradas de esta agenda, así que se

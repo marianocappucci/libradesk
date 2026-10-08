@@ -14,9 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -100,16 +98,16 @@ function FormDeposito({ deposito, sucursales, onGuardar }: {
   const [nombre, setNombre] = useState(deposito?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(deposito?.descripcion ?? '')
   const [sucursalId, setSucursalId] = useState(
-    deposito?.sucursal_id == null ? 'ninguna' : String(deposito.sucursal_id),
+    deposito?.sucursal_id == null ? '' : String(deposito.sucursal_id),
   )
 
   const cambiaDeSucursal = editando
-    && (deposito.sucursal_id ?? null) !== (sucursalId === 'ninguna' ? null : Number(sucursalId))
+    && (deposito.sucursal_id ?? null) !== (sucursalId === '' ? null : Number(sucursalId))
 
   async function guardar() {
     const cuerpo = {
       nombre: nombre.trim(), descripcion,
-      sucursal_id: sucursalId === 'ninguna' ? null : Number(sucursalId),
+      sucursal_id: sucursalId === '' ? null : Number(sucursalId),
       // `es_default` no viaja: el servicio lo conserva de la fila actual, y
       // mandarlo desde acá sería otra fuente de verdad para el mismo dato.
       ...(editando ? { activo: deposito.activo } : {}),
@@ -159,15 +157,15 @@ function FormDeposito({ deposito, sucursales, onGuardar }: {
           {sucursales.length > 0 && (
             <div className="grid gap-2">
               <Label htmlFor="d-suc">Sucursal</Label>
-              <Select value={sucursalId} onValueChange={setSucursalId}>
-                <SelectTrigger id="d-suc"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ninguna">Sin sucursal</SelectItem>
-                  {sucursales.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                id="d-suc"
+                value={sucursalId}
+                onChange={setSucursalId}
+                opciones={[
+                  { value: '', label: 'Sin sucursal' },
+                  ...sucursales.map((s) => ({ value: String(s.id), label: s.nombre })),
+                ]}
+              />
             </div>
           )}
           {cambiaDeSucursal && (

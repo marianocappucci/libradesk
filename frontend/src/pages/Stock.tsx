@@ -21,9 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BadgeEstado } from 'libra-ui/badge-estado'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -159,20 +157,14 @@ export function Stock() {
                     NO controlado y pasa a controlado al elegir algo, y React
                     avisa por consola. Lo caza el test de esta pantalla, que
                     falla ante cualquier warning. */}
-                <Select
+                <SelectBuscable
+                  id="st-consumible"
                   value={elegido ? String(elegido.id) : ''}
-                  onValueChange={(v) =>
+                  onChange={(v) =>
                     setElegido(consumibles.find((c) => String(c.id) === v) ?? null)}
-                >
-                  <SelectTrigger id="st-consumible">
-                    <SelectValue placeholder="Elegí un consumible" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {consumibles.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  opciones={consumibles.map((c) => ({ value: String(c.id), label: c.nombre }))}
+                  placeholder="Elegí un consumible"
+                />
               </div>
               {/* La vuelta al listado. Sin esto, elegir un consumible es un
                   camino de ida: el Select no tiene opción vacía, así que la
@@ -379,32 +371,25 @@ function Transferir({ item, origenes, destinos, onListo }: ConAccion & {
                 accesible y queda como "un combobox más" del diálogo, tanto para
                 un lector de pantalla como para quien lo busque desde un test. */}
             <Label htmlFor="tr-origen">Desde</Label>
-            <Select value={origen} onValueChange={setOrigen}>
-              <SelectTrigger id="tr-origen"><SelectValue placeholder="Depósito de origen" /></SelectTrigger>
-              <SelectContent>
-                {origenes.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
-                    {d.nombre} ({d.stock})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="tr-origen"
+              value={origen}
+              onChange={setOrigen}
+              opciones={origenes.map((d) => ({ value: String(d.id), label: `${d.nombre} (${d.stock})` }))}
+              placeholder="Depósito de origen"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="tr-destino">Hacia</Label>
-            <Select value={destino} onValueChange={setDestino}>
-              <SelectTrigger id="tr-destino"><SelectValue placeholder="Depósito de destino" /></SelectTrigger>
-              <SelectContent>
-                {destinos.filter((d) => String(d.id) !== origen).map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
-                    {d.nombre}
-                    {d.sucursal && (
-                      <span className="ml-2 text-xs text-muted-foreground">· {d.sucursal}</span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="tr-destino"
+              value={destino}
+              onChange={setDestino}
+              opciones={destinos.filter((d) => String(d.id) !== origen).map((d) => ({
+                value: String(d.id), label: d.nombre, hint: d.sucursal || undefined,
+              }))}
+              placeholder="Depósito de destino"
+            />
           </div>
           <div className="grid gap-2">
             <Label>Cantidad</Label>

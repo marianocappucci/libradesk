@@ -371,6 +371,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
                 opciones={[{ value: SIN, label: 'Sin responsable' }, ...opcionesPorNombre(responsables)]}
                 ariaLabel="Responsable del equipo"
                 emptyMessage="Nadie tiene el rol de responsable en Personal."
+                limpiable={false}
               />
             </div>
             <div className="grid gap-2">
@@ -444,6 +445,7 @@ function EquiposYFlota({ seccion }: { seccion: Seccion }) {
                   cambiarle el estado.
                 </p>
               ) : (
+                // select-cerrado: los 3 estados de vehículo que se eligen a mano (ESTADOS_VEHICULO_MANUALES; «asignado» lo pone el sistema)
                 <Select value={estadoVeh} onValueChange={setEstadoVeh}>
                   <SelectTrigger aria-label="Estado del vehículo"><SelectValue /></SelectTrigger>
                   <SelectContent>

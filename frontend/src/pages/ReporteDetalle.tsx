@@ -264,6 +264,7 @@ function CampoFiltro({
         ]}
         ariaLabel={campo.label}
         className="w-48"
+        limpiable={false}
       />
     </div>
   )

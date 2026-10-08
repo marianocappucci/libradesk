@@ -18,9 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -294,16 +292,14 @@ function EditorLineas({ productos, lineas, setLineas }: {
     <div className="space-y-2">
       <Label>Ítems</Label>
       <div className="flex gap-2">
-        <Select value={productoId} onValueChange={setProductoId}>
-          <SelectTrigger><SelectValue placeholder="Elegir producto…" /></SelectTrigger>
-          <SelectContent>
-            {productos.map((p) => (
-              <SelectItem key={p.id} value={String(p.id)}>
-                {p.codigo ? `${p.codigo} · ${p.nombre}` : p.nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectBuscable
+          className="flex-1"
+          ariaLabel="Producto"
+          value={productoId}
+          onChange={setProductoId}
+          opciones={productos.map((p) => ({ value: String(p.id), label: p.codigo ? `${p.codigo} · ${p.nombre}` : p.nombre }))}
+          placeholder="Elegir producto…"
+        />
         <Button variant="outline" onClick={agregar} disabled={!productoId}>Agregar</Button>
       </div>
       {lineas.map((l, i) => (
@@ -356,14 +352,13 @@ function FormOrden({ proveedores, productos, onGuardar }: {
         <div className="space-y-3">
           <div className="grid gap-2">
             <Label htmlFor="oc-prov">Proveedor</Label>
-            <Select value={proveedorId} onValueChange={setProveedorId}>
-              <SelectTrigger id="oc-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-              <SelectContent>
-                {proveedores.filter((p) => p.activo).map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="oc-prov"
+              value={proveedorId}
+              onChange={setProveedorId}
+              opciones={proveedores.filter((p) => p.activo).map((p) => ({ value: String(p.id), label: p.nombre }))}
+              placeholder="Elegir…"
+            />
           </div>
           <EditorLineas productos={productos} lineas={lineas} setLineas={setLineas} />
         </div>
@@ -408,33 +403,28 @@ function FormRecepcion({ proveedores, productos, depositos, onGuardar }: {
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="rc-prov">Proveedor</Label>
-              <Select value={proveedorId} onValueChange={setProveedorId}>
-                <SelectTrigger id="rc-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-                <SelectContent>
-                  {proveedores.filter((p) => p.activo).map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                id="rc-prov"
+                value={proveedorId}
+                onChange={setProveedorId}
+                opciones={proveedores.filter((p) => p.activo).map((p) => ({ value: String(p.id), label: p.nombre }))}
+                placeholder="Elegir…"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="rc-dep">Depósito de entrada</Label>
               {/* Es lo que define en qué sucursal queda la recepción, así que
                   la sucursal se muestra al lado de cada opción: elegir mal el
                   depósito manda el stock a la otra punta sin ningún aviso. */}
-              <Select value={depositoId} onValueChange={setDepositoId}>
-                <SelectTrigger id="rc-dep"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-                <SelectContent>
-                  {depositos.filter((d) => d.activo).map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.nombre}
-                      {d.sucursal && (
-                        <span className="ml-2 text-xs text-muted-foreground">· {d.sucursal}</span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectBuscable
+                id="rc-dep"
+                value={depositoId}
+                onChange={setDepositoId}
+                opciones={depositos.filter((d) => d.activo).map((d) => ({
+                  value: String(d.id), label: d.nombre, hint: d.sucursal || undefined,
+                }))}
+                placeholder="Elegir…"
+              />
             </div>
           </div>
           <div className="grid gap-2">
@@ -507,14 +497,13 @@ function FormEgreso({ proveedores, onGuardar }: {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="eg-prov">Proveedor</Label>
-            <Select value={proveedorId} onValueChange={setProveedorId}>
-              <SelectTrigger id="eg-prov"><SelectValue placeholder="Elegir…" /></SelectTrigger>
-              <SelectContent>
-                {proveedores.filter((p) => p.activo).map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              id="eg-prov"
+              value={proveedorId}
+              onChange={setProveedorId}
+              opciones={proveedores.filter((p) => p.activo).map((p) => ({ value: String(p.id), label: p.nombre }))}
+              placeholder="Elegir…"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="eg-cat">Categoría</Label>

@@ -388,6 +388,7 @@ export function EmpresaCard() {
                   {/* 🔑 Si lo guardado no está entre las tres, entra como una
                       opción más: sin eso el `<Select>` no lo encuentra, muestra
                       el campo vacío, y el primer guardado lo pisa en silencio. */}
+                  {/* select-cerrado: las 3 condiciones frente al IVA del emisor, de CONDICIONES_IVA del kit */}
                   <Select value={config[CAMPO_IVA]} disabled={!esAdmin}
                           onValueChange={(v) => setConfig({ ...config, [CAMPO_IVA]: v })}>
                     <SelectTrigger id={`cfg-${CAMPO_IVA}`}>
@@ -698,6 +699,7 @@ export function ServiciosCard() {
               21 / 10,5 / 27 / exento sale de QUÉ se vende. De la condición del
               cliente depende otra cosa — si el comprobante la discrimina. */}
           <Label htmlFor="srv-iva">IVA</Label>
+          {/* select-cerrado: las 4 alícuotas de IVA que ARCA sabe mapear (el backend las confirma) */}
           <select
             id="srv-iva"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"

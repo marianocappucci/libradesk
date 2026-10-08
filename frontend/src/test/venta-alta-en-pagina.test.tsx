@@ -184,6 +184,23 @@ describe('La pantalla de alta', () => {
     expect(screen.getByText(/200\.000/)).toBeInTheDocument()
   })
 
+  it('el cliente es opcional: se quita con la ×, y la venta sale de mostrador (cliente_id null)', async () => {
+    const user = userEvent.setup()
+    await altaConUnProducto(user)
+
+    const cliente = screen.getByRole('combobox', { name: 'Cliente' })
+    await user.click(cliente)
+    await user.click(await screen.findByRole('option', { name: /Estudio Contable Sur/ }))
+    expect(cliente).toHaveValue('Estudio Contable Sur')
+
+    await user.click(screen.getByRole('button', { name: 'Quitar la selección' }))
+    expect(cliente).toHaveValue('')
+
+    await user.click(screen.getByRole('button', { name: 'Registrar venta' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].cuerpo.cliente_id).toBeNull()
+  })
+
   it('registra la venta y vuelve a la lista con el aviso de los equipos', async () => {
     const user = userEvent.setup()
     await altaConUnProducto(user)
