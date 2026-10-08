@@ -35,9 +35,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeftRight, CircleAlert as AlertCircle, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
+import { ArrowLeftRight, RotateCcwClock as History, MessageSquare, ShieldCheck, Wrench } from 'lucide-react'
 import { ArrowLeft, ArrowLeftRight as ArrowLeftRightAccion, Check, PackageCheck, Printer, ShieldCheck as ShieldCheckAccion, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { INDICADORES } from 'libra-ui/iconos-indicador'
 import { hoyISO } from 'libra-ui/fechas'
 
 const NONE = '__none__'
@@ -526,7 +527,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
       <EncabezadoDePantalla
         titulo={
           incidencia && (
-            <TituloPantalla icono={AlertCircle}>
+            <TituloPantalla icono={INDICADORES.incidencias}>
               {incidencia.titulo}
               {/* El mismo semáforo que la grilla, adentro del badge de estado:
                   quien viene de la lista reconoce el color y no tiene que

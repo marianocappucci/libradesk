@@ -10,9 +10,8 @@
  *  garantiza que la tabla en pantalla y el .xlsx sean el mismo reporte.
  */
 import { ESTADO_LABELS, INSUMO_LABELS, PRIORIDAD_LABELS } from '../api'
-import { Monitor, Wallet } from 'lucide-react'
-import { Ticket } from '@/components/iconos-accion'
 import { hoyISO, primerDiaDelMesISO } from 'libra-ui/fechas'
+import type { ConceptoIndicador } from 'libra-ui/iconos-indicador'
 
 export const TODOS = '__todos__'
 
@@ -53,6 +52,8 @@ export type Reporte = {
   titulo: string
   descripcion: string
   grupo: Grupo
+  /** Qué mide el reporte: el ícono sale del catálogo de la familia (`libra-ui/iconos-indicador`, ADR-038), no se elige acá. */
+  concepto: ConceptoIndicador
   campos: Campo[]
   // Valores iniciales; los que no estén acá arrancan vacíos (= sin filtrar).
   inicial?: Record<string, string>
@@ -60,24 +61,24 @@ export type Reporte = {
 
 // El índice se arma a partir de esto, no de una lista aparte: agregar un
 // reporte es agregarle su `grupo` y ya aparece en la sección que le toca.
-export const GRUPOS: { id: Grupo; titulo: string; descripcion: string; icono: React.ReactNode }[] = [
+export const GRUPOS: { id: Grupo; titulo: string; descripcion: string; concepto: ConceptoIndicador }[] = [
   {
     id: 'equipos',
     titulo: 'Equipos',
     descripcion: 'El parque instalado: qué hay, dónde está y qué se le vence.',
-    icono: <Monitor className="size-4" />,
+    concepto: 'equipos',
   },
   {
     id: 'incidencias',
     titulo: 'Reclamos',
     descripcion: 'Los tickets del período y cómo se reparte el trabajo.',
-    icono: <Ticket className="size-4" />,
+    concepto: 'incidencias',
   },
   {
     id: 'administracion',
     titulo: 'Administración',
     descripcion: 'Lo que hay para facturar.',
-    icono: <Wallet className="size-4" />,
+    concepto: 'facturado',
   },
 ]
 
@@ -92,6 +93,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Equipamiento',
     descripcion: 'Parque instalado por cliente, con cantidad de reclamos y garantías vencidas resaltadas.',
     grupo: 'equipos',
+    concepto: 'equipos',
     campos: [
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
       { tipo: 'opciones', name: 'estado', label: 'Estado', opciones: ESTADO_EQUIPO_LABELS },
@@ -103,6 +105,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Reclamos por período',
     descripcion: 'Detalle de reclamos del período con totales de actividades y promedio de horas de resolución.',
     grupo: 'incidencias',
+    concepto: 'incidencias',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -120,6 +123,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Facturación',
     descripcion: 'Reclamos cerrados de clientes por servicio, agrupados por cliente. Los clientes con abono mensual no aparecen.',
     grupo: 'administracion',
+    concepto: 'facturado',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -131,6 +135,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Garantías por vencer',
     descripcion: 'Equipos cuya garantía vence dentro del plazo indicado. Marca las ya vencidas y las que vencen en 14 días o menos.',
     grupo: 'equipos',
+    concepto: 'garantias',
     campos: [
       { tipo: 'numero', name: 'dias', label: 'Próximos (días)' },
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -142,6 +147,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Por técnico',
     descripcion: 'Carga de trabajo por técnico: totales por estado, porcentaje de resolución y promedio de horas.',
     grupo: 'incidencias',
+    concepto: 'tecnicos',
     campos: PERIODO,
   },
   {
@@ -149,6 +155,8 @@ export const REPORTES: Reporte[] = [
     titulo: 'Movimientos de equipos',
     descripcion: 'Historial de altas, bajas y traslados, con origen y destino — sector del cliente o depósito.',
     grupo: 'equipos',
+    // El catálogo no tiene un concepto para los traslados: se queda en `equipos` (ver el informe de la migración).
+    concepto: 'equipos',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -159,6 +167,7 @@ export const REPORTES: Reporte[] = [
     titulo: 'Insumos por equipo',
     descripcion: 'Qué consumió cada máquina: pedidos, entregas, demora del proveedor y cuánto rindió cada insumo. Es el papel con el que se le reclama al proveedor.',
     grupo: 'equipos',
+    concepto: 'insumos',
     campos: [
       ...PERIODO,
       { tipo: 'cliente', name: 'cliente_id', label: 'Cliente' },
@@ -174,9 +183,9 @@ export const REPORTES: Reporte[] = [
 // Los tres volcados planos. Sin filtros: son la tabla entera. Se ven en
 // pantalla y se bajan por las mismas dos rutas que los analíticos.
 export const VOLCADOS: Reporte[] = [
-  { slug: 'clientes', titulo: 'Clientes', descripcion: 'La tabla de clientes completa.', grupo: 'administracion', campos: [] },
-  { slug: 'equipos', titulo: 'Equipos', descripcion: 'La tabla de equipos completa.', grupo: 'equipos', campos: [] },
-  { slug: 'incidencias', titulo: 'Reclamos', descripcion: 'La tabla de reclamos completa.', grupo: 'incidencias', campos: [] },
+  { slug: 'clientes', titulo: 'Clientes', descripcion: 'La tabla de clientes completa.', grupo: 'administracion', concepto: 'clientes', campos: [] },
+  { slug: 'equipos', titulo: 'Equipos', descripcion: 'La tabla de equipos completa.', grupo: 'equipos', concepto: 'equipos', campos: [] },
+  { slug: 'incidencias', titulo: 'Reclamos', descripcion: 'La tabla de reclamos completa.', grupo: 'incidencias', concepto: 'incidencias', campos: [] },
 ]
 
 export function buscarReporte(slug: string | undefined): Reporte | undefined {

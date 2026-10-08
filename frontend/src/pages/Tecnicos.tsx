@@ -18,7 +18,8 @@ import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { HardHat, Wrench } from 'lucide-react'
+import { INDICADORES } from 'libra-ui/iconos-indicador'
+import { IconoIndicador } from 'libra-ui/IconoIndicador'
 import { FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 
@@ -215,7 +216,7 @@ export function Tecnicos() {
 
   return (
     <div className="grid gap-4">
-      <EncabezadoDePantalla titulo={<TituloPantalla icono={HardHat}>Técnicos</TituloPantalla>}>
+      <EncabezadoDePantalla titulo={<TituloPantalla icono={INDICADORES.tecnicos}>Técnicos</TituloPantalla>}>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={abrirNuevo}><FilePlus />Nuevo técnico</Button>
@@ -223,7 +224,7 @@ export function Tecnicos() {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Wrench className="size-4" />
+                <IconoIndicador concepto="tecnicos" />
                 {editando === null ? 'Nuevo técnico' : `Editar técnico — ${editando.nombre}`}
               </DialogTitle>
             </DialogHeader>
