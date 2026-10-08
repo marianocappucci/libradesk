@@ -99,11 +99,16 @@ describe('los técnicos de una tarea', () => {
     // Los UNICOS inputs del dialogo son los dos tramos por fila: cuatro para
     // dos tecnicos. Si apareciera uno mas, seria el del importe.
     //
+    // El campo «Asignar técnico» es un `SelectBuscable` (libra-ui v0.129.0, ADR-039):
+    // un `<input role="combobox">` que NO es un campo de dato de la fila, así que
+    // no se cuenta (antes era un `Select` de Radix, que no es un `<input>`).
+    //
     // Se cuentan por el DOM y no con `getAllByRole('textbox')`: un
     // `datetime-local` **no tiene ese rol**, asi que esa consulta devolvia cero
     // y el test fallaba por el arnes y no por el componente.
     const dialogo = screen.getByRole('dialog')
-    const inputs = dialogo.querySelectorAll('input')
+    const inputs = Array.from(dialogo.querySelectorAll('input'))
+      .filter((i) => i.getAttribute('role') !== 'combobox')
     expect(inputs.length).toBe(4)
     for (const i of inputs) {
       expect(i.type).toBe('datetime-local')

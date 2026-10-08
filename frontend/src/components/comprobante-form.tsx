@@ -447,6 +447,7 @@ export function ComprobanteForm({
                 </div>
                 <div className="grid gap-2">
                   <Label>Estado</Label>
+                  {/* select-cerrado: los 4 estados de un presupuesto que se eligen a mano (borrador, enviado, aceptado, rechazado) */}
                   <Select value={draft.status} onValueChange={(v) => set('status', v as EstadoPresupuesto)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -538,6 +539,7 @@ export function ComprobanteForm({
                         pre-factura de Lagrace mezcla renglones en pesos y en
                         dólares, y la factura sale unificada en pesos. */}
                     {i === 0 && <span className="text-xs text-muted-foreground">Moneda</span>}
+                    {/* select-cerrado: las 2 monedas de la constante MONEDAS (ARS, USD) */}
                     <Select value={item.moneda}
                             onValueChange={(v) => setItem(i, 'moneda', v)}>
                       <SelectTrigger aria-label={`Moneda del ítem ${i + 1}`}>
@@ -562,6 +564,7 @@ export function ComprobanteForm({
                         un libro exento. Elegir un servicio del catálogo trae
                         la suya. */}
                     {i === 0 && <span className="text-xs text-muted-foreground">IVA</span>}
+                    {/* select-cerrado: las 4 alícuotas de IVA que ARCA sabe mapear (0, 10,5, 21 y 27 %); el backend las confirma, no las inventa */}
                     <Select value={item.tax_rate}
                             onValueChange={(v) => setItem(i, 'tax_rate', v)}>
                       <SelectTrigger aria-label={`Alícuota de IVA del ítem ${i + 1}`}>

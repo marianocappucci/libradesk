@@ -393,6 +393,7 @@ export function Clientes() {
                 <FormField control={form.control} name="condicion_iva" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Condición frente al IVA</FormLabel>
+                    {/* select-cerrado: las 5 condiciones frente al IVA de ARCA (el backend las confirma) más «Sin cargar» */}
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger className="w-52">

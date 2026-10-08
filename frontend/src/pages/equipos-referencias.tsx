@@ -174,6 +174,7 @@ export function DialogoDeReferencias({ equipo, proveedores, onClose, onGuardado 
               ]}
               placeholder="Del cliente"
               ariaLabel="De quién es ese número"
+              limpiable={false}
             />
           </div>
         </div>

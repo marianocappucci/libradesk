@@ -109,6 +109,28 @@ describe('el selector de sucursal vive en el menú del usuario', () => {
     })
   })
 
+  it('🔴 escribir en el campo busca la sucursal y NO le roba el foco a los ítems del menú', async () => {
+    // El campo es un `SelectBuscable` (libra-ui v0.129.0, ADR-039) adentro de un
+    // `DropdownMenuContent` de Radix, que lleva una búsqueda por letras (typeahead)
+    // sobre sus ítems: la primera «C» de «Chivilcoy» mandaba el foco a «Cambiar
+    // contraseña», el campo perdía lo escrito y la lista se cerraba. Se mide con el
+    // `Layout` y el menú reales.
+    const user = userEvent.setup()
+    montar()
+    await abrirMenu(user)
+
+    const campo = await screen.findByRole('combobox', { name: 'Sucursal activa' })
+    await user.click(campo)
+    await user.keyboard('Chiv')
+
+    expect(campo).toHaveFocus()
+    expect(campo).toHaveValue('Chiv')
+    await user.keyboard('{Enter}')
+    await waitFor(() => {
+      expect(localStorage.getItem('libradesk.sucursal_activa')).toBe('1')
+    })
+  })
+
   it('con una sola sucursal el selector no se dibuja', async () => {
     // Con una no ofrece nada; con cero no hay concepto. El menú tiene que
     // seguir abriendo igual — es donde además se cambia la contraseña.

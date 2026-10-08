@@ -152,6 +152,26 @@ describe('la grilla de tareas del reclamo', () => {
     expect('orden' in body).toBe(false)
   })
 
+  it('el tipo de servicio es opcional: se quita con la ×, y la tarea se agrega sin tipo (item_id null)', async () => {
+    const fn = stub()
+    render(<TareasDelReclamo incidenciaId={3} />)
+    const nueva = await screen.findByLabelText('Nueva tarea')
+    const tipo = screen.getByLabelText('Tipo de servicio')
+
+    fireEvent.click(tipo)
+    fireEvent.click(await screen.findByRole('option', { name: 'Hora normal' }))
+    expect(tipo).toHaveProperty('value', 'Hora normal')
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar la selección' }))
+    expect(tipo).toHaveProperty('value', '')
+
+    fireEvent.change(nueva, { target: { value: 'Pedido de repuesto' } })
+    fireEvent.click(screen.getByRole('button', { name: /agregar/i }))
+
+    await waitFor(() => expect(llamadas(fn, 'POST').length).toBe(1))
+    const body = JSON.parse(String((llamadas(fn, 'POST')[0][1] as RequestInit).body))
+    expect(body.item_id).toBeNull()
+  })
+
   it('cada control de la grilla tiene nombre accesible', async () => {
     render(<TareasDelReclamo incidenciaId={3} />)
     await screen.findByDisplayValue('Diagnóstico en el lugar')

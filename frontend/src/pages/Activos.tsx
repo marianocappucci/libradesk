@@ -319,6 +319,7 @@ export function Activos() {
                         contrato para cambiarle el estado.
                       </p>
                     ) : (
+                      // select-cerrado: los 8 estados que un activo admite a mano, de la constante ESTADO_ACTIVO_LABELS
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                         <SelectContent>
@@ -400,6 +401,7 @@ export function Activos() {
       <Card>
         <CardContent className="grid gap-2 sm:max-w-xs">
           <Label>Estado</Label>
+          {/* select-cerrado: los 8 estados de un activo, de la constante ESTADO_ACTIVO_LABELS */}
           <Select value={estado} onValueChange={setEstado}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>

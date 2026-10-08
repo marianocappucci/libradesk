@@ -234,6 +234,7 @@ export function InsumosAPedir() {
               opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
               placeholder="Todos los clientes"
               ariaLabel="Filtrar por cliente"
+              limpiable={false}
             />
           </div>
         </CardContent>

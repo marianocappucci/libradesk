@@ -11,9 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { SelectBuscable } from '@/components/select-buscable'
 import type { Consumible, StockPorDeposito } from '../pages/Stock'
 import { Trash2 } from '@/components/iconos-accion'
 
@@ -129,27 +127,24 @@ export function MaterialesIncidencia({ incidenciaId }: { incidenciaId: number })
         <div className="flex items-end gap-2 flex-wrap">
           <div className="grid gap-2 min-w-48">
             <Label>Consumible</Label>
-            <Select value={item} onValueChange={(v) => { setItem(v); setDeposito('') }}>
-              <SelectTrigger aria-label="Consumible"><SelectValue placeholder="Elegí uno" /></SelectTrigger>
-              <SelectContent>
-                {consumibles.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              value={item}
+              onChange={(v) => { setItem(v); setDeposito('') }}
+              opciones={consumibles.map((c) => ({ value: String(c.id), label: c.nombre }))}
+              placeholder="Elegí uno"
+              ariaLabel="Consumible"
+            />
           </div>
           <div className="grid gap-2 min-w-44">
             <Label>Depósito</Label>
-            <Select value={deposito} onValueChange={setDeposito} disabled={item === ''}>
-              <SelectTrigger aria-label="Depósito del consumible"><SelectValue placeholder="De dónde sale" /></SelectTrigger>
-              <SelectContent>
-                {stock.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
-                    {d.nombre} ({d.stock})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectBuscable
+              value={deposito}
+              onChange={setDeposito}
+              disabled={item === ''}
+              opciones={stock.map((d) => ({ value: String(d.id), label: `${d.nombre} (${d.stock})` }))}
+              placeholder="De dónde sale"
+              ariaLabel="Depósito del consumible"
+            />
           </div>
           <div className="grid gap-2 w-24">
             <Label>Cantidad</Label>

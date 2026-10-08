@@ -287,6 +287,7 @@ export function Reparaciones() {
               opciones={[{ value: TODOS, label: 'Todos los clientes' }, ...opcionesCliente(clientes)]}
               placeholder="Todos los clientes"
               ariaLabel="Filtrar por cliente"
+              limpiable={false}
             />
           </div>
           <div className="grid gap-2">
@@ -297,6 +298,7 @@ export function Reparaciones() {
               opciones={[{ value: TODOS, label: 'Todos los proveedores' }, ...opcionesProveedor(proveedores)]}
               placeholder="Todos los proveedores"
               ariaLabel="Filtrar por proveedor"
+              limpiable={false}
             />
           </div>
         </CardContent>
