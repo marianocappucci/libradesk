@@ -9,35 +9,45 @@
  *  motivo del diálogo, no tener seis formularios desplegados a la vez— se
  *  conserva tal cual.
  */
-import { Link } from 'react-router-dom'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileSpreadsheet, Table2 } from 'lucide-react'
 import { ICONOS } from 'libra-ui/iconos-identidad'
-import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
-import { ChevronRight } from '@/components/iconos-accion'
+import { IconoIndicador } from 'libra-ui/IconoIndicador'
+import { TarjetaReporte } from 'libra-ui/TarjetaReporte'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { GRUPOS, REPORTES, VOLCADOS, type Reporte } from './reportes-definicion'
 
+/** Un reporte del índice: el ícono es el de lo que mide (`libra-ui/iconos-indicador`), el mismo en toda la suite. */
 function ItemReporte({ reporte }: { reporte: Reporte }) {
   return (
-    <li>
-      <Link
-        to={`/reportes/${reporte.slug}`}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50"
-      >
-        <FileSpreadsheet className="size-4 shrink-0 text-primary" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{reporte.titulo}</p>
-          <p className="text-xs text-muted-foreground">{reporte.descripcion}</p>
-        </div>
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-      </Link>
-    </li>
+    <TarjetaReporte
+      concepto={reporte.concepto}
+      titulo={reporte.titulo}
+      descripcion={reporte.descripcion}
+      a={`/reportes/${reporte.slug}`}
+    />
+  )
+}
+
+/** Un grupo del índice: su título con el ícono de lo que agrupa, su descripción y las tarjetas de sus reportes. */
+function GrupoDeReportes({ titulo, descripcion, icono, children }: {
+  titulo: string
+  descripcion: string
+  icono: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="grid gap-3">
+      <div className="grid gap-1">
+        <h3 className="flex items-center gap-2 text-base font-semibold leading-none">{icono}{titulo}</h3>
+        <p className="text-sm text-muted-foreground">{descripcion}</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">{children}</div>
+    </section>
   )
 }
 
 export function Reportes() {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <div>
         <TituloPantalla icono={ICONOS.reportes}>
           Reportes
@@ -52,37 +62,24 @@ export function Reportes() {
         const delGrupo = REPORTES.filter((r) => r.grupo === grupo.id)
         if (delGrupo.length === 0) return null
         return (
-          <Card key={grupo.id}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                {grupo.icono}{grupo.titulo}
-              </CardTitle>
-              <CardDescription>{grupo.descripcion}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="divide-y rounded-md border">
-                {delGrupo.map((r) => <ItemReporte key={r.slug} reporte={r} />)}
-              </ul>
-            </CardContent>
-          </Card>
+          <GrupoDeReportes
+            key={grupo.id}
+            titulo={grupo.titulo}
+            descripcion={grupo.descripcion}
+            icono={<IconoIndicador concepto={grupo.concepto} />}
+          >
+            {delGrupo.map((r) => <ItemReporte key={r.slug} reporte={r} />)}
+          </GrupoDeReportes>
         )
       })}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Table2 className="size-4" />Listados completos
-          </CardTitle>
-          <CardDescription>
-            La tabla entera, sin filtros — para mirarla de una o trabajarla aparte.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="divide-y rounded-md border">
-            {VOLCADOS.map((v) => <ItemReporte key={v.slug} reporte={v} />)}
-          </ul>
-        </CardContent>
-      </Card>
+      <GrupoDeReportes
+        titulo="Listados completos"
+        descripcion="La tabla entera, sin filtros — para mirarla de una o trabajarla aparte."
+        icono={<IconoIndicador concepto="reportes" />}
+      >
+        {VOLCADOS.map((v) => <ItemReporte key={v.slug} reporte={v} />)}
+      </GrupoDeReportes>
     </div>
   )
 }

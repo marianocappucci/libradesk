@@ -6,6 +6,7 @@ import {
   PRIORIDAD_TONO, ubicacionTexto, type ClienteResumen,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { TarjetaIndicador } from 'libra-ui/TarjetaIndicador'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { BadgeEstado } from 'libra-ui/badge-estado'
@@ -16,10 +17,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { MapPin, Monitor } from 'lucide-react'
 import { ICONOS } from 'libra-ui/iconos-identidad'
 import { fecha } from '@/lib/format'
-import { AlertTriangle, ArrowLeft, FileText, ShieldCheck, Ticket } from '@/components/iconos-accion'
+import { ArrowLeft, FileText } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { primerDiaDelMesISO, sumarDiasISO } from 'libra-ui/fechas'
 
@@ -113,36 +113,20 @@ function DialogoInforme({ clienteId, nombre }: { clienteId: number; nombre: stri
   )
 }
 
-/** Tarjeta de conteo con el desglose debajo. El formato calca al que tenía el
- *  Dashboard global (retirado el 2026-09-16); se mantiene el estilo acá aunque
- *  ya no quede esa segunda pantalla con la que igualarse. */
-function TarjetaConteo({ titulo, total, pie, desglose, icono }: {
-  titulo: string
-  total: number
-  pie?: string
-  desglose?: [string, number][]
-  icono: React.ReactNode
-}) {
+/** El desglose que va debajo de la cifra de una tarjeta de conteo (`children` de `TarjetaIndicador`): una línea por estado con su cantidad.
+ *  Sin filas no devuelve nada, para que la tarjeta no dibuje un bloque vacío. El formato calca al que tenía el Dashboard global (retirado
+ *  el 2026-09-16); la tarjeta en sí es la del kit (`libra-ui/TarjetaIndicador`, ADR-038). */
+function desglose(filas: [string, number][]): React.ReactNode {
+  if (filas.length === 0) return null
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription className="flex items-center gap-1.5">{icono}{titulo}</CardDescription>
-        <CardTitle className="text-3xl">{total}</CardTitle>
-        {pie && <CardDescription>{pie}</CardDescription>}
-      </CardHeader>
-      {desglose && desglose.length > 0 && (
-        <CardContent>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {desglose.map(([label, count]) => (
-              <li key={label} className="flex justify-between">
-                <span>{label}</span>
-                <span className="font-medium text-foreground">{count}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      )}
-    </Card>
+    <ul className="space-y-1">
+      {filas.map(([label, count]) => (
+        <li key={label} className="flex justify-between">
+          <span>{label}</span>
+          <span className="font-medium text-foreground">{count}</span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -234,35 +218,39 @@ export function ClienteDetalle() {
       </EncabezadoDePantalla>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <TarjetaConteo
-          titulo="Parque"
-          icono={<Monitor className="size-4" />}
-          total={resumen.total_equipos}
-          pie="equipos"
-          desglose={Object.entries(resumen.equipos_por_estado)
+        <TarjetaIndicador
+          concepto="equipos"
+          etiqueta="Parque"
+          valor={resumen.total_equipos}
+          ayuda="equipos"
+        >
+          {desglose(Object.entries(resumen.equipos_por_estado)
             .filter(([, n]) => n > 0)
-            .map(([estado, n]) => [ESTADO_EQUIPO_LABELS[estado] ?? estado, n])}
-        />
-        <TarjetaConteo
-          titulo="Reclamos"
-          icono={<Ticket className="size-4" />}
-          total={resumen.total_incidencias}
-          pie={`${abiertas.length} sin cerrar`}
-          desglose={Object.entries(resumen.incidencias_por_estado)
+            .map(([estado, n]) => [ESTADO_EQUIPO_LABELS[estado] ?? estado, n]))}
+        </TarjetaIndicador>
+        <TarjetaIndicador
+          concepto="incidencias"
+          etiqueta="Reclamos"
+          valor={resumen.total_incidencias}
+          ayuda={`${abiertas.length} sin cerrar`}
+        >
+          {desglose(Object.entries(resumen.incidencias_por_estado)
             .filter(([, n]) => n > 0)
-            .map(([estado, n]) => [ESTADO_LABELS[estado as keyof typeof ESTADO_LABELS] ?? estado, n])}
+            .map(([estado, n]) => [ESTADO_LABELS[estado as keyof typeof ESTADO_LABELS] ?? estado, n]))}
+        </TarjetaIndicador>
+        {/* Con garantías vencidas la tarjeta se pinta de peligro: antes lo decía el ícono (el triángulo rojo en lugar del escudo). */}
+        <TarjetaIndicador
+          concepto="garantias"
+          etiqueta="Garantías"
+          valor={garantias.length}
+          tono={vencidas > 0 ? 'peligro' : 'neutro'}
+          ayuda={`vencen en ${resumen.dias_garantia} días o menos${vencidas > 0 ? ` — ${vencidas} ya vencida${vencidas === 1 ? '' : 's'}` : ''}`}
         />
-        <TarjetaConteo
-          titulo="Garantías"
-          icono={vencidas > 0 ? <AlertTriangle className="size-4 text-destructive" /> : <ShieldCheck className="size-4" />}
-          total={garantias.length}
-          pie={`vencen en ${resumen.dias_garantia} días o menos${vencidas > 0 ? ` — ${vencidas} ya vencida${vencidas === 1 ? '' : 's'}` : ''}`}
-        />
-        <TarjetaConteo
-          titulo="Sectores"
-          icono={<MapPin className="size-4" />}
-          total={resumen.total_sectores}
-          pie={`${resumen.horas_invertidas.toFixed(1)} hs invertidas en total`}
+        <TarjetaIndicador
+          concepto="sucursales"
+          etiqueta="Sectores"
+          valor={resumen.total_sectores}
+          ayuda={`${resumen.horas_invertidas.toFixed(1)} hs invertidas en total`}
         />
       </div>
 
