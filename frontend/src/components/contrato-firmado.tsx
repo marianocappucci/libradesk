@@ -6,16 +6,18 @@
  *  lo que dice el sistema era el número de contrato y nada más.
  *
  *  Es la primera pantalla del producto que sube un archivo propio. El patrón
- *  —input escondido, `postForm`, y un `version` para saltear la caché— sale de
- *  `LogoCard` en Configuración, que hasta hoy era el único, y ese sube a un
- *  router de LibraCore.
+ *  —`postForm` y un `version` para saltear la caché— sale de `LogoCard` en
+ *  Configuración, que hasta hoy era el único, y ese sube a un router de
+ *  LibraCore. El campo es el `CampoArchivo` del kit (ADR-037 de libra-ui):
+ *  sube apenas se elige, así que va con `archivo={null}`.
  */
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { CampoArchivo } from 'libra-ui/CampoArchivo'
 import { api, ApiError } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Eye, Trash2, Upload } from '@/components/iconos-accion'
+import { Eye, Trash2 } from '@/components/iconos-accion'
 
 export function ContratoFirmado({
   contratoId, hayArchivo, onCambio,
@@ -29,7 +31,6 @@ export function ContratoFirmado({
   const [error, setError] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
   const [confirmarBorrado, setConfirmarBorrado] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   async function subir(archivo: File) {
     setSubiendo(true)
@@ -45,10 +46,9 @@ export function ContratoFirmado({
       // mensaje propio perdería justamente lo que el usuario necesita saber.
       setError(err instanceof ApiError ? err.detail : 'No se pudo subir el archivo.')
     } finally {
+      // `CampoArchivo` vacía el input nativo solo: elegir el MISMO archivo dos
+      // veces seguidas vuelve a disparar la subida.
       setSubiendo(false)
-      // Sin esto, elegir el MISMO archivo dos veces seguidas no dispara
-      // `onChange` y el segundo intento parece que no hace nada.
-      if (inputRef.current) inputRef.current.value = ''
     }
   }
 
@@ -71,7 +71,7 @@ export function ContratoFirmado({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {hayArchivo ? (
+        {hayArchivo && (
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="sm">
               {/* Se abre en una pestaña nueva y no se descarga: el backend lo
@@ -85,44 +85,29 @@ export function ContratoFirmado({
               </a>
             </Button>
             <Button
-              variant="outline" size="sm" disabled={subiendo}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload /> {subiendo ? 'Subiendo…' : 'Reemplazar'}
-            </Button>
-            <Button
               variant="outline" size="sm"
               onClick={() => setConfirmarBorrado(true)}
             >
               <Trash2 /> Quitar
             </Button>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline" size="sm" disabled={subiendo}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload /> {subiendo ? 'Subiendo…' : 'Subir el firmado'}
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Todavía no hay ninguno cargado.
-            </span>
-          </div>
         )}
 
-        <input
-          ref={inputRef}
-          type="file"
+        <CampoArchivo
+          archivo={null}
+          onChange={(archivo) => { if (archivo) void subir(archivo) }}
           accept="application/pdf,.pdf"
-          className="hidden"
-          onChange={(e) => {
-            const archivo = e.target.files?.[0]
-            if (archivo) void subir(archivo)
-          }}
+          disabled={subiendo}
+          aria-label={hayArchivo ? 'Reemplazar el firmado' : 'Subir el firmado'}
+          placeholder={
+            subiendo
+              ? 'Subiendo…'
+              : hayArchivo
+                ? 'Elegí otro PDF para reemplazarlo'
+                : 'Todavía no hay ninguno cargado'
+          }
+          error={error ?? undefined}
         />
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
       </CardContent>
 
       <ConfirmDialog
