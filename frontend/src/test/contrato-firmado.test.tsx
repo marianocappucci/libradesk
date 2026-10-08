@@ -44,7 +44,9 @@ describe('el contrato firmado escaneado', () => {
   it('sin archivo cargado, ofrece subirlo y lo dice', () => {
     render(<ContratoFirmado contratoId={7} hayArchivo={false} onCambio={() => {}} />)
 
-    expect(screen.getByRole('button', { name: /subir el firmado/i })).toBeTruthy()
+    // El campo es el `CampoArchivo` del kit: el input lleva el nombre de la acción.
+    expect(screen.getByLabelText(/subir el firmado/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /subir archivo/i })).toBeTruthy()
     expect(screen.getByText(/todavía no hay ninguno cargado/i)).toBeTruthy()
   })
 
@@ -82,6 +84,8 @@ describe('el contrato firmado escaneado', () => {
     elegirArchivo(container, pdf())
 
     expect(await screen.findByText(/supera el máximo de 20 MB/i)).toBeTruthy()
+    // Y queda asociado al campo, que se pinta como inválido.
+    expect(screen.getByLabelText(/subir el firmado/i).getAttribute('aria-invalid')).toBe('true')
   })
 
   it('con archivo cargado, el acceso apunta al PDF de ESE contrato', () => {
@@ -91,7 +95,7 @@ describe('el contrato firmado escaneado', () => {
     expect(ver.getAttribute('href')).toBe('/api/contratos/7/archivo')
     expect(ver.getAttribute('target')).toBe('_blank')
     // Y aparecen las dos acciones que sólo tienen sentido con algo cargado.
-    expect(screen.getByRole('button', { name: /reemplazar/i })).toBeTruthy()
+    expect(screen.getByLabelText(/reemplazar el firmado/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: /quitar/i })).toBeTruthy()
   })
 })

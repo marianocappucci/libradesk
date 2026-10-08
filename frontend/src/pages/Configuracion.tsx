@@ -27,7 +27,7 @@
 //
 // Si se decide que estos catálogos sean admin-only, el lugar es el backend, no
 // esta pantalla.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   api, ApiError, type CategoriaIncidencia, type ConfigEmpresa,
   type Servicio,
@@ -42,11 +42,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
-  Check, CornerDownRight, FilePlus, Pencil, PlusCircle, Trash2, Upload, X,
+  Check, CornerDownRight, FilePlus, Pencil, PlusCircle, Trash2, X,
 } from '@/components/iconos-accion'
 import { ListChecks, Send } from 'lucide-react'
 import { Tags } from '@/components/iconos-accion'
 import { CONDICIONES_IVA, createConfiguracion } from 'libra-ui/Configuracion'
+import { CampoArchivo } from 'libra-ui/CampoArchivo'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -449,7 +450,6 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
   const [hayLogo, setHayLogo] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let vivo = true
@@ -471,7 +471,6 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
       setError(err instanceof ApiError ? err.detail : 'No se pudo subir el logo.')
     } finally {
       setSubiendo(false)
-      if (inputRef.current) inputRef.current.value = ''
     }
   }
 
@@ -508,26 +507,20 @@ function LogoCard({ esAdmin }: { esAdmin: boolean }) {
           </p>
         )}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
         {esAdmin ? (
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={inputRef}
-              type="file"
+          <div className="flex flex-wrap items-start gap-2">
+            {/* El campo del kit (ADR-037 de libra-ui) sube apenas se elige: va
+                con `archivo={null}` y el logo cargado se ve en la imagen. */}
+            <CampoArchivo
+              archivo={null}
+              onChange={(f) => { if (f) void subir(f) }}
               accept="image/png,image/jpeg"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) subir(f) }}
-            />
-            <Button
-              type="button"
-              variant="outline"
               disabled={subiendo}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              {subiendo ? 'Subiendo…' : hayLogo ? 'Reemplazar' : 'Subir logo'}
-            </Button>
+              aria-label={hayLogo ? 'Reemplazar el logo' : 'Subir logo'}
+              placeholder={subiendo ? 'Subiendo…' : hayLogo ? 'Elegí otra imagen para reemplazarlo' : 'Ningún logo'}
+              error={error ?? undefined}
+              className="flex-1 sm:max-w-sm"
+            />
             {hayLogo && (
               <Button type="button" variant="outline" onClick={borrar}>
                 <Trash2 className="mr-2 h-4 w-4" />
