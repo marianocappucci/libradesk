@@ -95,6 +95,11 @@ def enganchar_secretos() -> None:
 
     _secretos = SecretosRepository(_session_factory)
     _lc_config_manager.usar_almacen_de_secretos(_secretos)
+    # La empresa ficticia de la demo pública (ADR-038 de libracore): en una
+    # instancia con `DEMO_MODE=1` reemplaza lo que haya en `config.json`.
+    from app import empresa_demo
+
+    empresa_demo.registrar()
 
 
 def migrar_secretos() -> dict:
