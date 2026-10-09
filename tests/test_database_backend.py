@@ -91,17 +91,20 @@ def test_configure_siempre_termina_en_psycopg3(esquema):
         database.get_engine().dispose()
 
 
-def test_sin_normalizar_el_engine_ni_se_construye():
-    """Contraprueba de la de arriba, y la razon por la que normalizar no es
-    cosmetico: `create_engine` con el esquema pelado revienta ACÁ MISMO, en este
-    entorno, exactamente como en el contenedor.
-
-    Si algun dia alguien instala psycopg2 en la imagen, este test se pone rojo —
-    y esa es la señal correcta: querria decir que el crash loop dejo de
-    reproducirse por una dependencia nueva, no porque el defecto se arreglara.
+def test_sin_normalizar_el_engine_usa_psycopg_desde_sqlalchemy_2_1():
+    """Era la contraprueba de la de arriba: con SQLAlchemy 2.0, `create_engine`
+    con el esquema pelado buscaba psycopg2 y reventaba (el crash loop que motivo
+    normalizar). Desde SQLAlchemy 2.1 (Dependabot, 2026-10-09) el driver por
+    defecto de `postgresql://` es psycopg (v3), el mismo que normalizamos: el
+    esquema pelado ya no rompe. Se fija el comportamiento nuevo, asi que si un
+    dia vuelve el default de psycopg2, este test se pone rojo. Normalizar sigue
+    valiendo: deja el driver explicito y no depende del default de la version.
     """
-    with pytest.raises(ModuleNotFoundError, match="psycopg2"):
-        create_engine("postgresql://u:p@host:5432/libradesk")
+    engine = create_engine("postgresql://u:p@host:5432/libradesk")
+    try:
+        assert engine.dialect.driver == "psycopg"
+    finally:
+        engine.dispose()
 
 
 def test_configure_sigue_rechazando_lo_que_no_es_postgres():
