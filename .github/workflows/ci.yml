@@ -30,7 +30,7 @@ jobs:
         # el collation de la locale, así que un `ORDER BY` sobre texto puede
         # dar distinto en las dos. Un CI verde sobre otra imagen no dice nada
         # sobre producción.
-        image: postgres:16-alpine
+        image: public.ecr.aws/docker/library/postgres:16-alpine
         env:
           POSTGRES_DB: libradesk
           POSTGRES_USER: libradesk
