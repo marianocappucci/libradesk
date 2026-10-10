@@ -23,26 +23,6 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        # 🔴 `-alpine`, la MISMA imagen que corren las tres instancias. No es
-        # un detalle de tamaño: alpine ordena por bytes y la imagen Debian usa
-        # el collation de la locale, así que un `ORDER BY` sobre texto puede
-        # dar distinto en las dos. Un CI verde sobre otra imagen no dice nada
-        # sobre producción.
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: libradesk
-          POSTGRES_USER: libradesk
-          POSTGRES_PASSWORD: libradesk-ci
-          TZ: America/Argentina/Buenos_Aires
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U libradesk -d libradesk"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
     env:
       TZ: America/Argentina/Buenos_Aires
       # La suite arma UNA BASE POR TEST, copiada de una plantilla, así que esta
@@ -58,6 +38,21 @@ jobs:
       LIBRADESK_SUITE_POSTGRES_URL: postgresql+psycopg://libradesk:libradesk-ci@localhost:5432/postgres
 
     steps:
+      # El PostgreSQL sale de la Action compartida de libra-web-kit (`postgres-ci-v1`, desde el espejo de ECR;
+      # reglas/ci.md del wiki), con los mismos datos y el mismo healthcheck que el `services:` de antes.
+      # 🔴 `-alpine`, la MISMA imagen que corren las tres instancias. No es
+      # un detalle de tamaño: alpine ordena por bytes y la imagen Debian usa
+      # el collation de la locale, así que un `ORDER BY` sobre texto puede
+      # dar distinto en las dos. Un CI verde sobre otra imagen no dice nada
+      # sobre producción.
+      - name: PostgreSQL de la suite
+        uses: marianocappucci/libra-web-kit/.github/actions/postgres-ci@postgres-ci-v1
+        with:
+          variante: alpine
+          base: libradesk
+          usuario: libradesk
+          clave: libradesk-ci
+          tz: America/Argentina/Buenos_Aires
       - uses: actions/checkout@v7
 
       # F3 (2026-09-05): un PR que solo toca frontend/ o documentacion no corre
