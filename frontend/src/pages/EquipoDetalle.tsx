@@ -35,7 +35,7 @@ import { AlertTriangle, ArrowLeft, ArrowLeftRight, ShieldCheck } from '@/compone
 import { MoverEquipo } from '@/components/mover-equipo'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { IconoIndicador } from 'libra-ui/IconoIndicador'
-import { formatoCantidad } from 'libra-ui/formatos'
+import { formatoCantidad, formatoMoneda } from 'libra-ui/formatos'
 
 function formatFecha(valor: string | null): string {
   // Ver `ClienteDetalle`: la guarda subio a `lib/format`.
@@ -44,10 +44,6 @@ function formatFecha(valor: string | null): string {
 
 function formatFechaHora(fecha: string | null): string {
   return fechaHora(fecha)
-}
-
-function pesos(monto: number): string {
-  return `$ ${monto.toLocaleString('es-AR')}`
 }
 
 function Dato({ label, children }: { label: string; children: React.ReactNode }) {
@@ -335,7 +331,7 @@ export function EquipoDetalle() {
             <Tarjeta
               titulo="Gastado en service"
               icono={<Wrench className="size-4" />}
-              valor={pesos(resumen.gastado_reparaciones)}
+              valor={formatoMoneda(resumen.gastado_reparaciones)}
               pie="acumulado del equipo"
             />
             <Tarjeta
@@ -428,7 +424,7 @@ export function EquipoDetalle() {
                             : `${formatFecha(r.fecha_envio)} → ${formatFecha(r.fecha_retorno)} · ${r.dias_afuera} días`,
                           r.remito_salida ? `remito ${r.remito_salida}` : null,
                           r.rma ? `RMA ${r.rma}` : null,
-                          r.costo !== null ? pesos(r.costo) : null,
+                          r.costo !== null ? formatoMoneda(r.costo) : null,
                         ].filter(Boolean).join(' · ')}
                       </span>
                       {r.diagnostico && (

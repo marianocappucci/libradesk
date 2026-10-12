@@ -151,7 +151,7 @@ describe('la ficha, al click en la fila', () => {
 
     const ficha = await screen.findByRole('dialog')
     expect(within(ficha).getByText('Garantía')).toBeInTheDocument()
-    expect(within(ficha).getByText(/45\.000/)).toBeInTheDocument()
+    expect(within(ficha).getByText(/\$\s45\.000,00/)).toBeInTheDocument()
   })
 
   it('el ticket que la originó es un link, y sólo si lo hay', async () => {
