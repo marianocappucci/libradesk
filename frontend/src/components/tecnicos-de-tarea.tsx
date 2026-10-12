@@ -19,6 +19,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { SelectBuscable } from '@/components/select-buscable'
+import { formatoMoneda } from 'libra-ui/formatos'
 import { PlusCircle, Trash2, Users } from '@/components/iconos-accion'
 
 export type AsignacionTecnico = {
@@ -182,7 +183,7 @@ export function TecnicosDeTarea({
                           {a.horas ?? SIN_DATO}
                         </td>
                         <td className="py-2 pr-2 text-right tabular-nums">
-                          {a.importe === null ? SIN_DATO : `$ ${a.importe.toLocaleString('es-AR')}`}
+                          {a.importe === null ? SIN_DATO : formatoMoneda(a.importe)}
                         </td>
                         <td className="py-2">
                           <Button
@@ -201,7 +202,7 @@ export function TecnicosDeTarea({
                         {horasTotal ?? SIN_DATO}
                       </td>
                       <td className="py-2 pr-2 text-right tabular-nums">
-                        {importeTotal === null ? SIN_DATO : `$ ${importeTotal.toLocaleString('es-AR')}`}
+                        {importeTotal === null ? SIN_DATO : formatoMoneda(importeTotal)}
                       </td>
                       <td />
                     </tr>

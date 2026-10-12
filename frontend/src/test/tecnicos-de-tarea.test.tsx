@@ -82,9 +82,9 @@ describe('los técnicos de una tarea', () => {
 
     const filas = await screen.findAllByRole('row')
     const cantone = filas.find((f) => f.textContent?.includes('Cantone'))!
-    // Ni "0" ni "$ 0": no se sabe cuántas horas trabajó.
+    // Ni "0" ni "$ 0,00": no se sabe cuántas horas trabajó. (`formatoMoneda` escribe el espacio duro de `Intl` es-AR.)
     expect(within(cantone).getAllByText('—').length).toBe(2)
-    expect(cantone.textContent).not.toContain('$ 0')
+    expect(cantone.textContent).not.toContain('$\u00a00')
 
     // Y el de Oteiza sí muestra sus números.
     const oteiza = filas.find((f) => f.textContent?.includes('Oteiza'))!
@@ -114,8 +114,8 @@ describe('los técnicos de una tarea', () => {
       expect(i.type).toBe('datetime-local')
     }
     expect(screen.queryByLabelText(/importe/i)).toBeNull()
-    // Y el importe esta, como texto: no es que falte la columna.
-    expect(dialogo.textContent).toContain('73.850')
+    // Y el importe esta, como texto y con centavos: no es que falte la columna.
+    expect(dialogo.textContent).toContain('$\u00a073.850,00')
   })
 
   it('editar un tramo manda sólo ese campo', async () => {

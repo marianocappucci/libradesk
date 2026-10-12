@@ -31,7 +31,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RotateCcwClock as History, Briefcase as IconoActivos } from 'lucide-react'
 import { Boxes, FilePlus, Pencil, Trash2 } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
-import { formatoMonedaEntera } from 'libra-ui/formatos'
+import { formatoMoneda } from 'libra-ui/formatos'
 
 const TODOS = '__todos__'
 
@@ -68,7 +68,7 @@ const VACIO: ActivoFormValues = {
 
 function pesos(v: number | null): string {
   if (v === null) return '—'
-  return formatoMonedaEntera(v)
+  return formatoMoneda(v)
 }
 
 function numero(v: string | undefined): number | undefined {
