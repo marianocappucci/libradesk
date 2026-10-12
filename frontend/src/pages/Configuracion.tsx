@@ -48,6 +48,7 @@ import { ListChecks, Send } from 'lucide-react'
 import { Tags } from '@/components/iconos-accion'
 import { CONDICIONES_IVA, createConfiguracion } from 'libra-ui/Configuracion'
 import { CampoArchivo } from 'libra-ui/CampoArchivo'
+import { formatoMoneda } from 'libra-ui/formatos'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -813,7 +814,7 @@ export function ServiciosCard() {
                   <span className="truncate text-xs text-muted-foreground">{s.descripcion}</span>
                 )}
                 <span className="ml-auto tabular-nums">
-                  {s.precio.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+                  {formatoMoneda(s.precio)}
                 </span>
                 <Badge variant="secondary" className="tabular-nums">
                   {s.iva_rate === 0

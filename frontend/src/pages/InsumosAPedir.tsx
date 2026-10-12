@@ -38,11 +38,12 @@ import { Droplets } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { ArrowLeft } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
+import { formatoCantidad } from 'libra-ui/formatos'
 
 const TODOS = '__todos__'
 
 function copias(v: number | null): string {
-  return v === null ? '—' : v.toLocaleString('es-AR')
+  return v === null ? '—' : formatoCantidad(v)
 }
 
 export function InsumosAPedir() {
