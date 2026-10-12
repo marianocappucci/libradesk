@@ -35,6 +35,7 @@ import { AlertTriangle, ArrowLeft, ArrowLeftRight, ShieldCheck } from '@/compone
 import { MoverEquipo } from '@/components/mover-equipo'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { IconoIndicador } from 'libra-ui/IconoIndicador'
+import { formatoCantidad } from 'libra-ui/formatos'
 
 function formatFecha(valor: string | null): string {
   // Ver `ClienteDetalle`: la guarda subio a `lib/format`.
@@ -470,7 +471,7 @@ export function EquipoDetalle() {
                               ? `se cambia cada ${c.dias_entre_cambios} días`
                               : `${c.cambios} cambio${c.cambios === 1 ? '' : 's'} registrado${c.cambios === 1 ? '' : 's'}`,
                             c.copias_promedio !== null
-                              ? `rinde ${c.copias_promedio.toLocaleString('es-AR')} copias`
+                              ? `rinde ${formatoCantidad(c.copias_promedio)} copias`
                               : null,
                             c.pedir_desde !== null
                               ? `pedir desde ${formatFecha(c.pedir_desde)}`
@@ -508,11 +509,11 @@ export function EquipoDetalle() {
                             i.dias_esperando !== null ? `${i.dias_esperando} días esperando` : null,
                             i.remito_proveedor ? `remito ${i.remito_proveedor}` : null,
                             i.contador_copias !== null
-                              ? `contador ${i.contador_copias.toLocaleString('es-AR')}` : null,
+                              ? `contador ${formatoCantidad(i.contador_copias)}` : null,
                             // El rendimiento del tramo que cierra: es lo que
                             // ninguna fila suelta contesta.
                             i.copias_desde_el_anterior !== null
-                              ? `el anterior rindió ${i.copias_desde_el_anterior.toLocaleString('es-AR')} copias`
+                              ? `el anterior rindió ${formatoCantidad(i.copias_desde_el_anterior)} copias`
                               : null,
                           ].filter(Boolean).join(' · ')}
                         </span>
