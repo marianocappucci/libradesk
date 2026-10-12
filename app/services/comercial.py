@@ -51,9 +51,9 @@ algo la referencia, asi que **se rompe la cadena entera, no solo este modulo**.
 | Columna | FK original |
 |---|---|
 | `egresos.proveedor_id` | `proveedores(id)` |
-| `cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `cc_resumenes_enviados.cliente_id`, `recibos.cliente_id` | `clients(id)` |
+| `cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `recibos.cliente_id` | `clients(id)` |
 
-Las cinco quedan como INTEGER pelado y **la integridad la sostiene el router**,
+Las cuatro quedan como INTEGER pelado y **la integridad la sostiene el router**,
 igual que `client_id` en `remitos_presupuestos.py`. No se descubrio pensando:
 lo destapo `test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja`, que
 hace un downgrade real hasta el baseline.
@@ -265,20 +265,6 @@ CREATE TABLE IF NOT EXISTS cc_asientos (
 );
 CREATE INDEX IF NOT EXISTS idx_cc_asientos_cuenta ON cc_asientos(tercero_id, rol, fecha);
 CREATE INDEX IF NOT EXISTS idx_cc_asientos_origen ON cc_asientos(origen) WHERE origen IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id    INTEGER NOT NULL,
-    fecha         TEXT NOT NULL,
-    periodo_desde TEXT NOT NULL,
-    periodo_hasta TEXT NOT NULL,
-    saldo         REAL NOT NULL DEFAULT 0,
-    email         TEXT DEFAULT '',
-    estado        TEXT NOT NULL DEFAULT 'ok',
-    detalle       TEXT DEFAULT '',
-    automatico    INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT DEFAULT (datetime('now','-3 hours'))
-);
 
 CREATE TABLE IF NOT EXISTS recibos (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
