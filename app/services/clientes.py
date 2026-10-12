@@ -105,7 +105,7 @@ class Cliente(Base):
         ),
     )
 
-    # --- Las cinco columnas que son del motor y este producto no usa ---------
+    # --- Las dos columnas que son del motor y este producto no usa -----------
     #
     # `clients` es una tabla compartida: la revision `0017` la trajo con todo
     # lo que LibraCore le pone, incluida la cuenta corriente y el espejo de
@@ -120,13 +120,6 @@ class Cliente(Base):
     auto_facturar: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    cc_resumen_auto: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    cc_resumen_frecuencia: Mapped[str] = mapped_column(
-        Text, nullable=False, default="mensual", server_default="mensual"
-    )
-    cc_resumen_ultimo_envio: Mapped[str | None] = mapped_column(Text, server_default="")
     external_ref: Mapped[str | None] = mapped_column(Text)
 
 
