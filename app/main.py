@@ -25,6 +25,7 @@ from libraauth.session_auth import (
 )
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 from libraauth.terminos import TerminosRepository, build_terminos_router
+from libracore import auditoria as auditoria_del_motor
 from libracore.config_router import (
     build_backup_router,
     build_empresa_admin_router,
@@ -38,7 +39,7 @@ from libracore.tema_router import build_tema_admin_router, build_tema_router
 from sqlalchemy.engine import make_url
 
 from . import database, schema
-from .auditoria import AUDITABLES
+from .auditoria import AUDITABLES, ENTIDADES_DEL_LOG, registrador_del_motor
 from .auth import build_session_auth, require_admin, require_admin_o_servicio, require_staff
 from .database import configure, get_engine, get_session_factory
 from .modules_gate import require_module
@@ -176,9 +177,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     comercial_service.ensure_schema()
 
     # 7. El espejo de `parties`. Sin esto no hay ni una venta ni una recepción
-    #    de compra: sus FK contra esa tabla son NOT NULL y está vacía, porque
-    #    LibraDesk escribe clientes y proveedores por SQLAlchemy y el espejo de
-    #    LibraCore nunca se dispara. Es idempotente y barato (dos INSERT ...
+    #    de compra: sus FK contra esa tabla son NOT NULL y está vacía. Los
+    #    proveedores se escriben por SQLAlchemy y su espejo no lo mantiene nadie
+    #    más; los clientes desde el ADR-013 van por `libracore.db.clients`, que
+    #    espeja solo, pero los que ya existían hay que adoptarlos. Es idempotente
+    #    y barato (dos INSERT ...
     #    SELECT con anti-join), así que corre en cada arranque y así adopta
     #    también los clientes que ya existían.
     comercial_service.sincronizar_parties()
@@ -233,6 +236,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # creó la revisión `0010`, de cuando este código vivía en el producto.
     AuditoriaBase.metadata.create_all(engine)
     configurar_auditoria(sessions, AUDITABLES)
+    # El otro camino (ADR-013): `clients` se escribe por `libracore.db.clients`, que no
+    # pasa por el `flush`, asi que el motor avisa cada cambio a un registrador. Va despues
+    # de `AuditoriaBase.metadata.create_all` porque inserta en `actividad_log`, y de
+    # `rp_service.configure` (paso 3), que es la conexion por la que escribe.
+    auditoria_del_motor.configurar_auditoria(registrador_del_motor())
 
     app = FastAPI(title="LibraDesk")
     app.state.users = user_repository
@@ -668,7 +676,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # El router lo arma el motor (libraauth v0.10.0) pero **el gate lo pone el
     # producto**: el vocabulario de roles es de acá, no del paquete.
     app.include_router(
-        build_logs_router(AUDITABLES, prefix="/api/logs"),
+        build_logs_router(ENTIDADES_DEL_LOG, prefix="/api/logs"),
         dependencies=[Depends(require_admin)],
     )
 
