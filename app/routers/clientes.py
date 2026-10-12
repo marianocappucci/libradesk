@@ -1,9 +1,13 @@
+# `sqlite3.IntegrityError` y no el de SQLAlchemy: las escrituras de clientes van por
+# `libracore.db.clients`, cuya capa dual traduce el error de psycopg (la violacion del
+# UNIQUE de `email`) a la clase de `sqlite3`. Ver `ClienteRepository`.
+from sqlite3 import IntegrityError
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
 
 from ..dependencies import get_cliente_repository
-from ..services.clientes import ClienteRepository
+from ..services.clientes import ClienteConDocumentos, ClienteRepository
 from ..services.iva import CONDICIONES, discrimina
 
 router = APIRouter(prefix="/api/clientes", tags=["clientes"])
@@ -128,12 +132,17 @@ def delete_cliente(cliente_id: int, clientes: ClienteRepository = Depends(get_cl
     El 409 de aca **existia desde el dia 1 en un `except IntegrityError` que
     no se disparaba nunca** (el pragma de FKs esta apagado): el DELETE pasaba
     igual y dejaba todo huerfano. Ahora el chequeo es explicito y el mensaje
-    dice que cuelga.
+    dice que cuelga. Los remitos y presupuestos los cuenta el motor
+    (`libracore.db.clients.delete_client`); el resto, `ClienteRepository.dependencias`.
     """
     try:
         clientes.delete(cliente_id)
     except KeyError:
         raise HTTPException(404, "cliente not found")
+    except ClienteConDocumentos as e:
+        # El mensaje es el del motor: «El cliente tiene 2 remito(s) y 1 presupuesto(s)
+        # asociado(s) y no puede eliminarse.» Se le suma la salida, igual que al otro 409.
+        raise HTTPException(409, f"{e} Desactivalo en vez de borrarlo.")
     except ValueError as e:
         colgando = ", ".join(f"{n} {k}" for k, n in e.args[0].items() if n)
         raise HTTPException(
