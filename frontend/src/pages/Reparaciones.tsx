@@ -32,7 +32,7 @@ import { fecha } from '@/lib/format'
 import { PackageCheck, ShieldCheck } from '@/components/iconos-accion'
 import { TituloPantalla } from 'libra-ui/titulo-pantalla'
 import { hoyISO } from 'libra-ui/fechas'
-import { formatoMonedaEntera } from 'libra-ui/formatos'
+import { formatoMoneda } from 'libra-ui/formatos'
 
 const TODOS = '__todos__'
 
@@ -46,7 +46,7 @@ type CierreFormValues = z.infer<typeof cierreSchema>
 
 function pesos(v: number | null): string {
   if (v === null) return '—'
-  return formatoMonedaEntera(v)
+  return formatoMoneda(v)
 }
 
 /**
