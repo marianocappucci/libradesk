@@ -47,6 +47,7 @@ import {
 import { Droplets } from 'lucide-react'
 import { fecha } from '@/lib/format'
 import { hoyISO } from 'libra-ui/fechas'
+import { formatoCantidad } from 'libra-ui/formatos'
 // `FilePlus` y no `Plus`: es el alta de un registro, que es lo que ese dibujo
 // significa en el vocabulario (`components/iconos-accion.tsx`).
 import { FilePlus, PackageCheck } from '@/components/iconos-accion'
@@ -79,7 +80,7 @@ type EntregaValues = z.infer<typeof entregaSchema>
 type ColocacionValues = z.infer<typeof colocacionSchema>
 
 function copias(v: number | null): string {
-  return v === null ? '—' : v.toLocaleString('es-AR')
+  return v === null ? '—' : formatoCantidad(v)
 }
 
 export function Insumos() {

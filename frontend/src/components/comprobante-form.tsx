@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Trash2 } from '@/components/iconos-accion'
 import { enDiasISO, hoyISO } from 'libra-ui/fechas'
+import { formatoMoneda } from 'libra-ui/formatos'
 import { ReclamosParaRemito } from '@/components/reclamos-para-remito'
 
 /** `tax_rate` es el PORCENTAJE como string ('21', '10.5'), no la fracción: es
@@ -203,10 +204,8 @@ export function draftVacio(): ComprobanteDraft {
   }
 }
 
-const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
-
 export function formatMoney(value: number): string {
-  return money.format(value)
+  return formatoMoneda(value)
 }
 
 /** Mismos totales que calcula el backend. Se recalculan acá sólo para
