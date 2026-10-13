@@ -214,3 +214,22 @@ wiki (entidad `libradesk`).
   - Sin migración. El pin sube a libracore v1.157.0 (desde v1.155.0) y libraauth v0.49.0.
   - Una columna nueva de `clients` en el motor entra sola a `crear_cliente`/`actualizar_cliente`, pero hay que declararla en `Cliente` (si no, `test_cliente_describe_la_tabla_del_motor` se pone rojo, que es su trabajo).
   - Los tests que construyen la app limpian el registrador (`configurar_auditoria(None)`, fixture autouse del `conftest`), que es un global del proceso.
+
+
+## ADR-014 — Varios procesos listos (`WEB_CONCURRENCY`, hoy 1) y el registro de errores de la familia
+
+- Estado: aceptada. **Exige `libracore >= v1.159.0`, `libraauth >= v0.50.0` (con migración `0003_captcha_usados`) y `libra-ui >= v0.142.1`.**
+- Fecha: 2026-10-13
+- Contexto: el dueño decidió (2026-10-13) dejar el código listo para correr con `uvicorn --workers N` **sin prender más workers todavía**: todo sigue en 1 (ADR-044 de libracore, `docs/varios-procesos.md`). Y (2026-10-12) que la familia tenga un registro de errores propio (ADR-045 de libracore, ADR-053 de libra-ui): hasta ahora un 500 iba al stdout de uvicorn y se perdía en cada recreate del contenedor.
+- Qué ya existía (se miró antes): `docs/varios-procesos.md` y `docs/errores.md` del motor, ADR-023 de libraauth (captcha en la base), el `pool_pre_ping` de este producto. `pool_pre_ping=True` ya estaba (`app/database.py`).
+- Decisión:
+  - **Siembras de arranque serializadas.** `ensure_default_admin`, `ensure_demo_user` y `ModuleRepository.ensure_seeded` (`app/main.py`) corren adentro de `una_vez_al_arrancar("libradesk-sembrar")`; cada uno sigue preguntando adentro.
+  - **Captcha en la base.** `app/routers/auth.py`: `captcha_usados=UsadosEnBase(lambda: get_session_factory()())` (la fábrica se resuelve en cada uso: el módulo se importa antes de que `create_app()` arme el engine).
+  - **Nota de crédito.** No emite notas de crédito: no aplica.
+  - **Registro de errores.** Backend: `instalar_registro_de_errores(app, "libradesk")` al lado de `SecurityHeadersMiddleware`, que monta `POST /api/errores-cliente`. Frontend: `instalarReporteDeErrores()` antes de montar y `<ErrorBoundary>` alrededor de todo en `main.tsx`. Compose de `-dev`: `LIBRA_ENTORNO=dev`, `LIBRA_INSTANCIA=libradesk-dev`, `LIBRA_VERSION=${LIBRA_VERSION:-dev}`; las instancias de cliente y demo las escribe el panel.
+  - **Compose de `-dev`**: `exec uvicorn ... --workers ${WEB_CONCURRENCY:-1}`. `uvicorn>=0.30` ya era el piso.
+- Consecuencias:
+  - **La migración `0003` de libraauth corre antes de uvicorn** en todo camino de arranque (la cadena de `scripts/panel_admin.py` y el `command:` del compose ya incluyen `libraauth-migrar upgrade`): `exigir_schema_al_dia` hace que el producto no arranque sin ella, aunque no use `UsadosEnBase`.
+  - Sin migración propia. Con más de un worker, después de un restore en caliente hay que **reiniciar el contenedor** (`docs/varios-procesos.md` del motor).
+  - Las serializaciones del arranque cubren las siembras («si no existe, crear»); la creación idempotente del esquema (`CREATE TABLE IF NOT EXISTS` de `ensure_schema`) no se serializa: antes de subir `WEB_CONCURRENCY` a más de 1 hay que medirlo con dos workers.
+  - Tests: `tests/test_registro_de_errores.py`, `tests/test_arranque_varios_procesos.py` y el caso de `captcha_usados` en `tests/test_captcha_login.py`; los dobles del captcha de los `conftest` aceptan el segundo argumento que libraauth v0.50.0 pasa a `_captcha_de(request, usados)`.

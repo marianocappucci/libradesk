@@ -1,6 +1,9 @@
 """Monta el router /auth (login/logout/me) que expone `libraauth`."""
+from libraauth.captcha import UsadosEnBase
 from libraauth.session_auth import build_json_api_auth_router
 from libracore import config_manager
+
+from ..database import get_session_factory
 
 
 def _empresa_nombre(_request) -> str | None:
@@ -70,9 +73,18 @@ def _extras(_request, _user) -> dict:
 # `/auth/forgot-password`: sin una solucion valida, 400 antes de mirar la
 # contrasena. Se emite y se verifica en este mismo servidor, con claves
 # derivadas del SECRET_KEY: no hay proveedor externo ni variable nueva.
+#
+# `captcha_usados=UsadosEnBase(...)` (2026-10-13, libraauth v0.50.0, ADR-023): los
+# desafios ya resueltos se anotan en la tabla `libraauth_captcha_usados` y no en
+# la memoria del proceso. Con `uvicorn --workers N` (hoy N = 1) la lista en memoria
+# haria que un desafio resuelto sirviera **una vez por worker**. Necesita la
+# migracion `0003`, que corre `libraauth-migrar upgrade` antes de uvicorn.
+# El `session_factory` se resuelve **en cada uso** (`lambda`) y no aca: este
+# modulo se importa antes de que `create_app()` arme el engine.
 router = build_json_api_auth_router(
     incluir_verify=True, incluir_password_reset=True, incluir_demo=True,
     get_empresa_nombre=_empresa_nombre,
     get_extras=_extras,
     captcha=True,
+    captcha_usados=UsadosEnBase(lambda: get_session_factory()()),
 )

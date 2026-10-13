@@ -82,3 +82,23 @@ def test_un_captcha_resuelto_sirve_una_sola_vez(client, captcha_real):
     r = client.post("/auth/login", json={**CREDENCIALES, "captcha": payload})
     assert r.status_code == 400
     assert r.json()["detail"] == CAPTCHA_INVALIDO
+
+
+def test_los_desafios_usados_se_anotan_en_la_base_y_no_en_la_memoria_del_proceso(client, captcha_real):
+    """Los usados van a `libraauth_captcha_usados` (libraauth v0.50.0, ADR-023).
+
+    Con `uvicorn --workers N` (hoy N = 1) una lista en memoria deja que un desafio resuelto sirva **una vez por
+    worker**. Sin `_barato`: el `Captcha` lo arma el router con el `captcha_usados` de este producto (costo de
+    produccion, del orden de un segundo). Si alguien saca `captcha_usados=` de `app/routers/auth.py`, la fila no
+    aparece y esto da rojo.
+    """
+    from sqlalchemy import text
+
+    from app.database import get_session_factory
+
+    payload = _resolver(client)
+    assert client.post("/auth/login", json={**CREDENCIALES, "captcha": payload}).status_code == 200
+    with get_session_factory()() as sesion:
+        assert sesion.execute(text("SELECT count(*) FROM libraauth_captcha_usados")).scalar() == 1
+    client.post("/auth/logout")
+    assert client.post("/auth/login", json={**CREDENCIALES, "captcha": payload}).status_code == 400

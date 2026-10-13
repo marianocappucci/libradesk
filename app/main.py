@@ -26,11 +26,13 @@ from libraauth.session_auth import (
 from libraauth.smtp_settings import SmtpSettingsRepository, resolver_smtp_config
 from libraauth.terminos import TerminosRepository, build_terminos_router
 from libracore import auditoria as auditoria_del_motor
+from libracore.candados import una_vez_al_arrancar
 from libracore.config_router import (
     build_backup_router,
     build_empresa_admin_router,
     build_empresa_router,
 )
+from libracore.errores import instalar_registro_de_errores
 from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
@@ -213,19 +215,26 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     database.migrar_secretos()
 
     user_repository = UserRepository(sessions)
-    ensure_default_admin(user_repository)
-    # Crea al visitante de la demo, **solo si esta instancia es una demo**: se
-    # guia por `DEMO_MODE` + `DEMO_USERNAME`, las mismas dos variables que
-    # registran `POST /auth/demo`. En la instancia de un cliente devuelve None
-    # y no toca la base.
-    #
-    # 🔴 Sin esta llamada la ruta existe y no tiene a quien loguear: contesta
-    # `503 demo user not provisioned`. Cablear `incluir_demo=True` en el router
-    # no alcanza — la ruta y la siembra las conecta el producto, cada una por
-    # su lado.
-    ensure_demo_user(user_repository)
     module_repository = ModuleRepository(sessions)
-    module_repository.ensure_seeded()
+    # 🔴 Las tres siembras de abajo son «si no existe, crear», y con
+    # `uvicorn --workers N` (ADR-044 de libracore; hoy N = 1) cada worker corre
+    # este arranque: las dos preguntas «¿existe?» se contestan «no» antes de que
+    # ninguna haya creado. `una_vez_al_arrancar` las serializa (el segundo espera
+    # al primero y ve lo que dejo), y por eso cada una **sigue preguntando
+    # adentro**: el candado las ordena, no las saltea.
+    with una_vez_al_arrancar("libradesk-sembrar"):
+        ensure_default_admin(user_repository)
+        # Crea al visitante de la demo, **solo si esta instancia es una demo**: se
+        # guia por `DEMO_MODE` + `DEMO_USERNAME`, las mismas dos variables que
+        # registran `POST /auth/demo`. En la instancia de un cliente devuelve None
+        # y no toca la base.
+        #
+        # 🔴 Sin esta llamada la ruta existe y no tiene a quien loguear: contesta
+        # `503 demo user not provisioned`. Cablear `incluir_demo=True` en el router
+        # no alcanza — la ruta y la siembra las conecta el producto, cada una por
+        # su lado.
+        ensure_demo_user(user_repository)
+        module_repository.ensure_seeded()
 
     # Log de actividad (libraauth v0.9.0): cuelga del `flush` de SQLAlchemy, así
     # que se engancha al session_factory y no a la app — cualquier escritura del
@@ -366,6 +375,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # `CSP_SPA` y no la CSP por defecto: esa habilita `cdn.jsdelivr.net` para las
     # apps Jinja2, y este producto no carga nada externo. Ver libracore.
     app.add_middleware(SecurityHeadersMiddleware, csp=CSP_SPA)
+    # El registro de errores de la familia (ADR-045 de libracore): un 500 deja una
+    # linea en `DATA_DIR/errores/errores.jsonl` y responde con un `ref`; monta
+    # `POST /api/errores-cliente` para los errores del navegador. Una sola linea,
+    # **al construir la app**: Starlette no deja sumar handlers despues.
+    instalar_registro_de_errores(app, "libradesk")
 
     app.include_router(health.router)
     app.include_router(auth_router.router)
