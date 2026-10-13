@@ -553,4 +553,6 @@ def _captcha_siempre_valido(monkeypatch):
     ninguna.
     """
     doble = _CaptchaDeLaSuite()
-    monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request: doble)
+    # libraauth v0.50.0 (ADR-023) llama `_captcha_de(request, usados)`: el segundo argumento es el `captcha_usados=` del
+    # router, que el doble ignora.
+    monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request, usados=None: doble)
