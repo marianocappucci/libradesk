@@ -51,9 +51,9 @@ algo la referencia, asi que **se rompe la cadena entera, no solo este modulo**.
 | Columna | FK original |
 |---|---|
 | `egresos.proveedor_id` | `proveedores(id)` |
-| `cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `cc_resumenes_enviados.cliente_id`, `recibos.cliente_id` | `clients(id)` |
+| `cc_pagos.cliente_id`, `cc_debitos.cliente_id`, `recibos.cliente_id` | `clients(id)` |
 
-Las cinco quedan como INTEGER pelado y **la integridad la sostiene el router**,
+Las cuatro quedan como INTEGER pelado y **la integridad la sostiene el router**,
 igual que `client_id` en `remitos_presupuestos.py`. No se descubrio pensando:
 lo destapo `test_la_migracion_agrega_cuit_y_domicilio_a_una_base_vieja`, que
 hace un downgrade real hasta el baseline.
@@ -266,20 +266,6 @@ CREATE TABLE IF NOT EXISTS cc_asientos (
 CREATE INDEX IF NOT EXISTS idx_cc_asientos_cuenta ON cc_asientos(tercero_id, rol, fecha);
 CREATE INDEX IF NOT EXISTS idx_cc_asientos_origen ON cc_asientos(origen) WHERE origen IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS cc_resumenes_enviados (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id    INTEGER NOT NULL,
-    fecha         TEXT NOT NULL,
-    periodo_desde TEXT NOT NULL,
-    periodo_hasta TEXT NOT NULL,
-    saldo         REAL NOT NULL DEFAULT 0,
-    email         TEXT DEFAULT '',
-    estado        TEXT NOT NULL DEFAULT 'ok',
-    detalle       TEXT DEFAULT '',
-    automatico    INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT DEFAULT (datetime('now','-3 hours'))
-);
-
 CREATE TABLE IF NOT EXISTS recibos (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     punto_venta       INTEGER NOT NULL DEFAULT 1,
@@ -352,13 +338,16 @@ def _existe_tabla(conn, nombre: str) -> bool:
 # de compras son **NOT NULL**. O sea: sin espejo no hay ni una venta ni una
 # recepcion de compra.
 #
-# 🔴 **LibraCore sabe espejar clientes y en LibraDesk ese codigo no corre.**
-# `libracore.db.clients._crear_party_espejo()` se dispara desde las escrituras
-# de ESE modulo, y LibraDesk escribe sus clientes por SQLAlchemy a proposito
-# --para que la auditoria por flush de libraauth vea la operacion (ver
-# `app/services/clientes.py`)--. El resultado es que `parties` existe y esta
-# vacia. Por eso el espejo se sincroniza aca, en el arranque y despues de cada
-# alta, en vez de confiar en el motor.
+# 🔴 **LibraCore sabe espejar clientes y en LibraDesk ese codigo no corria.**
+# `libracore.db.clients._espejar_party()` se dispara desde las escrituras de
+# ESE modulo, y LibraDesk escribia sus clientes por SQLAlchemy --para que la
+# auditoria por flush de libraauth viera la operacion--. El resultado era que
+# `parties` existia y estaba vacia. Por eso el espejo se sincroniza aca, en el
+# arranque, para adoptar lo que ya existia.
+#
+# Desde el 2026-10-12 (ADR-013) los clientes se escriben por `crear_cliente` y
+# `actualizar_cliente` del motor, que espejan solos en la misma transaccion; la
+# sincronizacion de aca queda para los clientes anteriores y para los proveedores.
 #
 # Del lado proveedor no hay espejo para nadie: LibraCore solo crea
 # `party_type='person'`. Esa mitad se escribe entera aca.

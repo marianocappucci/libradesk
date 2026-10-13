@@ -142,7 +142,7 @@ services:
     # la corria ningun camino de este producto. El orden y el motivo estan en
     # `scripts/panel_admin.py`; `test_provisioning.py` exige que este `command:` diga
     # lo mismo que lo que declara el deploy. Ver DECISIONS.md (ADR-012).
-    command: sh -c "alembic upgrade head && libracommerce-migrar upgrade --prefijo libradesk && libraauth-migrar upgrade --prefijo libradesk --base dominio && libracore-migrar upgrade --prefijo libradesk && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && libracommerce-migrar upgrade --prefijo libradesk && libraauth-migrar upgrade --prefijo libradesk --base dominio && libracore-migrar upgrade --prefijo libradesk && exec uvicorn app.asgi:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"
     ports:
       - "127.0.0.1:8086:8000"
     volumes:
@@ -195,6 +195,14 @@ services:
       - LIBRAAUTH_SMTP_PASSWORD=${LIBRAAUTH_SMTP_PASSWORD:-}
       - LIBRAAUTH_SMTP_FROM_EMAIL=${LIBRAAUTH_SMTP_FROM_EMAIL:-}
       - LIBRAAUTH_SMTP_FROM_NAME=${LIBRAAUTH_SMTP_FROM_NAME:-LibraDesk}
+      # El registro de errores (ADR-045 de libracore): de que instancia es cada
+      # linea de `data-dev/errores/errores.jsonl`. En las instancias de cliente y
+      # demo las escribe el panel; en `-dev` no pasa por el panel, asi que van
+      # aca. `LIBRA_VERSION` la fija el que despliega (`LIBRA_VERSION=... docker
+      # compose up`); sin ella dice `dev`.
+      - LIBRA_ENTORNO=dev
+      - LIBRA_INSTANCIA=libradesk-dev
+      - LIBRA_VERSION=${LIBRA_VERSION:-dev}
 
 networks:
   stack-net:

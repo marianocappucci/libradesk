@@ -411,6 +411,22 @@ def client(data_dir, url_de_base):
 
 
 @pytest.fixture(autouse=True)
+def _sin_registrador_de_auditoria_colgado():
+    """El registrador de auditoria del motor no se filtra entre tests.
+
+    `libracore.auditoria.configurar_auditoria` es un GLOBAL del proceso, y `create_app` lo
+    pone. Sin esto, un test que no construye la app (o que arma una `libracore.db` por su
+    cuenta) heredaria un registrador que inserta en `actividad_log` de una base que
+    `url_de_base` ya dropeo: el primer `crear_cliente` fallaria con un error de conexion o
+    de tabla que no se parece a su causa.
+    """
+    from libracore import auditoria
+
+    yield
+    auditoria.configurar_auditoria(None)
+
+
+@pytest.fixture(autouse=True)
 def _sin_configuracion_de_facturacion_colgada():
     """La lectura de configuracion de facturacion no se filtra entre tests.
 
@@ -537,4 +553,6 @@ def _captcha_siempre_valido(monkeypatch):
     ninguna.
     """
     doble = _CaptchaDeLaSuite()
-    monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request: doble)
+    # libraauth v0.50.0 (ADR-023) llama `_captcha_de(request, usados)`: el segundo argumento es el `captcha_usados=` del
+    # router, que el doble ignora.
+    monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request, usados=None: doble)

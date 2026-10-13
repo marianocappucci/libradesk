@@ -1377,7 +1377,7 @@ def _sembrar_sucursales_y_stock(api: Api, contar) -> None:
 #: | tabla | por qué |
 #: |---|---|
 #: | `facturas`, `cajas`, `caja_movimientos` | LibraDesk **no factura ni lleva caja**: no hay endpoint ni pantalla que las escriba. Existen porque el motor las consulta —`get_cc_saldo()` hace un JOIN contra las dos primeras y `create_pago_egreso()` busca la caja por defecto—, y vacías devuelven 0 y NULL, que es la respuesta correcta. Ver `app/services/comercial.py`. |
-#: | `item_variants`, `cc_resumenes_enviados`, `commerce_settings` | Mismo caso: son del motor y este producto no las usa. |
+#: | `item_variants`, `commerce_settings` | Mismo caso: son del motor y este producto no las usa. |
 #: | `sale_payments` | El motor la trae, pero **LibraDesk escribe los pagos en `ventas_pagos`** — está dicho en el docstring de `app/services/ventas.py`. Sembrarla dejaría los pagos en la tabla que no lee nadie. |
 #: | `smtp_settings`, `config_facturacion` | Llevan **credenciales**. Sembrar unas falsas deja la instancia diciendo que está configurada cuando no lo está, y el primer envío falla en el peor momento. Se configuran a mano, por su pantalla. |
 #: | `password_reset_tokens` | Tokens de un solo uso que crea el flujo de recuperación. Sembrar tokens es sembrar basura con fecha de vencimiento. |
@@ -1391,7 +1391,7 @@ def _sembrar_sucursales_y_stock(api: Api, contar) -> None:
 #: acá por ese cotejo: yo las había dado por sembradas.
 TABLAS_VACIAS_A_PROPOSITO = (
     "facturas", "cajas", "caja_movimientos",
-    "item_variants", "cc_resumenes_enviados", "commerce_settings",
+    "item_variants", "commerce_settings",
     "sale_payments",
     "smtp_settings", "config_facturacion",
     "password_reset_tokens", "envios_facturacion",

@@ -53,9 +53,6 @@ libro_de_clientes.registrar_origen_de_ventas(VENTAS_LIBRACOMMERCE)
 
 saldo = partial(_cc.get_cc_saldo, origen=VENTAS_LIBRACOMMERCE)
 movimientos = partial(_cc.get_cc_movimientos, origen=VENTAS_LIBRACOMMERCE)
-movimientos_periodo = partial(
-    _cc.get_cc_movimientos_periodo, origen=VENTAS_LIBRACOMMERCE
-)
 
 
 def debitos_de_referencia(base: str) -> list[dict]:

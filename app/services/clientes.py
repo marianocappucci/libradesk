@@ -5,6 +5,12 @@ patron que `service_prices.py` de Gestiolibra.
 `0017`). LibraDesk era el unico producto de la familia con tabla de clientes
 propia; ahora comparte la del motor, como Contalibra, Restolibra y VentaLibra.
 
+🔴 **Desde el 2026-10-12 `Cliente` es un mapeo de SOLO LECTURA** (ADR-013): las escrituras
+de `clients` van por `libracore.db.clients` (`crear_cliente`, `actualizar_cliente`,
+`desactivar_cliente`, `activar_cliente`, `delete_client`), que le avisa a
+`libracore.auditoria` cada cambio dentro de la misma transaccion. El modelo se queda
+porque lo usan siete FK y unos veinticinco joins; ver `_cliente_es_de_solo_lectura`.
+
 Los **atributos** siguen siendo los de este producto —`nombre`, `telefono`,
 `cuit`, `domicilio`, `condicion_iva`, `fecha_creacion`— y solo cambia a que
 columna real apunta cada uno. Es deliberado: los usa medio producto y el
@@ -14,10 +20,12 @@ mezclado una migracion de datos con un cambio de API que el frontend ve.
 from __future__ import annotations
 
 from datetime import datetime
+from functools import cache
 
+from libracore.db import clients as motor
 from libracore.db.clients import validar_cuit_no_duplicado
-from sqlalchemy import Integer, String, Text, func, select, text
-from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
+from sqlalchemy import Integer, String, Text, event, func, inspect, select, text
+from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from ..database import Base
 from . import iva
@@ -105,7 +113,7 @@ class Cliente(Base):
         ),
     )
 
-    # --- Las cinco columnas que son del motor y este producto no usa ---------
+    # --- Las dos columnas que son del motor y este producto no usa -----------
     #
     # `clients` es una tabla compartida: la revision `0017` la trajo con todo
     # lo que LibraCore le pone, incluida la cuenta corriente y el espejo de
@@ -120,14 +128,53 @@ class Cliente(Base):
     auto_facturar: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    cc_resumen_auto: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    cc_resumen_frecuencia: Mapped[str] = mapped_column(
-        Text, nullable=False, default="mensual", server_default="mensual"
-    )
-    cc_resumen_ultimo_envio: Mapped[str | None] = mapped_column(Text, server_default="")
     external_ref: Mapped[str | None] = mapped_column(Text)
+
+
+@event.listens_for(Session, "before_flush")
+def _cliente_es_de_solo_lectura(session: Session, flush_context, instances) -> None:  # noqa: ARG001
+    """Un `Cliente` que llega al `flush` es un defecto, y se dice en voz alta.
+
+    Las escrituras de `clients` van por `libracore.db.clients` (ADR-013), que es lo que
+    las audita. Un `session.add(Cliente(...))` o un `cliente.nombre = ...` seguiria
+    andando --el modelo escribe la tabla igual que antes-- pero **sin dejar fila en el
+    log**, y un log incompleto se ve igual que uno completo: nadie se entera. Antes de
+    la mudanza el listener de `libraauth` lo cubria solo; ahora lo cubre esta guarda.
+
+    Va a nivel de `Session` (y no del `sessionmaker`) para que valga tambien para una
+    sesion que arme un script o un test por su cuenta. `dirty` se filtra con
+    `is_modified(include_collections=False)`: una coleccion tocada por una relacion no es
+    una escritura de la fila.
+    """
+    tocados = [o for o in (*session.new, *session.deleted) if isinstance(o, Cliente)]
+    tocados += [
+        o for o in session.dirty
+        if isinstance(o, Cliente) and session.is_modified(o, include_collections=False)
+    ]
+    if tocados:
+        raise RuntimeError(
+            "`Cliente` es de solo lectura: las escrituras de `clients` van por "
+            "`ClienteRepository` (que usa `libracore.db.clients`) para quedar en el log de "
+            "actividad. Se intento escribir por la sesion: " + ", ".join(map(repr, tocados))
+        )
+
+
+@cache
+def columnas_por_atributo() -> dict[str, str]:
+    """`{atributo del modelo: columna de clients}`, derivado del mapeo y no escrito a mano.
+
+    Es lo que traduce la API (`nombre`, `telefono`, `cuit`...) a las columnas que escribe el
+    motor (`name`, `phone`, `cuit_dni`...). Se calcula la primera vez que se pide y no al
+    importar el modulo: `column_attrs` configura todos los mapeos, y a esa altura de los
+    imports faltan modelos por cargar.
+    """
+    return {a.key: a.columns[0].name for a in inspect(Cliente).column_attrs}
+
+
+def atributos_por_columna() -> dict[str, str]:
+    """La inversa de `columnas_por_atributo()`: lo que necesita el registrador del log, que
+    recibe columnas del motor y tiene que mostrar el vocabulario del producto."""
+    return {columna: atributo for atributo, columna in columnas_por_atributo().items()}
 
 
 def _to_dict(c: Cliente) -> dict:
@@ -173,39 +220,56 @@ def _fecha_iso(valor) -> str | None:
 
 
 def _al_motor(data: dict) -> dict:
-    """Traduce los tipos de la API a los de la tabla del motor.
+    """Traduce lo que llega de la API a lo que escribe el motor: atributos -> columnas, y
+    los tipos de la API a los de la tabla.
 
-    Hoy es sólo `activo`, que en `/api/clientes` es booleano y en `clients` es
-    INTEGER desde la revisión `0017`. Sin esta conversión, psycopg adapta el
-    `True` de Python a un `boolean` y PostgreSQL rechaza el alta entera con
-    "column activo is of type integer but expression is of type boolean" — que
-    es lo que puso en rojo 183 tests la primera vez.
+    - Las claves son **exactamente** las recibidas, y `None` llega como `NULL`: vaciar un
+      campo desde la pantalla lo deja vacio de verdad. (`update_client` del motor, en
+      cambio, toma `None` por «no tocar»; por eso no se usa.)
+    - `activo` es booleano en `/api/clientes` e INTEGER en `clients` desde la revision
+      `0017`. Sin la conversion, psycopg adapta el `True` de Python a un `boolean` y
+      PostgreSQL rechaza la escritura entera con "column activo is of type integer but
+      expression is of type boolean" --lo que puso en rojo 183 tests la primera vez--.
 
-    Va acá, en el borde del repositorio, por simetría con `_to_dict`, que hace
-    la conversión inversa al salir. Así el detalle del motor no se filtra ni al
-    router ni a la pantalla.
+    Va aca, en el borde del repositorio, por simetria con `_to_dict`, que hace la
+    conversion inversa al salir. Un atributo que el modelo no tiene es un defecto de quien
+    llama y levanta `TypeError` antes de escribir.
     """
-    if "activo" in data and data["activo"] is not None:
-        data = {**data, "activo": int(data["activo"])}
-    return data
+    columnas = columnas_por_atributo()
+    desconocidos = sorted(set(data) - set(columnas))
+    if desconocidos:
+        raise TypeError(f"Cliente no tiene los atributos: {', '.join(desconocidos)}")
+    escribir = {columnas[k]: v for k, v in data.items()}
+    if escribir.get("activo") is not None:
+        escribir["activo"] = int(escribir["activo"])
+    return escribir
+
+
+class ClienteConDocumentos(Exception):
+    """El motor se nego a borrar: el cliente tiene remitos o presupuestos (`delete_client`).
+
+    Lleva el mensaje del motor, que ya dice cuantos y de que tipo. El router lo devuelve
+    como 409.
+    """
 
 
 class ClienteRepository:
     """CRUD de clientes sobre la tabla `clients` del motor.
 
-    🔴 **Las escrituras van por SQLAlchemy y NO por `libracore.db.clients`, a
-    proposito.** El log de actividad de `libraauth` cuelga de los eventos
-    `before_flush` / `after_flush` de la sesion (ver `app/auditoria.py`, donde
-    `Cliente` esta en la lista blanca). `libracore.db.clients` escribe por su
-    conexion DB-API cruda, asi que delegarle el CRUD dejaria el alta, la
-    edicion y la baja de clientes **sin auditar y sin que nadie se entere** —
-    una regresion silenciosa en un producto con pantalla de logs y un cliente
-    real usandolo.
+    🔴 **Las escrituras van por `libracore.db.clients` y las lecturas por SQLAlchemy**
+    (ADR-013, 2026-10-12). Hasta entonces era al reves, y a proposito: el log de
+    actividad de `libraauth` colgaba del `flush` de la sesion, y `db/clients.py` escribe
+    por una conexion DB-API cruda, asi que delegarle el CRUD dejaba el alta, la edicion y
+    la baja **sin auditar y sin que nadie se enterara**. Desde `libracore` v1.157.0 el
+    motor le avisa cada escritura de `clients` a `libracore.auditoria`, dentro de la misma
+    transaccion, y `app/main.py` le enchufa el registrador de `libraauth`
+    (`registrador_dbapi`): mismo formato de log, mismo usuario, misma pantalla. Una
+    escritura que se salte esto por la sesion la frena `_cliente_es_de_solo_lectura`.
 
-    Lo que si se comparte es la **logica**: `validar_cuit_no_duplicado()` es
-    la misma funcion que usa `create_client()` del motor, extraida ahi para
-    este caso. Asi el chequeo de CUIT duplicado se corrige una vez, en el
-    motor, y lo heredan los cuatro productos.
+    Lo que se gana de paso: el espejo en `parties` y el asiento al libro de clientes
+    (`_espejar_party`, `_al_libro`) pasan a mantenerse solos en cada alta y edicion, como
+    en los otros productos. La logica de CUIT duplicado ya era del motor
+    (`validar_cuit_no_duplicado`) y sigue siendolo.
     """
 
     def __init__(self, session_factory: sessionmaker):
@@ -213,12 +277,7 @@ class ClienteRepository:
 
     def create(self, **data) -> dict:
         validar_cuit_no_duplicado(data.get("cuit"))
-        with self.session_factory() as session:
-            c = Cliente(**_al_motor(data))
-            session.add(c)
-            session.commit()
-            session.refresh(c)
-            return _to_dict(c)
+        return self.get(motor.crear_cliente(_al_motor(data)))
 
     def list(self, solo_activos: bool = False) -> list[dict]:
         with self.session_factory() as session:
@@ -240,15 +299,17 @@ class ClienteRepository:
         # el nombre a un cliente que tiene CUIT fallaria siempre.
         if "cuit" in data:
             validar_cuit_no_duplicado(data.get("cuit"), excluir_id=cliente_id)
-        with self.session_factory() as session:
-            c = session.get(Cliente, cliente_id)
-            if c is None:
+        # `actualizar_cliente` devuelve False si no hay un cliente con ese id (no escribe
+        # ni avisa nada); con `data` vacio el motor se niega, asi que ese caso se resuelve
+        # mirando si existe.
+        if not data:
+            cliente = self.get(cliente_id)
+            if cliente is None:
                 raise KeyError(cliente_id)
-            for key, value in _al_motor(data).items():
-                setattr(c, key, value)
-            session.commit()
-            session.refresh(c)
-            return _to_dict(c)
+            return cliente
+        if not motor.actualizar_cliente(cliente_id, _al_motor(data)):
+            raise KeyError(cliente_id)
+        return self.get(cliente_id)
 
     def set_activo(self, cliente_id: int, activo: bool) -> dict:
         """Baja/alta logica. **Es la operacion normal**: un cliente no se
@@ -257,15 +318,15 @@ class ClienteRepository:
 
         Asi el problema de los huerfanos deja de existir en vez de
         resolverse: si no hay DELETE, no hay nada que quede colgado, y
-        ademas la baja es reversible."""
-        with self.session_factory() as session:
-            c = session.get(Cliente, cliente_id)
-            if c is None:
-                raise KeyError(cliente_id)
-            c.activo = int(activo)
-            session.commit()
-            session.refresh(c)
-            return _to_dict(c)
+        ademas la baja es reversible.
+
+        Se pregunta por el cliente antes porque `desactivar_cliente`/`activar_cliente` no
+        distinguen un id que no existe. Dejar el cliente como esta (activar a uno activo)
+        no deja fila en el log: el registrador no registra una edicion sin cambios."""
+        if self.get(cliente_id) is None:
+            raise KeyError(cliente_id)
+        (motor.activar_cliente if activo else motor.desactivar_cliente)(cliente_id)
+        return self.get(cliente_id)
 
     def dependencias(self, cliente_id: int) -> dict[str, int]:
         """Cuenta lo que cuelga del cliente, para poder negarse a borrarlo.
@@ -335,15 +396,17 @@ class ClienteRepository:
         Ahora el chequeo es explicito. Para dar de baja a un cliente **con**
         historial esta `set_activo`, que es el camino normal.
         """
-        with self.session_factory() as session:
-            c = session.get(Cliente, cliente_id)
-            if c is None:
-                raise KeyError(cliente_id)
+        if self.get(cliente_id) is None:
+            raise KeyError(cliente_id)
 
         colgando = self.dependencias(cliente_id)
         if any(colgando.values()):
             raise ValueError(colgando)
 
-        with self.session_factory() as session:
-            session.delete(session.get(Cliente, cliente_id))
-            session.commit()
+        # Los remitos y presupuestos son del motor, no de este modelo: `delete_client` los
+        # cuenta y se niega (ValueError, sin escribir ni registrar nada). Ese es el unico
+        # chequeo que le faltaba a `dependencias`.
+        try:
+            motor.delete_client(cliente_id)
+        except ValueError as e:
+            raise ClienteConDocumentos(str(e)) from e

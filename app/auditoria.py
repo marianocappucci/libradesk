@@ -7,19 +7,28 @@ Gestiolibra, MedLibra y VentaLibra: era el mismo codigo salvo esta lista.
 
 Lo que queda en el producto es lo unico que el producto sabe: **cuales de sus
 modelos vale la pena auditar**.
+
+**Los clientes tienen el otro camino** (ADR-013, 2026-10-12). `clients` es una tabla del
+motor y se escribe por `libracore.db.clients`, que no pasa por el `flush`: el motor le
+avisa cada escritura a `libracore.auditoria` y este modulo le arma el registrador, que es
+el `registrador_dbapi` de `libraauth` (mismo formato de fila, mismo usuario, misma tabla).
+Por eso `Cliente` ya no esta en `AUDITABLES`: con las dos cosas, cada cambio dejaria dos
+filas.
 """
+from dataclasses import replace
+
 from libraauth.auditoria import (  # noqa: F401 — re-export para el router y los tests
     BORRAR,
     CREAR,
     EDITAR,
     AuditoriaRepository,
+    registrador_dbapi,
 )
 
 # {nombre de la clase del modelo: nombre logico}. Se indexa por nombre y no por
 # la clase para no importar los 12 modulos de servicio desde aca — varios de
 # ellos terminarian importando a este.
 AUDITABLES: dict[str, str] = {
-    "Cliente": "cliente",
     "Equipo": "equipo",
     "Incidencia": "incidencia",
     "Contrato": "contrato",
@@ -48,6 +57,45 @@ AUDITABLES: dict[str, str] = {
     # la ficha del contrato ya las muestra.
     "ContratoProveedor": "contrato_de_proveedor",
 }
+
+#: Lo que se audita por el camino del motor: `{tabla: nombre logico}`. Hoy sólo `clients`.
+ENTIDADES_DEL_MOTOR: dict[str, str] = {"clients": "cliente"}
+
+#: Todo lo que la pantalla de Logs ofrece en el filtro de entidades. Router de `libraauth`
+#: arma ese selector con `sorted(set(auditables.values()))`: sólo mira los valores, así que
+#: mezclar las dos listas (clases del ORM y tablas del motor) alcanza.
+ENTIDADES_DEL_LOG: dict[str, str] = {**AUDITABLES, **ENTIDADES_DEL_MOTOR}
+
+
+def registrador_del_motor():
+    """El registrador de `libracore.auditoria` para las escrituras de `clients`.
+
+    - `atributos`: la columna `name` se muestra como `nombre`, `phone` como `telefono`, etc.
+      Sale del mapeo de `Cliente` (`atributos_por_columna`) y no de una tabla a mano, para
+      que una columna nueva del modelo se vea con su nombre sin tocar esto.
+    - Sin `columnas_ocultas` propias: el ORM tampoco las tenia, y `libraauth` ya tapa las
+      suyas (contrasenas, tokens, secretos).
+    - El diff sale en **el orden de las columnas del modelo**, como salia del `flush`; el
+      motor entrega la fila en el orden de la tabla, que no es el mismo, y la pantalla
+      muestra las claves en el orden en que llegan.
+    """
+    from .services.clientes import atributos_por_columna, columnas_por_atributo
+
+    registrar = registrador_dbapi(
+        ENTIDADES_DEL_MOTOR, atributos={"clients": atributos_por_columna()},
+    )
+    orden = list(columnas_por_atributo().values())
+
+    def _ordenada(fila):
+        if fila is None:
+            return None
+        return {**{c: fila[c] for c in orden if c in fila}, **fila}
+
+    def registrador(conn, cambio) -> None:
+        registrar(conn, replace(cambio, antes=_ordenada(cambio.antes), despues=_ordenada(cambio.despues)))
+
+    return registrador
+
 
 # 🔴 Aca vivia `"Servicio": "servicio"`, con el comentario "el precio de lista de
 # lo que se cotiza". Se fue el 2026-08-19: la revision `0031` dropeo la tabla
