@@ -19,6 +19,13 @@ La causa es el ORDEN de quién crea `ventas_pagos`:
 **Por qué la suite no lo veía**: la plantilla de `conftest.py` arma la base con el
 arranque de la app SOLO (sin `libracore-migrar`), o sea con el orden de antes del
 ADR-012. Estos tests usan la secuencia real, la que declara `scripts/panel_admin.py`.
+
+**El mismo orden dejaba otra diferencia (medida el 2026-10-15, ADR-016)**: la baseline
+crea también seis tablas que este producto declara SIN FK (`cc_debitos`, `cc_pagos`,
+`recibos`, `remitos`, `presupuestos`, `egresos`), con FK hacia `clients` y `proveedores` y
+dos de ellas `ON DELETE CASCADE`, y deja `presupuestos.status` en `'pendiente'` en vez de
+`'borrador'`. Una base nueva no es igual a una migrada hasta que el arranque las suelta
+(`soltar_fk()` del motor, `comercial.ensure_schema()` y `remitos_presupuestos.ensure_schema()`).
 """
 import shutil
 from pathlib import Path
@@ -33,34 +40,41 @@ _SQL_FK_DE_PAGOS = (
     "WHERE conrelid = 'ventas_pagos'::regclass AND contype = 'f' AND conname = 'ventas_pagos_venta_id_fkey'"
 )
 
-#: Todas las FK de la base, una línea por restricción.
-_SQL_TODAS_LAS_FK = (
-    "SELECT conrelid::regclass::text || '.' || conname || ' ' || pg_get_constraintdef(oid) "
-    "FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace"
-)
+#: Lo que una base nueva puede tener distinto de una migrada y está aceptado POR ESCRITO, por sección
+#: del volcado de `libracore.db.schema_dump` (`tablas`, `claves primarias`, `claves foráneas`, `índices`,
+#: `checks`). **Hoy no hay nada**: el ADR-012 había aceptado las FK de `remitos` y `presupuestos` (inocuas,
+#: `SET NULL`) y las otras cuatro quedaron pendientes; el ADR-016 las sacó todas. Agregar una línea acá es una
+#: decisión que se escribe en `DECISIONS.md`, no un parche para que el test pase. Una diferencia NUEVA entre
+#: base nueva y base migrada pone el test en rojo --por ejemplo una FK que el motor agregue a una de estas
+#: tablas en una versión futura--, y si algo de esta lista deja de diferir también, para que se saque.
+_DIFERENCIAS_ACEPTADAS: dict[str, set[str]] = {}
 
-#: Seis FK que una base nueva tiene de más respecto de una migrada, y que NO son este defecto.
-#: Las crea la baseline del motor (`init_core_schema()`) antes de que `comercial.py` pueda
-#: declarar las tablas sin ellas: es la regla «el DDL crudo no referencia tablas de Alembic»
-#: de `app/services/comercial.py` (motivo 2) violada por el orden. Las de `remitos` y
-#: `presupuestos` las acepta el ADR-012 (`ON DELETE SET NULL`, inocuas); las otras cuatro
-#: quedan pendientes de decisión. Están acá, nombradas, para que la comparación sirva: una
-#: diferencia NUEVA entre base nueva y base migrada pone el test en rojo, y si alguna de
-#: estas desaparece (alguien las arregló) también, para que se saque de la lista.
-_DIFERENCIAS_CONOCIDAS = {
-    "cc_debitos.cc_debitos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES clients(id) ON DELETE CASCADE",
-    "cc_pagos.cc_pagos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES clients(id) ON DELETE CASCADE",
-    "egresos.egresos_proveedor_id_fkey FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE SET NULL",
-    "presupuestos.presupuestos_client_id_fkey FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL",
-    "recibos.recibos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES clients(id) ON DELETE SET NULL",
-    "remitos.remitos_client_id_fkey FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL",
-}
+_SECCIONES = ("tablas", "claves primarias", "claves foráneas", "índices", "checks")
 
 
 def _consultar(url: str, sql: str) -> list:
     crudo = url.replace("postgresql+psycopg://", "postgresql://", 1)
     with psycopg.connect(crudo, autocommit=True) as c:
         return [r[0] for r in c.execute(sql).fetchall()]
+
+
+def _volcar(url: str) -> dict[str, set[str]]:
+    """El schema completo de la base, por sección: `libracore.db.schema_dump`, el mismo volcado que congela la baseline."""
+    from libracore.db._postgres import ConnectionWrapper
+    from libracore.db.schema_dump import volcar_schema
+
+    crudo = url.replace("postgresql+psycopg://", "postgresql://", 1)
+    with psycopg.connect(crudo, autocommit=True) as c:
+        texto = volcar_schema(ConnectionWrapper(c))
+    secciones: dict[str, set[str]] = {}
+    actual = None
+    for linea in texto.splitlines():
+        if linea.startswith("## "):
+            actual = linea[3:].rsplit(" (", 1)[0]
+            secciones[actual] = set()
+        elif linea and not linea.startswith("#") and actual:
+            secciones[actual].add(linea)
+    return secciones
 
 
 @pytest.fixture
@@ -153,27 +167,69 @@ def test_en_una_base_nueva_se_puede_vender_con_un_pago(crear_base, monkeypatch):
         assert c.get(f"/api/ventas/{v.json()['id']}").json()["pagos"], "la venta quedó sin su pago"
 
 
-def test_una_base_nueva_tiene_las_mismas_fk_que_una_migrada(crear_base, monkeypatch):
-    """La instancia de hoy (lagrace, compulibra, dev) contra la que nace de cero.
-
-    La «migrada» sigue la historia real de esas bases: las tres cadenas y la app (como era el
-    deploy hasta el ADR-012), y DESPUÉS `libracore-migrar`. La «nueva» es el reset de la demo:
-    las cuatro cadenas y después la app. Se comparan las FK de las dos --que es donde se vio
-    el defecto-- salvo `_DIFERENCIAS_CONOCIDAS`.
-    """
-    nueva, _ = _base_nueva(crear_base, monkeypatch)
-
+def _base_migrada(crear_base, monkeypatch):
+    """La historia real de dev, compulibra y lagrace: las tres cadenas y la app (el deploy hasta el ADR-012),
+    y DESPUÉS `libracore-migrar`."""
     migrada, datos = crear_base("migrada")
     comandos = _declaradas("panel_admin")
     _correr([c for c in comandos if c[0] != "libracore-migrar"], migrada, datos)
     _arrancar_app(migrada, datos, monkeypatch)
     _correr([c for c in comandos if c[0] == "libracore-migrar"], migrada, datos)
+    return migrada
 
-    fk_nueva, fk_migrada = set(_consultar(nueva, _SQL_TODAS_LAS_FK)), set(_consultar(migrada, _SQL_TODAS_LAS_FK))
-    assert fk_migrada - fk_nueva == set(), f"a la base nueva le faltan FK que tiene la migrada: {fk_migrada - fk_nueva}"
-    assert fk_nueva - fk_migrada == _DIFERENCIAS_CONOCIDAS, (
-        "la base nueva y la migrada difieren en FK distintas de las conocidas.\n"
-        f"  de más (no listadas): {sorted((fk_nueva - fk_migrada) - _DIFERENCIAS_CONOCIDAS)}\n"
-        f"  listadas que ya no difieren (sacarlas de la lista): "
-        f"{sorted(_DIFERENCIAS_CONOCIDAS - (fk_nueva - fk_migrada))}"
-    )
+
+def test_una_base_nueva_tiene_el_mismo_schema_que_una_migrada(crear_base, monkeypatch):
+    """La instancia de hoy (lagrace, compulibra, dev) contra la que nace de cero.
+
+    La «migrada» sigue la historia real de esas bases (ver `_base_migrada`). La «nueva» es el reset de la
+    demo: las cuatro cadenas y después la app. Se compara TODO el volcado del schema --tablas con sus tipos y
+    `DEFAULT`, claves primarias y foráneas, índices y checks--, no sólo las FK donde se vio el defecto: el
+    `DEFAULT` de `presupuestos.status` también difería. Sólo se admite lo de `_DIFERENCIAS_ACEPTADAS`.
+    """
+    nueva, _ = _base_nueva(crear_base, monkeypatch)
+    migrada = _base_migrada(crear_base, monkeypatch)
+
+    vn, vm = _volcar(nueva), _volcar(migrada)
+    assert set(vn) == set(vm) == set(_SECCIONES), (sorted(vn), sorted(vm))
+    for seccion in _SECCIONES:
+        solo_nueva, solo_migrada = vn[seccion] - vm[seccion], vm[seccion] - vn[seccion]
+        aceptadas = _DIFERENCIAS_ACEPTADAS.get(seccion, set())
+        assert solo_nueva | solo_migrada == aceptadas, (
+            f"[{seccion}] la base nueva y la migrada difieren en algo distinto de lo aceptado.\n"
+            f"  sólo en la nueva (no aceptado): {sorted(solo_nueva - aceptadas)}\n"
+            f"  sólo en la migrada (no aceptado): {sorted(solo_migrada - aceptadas)}\n"
+            f"  aceptadas que ya no difieren (sacarlas de la lista): {sorted(aceptadas - (solo_nueva | solo_migrada))}\n"
+            "Ver el docstring de este archivo."
+        )
+
+
+def test_en_una_base_nueva_borrar_un_cliente_no_borra_su_cuenta_corriente(crear_base, monkeypatch):
+    """El daño concreto de la diferencia: la baseline crea `cc_pagos` y `cc_debitos` con `ON DELETE CASCADE`.
+
+    Con esa FK, un `DELETE FROM clients` se llevaba los movimientos de cuenta corriente del cliente. En una base
+    migrada nunca pasó (la tabla no tiene FK); una base nueva tiene que comportarse igual.
+    """
+    url, _ = _base_nueva(crear_base, monkeypatch)
+    crudo = url.replace("postgresql+psycopg://", "postgresql://", 1)
+    with psycopg.connect(crudo) as c:
+        cid = c.execute(
+            "INSERT INTO clients (name, tipo_facturacion) VALUES ('Cliente de prueba', 'por_servicio') RETURNING id"
+        ).fetchone()[0]
+        c.execute("INSERT INTO cc_pagos (cliente_id, monto, fecha) VALUES (%s, 100, '2026-10-15')", (cid,))
+        c.execute("INSERT INTO cc_debitos (cliente_id, monto, fecha) VALUES (%s, 50, '2026-10-15')", (cid,))
+        c.commit()
+        c.execute("DELETE FROM clients WHERE id = %s", (cid,))
+        c.commit()
+        pagos = c.execute("SELECT COUNT(*) FROM cc_pagos WHERE cliente_id = %s", (cid,)).fetchone()[0]
+        debitos = c.execute("SELECT COUNT(*) FROM cc_debitos WHERE cliente_id = %s", (cid,)).fetchone()[0]
+    assert (pagos, debitos) == (1, 1), "borrar el cliente se llevó su cuenta corriente: la base nueva tiene el CASCADE"
+
+
+def test_reiniciar_la_app_sobre_una_base_ya_alineada_no_cambia_el_schema(crear_base, monkeypatch):
+    """El reinicio de un contenedor (`ensure_schema()` otra vez) sobre una base nueva ya alineada es un no-op."""
+    url, datos = crear_base("nueva")
+    _correr(_declaradas("panel_admin"), url, datos)
+    _arrancar_app(url, datos, monkeypatch)
+    primero = _volcar(url)
+    _arrancar_app(url, datos, monkeypatch)
+    assert _volcar(url) == primero

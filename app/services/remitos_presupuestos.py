@@ -44,6 +44,7 @@ import os
 from libracore import config_manager
 from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
+from libracore.db.fk_de_producto import soltar_fk
 
 from . import iva
 
@@ -139,11 +140,43 @@ def configure(database_url: str, data_dir: str) -> None:
     config_manager.LOGO_DIR = os.path.join(data_dir, "logos")
 
 
+#: El `DEFAULT` de `presupuestos.status` de este DDL. La baseline del motor lo crea con
+#: `'pendiente'`, que no es ni uno de los `ESTADOS_PRESUPUESTO`.
+_ESTADO_INICIAL = "borrador"
+
+
 def ensure_schema() -> None:
     """Crea `remitos` y `presupuestos` si no existen. Llamar DESPUES de
-    `create_all()`, para que la FK `usuario_id -> usuarios` tenga destino."""
+    `create_all()`, para que la FK `usuario_id -> usuarios` tenga destino.
+
+    🔴 **En una base nueva las dos ya existen cuando esto corre** (ADR-016): la cadena
+    `libracore-migrar` corre antes de la app y su baseline las crea con la FK
+    `client_id -> clients` (`SET NULL`) y `status` por defecto `'pendiente'`, a diferencia
+    del `_DDL` de arriba. Para que una base nueva quede igual a una migrada se suelta la FK
+    (`soltar_fk()` del motor: idempotente, no toca filas) y se alinea el `DEFAULT`.
+    """
     with libracore_core.get_connection() as conn:
         conn.executescript(_DDL)
+        soltar_fk(conn, "remitos", "client_id", hacia="clients")
+        soltar_fk(conn, "presupuestos", "client_id", hacia="clients")
+        _alinear_estado_inicial(conn)
+
+
+def _alinear_estado_inicial(conn) -> None:
+    """`presupuestos.status` por defecto en `'borrador'`, mire la base que mire.
+
+    Se pregunta antes de alterar: `ALTER COLUMN SET DEFAULT` pide un candado exclusivo, y esto
+    corre en cada arranque. El alta de un presupuesto pasa el estado a mano, asi que el
+    `DEFAULT` casi no se usa; se alinea para que la base nueva y la migrada sean la misma.
+    """
+    actual = conn.execute(
+        "SELECT pg_get_expr(d.adbin, d.adrelid) FROM pg_attrdef d "
+        "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum "
+        "WHERE d.adrelid = to_regclass('presupuestos') AND a.attname = 'status'"
+    ).fetchone()
+    if actual is not None and actual[0] != f"'{_ESTADO_INICIAL}'::text":
+        conn.execute(f"ALTER TABLE presupuestos ALTER COLUMN status SET DEFAULT '{_ESTADO_INICIAL}'")
+        conn.commit()
 
 
 def _totales(items: list[dict], tax_rate: float) -> tuple[float, float, float]:
