@@ -1,7 +1,12 @@
-"""Smoke tests de la API real (auth + un flujo CRUD por dominio +
-dashboard). No es cobertura exhaustiva de los 5 dominios — verifica que
-el wiring completo (libraauth + SQLAlchemy + routers) funciona de punta
-a punta contra una SQLite temporal."""
+"""Tests de la API real, de punta a punta: auth y sesión, el flujo
+cliente → equipo → incidencia, el dashboard, clientes (CUIT y domicilio),
+usuarios y roles, el export y el historial de movimientos de equipos.
+
+Empezó como un smoke de 6 casos y fue creciendo con lo que no tenía archivo
+propio; las features nuevas van a su archivo (`test_<feature>.py`). Verifica
+el wiring completo (libraauth + SQLAlchemy + routers + motores). Corre contra
+la base de la plantilla de `conftest.py`: SQLite por defecto, o PostgreSQL con
+`LIBRADESK_SUITE_POSTGRES_URL` (lo que hace el CI)."""
 import pytest
 
 # La fixture `client` vive en `conftest.py`: es la misma para toda la suite y
