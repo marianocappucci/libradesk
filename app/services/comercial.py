@@ -96,6 +96,7 @@ existia.
 
 from __future__ import annotations
 
+from libracommerce.erp.ventas import repuntar_fk_ventas_pagos
 from libracore.db import core as libracore_core
 
 #: Los proveedores viven desplazados dentro de `parties` para no chocar con
@@ -307,10 +308,23 @@ def ensure_schema() -> None:
 
     El orden no es cosmetico: `ventas_pagos` referencia `sales`, que la crea el
     `init_schema()` de LibraCommerce.
+
+    🔴 **El `CREATE TABLE IF NOT EXISTS ventas_pagos` de `_DDL_LIBRACORE` solo
+    manda si la tabla no existe**, y desde el ADR-012 (2026-10-07) en una base
+    nueva ya existe: la cadena `libracore-migrar` corre ANTES del arranque y su
+    baseline la crea con la FK contra `ventas`, la tabla legada del motor. Por
+    eso, ademas del DDL, se llama a `repuntar_fk_ventas_pagos()` de
+    LibraCommerce --la costura que usan Contalibra, Restolibra y VentaLibra en
+    su `init_db`--: idempotente, no hace nada si la FK ya apunta a `sales`
+    (las bases migradas, y la de un arranque sin cadena del motor) y la repunta
+    si no. Sin eso, el reset de la demo, el alta de un cliente y el restore de
+    un backup dejaban una base donde no entra ni un pago
+    (`tests/test_base_nueva_del_deploy.py`).
     """
     with libracore_core.get_connection() as conn:
         conn.executescript(_DDL_LIBRACORE)
         conn.executescript(_DDL_PROPIO)
+        repuntar_fk_ventas_pagos(conn)
 
 
 def _existe_tabla(conn, nombre: str) -> bool:

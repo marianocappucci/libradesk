@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-10-15
+- **Corregido:** **una base nueva dejaba `ventas_pagos` apuntando a la tabla `ventas` legada del motor** (ADR-015). Desde el ADR-012 la cadena `libracore-migrar` corre antes del arranque y su baseline crea `ventas_pagos` con la FK a `ventas`; el `CREATE TABLE IF NOT EXISTS` de `comercial.py` ya no la creaba y nadie la repuntaba a `sales`. Efecto: el reset nocturno de la demo, el alta de un cliente y el restore de un backup dejaban una base donde `POST /api/ventas` con un pago devolvía 500 (`ForeignKeyViolation`). `comercial.ensure_schema()` llama ahora a `repuntar_fk_ventas_pagos()` de LibraCommerce (idempotente: las instancias vivas ya la tienen en `sales` y no se tocan). Sin migración ni cambio de pin.
+
 ### 2026-10-13
 - **Cambiado:** **varios procesos listos (todo sigue en 1) y registro de errores** (2026-10-13, ADR-014; libracore `v1.159.0`, libraauth `v0.50.0`, libra-ui `v0.142.1`). Las siembras de arranque corren serializadas (`una_vez_al_arrancar`), el captcha anota los desafíos usados en la base (`UsadosEnBase`), el compose de `-dev` acepta `WEB_CONCURRENCY` (por defecto 1) y un 500 deja una línea en `errores/errores.jsonl` con un `ref` que ve el usuario (la pantalla «Algo falló» de libra-ui lo muestra). **Con migración de libraauth** (`0003_captcha_usados`), que corre antes de uvicorn. Sin migración propia.
 
