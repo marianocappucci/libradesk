@@ -62,6 +62,14 @@ hace un downgrade real hasta el baseline.
 > crudo no referencia tablas de Alembic**. Al reves si --`egresos_pagos` cuelga
 > de `egresos` y las dos son de aca--.
 
+🔴 **Esa regla hay que hacerla cumplir en el arranque, no sólo escribirla.** Desde el
+ADR-012 (2026-10-07) la cadena `libracore-migrar` corre ANTES de la app, y su baseline
+(`init_core_schema()`) crea estas mismas tablas **con** las FK; el `CREATE TABLE IF NOT
+EXISTS` de aca ya no manda en una base nueva (la demo cada noche, un alta, un restore).
+`ensure_schema()` suelta esas FK con `libracore.db.fk_de_producto.soltar_fk` (ADR-016),
+para que una base nueva quede igual a una migrada. La baseline las crea con `ON DELETE
+CASCADE` en `cc_pagos` y `cc_debitos`: borrar un cliente borraria su cuenta corriente.
+
 ## Tres tablas que se crean para quedar VACIAS, y no es desprolijidad
 
 `facturas`, `cajas` y `caja_movimientos` no las usa LibraDesk --no emite
@@ -98,6 +106,7 @@ from __future__ import annotations
 
 from libracommerce.erp.ventas import repuntar_fk_ventas_pagos
 from libracore.db import core as libracore_core
+from libracore.db.fk_de_producto import soltar_fk
 
 #: Los proveedores viven desplazados dentro de `parties` para no chocar con
 #: los ids de `clients`. 500.000 y no 100.000 para no pisar el offset que ya
@@ -303,6 +312,18 @@ CREATE TABLE IF NOT EXISTS sucursales (
 """
 
 
+#: Las FK que la baseline del motor crea en estas cuatro tablas y que `_DDL_LIBRACORE` declara
+#: SIN ellas (motivo 2 del docstring del modulo): (tabla, columna, tabla padre). Las de
+#: `remitos` y `presupuestos` --que tambien las crea la baseline-- las suelta
+#: `remitos_presupuestos.ensure_schema()`, que es quien declara esas dos tablas.
+_FK_QUE_ESTE_DDL_NO_DECLARA = (
+    ("cc_debitos", "cliente_id", "clients"),
+    ("cc_pagos", "cliente_id", "clients"),
+    ("recibos", "cliente_id", "clients"),
+    ("egresos", "proveedor_id", "proveedores"),
+)
+
+
 def ensure_schema() -> None:
     """Crea las tablas comerciales. Llamar DESPUES de `inventario.ensure_schema()`.
 
@@ -320,11 +341,19 @@ def ensure_schema() -> None:
     si no. Sin eso, el reset de la demo, el alta de un cliente y el restore de
     un backup dejaban una base donde no entra ni un pago
     (`tests/test_base_nueva_del_deploy.py`).
+
+    🔴 **La baseline tambien deja FK que este DDL no declara** (ADR-016): `cc_debitos` y
+    `cc_pagos` hacia `clients` con `ON DELETE CASCADE`, `recibos` hacia `clients` y `egresos`
+    hacia `proveedores`. Se sueltan con `soltar_fk()` del motor (idempotente, no toca filas;
+    no hace nada si la FK no esta, que es el caso de las bases migradas). Sin eso una base
+    nueva queda distinta de una migrada, y borrar un cliente borraria su cuenta corriente.
     """
     with libracore_core.get_connection() as conn:
         conn.executescript(_DDL_LIBRACORE)
         conn.executescript(_DDL_PROPIO)
         repuntar_fk_ventas_pagos(conn)
+        for tabla, columna, padre in _FK_QUE_ESTE_DDL_NO_DECLARA:
+            soltar_fk(conn, tabla, columna, hacia=padre)
 
 
 def _existe_tabla(conn, nombre: str) -> bool:
