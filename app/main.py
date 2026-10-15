@@ -32,6 +32,7 @@ from libracore.config_router import (
     build_empresa_admin_router,
     build_empresa_router,
 )
+from libracore.docs_api import cerrar_docs_de_la_api
 from libracore.errores import instalar_registro_de_errores
 from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
@@ -252,6 +253,7 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     auditoria_del_motor.configurar_auditoria(registrador_del_motor())
 
     app = FastAPI(title="LibraDesk")
+    cerrar_docs_de_la_api(app)
     app.state.users = user_repository
     app.state.session_auth = build_session_auth(user_repository)
     # Recuperación de contraseña por correo (libraauth v0.5.0). Acá `sessions`
