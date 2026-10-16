@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, opcionesDeposito,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_EQUIPO_TONO, opcionesDeposito,
   type Deposito, type EquipoEnDeposito,
 } from '../api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -252,7 +252,7 @@ export function DepositoDetalle() {
                       <td className="px-2 py-1.5">{e.cliente_nombre}</td>
                       <td className="px-2 py-1.5 text-muted-foreground">{e.serial ?? '—'}</td>
                       <td className="px-2 py-1.5">
-                        <BadgeEstado tono={e.estado === 'activo' ? 'ok' : 'neutro'}>
+                        <BadgeEstado tono={ESTADO_EQUIPO_TONO[e.estado] ?? 'neutro'}>
                           {ESTADO_EQUIPO_LABELS[e.estado] ?? e.estado}
                         </BadgeEstado>
                       </td>

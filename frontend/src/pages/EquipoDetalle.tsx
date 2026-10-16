@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_LABELS, ESTADO_TONO,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_EQUIPO_TONO, ESTADO_LABELS, ESTADO_TONO,
   INSUMO_LABELS, INSUMO_TONO, MOVIMIENTO_LABELS,
   CONSUMO_LABELS, CONSUMO_TONO,
   PRIORIDAD_LABELS, PRIORIDAD_TONO, ubicacionTexto,
@@ -181,7 +181,7 @@ export function EquipoDetalle() {
           <div>
             <TituloPantalla icono={Monitor}>
               {equipo.descripcion}
-              <BadgeEstado tono={equipo.estado === 'activo' ? 'ok' : 'neutro'}>
+              <BadgeEstado tono={ESTADO_EQUIPO_TONO[equipo.estado] ?? 'neutro'}>
                 {ESTADO_EQUIPO_LABELS[equipo.estado] ?? equipo.estado}
               </BadgeEstado>
             </TituloPantalla>

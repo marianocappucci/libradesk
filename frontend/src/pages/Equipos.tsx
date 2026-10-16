@@ -6,7 +6,7 @@ import type { ColumnDef } from 'libra-ui/data-table'
 import { useNavigate } from 'react-router-dom'
 import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
-  api, ApiError, ESTADO_EQUIPO_LABELS, describirEquipo, lugarDe, opcionesCliente,
+  api, ApiError, ESTADO_EQUIPO_LABELS, ESTADO_EQUIPO_TONO, describirEquipo, lugarDe, opcionesCliente,
   opcionesDeposito, opcionesProveedor, ubicacionTexto,
   type Cliente, type Deposito, type Equipo, type Proveedor, type Sector,
 } from '../api'
@@ -107,6 +107,8 @@ export function Equipos() {
   const [formError, setFormError] = useState<string | null>(null)
   const [aBorrar, setABorrar] = useState<Equipo | null>(null)
   const [filtroCliente, setFiltroCliente] = useState(TODOS)
+  // Mismo camino que el de cliente: lo resuelve el backend (`?estado=`).
+  const [filtroEstado, setFiltroEstado] = useState(TODOS)
 
   const form = useForm<EquipoFormValues>({
     resolver: zodResolver(equipoSchema),
@@ -129,7 +131,7 @@ export function Equipos() {
     }
     loadEquipos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroCliente])
+  }, [filtroCliente, filtroEstado])
 
   // Los sectores se recargan al cambiar de cliente en el formulario, no al
   // abrirlo: el alta arranca sin cliente y el select se puede cambiar con el
@@ -172,8 +174,14 @@ export function Equipos() {
 
   // El filtro lo resuelve el backend (`?cliente_id=`, ya existía y no lo usaba
   // nadie), no un filter local: es lo que escala cuando el parque crezca.
-  const rutaEquipos = () =>
-    filtroCliente === TODOS ? '/api/equipos' : `/api/equipos?cliente_id=${filtroCliente}`
+  const rutaEquipos = () => {
+    const q = new URLSearchParams()
+    if (filtroCliente !== TODOS) q.set('cliente_id', filtroCliente)
+    if (filtroEstado !== TODOS) q.set('estado', filtroEstado)
+    const qs = q.toString()
+    return qs ? `/api/equipos?${qs}` : '/api/equipos'
+  }
+  const hayFiltro = filtroCliente !== TODOS || filtroEstado !== TODOS
 
   async function loadEquipos() {
     setError(null)
@@ -398,7 +406,7 @@ export function Equipos() {
         size: 120,
         minSize: 90,
         cell: ({ row }) => (
-          <BadgeEstado tono={row.original.estado === 'activo' ? 'ok' : 'neutro'}>
+          <BadgeEstado tono={ESTADO_EQUIPO_TONO[row.original.estado] ?? 'neutro'}>
             {ESTADO_EQUIPO_LABELS[row.original.estado] ?? row.original.estado}
           </BadgeEstado>
         ),
@@ -632,9 +640,25 @@ export function Equipos() {
             limpiable={false}
           />
         </div>
-        {filtroCliente !== TODOS && (
-          <Button variant="ghost" size="sm" onClick={() => setFiltroCliente(TODOS)}>
-            Limpiar filtro
+        <div className="grid gap-2">
+          <span className="text-xs text-muted-foreground">Estado</span>
+          {/* select-cerrado: los 4 estados de la constante ESTADOS_EQUIPO */}
+          <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+            <SelectTrigger className="w-44" aria-label="Filtrar por estado">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos</SelectItem>
+              {ESTADOS_EQUIPO.map((e) => <SelectItem key={e} value={e}>{ESTADO_EQUIPO_LABELS[e]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {hayFiltro && (
+          <Button
+            variant="ghost" size="sm"
+            onClick={() => { setFiltroCliente(TODOS); setFiltroEstado(TODOS) }}
+          >
+            Limpiar filtros
           </Button>
         )}
       </div>
@@ -647,9 +671,11 @@ export function Equipos() {
             <DataTable
               columns={columns}
               data={equipos}
-              emptyMessage={filtroCliente === TODOS
+              emptyMessage={!hayFiltro
                 ? 'Sin equipos todavía.'
-                : 'Este cliente no tiene equipos cargados.'}
+                : filtroEstado === TODOS
+                  ? 'Este cliente no tiene equipos cargados.'
+                  : 'No hay equipos con ese filtro.'}
               onRowClick={(e) => navigate(`/equipos/${e.id}`)}
               search={{
                 campos: (e) => [
