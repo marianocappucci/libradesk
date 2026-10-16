@@ -28,6 +28,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import { MaterialesIncidencia } from '@/components/materiales-incidencia'
 import { TareasDelReclamo } from '@/components/tareas-del-reclamo'
 import { TecnicosDelReclamo } from '@/components/tecnicos-del-reclamo'
@@ -78,6 +80,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
 
   const [incidencia, setIncidencia] = useState<Incidencia | null>(null)
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
   const [sectores, setSectores] = useState<Sector[]>([])
@@ -889,17 +892,15 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   />
                 </div>
               )}
-              <div className="grid gap-2">
-                <Label>Cliente</Label>
-                <SelectBuscable
-                  value={String(incidencia.cliente_id)}
-                  onChange={(v) => actualizarCampo({ cliente_id: Number(v), equipo_id: null })}
-                  opciones={opcionesCliente(clientes)}
-                  ariaLabel="Cliente"
-                  className="w-full"
-                  limpiable={false}
-                />
-              </div>
+              <SelectCliente
+                etiqueta="Cliente"
+                value={String(incidencia.cliente_id)}
+                onChange={(v) => actualizarCampo({ cliente_id: Number(v), equipo_id: null })}
+                opciones={opcionesCliente(clientes)}
+                crear={crearCliente}
+                ariaLabel="Cliente"
+                limpiable={false}
+              />
               <div className="grid gap-2">
                 <Label>Equipo</Label>
                 <SelectBuscable

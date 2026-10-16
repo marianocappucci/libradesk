@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -78,6 +80,9 @@ const VACIO: ContratoFormValues = {
 export function ContratosProveedor() {
   const [contratos, setContratos] = useState<ContratoProveedor[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
+  // El diálogo es una grilla de dos columnas: con el panel de alta abierto el campo ocupa el ancho entero.
+  const [altaClienteAbierta, setAltaClienteAbierta] = useState(false)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [loading, setLoading] = useState(true)
@@ -359,6 +364,7 @@ export function ContratosProveedor() {
           </div>
           <div className="grid gap-2">
             <Label>Cliente</Label>
+            {/* cliente-sin-alta: filtro del listado de contratos, no crea nada */}
             <SelectBuscable
               value={clienteId}
               onChange={setClienteId}
@@ -424,12 +430,13 @@ export function ContratosProveedor() {
             <form onSubmit={form.handleSubmit(handleAlta)} className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className={altaClienteAbierta ? 'sm:col-span-2' : undefined}>
                     <FormLabel>Cliente</FormLabel>
                     <FormControl>
-                      <SelectBuscable
+                      <SelectCliente
+                        onPanelChange={setAltaClienteAbierta}
                         value={field.value} onChange={field.onChange}
-                        opciones={opcionesCliente(clientes)}
+                        opciones={opcionesCliente(clientes)} crear={crearCliente}
                         placeholder="Elegí el cliente" ariaLabel="Cliente"
                       />
                     </FormControl>

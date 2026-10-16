@@ -88,6 +88,10 @@ beforeEach(() => {
     if (metodo === 'POST' && u.endsWith('/api/ingresos-reparacion')) {
       return Promise.resolve(json({ ...EN_TALLER, id: 99 }))
     }
+    if (metodo === 'POST' && u.endsWith('/api/clientes')) {
+      // El backend devuelve el cliente creado con su id.
+      return Promise.resolve(json({ ...CLIENTE, id: 5, ...JSON.parse(String(opciones?.body)) }))
+    }
     if (metodo !== 'GET') return Promise.resolve(json({ ok: true }))
     if (u.includes('/api/ingresos-reparacion?en_taller=true')) {
       return Promise.resolve(json([EN_TALLER]))
@@ -218,6 +222,39 @@ describe('Recibir un equipo', () => {
 
     await waitFor(() => {
       expect(abiertas).toContain('/api/ingresos-reparacion/99/pdf/recepcion')
+    })
+  })
+
+  it('🔴 un cliente que no está cargado se da de alta ahí mismo y queda elegido (ADR-071)', async () => {
+    // El caso del mostrador: la persona llega con el equipo y no está en la lista. Antes había que cancelar la recepción, ir a Clientes,
+    // crearlo y empezar de nuevo con la persona esperando.
+    const { user, dialogo } = await abrirAlta()
+
+    await user.click(within(dialogo).getByRole('button', { name: 'Agregar nuevo cliente' }))
+    const panel = await within(dialogo).findByRole('group', { name: 'Nuevo cliente' })
+    await escribirEn(within(panel).getByLabelText(/Nombre/), 'Taller Norte')
+    await escribirEn(within(panel).getByLabelText('Teléfono'), '11-5555-0000')
+    await user.click(within(panel).getByRole('button', { name: 'Crear cliente' }))
+
+    // Se manda sólo lo que se cargó: lo que quedó vacío viaja como null, no como "".
+    await waitFor(() => {
+      const creado = pedidos.find((p) => p.metodo === 'POST' && p.url.endsWith('/api/clientes'))
+      expect(creado).toBeDefined()
+      expect(creado!.cuerpo).toEqual({ nombre: 'Taller Norte', telefono: '11-5555-0000', email: null })
+    })
+
+    // El panel se cierra, el campo muestra al cliente nuevo y el teléfono de contacto quedó precargado.
+    await waitFor(() => expect(within(dialogo).queryByRole('group', { name: 'Nuevo cliente' })).not.toBeInTheDocument())
+    expect(within(dialogo).getByRole('combobox', { name: 'Cliente' })).toHaveValue('Taller Norte')
+    expect(within(dialogo).getByLabelText('Teléfono')).toHaveValue('11-5555-0000')
+
+    await escribirEn(within(dialogo).getByLabelText('Tipo'), 'Notebook')
+    await user.click(within(dialogo).getByRole('button', { name: /Recibir e imprimir/ }))
+
+    await waitFor(() => {
+      const alta = pedidos.find((p) => p.metodo === 'POST' && p.url.endsWith('/api/ingresos-reparacion'))
+      expect(alta).toBeDefined()
+      expect(alta!.cuerpo).toMatchObject({ cliente_id: 5, equipo_id: null, contacto_telefono: '11-5555-0000' })
     })
   })
 
