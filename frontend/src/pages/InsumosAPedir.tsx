@@ -229,6 +229,7 @@ export function InsumosAPedir() {
           </div>
           <div className="grid gap-2">
             <Label>Cliente</Label>
+            {/* cliente-sin-alta: filtro del listado de insumos a pedir, no crea nada */}
             <SelectBuscable
               value={clienteId}
               onChange={setClienteId}

@@ -430,6 +430,7 @@ export function Insumos() {
           </div>
           <div className="grid gap-2">
             <Label>Cliente</Label>
+            {/* cliente-sin-alta: filtro del listado de insumos, no crea nada */}
             <SelectBuscable
               value={clienteId}
               onChange={setClienteId}

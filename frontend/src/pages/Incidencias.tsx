@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -87,6 +89,9 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
   const vocabulario = VOCABULARIO
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
+  // El formulario es una fila `flex-wrap`: con el panel de alta abierto el campo ocupa la fila entera en vez de apretarlo en su columna.
+  const [altaClienteAbierta, setAltaClienteAbierta] = useState(false)
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([])
   const [loading, setLoading] = useState(true)
@@ -188,6 +193,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
 
   function startCreate() {
     setCreating(true)
+    setAltaClienteAbierta(false)
     setFormError(null)
     // Si hay un cliente filtrado, el alta arranca con ése elegido.
     form.reset({ ...EMPTY_VALUES, cliente_id: filtroCliente === TODOS ? '' : filtroCliente })
@@ -498,16 +504,18 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
               <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
                 {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className={altaClienteAbierta ? 'basis-full' : undefined}>
                     <FormLabel>Cliente</FormLabel>
                     <FormControl>
-                      <SelectBuscable
+                      <SelectCliente
                         value={field.value}
                         onChange={field.onChange}
                         opciones={opcionesCliente(clientesElegibles)}
+                        crear={crearCliente}
+                        onPanelChange={setAltaClienteAbierta}
                         placeholder="Cliente…"
                         ariaLabel="Cliente"
-                        className="w-44"
+                        classNameSelect="w-44"
                       />
                     </FormControl>
                     <FormMessage />
@@ -587,6 +595,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
         </div>
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Cliente</span>
+          {/* cliente-sin-alta: filtro del listado de incidencias, no crea nada */}
           <SelectBuscable
             value={filtroCliente}
             onChange={setFiltroCliente}

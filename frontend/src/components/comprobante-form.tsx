@@ -9,7 +9,8 @@ import { api, ESTADO_PRESUPUESTO_LABELS } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -270,9 +271,19 @@ type Props = {
 }
 
 export function ComprobanteForm({
-  tipo, titulo, clientes, draft, onChange, onSubmit, onCancel, saving, numeroPreview,
+  tipo, titulo, clientes: clientesDelPadre, draft, onChange, onSubmit, onCancel, saving, numeroPreview,
 }: Props) {
   const [validacion, setValidacion] = useState<string | null>(null)
+  // Los clientes dados de alta desde este formulario (ADR-071). Se suman a los que trae la pantalla para que `clienteElegido` y el CUIT/
+  // domicilio heredado los vean sin que el padre tenga que saber del alta.
+  const [creados, setCreados] = useState<Cliente[]>([])
+  const clientes = useMemo(
+    () => [...clientesDelPadre, ...creados.filter((c) => !clientesDelPadre.some((p) => p.id === c.id))],
+    [clientesDelPadre, creados],
+  )
+  const crearCliente = crearClienteEn((creado) => setCreados((prev) => [...prev, creado]))
+  // La fila es una grilla de columnas angostas: con el panel de alta abierto el campo ocupa la fila entera.
+  const [altaClienteAbierta, setAltaClienteAbierta] = useState(false)
   // Las alícuotas salen del backend para que haya una sola lista. Si la
   // consulta falla se usan las cuatro conocidas: quedarse sin `<select>` haría
   // imposible cargar un comprobante, y el backend valida igual al guardar.
@@ -414,23 +425,23 @@ export function ComprobanteForm({
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="grid gap-2">
-              <Label>Cliente</Label>
-              <SelectBuscable
-                value={draft.client_id}
-                onChange={elegirCliente}
-                // Acá la etiqueta es la empresa cuando existe (es lo que va en
-                // el comprobante), pero el nombre entra igual en la búsqueda.
-                opciones={clientes.map((c) => ({
-                  value: String(c.id),
-                  label: c.empresa || c.nombre,
-                  hint: c.empresa ? c.nombre : c.ciudad ?? undefined,
-                }))}
-                placeholder="Elegí un cliente"
-                ariaLabel="Cliente"
-                className="w-full"
-              />
-            </div>
+            <SelectCliente
+              etiqueta="Cliente"
+              className={altaClienteAbierta ? 'col-span-full' : undefined}
+              onPanelChange={setAltaClienteAbierta}
+              value={draft.client_id}
+              onChange={elegirCliente}
+              // Acá la etiqueta es la empresa cuando existe (es lo que va en
+              // el comprobante), pero el nombre entra igual en la búsqueda.
+              opciones={clientes.map((c) => ({
+                value: String(c.id),
+                label: c.empresa || c.nombre,
+                hint: c.empresa ? c.nombre : c.ciudad ?? undefined,
+              }))}
+              crear={crearCliente}
+              placeholder="Elegí un cliente"
+              ariaLabel="Cliente"
+            />
 
             <div className="grid gap-2">
               <Label htmlFor="cf-date">Fecha</Label>

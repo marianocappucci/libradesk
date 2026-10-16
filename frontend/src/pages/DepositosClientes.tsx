@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -35,6 +37,7 @@ const TODOS = '__todos__'
 export function DepositosClientes() {
   const [depositos, setDepositos] = useState<Deposito[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filtro, setFiltro] = useState(TODOS)
@@ -159,6 +162,7 @@ export function DepositosClientes() {
       <Card>
         <CardContent className="grid gap-2 sm:max-w-sm">
           <Label>Cliente</Label>
+          {/* cliente-sin-alta: filtro del listado de depósitos, no crea nada */}
           <SelectBuscable
             value={filtro}
             onChange={setFiltro}
@@ -207,10 +211,11 @@ export function DepositosClientes() {
               {editando ? (
                 <p className="text-sm">{editando.cliente_nombre}</p>
               ) : (
-                <SelectBuscable
+                <SelectCliente
                   value={clienteId}
                   onChange={setClienteId}
                   opciones={opcionesCliente(clientes.filter((c) => c.activo))}
+                  crear={crearCliente}
                   placeholder="Elegí un cliente"
                   ariaLabel="Cliente del depósito"
                 />
