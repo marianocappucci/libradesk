@@ -17,6 +17,7 @@ import {
   type VistaReporte,
 } from '../api'
 import { Card, CardContent } from '@/components/ui/card'
+import { BadgeEstado } from 'libra-ui/badge-estado'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -321,10 +322,14 @@ export function TablaReporte({ vista }: { vista: VistaReporte }) {
                       className={[
                         'px-2 py-1.5 align-top',
                         vista.columnas[ci]?.numerica ? 'text-right tabular-nums' : '',
-                        celda.marca ? MARCA_CLASE[celda.marca] ?? '' : '',
+                        // Un estado va en pastilla y sin fondo: el fondo es lo
+                        // que lo hacía verse distinto que en el resto de la suite.
+                        celda.marca && !(celda.tono && celda.texto) ? MARCA_CLASE[celda.marca] ?? '' : '',
                       ].filter(Boolean).join(' ')}
                     >
-                      {celda.texto ?? '—'}
+                      {celda.tono && celda.texto
+                        ? <BadgeEstado tono={celda.tono}>{celda.texto}</BadgeEstado>
+                        : celda.texto ?? '—'}
                     </td>
                   ))}
                 </tr>

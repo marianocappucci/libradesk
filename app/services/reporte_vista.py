@@ -78,6 +78,25 @@ ESTADO_MARCA = {
 PRIO_MARCA = {"alta": "peligro", "media": "urgente", "baja": "ok"}
 FACT_MARCA = {"pendiente_cobro": "urgente", "facturada": "ok", "sin_facturar": "neutro"}
 
+# El estado **en pantalla** va en la pastilla de la familia (`BadgeEstado` de
+# libra-ui, sus cinco tonos), igual que en la lista de equipos, la ficha o los
+# reclamos, y no pintando el fondo de la celda: con el fondo, el mismo «En
+# reparación» se veía de un color en el reporte y de otro en la pantalla del
+# equipo (pedido del humano, 2026-10-16). La `marca` sigue existiendo para el
+# Excel, que no tiene pastillas y tiene que seguir saliendo igual.
+#
+# 🔴 Estos mapas **repiten los de `frontend/src/api.ts`** (`ESTADO_EQUIPO_TONO`,
+# `ESTADO_TONO`, `PRIORIDAD_TONO`, `INSUMO_TONO`): si se cambia uno, el otro.
+ESTADO_TONO = {
+    "activo": "ok", "en_reparacion": "atencion", "almacenado": "curso",
+    "baja": "neutro",
+    "abierto": "negativo", "en_progreso": "atencion",
+    "resuelta": "ok", "cerrado": "neutro",
+}
+PRIO_TONO = {"alta": "negativo", "media": "neutro", "baja": "neutro"}
+FACT_TONO = {"pendiente_cobro": "atencion", "facturada": "ok", "sin_facturar": "neutro"}
+COBERTURA_TONO = {None: "curso", "total": "curso", "parcial": "atencion", "fuera": "atencion"}
+
 
 def fmt_fecha(value) -> str:
     """dd-mm-aa, o '—' si no hay valor. Acepta datetime, date o el ISO string
@@ -113,6 +132,9 @@ class Columna:
 class Celda:
     texto: str | None = None
     marca: str | None = None
+    # El tono de `BadgeEstado` cuando la celda es un estado: la pantalla la
+    # dibuja como pastilla y no le pinta el fondo. Ver `ESTADO_TONO`.
+    tono: str | None = None
     # El valor crudo cuando es un numero. **No es redundante con `texto`**: si
     # el Excel recibiera el string, la columna "#" y los conteos dejarian de
     # ser numeros para la planilla —no se suman, no se ordenan— y eso es
@@ -163,26 +185,30 @@ class Vista:
                 {
                     "etiqueta": g.etiqueta,
                     "filas": [
-                        [{"texto": c.texto, "marca": c.marca} for c in fila]
+                        [{"texto": c.texto, "marca": c.marca, "tono": c.tono} for c in fila]
                         for fila in g.filas
                     ],
                 }
                 for g in self.grupos
             ],
             "totales": (
-                [{"texto": c.texto, "marca": c.marca} for c in self.totales]
+                [{"texto": c.texto, "marca": c.marca, "tono": c.tono} for c in self.totales]
                 if self.totales else None
             ),
         }
 
 
-def _fila(valores: list, marcas: list[str | None] | None = None) -> list[Celda]:
+def _fila(valores: list, marcas: list[str | None] | None = None,
+          tonos: dict[int, str | None] | None = None) -> list[Celda]:
     """Arma la fila desde dos listas paralelas, que es como se leen los seis
-    reportes: los valores en un bloque y los resaltados enfrente."""
+    reportes: los valores en un bloque y los resaltados enfrente. `tonos` va
+    por posición (`{6: "ok"}`) porque en cada fila hay una o dos columnas de
+    estado, no una por celda."""
     return [
         Celda(
             texto=None if v is None or v == "" else str(v),
             marca=marcas[i] if marcas and i < len(marcas) else None,
+            tono=(tonos or {}).get(i),
             numero=v if isinstance(v, (int, float)) and not isinstance(v, bool) else None,
         )
         for i, v in enumerate(valores)
@@ -229,7 +255,7 @@ def equipamiento(data: list[dict], filtros: list[str]) -> Vista:
             "peligro" if vencida else None,
             "carga" if r["incidencias_count"] else None,
             None,
-        ]))
+        ], {7: ESTADO_TONO.get(r["estado"], "neutro")}))
 
     return Vista("equipamiento", "Equipamiento", filtros, columnas, _plano(filas))
 
@@ -251,13 +277,15 @@ def incidencias_periodo(data: list[dict], filtros: list[str]) -> Vista:
             cobro_text, cobro_marca = COBERTURA_COBRO.get(
                 r.get("cobertura_abono"), ("Mensual", "info"),
             )
+            cobro_tono = COBERTURA_TONO.get(r.get("cobertura_abono"), "curso")
         elif r["estado_facturacion"]:
             cobro_text = FACT_LABEL.get(r["estado_facturacion"], r["estado_facturacion"])
             cobro_marca = FACT_MARCA.get(r["estado_facturacion"])
+            cobro_tono = FACT_TONO.get(r["estado_facturacion"], "neutro")
         elif r["estado"] in ("cerrado", "resuelta"):
-            cobro_text, cobro_marca = "Sin facturar", "neutro"
+            cobro_text, cobro_marca, cobro_tono = "Sin facturar", "neutro", "neutro"
         else:
-            cobro_text, cobro_marca = None, None
+            cobro_text, cobro_marca, cobro_tono = None, None, None
 
         filas.append(_fila([
             r["id"], r["cliente"], r["sector"], r["categoria"],
@@ -275,7 +303,11 @@ def incidencias_periodo(data: list[dict], filtros: list[str]) -> Vista:
             PRIO_MARCA.get(r["prioridad"]),
             None, None, None, None, None,
             cobro_marca,
-        ]))
+        ], {
+            6: ESTADO_TONO.get(r["estado"], "neutro"),
+            7: PRIO_TONO.get(r["prioridad"], "neutro"),
+            13: cobro_tono,
+        }))
 
     total_act = sum(r["actividades_count"] for r in data)
     con_horas = [r["horas_resolucion"] for r in data if r["horas_resolucion"] is not None]
@@ -313,12 +345,13 @@ def facturacion(data: list[dict], filtros: list[str]) -> Vista:
             if r["estado_facturacion"]:
                 texto = FACT_LABEL.get(r["estado_facturacion"], r["estado_facturacion"])
                 marca = FACT_MARCA.get(r["estado_facturacion"], "neutro")
+                tono = FACT_TONO.get(r["estado_facturacion"], "neutro")
             else:
-                texto, marca = "Sin facturar", "neutro"
+                texto, marca, tono = "Sin facturar", "neutro", "neutro"
             filas.append(_fila([
                 r["id"], r["cliente"], r["titulo"], r["tecnico"],
                 fmt_fecha(r["fecha_cierre"]), texto,
-            ], [None, None, None, None, None, marca]))
+            ], [None, None, None, None, None, marca], {5: tono}))
         grupos.append(Grupo(etiqueta=etiqueta, filas=filas))
 
     sin_fact = sum(1 for r in data if not r["estado_facturacion"])
@@ -356,7 +389,7 @@ def garantias(data: list[dict], filtros: list[str]) -> Vista:
         ], [
             None, None, None, None, None, None,
             ESTADO_MARCA.get(r["estado"]), marca, marca,
-        ]))
+        ], {6: ESTADO_TONO.get(r["estado"], "neutro")}))
 
     return Vista("garantias", "Garantías", filtros, columnas, _plano(filas))
 
@@ -436,6 +469,7 @@ INSUMO_LABEL = {
     "pendiente": "Pedido", "en_poder": "En el cliente", "colocado": "Colocado",
 }
 INSUMO_MARCA = {"pendiente": "urgente", "en_poder": "nuevo", "colocado": "ok"}
+INSUMO_TONO = {"pendiente": "atencion", "en_poder": "curso", "colocado": "ok"}
 
 #: A partir de cuantos dias esperando un pedido deja de ser "esperá" y pasa a
 #: ser un llamado. Es el mismo umbral que resalta la pantalla de Insumos.
@@ -512,7 +546,7 @@ def insumos(data: list[dict], filtros: list[str]) -> Vista:
                 None, INSUMO_MARCA.get(r["estado"]), None, None,
                 "peligro" if demorado else None,
                 None, None, None, None, marca_contrato,
-            ]))
+            ], {1: INSUMO_TONO.get(r["estado"], "neutro")}))
         grupos.append(Grupo(etiqueta=etiqueta, filas=filas))
 
     pendientes = [r for r in data if r["estado"] == "pendiente"]

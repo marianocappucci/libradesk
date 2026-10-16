@@ -115,12 +115,15 @@ def list_equipos(
     cliente_id: int | None = None,
     deposito_id: int | None = None,
     referencia: str | None = None,
+    estado: str | None = None,
     equipos: EquipoRepository = Depends(get_equipo_repository),
 ):
     """`referencia` contesta la pregunta del teléfono: *"me dicen que es la
-    4471, ¿cuál es?"*. Coincidencia exacta — ver `EquipoRepository.list`."""
+    4471, ¿cuál es?"*. Coincidencia exacta — ver `EquipoRepository.list`.
+    `estado` es el filtro de la lista de equipos (`activo`, `en_reparacion`…)."""
     return equipos.list(
         cliente_id=cliente_id, deposito_id=deposito_id, referencia=referencia,
+        estado=estado,
     )
 
 

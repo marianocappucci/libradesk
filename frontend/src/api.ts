@@ -333,6 +333,16 @@ export const ESTADO_EQUIPO_LABELS: Record<string, string> = {
   activo: 'Activo', en_reparacion: 'En reparación', almacenado: 'En depósito', baja: 'Baja',
 }
 
+/** El tono de cada estado del equipo, el mismo en la lista, la ficha, los
+ *  depósitos y los reportes (que lo repiten en `ESTADO_TONO` de
+ *  `services/reporte_vista.py`). Antes era un ternario `activo ? ok : neutro`
+ *  en tres pantallas, y un equipo en reparación se veía igual que uno dado de
+ *  baja. En reparación es lo único que pide seguimiento; la baja ya salió de
+ *  circulación y va neutra, como un reclamo cerrado. */
+export const ESTADO_EQUIPO_TONO: Record<string, TonoEstado> = {
+  activo: 'ok', en_reparacion: 'atencion', almacenado: 'curso', baja: 'neutro',
+}
+
 // Destino del equipo retirado en un reemplazo. El backend deriva de acá el
 // estado y el sector por defecto (ver services/reemplazo.py, DESTINOS).
 export type DestinoReemplazo = 'service' | 'deposito' | 'baja'
@@ -1472,6 +1482,10 @@ export type CeldaReporte = {
   texto: string | null
   // Resaltado semántico, no un color: cada salida lo traduce a lo suyo.
   marca: string | null
+  // Si la celda es un estado, su tono: en pantalla va como `BadgeEstado` y no
+  // con el fondo pintado. Opcional porque las celdas que no son estado no lo
+  // traen con valor.
+  tono?: TonoEstado | null
 }
 
 export type VistaReporte = {
