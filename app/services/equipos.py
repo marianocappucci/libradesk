@@ -465,7 +465,8 @@ class EquipoRepository:
 
     def list(self, cliente_id: int | None = None,
              deposito_id: int | None = None,
-             referencia: str | None = None) -> list[dict]:
+             referencia: str | None = None,
+             estado: str | None = None) -> list[dict]:
         """`referencia` busca por el numero con el que **otro** llama al equipo
         — ver `EquipoReferencia`.
 
@@ -480,6 +481,8 @@ class EquipoRepository:
                 stmt = stmt.where(Equipo.cliente_id == cliente_id)
             if deposito_id is not None:
                 stmt = stmt.where(Equipo.deposito_id == deposito_id)
+            if estado is not None:
+                stmt = stmt.where(Equipo.estado == estado)
             if referencia is not None:
                 stmt = stmt.where(Equipo.id.in_(
                     select(EquipoReferencia.equipo_id).where(

@@ -157,6 +157,35 @@ def test_los_resaltados_viajan_como_marca_y_no_como_color(client, escenario):
     assert all(not str(m).startswith("FF") for m in marcas)
 
 
+def test_el_estado_viaja_con_el_tono_de_la_pastilla(client, escenario):
+    """En pantalla el estado va en `BadgeEstado`, con el mismo tono que en la
+    lista y la ficha del equipo, y no con el fondo de la celda (2026-10-16).
+    Las celdas que no son estado no traen tono."""
+    vista = client.get("/api/reportes/equipamiento").json()
+
+    columnas = [c["label"] for c in vista["columnas"]]
+    estado = columnas.index("Estado")
+    por_texto = {fila[estado]["texto"]: fila[estado]["tono"]
+                 for fila in vista["grupos"][0]["filas"]}
+
+    assert por_texto == {"Activo": "ok", "En depósito": "curso"}
+    otras = {c["tono"] for fila in vista["grupos"][0]["filas"]
+             for i, c in enumerate(fila) if i != estado}
+    assert otras == {None}
+
+
+def test_el_reporte_de_reclamos_trae_tono_en_estado_prioridad_y_cobro(client, escenario):
+    vista = client.get(
+        "/api/reportes/incidencias-periodo?desde=2020-01-01&hasta=2099-12-31"
+    ).json()
+
+    columnas = [c["label"] for c in vista["columnas"]]
+    fila = vista["grupos"][0]["filas"][0]
+
+    assert fila[columnas.index("Estado")]["tono"] == "negativo"  # abierto
+    assert fila[columnas.index("Prioridad")]["tono"] == "negativo"  # alta
+
+
 def test_el_equipo_guardado_muestra_el_deposito_y_no_el_sector_viejo(client, escenario):
     """La columna dice "Sector / Depósito" justamente por esto: un equipo en el
     taller no está en ningún sector del cliente."""
