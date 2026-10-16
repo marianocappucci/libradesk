@@ -204,3 +204,33 @@ def test_ninguna_cuadrilla_queda_con_dos_trabajos_encimados(api):
                 f"la cuadrilla {equipo} tiene encimados el #{id1} (termina {h1}) "
                 f"y el #{id2} (empieza {d2})"
             )
+
+
+# ── 🔴 La demo no queda con datos fiscales reales (ADR-061 de libracore) ─────────────────────────────────────────
+
+
+def test_el_texto_de_los_seeds_no_tiene_cuit_de_forma_real():
+    """Un CUIT con verificador válido y fuera del rango reservado `99999xxx` no se puede distinguir de uno real; los
+    inventados que no cierran el verificador no existen en el padrón y no cuentan."""
+    from pathlib import Path
+
+    from libracore.demo import auditar_literales
+
+    hallazgos = []
+    for archivo in ("scripts/seed_demo.py", "scripts/seed_dev.py"):
+        hallazgos += auditar_literales(Path(archivo).read_text(encoding="utf-8"), archivo)
+    assert hallazgos == [], "\n".join(str(h) for h in hallazgos)
+
+
+def test_la_semilla_de_la_demo_no_deja_datos_fiscales_reales_en_la_base(api, monkeypatch):
+    """Lo que quedó en la base y en `config.json` después de sembrar la demo (clientes, proveedores, facturas)."""
+    from libracore.db import core
+    from libracore.demo import auditar_datos_fiscales
+
+    from scripts.seed_demo import sembrar as sembrar_demo
+
+    monkeypatch.setenv("DEMO_MODE", "1")
+    sembrar_demo(api)
+    with core.get_connection() as conn:
+        hallazgos = auditar_datos_fiscales(conn)
+    assert hallazgos == [], "\n".join(str(h) for h in hallazgos)
