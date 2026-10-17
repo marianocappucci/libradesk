@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge'
 import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { SelectBuscable } from '@/components/select-buscable'
 import { SelectCliente } from 'libra-ui/SelectCliente'
-import { crearClienteEn } from '@/lib/alta-de-cliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -486,6 +486,7 @@ export function VentaNueva() {
               onChange={setClienteId}
               opciones={clientes.filter((c) => c.activo).map((c) => ({ value: String(c.id), label: c.nombre }))}
               crear={crearCliente}
+              {...ALTA_FISCAL}
               placeholder="Consumidor final"
               limpiable
             />
@@ -714,6 +715,7 @@ function AccionRemito({ venta, clientes, onClienteCreado, onGenerado }: {
           onChange={setElegido}
           opciones={clientes.map((c) => ({ value: String(c.id), label: c.empresa || c.nombre }))}
           crear={crearClienteEn(onClienteCreado)}
+          {...ALTA_FISCAL}
           placeholder="Elegí un cliente"
         />
         <DialogFooter>

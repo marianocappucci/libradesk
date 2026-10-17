@@ -38,7 +38,7 @@ import {
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
 import { SelectCliente } from 'libra-ui/SelectCliente'
-import { crearClienteEn } from '@/lib/alta-de-cliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -437,6 +437,7 @@ export function ContratosProveedor() {
                         onPanelChange={setAltaClienteAbierta}
                         value={field.value} onChange={field.onChange}
                         opciones={opcionesCliente(clientes)} crear={crearCliente}
+ {...ALTA_FISCAL}
                         placeholder="Elegí el cliente" ariaLabel="Cliente"
                       />
                     </FormControl>

@@ -4,16 +4,20 @@
 // pantallas que eligen un cliente lo comparten, y si el backend cambia lo que
 // pide `ClienteIn` se corrige acá y no en cada una.
 //
-// Se piden sólo teléfono y email (los `campos` por defecto del kit), también
-// en las pantallas que emiten algo fiscal: las condiciones frente al IVA del
-// kit (`IVA_CONDITIONS`) incluyen «IVA No Responsable», que el backend no
-// conoce (`CONDICIONES` en `app/services/iva.py`), y dar de alta con una
-// condición que el backend no sabe leer dejaría al cliente sin IVA
-// discriminado en silencio. El CUIT y la condición se completan después en la
-// ficha del cliente, que sí ofrece las del backend.
+// En las pantallas operativas (recepción, equipos, incidencias, depósitos) se
+// piden teléfono y email, los `campos` por defecto del kit. En las que emiten
+// algo fiscal (presupuestos, remitos, ventas, contratos) se pide además el CUIT
+// y la condición frente al IVA (`ALTA_FISCAL`): desde libra-ui v0.158.2 las
+// condiciones del kit son las mismas que `CONDICIONES` de `app/services/iva.py`.
 import type { OpcionSelect } from 'libra-ui/SelectBuscable'
-import type { ClienteNuevo } from 'libra-ui/SelectCliente'
+import type { CampoDeAlta, ClienteNuevo } from 'libra-ui/SelectCliente'
 import { api, opcionesCliente, type Cliente } from '@/api'
+
+/** Lo que se pasa a `SelectCliente` en las pantallas que emiten algo fiscal. */
+export const ALTA_FISCAL = {
+  campos: ['documento', 'condicionIva', 'telefono', 'email'] as CampoDeAlta[],
+  etiquetaDocumento: 'CUIT',
+}
 
 /** Lo que recibe `POST /api/clientes` (`ClienteIn`) para lo que el kit pide. `''` viaja como `null`, como en la ficha del cliente. */
 export function payloadDeCliente(d: ClienteNuevo) {
