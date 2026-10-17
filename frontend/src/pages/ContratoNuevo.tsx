@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input'
 import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
-import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -70,6 +71,7 @@ const ID_FORM = 'form-contrato-nuevo'
 export function ContratoNuevo() {
   const navigate = useNavigate()
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -210,10 +212,12 @@ export function ContratoNuevo() {
                 <FormItem>
                   <FormLabel>Cliente (locatario)</FormLabel>
                   <FormControl>
-                    <SelectBuscable
+                    <SelectCliente
                       value={field.value}
                       onChange={field.onChange}
                       opciones={opcionesCliente(clientes)}
+                      crear={crearCliente}
+                      {...ALTA_FISCAL}
                       placeholder="Elegí un cliente"
                       // 🔴 `ariaLabel` no es decorativo acá: el disparador es un
                       // `role="combobox"`, y para ese rol el contenido **no**

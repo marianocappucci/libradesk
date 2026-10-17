@@ -29,6 +29,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader,
   DialogTitle,
@@ -86,6 +88,15 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
   })
   const [aBorrar, setABorrar] = useState<IngresoReparacion | null>(null)
   const [guardando, setGuardando] = useState(false)
+
+  // Alta de cliente desde el mostrador (ADR-071). Si el formulario todavía no tiene un teléfono de contacto, se precarga con el del cliente
+  // nuevo: es la misma persona que está parada adelante. Es una actualización funcional porque el `onChange` del campo corre justo después y
+  // no debe pisarla con un `alta` viejo.
+  const crearCliente = crearClienteEn((creado) => {
+    setClientes((prev) => [...prev, creado])
+    const telefono = creado.telefono ?? ''
+    if (telefono) setAlta((a) => (a && !a.contacto_telefono ? { ...a, contacto_telefono: telefono } : a))
+  })
 
   function describeError(err: unknown): string {
     return err instanceof ApiError ? err.detail : 'Error de conexión.'
@@ -331,17 +342,15 @@ function Recepciones({ enTaller }: { enTaller: boolean }) {
               className="grid gap-3"
               onSubmit={(e) => { e.preventDefault(); recibir() }}
             >
-              <div className="grid gap-2">
-                <Label>Cliente</Label>
-                <SelectBuscable
-                  value={alta.cliente_id}
-                  onChange={(v) => setAlta({ ...alta, cliente_id: v, equipo_id: NONE })}
-                  opciones={opcionesCliente(clientes)}
-                  ariaLabel="Cliente"
-                  className="w-full"
-                  limpiable={false}
-                />
-              </div>
+              <SelectCliente
+                etiqueta="Cliente"
+                value={alta.cliente_id}
+                onChange={(v) => setAlta((a) => a && { ...a, cliente_id: v, equipo_id: NONE })}
+                opciones={opcionesCliente(clientes)}
+                crear={crearCliente}
+                ariaLabel="Cliente"
+                limpiable={false}
+              />
               <div className="grid gap-2">
                 <Label>Equipo del inventario</Label>
                 <SelectBuscable

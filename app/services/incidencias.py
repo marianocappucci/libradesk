@@ -906,6 +906,15 @@ def _datos_de_items(item_ids, cliente_id: int | None) -> dict:
     return salida
 
 
+class ReclamosYaRemitados(ValueError):
+    """No se pudo atar todo el lote al remito que se estaba emitiendo.
+
+    Es un `ValueError` para que `_convertir` lo siga contestando 409, pero tiene
+    nombre propio porque `POST /api/remitos` ya traduce el `ValueError` de un
+    renglon en dolares sin cotizacion a 422, y este es un conflicto de estado.
+    """
+
+
 class IncidenciaRepository:
     def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
@@ -2102,20 +2111,20 @@ class IncidenciaRepository:
         Lo que cierra el circuito es que la bandeja de facturacion **se niega a
         mandar un remito con total 0**, asi que un olvido no llega a facturarse.
 
-        ## Lo que NO es atomico
+        ## Es atomico (2026-10-16)
 
-        El remito lo escribe la conexion de LibraCore y el vinculo lo escribe
-        SQLAlchemy: son dos conexiones, asi que no hay una transaccion que las
-        cubra (mismo problema que documenta `materiales.py`). Si el proceso se
-        cae entre las dos, queda un remito emitido sin vinculo y el proximo
-        intento genera un segundo remito por los mismos tickets. Se elige este
-        orden --primero el remito, despues el vinculo-- porque el error al
-        reves es peor: un ticket que dice "ya se remitio" apuntando a un remito
-        que no existe deja el trabajo sin poder facturarse nunca.
+        El remito y el vinculo de los reclamos entran en **una sola transaccion**
+        (`RemitoService.create(vincular=...)`): core y dominio son la misma base
+        PostgreSQL, asi que el remito se inserta por la sesion de SQLAlchemy que
+        despues ata los reclamos. Antes eran dos commits --el remito por la
+        conexion de LibraCore, el vinculo por SQLAlchemy-- y una caida entre los
+        dos dejaba un remito sin reclamos detras: el puente lo mandaba a facturar
+        y los tickets, todavia sueltos, se remitian de nuevo. Ahora una caida deja
+        las dos cosas como estaban, y se vuelve a intentar sin mas.
 
-        El vinculo de los N si es una sola sentencia (`UPDATE ... WHERE id IN`),
-        asi que no hay un estado intermedio donde la mitad del lote quedo atada
-        al remito y la otra mitad no.
+        El vinculo de los N es una sola sentencia (`UPDATE ... WHERE id IN`), asi
+        que no hay un estado intermedio donde la mitad del lote quedo atada al
+        remito y la otra mitad no.
         """
         from . import fecha
         from .remitos_presupuestos import datos_cliente_para_comprobante
@@ -2145,46 +2154,33 @@ class IncidenciaRepository:
             # hay formulario, asi que se toma el mejor dato que haya en la
             # ficha en vez de dejarlo vacio.
             **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
+            vincular=lambda sesion, remito_id: self.atar_al_remito(
+                sesion, ids, remito_id),
         )
+        return remito
 
-        atados = self.vincular_al_remito(ids, remito["id"])
-        if atados < len(ids):
-            # 🔴 **El doble click con dos pedidos en paralelo** (2026-09-11).
-            # Los dos pasan `preparar_remito` antes de que alguno ate los
-            # reclamos, los dos emiten, y el segundo no ata nada —el vinculo
-            # solo toma los que estan sueltos—. Hasta aca ese cero se ignoraba:
-            # quedaba un remito sin reclamos que lo respalden, y el proximo
-            # envio a facturar lo habria mandado igual, cobrandole dos veces el
-            # mismo trabajo al cliente. Se deshace lo de este pedido y se
-            # contesta como el lote con uno ya remitado.
-            #
-            # Lo que esto NO cubre: que el proceso muera entre `create` y el
-            # vinculo. Eso sigue siendo lo que describe "Lo que NO es atomico".
-            self.desvincular_del_remito(remito["id"])
-            remitos.delete(remito["id"])
-            raise ValueError(
+    def atar_al_remito(self, sesion, ids: list[int], remito_id: int) -> None:
+        """Ata los reclamos al remito que se esta emitiendo, o levanta y deshace todo.
+
+        🔴 **El doble click con dos pedidos en paralelo** (2026-09-11). Los dos
+        pasan `preparar_remito` antes de que alguno ate los reclamos, los dos
+        emiten, y el segundo no ata nada --el vinculo solo toma los que estan
+        sueltos--. Hasta aca ese cero se ignoraba: quedaba un remito sin reclamos
+        que lo respalden, y el proximo envio a facturar lo habria mandado igual,
+        cobrandole dos veces el mismo trabajo al cliente. Ahora el remito entra en
+        la transaccion de este vinculo: si no se ata todo el lote, el
+        `ReclamosYaRemitados` deshace tambien el remito, sin borrarlo despues. Lo
+        llaman `convertir_a_remito()` y `POST /api/remitos`; en el segundo, que
+        antes dejaba pasar el cero en silencio, tambien cubre un reclamo que ya
+        tenia remito o que no existe.
+        """
+        pedidos = len(set(ids))
+        if self.vincular_al_remito(ids, remito_id, sesion=sesion) < pedidos:
+            raise ReclamosYaRemitados(
                 "Otro pedido remitó estos reclamos al mismo tiempo, así que no se "
                 "generó un segundo remito. Recargá la pantalla para ver el que "
                 "quedó."
             )
-        return remito
-
-    def desvincular_del_remito(self, remito_id: int) -> int:
-        """Suelta los reclamos atados a un remito. Devuelve cuántos soltó.
-
-        Existe para una sola cosa: deshacer un remito recién emitido que perdió
-        la carrera en `convertir_a_remito`. `RemitoService.delete` se niega a
-        borrar un remito con reclamos atados, así que hay que soltar primero lo
-        que este pedido llegó a atar.
-        """
-        with self.session_factory() as session:
-            resultado = session.execute(
-                update(Incidencia)
-                .where(Incidencia.remito_id == remito_id)
-                .values(remito_id=None)
-            )
-            session.commit()
-            return resultado.rowcount or 0
 
     def marcar_facturadas_por_remito(self, remito_id: int) -> int:
         """Marca `facturada` a los reclamos de un remito que ya se facturó.
@@ -2214,7 +2210,7 @@ class IncidenciaRepository:
             session.commit()
             return resultado.rowcount or 0
 
-    def vincular_al_remito(self, incidencia_ids: list[int], remito_id: int) -> int:
+    def vincular_al_remito(self, incidencia_ids: list[int], remito_id: int, *, sesion) -> int:
         """Ata los reclamos al remito. Devuelve cuántos ató.
 
         🔴 **Es lo único que impide que el mismo reclamo entre en dos remitos**,
@@ -2222,6 +2218,11 @@ class IncidenciaRepository:
         llamarlo. Hoy son dos: `convertir_a_remito()` y el alta de remito con
         `incidencia_ids` (`POST /api/remitos`), que es como Lagrace arma la
         pre-factura desde el formulario.
+
+        **Va por la `sesion` del remito y no commitea**: es la mitad de la
+        transacción de `RemitoService.create(vincular=...)`, que commitea las dos
+        escrituras juntas. Atarlo en otra sesión reabriría la ventana en la que un
+        remito existe sin reclamos detrás.
 
         **Una sola sentencia** (`UPDATE ... WHERE id IN`), así que no hay un
         estado intermedio con la mitad del lote atada y la otra mitad suelta.
@@ -2233,11 +2234,9 @@ class IncidenciaRepository:
         ids = list(dict.fromkeys(incidencia_ids))
         if not ids:
             return 0
-        with self.session_factory() as session:
-            resultado = session.execute(
-                update(Incidencia)
-                .where(Incidencia.id.in_(ids), Incidencia.remito_id.is_(None))
-                .values(remito_id=remito_id)
-            )
-            session.commit()
-            return resultado.rowcount or 0
+        resultado = sesion.execute(
+            update(Incidencia)
+            .where(Incidencia.id.in_(ids), Incidencia.remito_id.is_(None))
+            .values(remito_id=remito_id)
+        )
+        return resultado.rowcount or 0

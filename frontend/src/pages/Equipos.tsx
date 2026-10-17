@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/form'
 import { DataTable, sortableHeader } from '@/components/data-table'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -81,6 +83,9 @@ export function Equipos() {
 
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const crearCliente = crearClienteEn((creado) => setClientes((prev) => [...prev, creado]))
+  // El formulario es una fila `flex-wrap`: con el panel de alta abierto el campo ocupa la fila entera en vez de apretarlo en su columna.
+  const [altaClienteAbierta, setAltaClienteAbierta] = useState(false)
   const [depositos, setDepositos] = useState<Deposito[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   // El equipo cuyos identificadores ajenos se están mirando. Diálogo aparte
@@ -222,6 +227,7 @@ export function Equipos() {
     // caso normal (se filtra por cliente y se le carga un equipo).
     form.reset({ ...EMPTY_VALUES, cliente_id: filtroCliente === TODOS ? '' : filtroCliente })
     setDialogOpen(true)
+    setAltaClienteAbierta(false)
   }
 
   function abrirEditar(equipo: Equipo) {
@@ -243,6 +249,7 @@ export function Equipos() {
       motivo: '',
     })
     setDialogOpen(true)
+    setAltaClienteAbierta(false)
   }
 
   async function handleSubmit(values: EquipoFormValues) {
@@ -461,16 +468,18 @@ export function Equipos() {
               <form className="flex flex-wrap items-start gap-3" onSubmit={form.handleSubmit(handleSubmit)}>
                 {formError && <p className="w-full text-sm text-destructive">{formError}</p>}
                 <FormField control={form.control} name="cliente_id" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className={altaClienteAbierta ? 'basis-full' : undefined}>
                     <FormLabel>Cliente</FormLabel>
                     <FormControl>
-                      <SelectBuscable
+                      <SelectCliente
                         value={field.value}
                         onChange={field.onChange}
                         opciones={opcionesCliente(clientesElegibles)}
+                        crear={crearCliente}
+                        onPanelChange={setAltaClienteAbierta}
                         placeholder="Cliente…"
                         ariaLabel="Cliente"
-                        className="w-48"
+                        classNameSelect="w-48"
                       />
                     </FormControl>
                     <FormMessage />
@@ -631,6 +640,7 @@ export function Equipos() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-2">
           <span className="text-xs text-muted-foreground">Cliente</span>
+          {/* cliente-sin-alta: filtro del listado de equipos, no crea nada */}
           <SelectBuscable
             value={filtroCliente}
             onChange={setFiltroCliente}

@@ -201,12 +201,16 @@ def test_no_pisa_el_vinculo_de_uno_ya_atado(client, escenario):
     }).json()
 
     # Un segundo remito intentando llevarse el mismo reclamo.
-    client.post("/api/remitos", json={
+    segundo = client.post("/api/remitos", json={
         "client_id": escenario["cliente"]["id"],
         "items": [{"description": "Segundo", "qty": 1, "unit_price": 100}],
         "incidencia_ids": [rec["id"]],
     })
 
+    # Se rechaza (antes se emitia igual, sin reclamo detras: un remito huerfano
+    # que el puente habria mandado a facturar) y no queda un segundo remito.
+    assert segundo.status_code == 409, segundo.text
+    assert [x["id"] for x in client.get("/api/remitos").json()] == [primero["id"]]
     # Sigue apuntando al PRIMERO.
     assert client.get(f"/api/incidencias/{rec['id']}").json()["remito_id"] == primero["id"]
 

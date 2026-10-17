@@ -29,6 +29,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { BadgeEstado, type TonoEstado } from 'libra-ui/badge-estado'
 import { SelectBuscable } from '@/components/select-buscable'
+import { SelectCliente } from 'libra-ui/SelectCliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle,
   DialogTrigger,
@@ -352,8 +354,9 @@ let proximaLinea = 1
 export function VentaNueva() {
   const navigate = useNavigate()
   const { activa } = useSucursal()
-  const { datos: clientes, error: errorClientes } =
+  const { datos: clientes, error: errorClientes, recargar: recargarClientes } =
     useDatos<Cliente[]>('/api/clientes', [])
+  const crearCliente = crearClienteEn(() => { void recargarClientes() })
   const { datos: productos, error: errorProductos } =
     useDatos<Producto[]>('/api/consumibles', [])
   // Sin filtrar: se puede vender descontando de un depósito de otra sucursal
@@ -476,12 +479,14 @@ export function VentaNueva() {
         <CardHeader><CardTitle className="text-base">Datos de la venta</CardTitle></CardHeader>
         <CardContent className="grid items-start gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="v-cliente">Cliente</Label>
-            <SelectBuscable
+            <SelectCliente
+              etiqueta="Cliente"
               id="v-cliente"
               value={clienteId}
               onChange={setClienteId}
               opciones={clientes.filter((c) => c.activo).map((c) => ({ value: String(c.id), label: c.nombre }))}
+              crear={crearCliente}
+              {...ALTA_FISCAL}
               placeholder="Consumidor final"
               limpiable
             />
@@ -647,9 +652,11 @@ export function VentaNueva() {
  *   un remito se emite a nombre de alguien.
  * - **Todo listo** → genera y navega al remito.
  */
-function AccionRemito({ venta, clientes, onGenerado }: {
+function AccionRemito({ venta, clientes, onClienteCreado, onGenerado }: {
   venta: VentaDetalleData
   clientes: Cliente[]
+  /** Se dio de alta un cliente desde el diálogo: la pantalla recarga su lista. */
+  onClienteCreado: () => void
   onGenerado: (accion: () => Promise<unknown>) => Promise<boolean>
 }) {
   const navigate = useNavigate()
@@ -701,16 +708,16 @@ function AccionRemito({ venta, clientes, onGenerado }: {
           Esta venta se cargó sin cliente y un remito se emite a nombre de
           alguien. Elegí a quién antes de generarlo.
         </p>
-        <div className="grid gap-2">
-          <Label htmlFor="cliente-remito">Cliente</Label>
-          <SelectBuscable
-            id="cliente-remito"
-            value={elegido}
-            onChange={setElegido}
-            opciones={clientes.map((c) => ({ value: String(c.id), label: c.empresa || c.nombre }))}
-            placeholder="Elegí un cliente"
-          />
-        </div>
+        <SelectCliente
+          etiqueta="Cliente"
+          id="cliente-remito"
+          value={elegido}
+          onChange={setElegido}
+          opciones={clientes.map((c) => ({ value: String(c.id), label: c.empresa || c.nombre }))}
+          crear={crearClienteEn(onClienteCreado)}
+          {...ALTA_FISCAL}
+          placeholder="Elegí un cliente"
+        />
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline" size="sm">Cancelar</Button>
@@ -737,7 +744,7 @@ export function VentaDetalle() {
   const { datos, error, cargando, conError } = useDatos<VentaDetalleData | null>(
     `/api/ventas/${Number(id)}`, null,
   )
-  const { datos: clientes } = useDatos<Cliente[]>('/api/clientes', [])
+  const { datos: clientes, recargar: recargarClientes } = useDatos<Cliente[]>('/api/clientes', [])
 
   if (cargando || error || !datos) return <DetalleEstado loading={cargando} error={error || null} />
 
@@ -758,7 +765,7 @@ export function VentaDetalle() {
           {/* El camino a facturación. Va acá y no en la lista a propósito: pide
               decidir a nombre de quién cuando la venta es de mostrador, y esa
               decisión necesita ver la venta. */}
-          <AccionRemito venta={datos} clientes={clientes} onGenerado={conError} />
+          <AccionRemito venta={datos} clientes={clientes} onClienteCreado={() => { void recargarClientes() }} onGenerado={conError} />
           <Button asChild size="sm" variant="outline">
             <Link to="/ventas"><ArrowLeft />Volver</Link>
           </Button>

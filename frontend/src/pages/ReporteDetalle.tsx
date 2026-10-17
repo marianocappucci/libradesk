@@ -256,6 +256,7 @@ function CampoFiltro({
   return (
     <div className="grid gap-2">
       <Label htmlFor={id}>{campo.label}</Label>
+      {/* cliente-sin-alta: filtro genérico del reporte (según el campo es cliente, proveedor, sector…), no crea nada */}
       <SelectBuscable
         value={valor || TODOS}
         onChange={onChange}

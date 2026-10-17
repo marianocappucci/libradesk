@@ -101,9 +101,8 @@ class VentaRemito(Base):
 
     Que sea SQLAlchemy y no DDL crudo la separa de `materiales`, que es cruda
     porque **necesita** entrar en la misma transaccion que el movimiento de
-    stock. Aca no: el remito ya se emitio por la conexion de LibraCore cuando
-    esto se escribe, que es la misma no-atomicidad que documentan y aceptan las
-    otras tres conversiones.
+    stock. Aca no: el remito entra en la transaccion de este vinculo
+    (`RemitoService.create(vincular=...)`), por la sesion de SQLAlchemy.
     """
 
     __tablename__ = "ventas_remitos"
@@ -424,7 +423,8 @@ def _dar_de_alta_equipos(venta, cliente_id, items, usuario_id) -> int:
 
     Los equipos los escribe SQLAlchemy y la venta la conexión de LibraCommerce:
     dos conexiones, sin una transacción que las cubra. Es el mismo compromiso
-    que ya documentan las cuatro conversiones a remito. Se da de alta **después**
+    que tenían las cuatro conversiones a remito hasta el 2026-10-16 (hoy cada una
+    emite el remito y se ata en una sola transacción). Se da de alta **después**
     de que la venta quedó confirmada, porque el error al revés —equipos de una
     venta que no existe— es peor que una venta cuyos equipos hay que cargar a
     mano.
@@ -527,13 +527,12 @@ def convertir_a_remito(venta_id: int, remitos, clientes, *,
     > todas las ventas que ya existen. El costo de esta decisión es el párrafo
     > que estás leyendo.
 
-    ## Lo que NO es atómico
+    ## Es atómico (2026-10-16)
 
-    Igual que las otras tres: el remito lo escribe la conexión de LibraCore y el
-    vínculo lo escribe SQLAlchemy, sin una transacción que cubra las dos. Se
-    emite primero el remito y se ata después, porque el error al revés —una venta
-    que dice "ya se remitió" apuntando a un remito que no existe— la dejaría sin
-    poder facturarse nunca.
+    Igual que las otras tres: el remito y el vínculo con la venta entran en una
+    sola transacción (`RemitoService.create(vincular=...)`). Antes eran dos
+    commits y una caída entre los dos dejaba un remito sin venta detrás, que el
+    puente mandaba a facturar mientras la venta seguía sin remitir.
     """
     from . import fecha, inventario
     from .remitos_presupuestos import datos_cliente_para_comprobante
@@ -600,7 +599,7 @@ def convertir_a_remito(venta_id: int, remitos, clientes, *,
         for i in venta["items"]
     ]
 
-    remito = remitos.create(
+    return remitos.create(
         # `fecha.hoy()` y no la fecha de la venta: el remito se emite hoy, en
         # hora de Argentina, igual que el de un reclamo y por el mismo motivo.
         date=fecha.hoy(),
@@ -609,16 +608,14 @@ def convertir_a_remito(venta_id: int, remitos, clientes, *,
         items=items,
         observations=f"Generado de la venta {venta['numero']}",
         usuario_id=usuario_id,
+        vincular=lambda sesion, remito_id: _atar(sesion, venta_id, remito_id),
         **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
     )
-    _atar(venta_id, remito["id"])
-    return remito
 
 
-def _atar(venta_id: int, remito_id: int) -> None:
-    with get_session_factory()() as session:
-        session.add(VentaRemito(venta_id=venta_id, remito_id=remito_id))
-        session.commit()
+def _atar(sesion, venta_id: int, remito_id: int) -> None:
+    """Ata la venta al remito por la `sesion` del remito, sin commitear."""
+    sesion.add(VentaRemito(venta_id=venta_id, remito_id=remito_id))
 
 
 def _desatar(venta_id: int) -> None:

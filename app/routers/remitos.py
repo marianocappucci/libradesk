@@ -23,7 +23,7 @@ from ..dependencies import (
     get_remito_service,
 )
 from ..services.clientes import ClienteRepository
-from ..services.incidencias import IncidenciaRepository
+from ..services.incidencias import IncidenciaRepository, ReclamosYaRemitados
 from ..services.remitos_presupuestos import (
     RemitoService,
     comprobante_para_pdf,
@@ -109,6 +109,21 @@ def create_remito(
     # 422 y no 409: un renglon en dolares sin cotizacion es un payload que no se
     # puede procesar, no un conflicto con el estado. (`contratos.py` usa 409
     # para sus `ValueError`, que si son conflictos de estado.)
+    #
+    # 🔴 **El remito y el vinculo con los reclamos entran en UNA transaccion**
+    # (`vincular=`), y ya no uno despues del otro. El orden "primero el remito,
+    # despues el vinculo" evitaba un reclamo apuntando a la nada, pero dejaba, si
+    # el proceso caia en el medio, un remito sin reclamos detras: el puente lo
+    # manda a facturar y los reclamos, todavia sueltos, se vuelven a remitir (el
+    # mismo trabajo cobrado dos veces). Si algun reclamo ya tiene remito --o no
+    # existe-- no se emite nada: antes se emitia igual y el vinculo se saltaba a
+    # ese reclamo en silencio.
+    vincular = (
+        (lambda sesion, remito_id: incidencias.atar_al_remito(
+            sesion, data.incidencia_ids, remito_id))
+        if data.incidencia_ids else None
+    )
+
     try:
         remito = remitos.create(
             date=data.date.isoformat(),
@@ -121,18 +136,13 @@ def create_remito(
             # libraauth devuelve el id como str; la columna es INTEGER y SQLite
             # lo convertiria por afinidad, pero se explicita en vez de confiar.
             usuario_id=int(user["id"]),
+            vincular=vincular,
             **_datos_cliente(data.client_id, clientes, data.client_address),
         )
+    except ReclamosYaRemitados as e:
+        raise HTTPException(409, str(e))
     except ValueError as e:
         raise HTTPException(422, str(e))
-
-    # 🔴 **El vinculo va DESPUES de crear, y no antes.** Mismo orden y mismo
-    # motivo que `convertir_a_remito()`: si el proceso muere en el medio queda
-    # un remito sin vinculo --que se puede rehacer-- y no un reclamo diciendo
-    # "ya se remito" contra un remito que no existe, que lo dejaria sin poder
-    # facturarse nunca.
-    if data.incidencia_ids:
-        incidencias.vincular_al_remito(data.incidencia_ids, remito["id"])
     return remito
 
 
