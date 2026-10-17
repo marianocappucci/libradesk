@@ -229,7 +229,18 @@ dependencies = [
     # v0.7.2 trae la transferencia entre depositos atomica y con guarda de
     # disponibilidad, que es el caso central de este producto: el deposito
     # central que abastece la camioneta del tecnico.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.16.4",
+    #
+    # v0.16.4 -> v0.63.0 (2026-10-16): 47 versiones de salto. Lo que este producto usa del motor es el repositorio
+    # (`SqliteCommerceRepository`), `usecases.inventory/sales/purchasing` y `erp.ventas.repuntar_fk_ventas_pagos`; el resto
+    # (capa `erp` y `web`) no lo monta. Cambia de conducta (ADR-051): el deposito por defecto no se guarda inactivo, y
+    # `confirm_sale`, `confirm_purchase_receipt` y `transfer_stock` rechazan un deposito inexistente o inactivo antes de
+    # escribir (`DepositoInexistente`, un `ValueError`: los routers ya contestan 422). `repo.transaction()` pasa a ser
+    # reentrante (ADR-031) y `init_schema()` suma la tabla `branches` y toma el candado del esquema en PostgreSQL (ADR-062;
+    # pide libracore>=1.168). **Migraciones de `libracommerce-migrar`: 0002 a 0007**, todas aditivas (columnas NULL o con DEFAULT
+    # en `catalog_items`, un indice en `stock_movements`, `purchase_receipts.clave_operacion` e indice unico parcial, y las tablas
+    # vacias `item_branch_min_stock` y `sale_service_returns`); no tocan una fila. `usecases.sales.return_sale_items` se retira
+    # (ADR-053; este producto no lo usa). Ensayo con datos ficticios: conteos y md5 iguales antes y despues.
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.63.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
