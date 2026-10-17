@@ -56,11 +56,13 @@ def escenario(client, dos_sucursales):
     item = client.post("/api/consumibles", json={
         "nombre": "Plug RJ45", "stock_minimo": 50,
     }).json()
+    # El depósito por defecto es el de Mercedes y no el de Chivilcoy: desde libracommerce v0.63.0 (ADR-051) el
+    # por defecto no se puede desactivar, y los tests de la baja de sucursal desactivan el de Chivilcoy.
     dep_chi = client.post("/api/depositos-stock", json={
-        "nombre": "Central Chivilcoy", "es_default": True, "sucursal_id": chi,
+        "nombre": "Central Chivilcoy", "sucursal_id": chi,
     }).json()
     dep_mer = client.post("/api/depositos-stock", json={
-        "nombre": "Central Mercedes", "sucursal_id": mer,
+        "nombre": "Central Mercedes", "es_default": True, "sucursal_id": mer,
     }).json()
     r = client.post(f"/api/consumibles/{item['id']}/ajuste", json={
         "deposito_id": dep_chi["id"], "cantidad": 120, "nota": "Carga inicial",
