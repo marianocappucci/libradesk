@@ -39,13 +39,18 @@ Tres decisiones que cuestan tiempo si no estan escritas:
 """
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Callable
 
 from libracore import config_manager
 from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
 from libracore.db.fk_de_producto import soltar_fk
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from ..database import get_session_factory
 from . import iva
 
 # El DDL de LibraCore (libracore/db/schema.py) menos la FK a `clients`, y
@@ -398,6 +403,31 @@ def datos_cliente_para_comprobante(cliente: dict, override_address: str | None =
     }
 
 
+#: Las columnas que escribe `libracore.db.remitos_presupuestos.create_remito`, en su
+#: orden. **Es una copia**: `_insertar_remito` hace el mismo INSERT por una sesion de
+#: SQLAlchemy, que es lo unico que lo deja entrar en la transaccion de un vinculo, y el
+#: motor no ofrece `create_remito(conn=...)`. Un test compara las dos filas
+#: (`tests/test_remito_atomico.py`), asi que una columna nueva en el motor pone rojo
+#: ahi y no en produccion.
+_COLUMNAS_REMITO = (
+    "number", "date", "client_id", "client_name", "client_address", "client_cuit",
+    "client_email", "client_phone", "items", "subtotal", "tax_rate", "tax_amount",
+    "total", "observations", "pdf_path", "usuario_id",
+)
+
+_INSERT_REMITO = text(
+    f"INSERT INTO remitos ({', '.join(_COLUMNAS_REMITO)}) "
+    f"VALUES ({', '.join(':' + c for c in _COLUMNAS_REMITO)}) RETURNING id"
+)
+
+
+def _insertar_remito(sesion: Session, valores: dict) -> int:
+    """El INSERT de `rp.create_remito()`, por `sesion` y **sin commitear**."""
+    fila = {c: valores[c] for c in _COLUMNAS_REMITO}
+    fila["items"] = json.dumps(fila["items"], ensure_ascii=False)
+    return sesion.execute(_INSERT_REMITO, fila).scalar_one()
+
+
 class RemitoService:
     """Envoltorio sobre `libracore.db.remitos_presupuestos` (remitos)."""
 
@@ -406,18 +436,55 @@ class RemitoService:
 
     def create(self, *, date, client_id, client_name, client_address="", client_cuit="",
                client_email="", client_phone="", items, tax_rate=0.21, observations="",
-               usuario_id=None, cotizacion=None) -> dict:
+               usuario_id=None, cotizacion=None,
+               vincular: Callable[[Session, int], None] | None = None) -> dict:
+        """Emite el remito. Con `vincular`, **lo emite y lo ata a su origen en
+        UNA transaccion**.
+
+        `vincular(sesion, remito_id)` escribe el vinculo con lo que origino el
+        remito (los reclamos, las cuotas, la venta, el presupuesto) **por la
+        misma `sesion` por la que entro el remito**, sin commitear. Si levanta,
+        no queda ni el remito ni el vinculo.
+
+        🔴 **Por que existe** (2026-10-16). Antes el remito entraba por la
+        conexion de LibraCore y el vinculo por SQLAlchemy: dos commits. Si el
+        proceso caia en el medio quedaba un remito **sin nada que lo respalde**,
+        y ese remito el puente lo manda a facturar igual mientras los reclamos
+        siguen "pendientes de remitir" y se vuelven a remitir: el mismo trabajo
+        cobrado dos veces. El orden "primero el remito, despues el vinculo" solo
+        garantizaba que la falla dejara un huerfano --rehacible a mano-- y no un
+        reclamo apuntando a la nada; no evitaba el huerfano.
+
+        Es posible porque en LibraDesk **core y dominio son la MISMA base
+        PostgreSQL**: `create_app()` le pasa la misma URL a SQLAlchemy y a
+        `libracore.db.core.configure()`, y `libradesk` esta en `_UNA_SOLA_BASE`
+        del motor. El insert se hace entonces por la sesion de SQLAlchemy; sin
+        `vincular` el remito sigue entrando por `rp.create_remito()`, como
+        siempre.
+        """
         items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
         # Lo que se guarda en la columna del comprobante es la alicuota
         # EFECTIVA, no la que vino del formulario: si las lineas mezclan, no
         # hay una sola que describa al documento. Ver `iva.py`.
         tax_rate = iva.alicuota_del_documento(items)
-        remito_id = rp.create_remito(
-            rp.get_next_remito_number(), date, client_id, client_name, client_address,
-            client_cuit, client_email, client_phone, items, subtotal, tax_rate,
-            tax_amount, total, observations, "", usuario_id,
+        valores = dict(
+            number=rp.get_next_remito_number(), date=date, client_id=client_id,
+            client_name=client_name, client_address=client_address,
+            client_cuit=client_cuit, client_email=client_email,
+            client_phone=client_phone, items=items, subtotal=subtotal,
+            tax_rate=tax_rate, tax_amount=tax_amount, total=total,
+            observations=observations, pdf_path="", usuario_id=usuario_id,
         )
+        if vincular is None:
+            remito_id = rp.create_remito(**valores)
+        else:
+            with get_session_factory()() as sesion:
+                remito_id = _insertar_remito(sesion, valores)
+                vincular(sesion, remito_id)
+                # Un solo commit para las dos escrituras. Si `vincular` levanta,
+                # el `with` cierra la sesion y se deshace todo, remito incluido.
+                sesion.commit()
         return rp.get_remito(remito_id)
 
     def list(self, limit: int = 100) -> list[dict]:
@@ -496,6 +563,15 @@ class RemitoService:
 
     def set_pdf_path(self, remito_id: int, pdf_path: str) -> None:
         rp.update_remito_pdf_path(remito_id, pdf_path)
+
+
+#: El vinculo presupuesto -> remito, que `crear` escribe en la misma transaccion que el
+#: remito. Deja tambien el `aceptado` que `al_convertir` pone despues: si el proceso
+#: cayera entre los dos, el presupuesto quedaria con remito y sin aceptar, y el reintento
+#: devuelve el remito existente sin pasar por `al_convertir`.
+_ATAR_PRESUPUESTO = text(
+    "UPDATE presupuestos SET remito_id = :remito, status = 'aceptado' WHERE id = :id"
+)
 
 
 class PresupuestoService:
@@ -589,7 +665,14 @@ class PresupuestoService:
         por los hooks: `crear_remito` recomputa los totales (IVA por línea vía
         `RemitoService.create`) y conserva `usuario_id`, y valida el estado ahí
         —dentro del create— para que un retorno idempotente no valide, igual que
-        antes. `al_convertir` marca `aceptado` sólo en una conversión nueva."""
+        antes. `al_convertir` marca `aceptado` sólo en una conversión nueva.
+
+        🔴 **El remito y el vínculo `presupuestos.remito_id` entran en una sola
+        transacción** (`vincular=` de `RemitoService.create`, 2026-10-16): el
+        `crear_remito` del motor ya no deja, si el proceso cae, un remito sin
+        presupuesto detrás que el puente mande a facturar mientras el presupuesto
+        sigue sin convertir. Lo que el motor escribe después (`remito_id` de nuevo y
+        `aceptado`) es lo mismo que ya quedó escrito."""
         presupuesto = rp.get_presupuesto(presupuesto_id)
         if presupuesto is None:
             raise KeyError(presupuesto_id)
@@ -609,6 +692,8 @@ class PresupuestoService:
                 tax_rate=p["tax_rate"],
                 observations=f"Generado del presupuesto {p['number']}",
                 usuario_id=usuario_id,
+                vincular=lambda sesion, remito_id: sesion.execute(
+                    _ATAR_PRESUPUESTO, {"remito": remito_id, "id": p["id"]}),
             )
             return remito["id"]
 

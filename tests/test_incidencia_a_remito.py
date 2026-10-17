@@ -435,9 +435,12 @@ def _otro_pedido_gana(client, cliente, monkeypatch, ata):
     otro_id = otro.json()["id"]
     original = IncidenciaRepository.vincular_al_remito
 
-    def _en_paralelo(self, incidencia_ids, remito_id):
-        original(self, ata, otro_id)
-        return original(self, incidencia_ids, remito_id)
+    def _en_paralelo(self, incidencia_ids, remito_id, *, sesion):
+        # El otro pedido es OTRA sesion y commitea antes que este.
+        with self.session_factory() as la_del_otro:
+            original(self, ata, otro_id, sesion=la_del_otro)
+            la_del_otro.commit()
+        return original(self, incidencia_ids, remito_id, sesion=sesion)
 
     monkeypatch.setattr(IncidenciaRepository, "vincular_al_remito", _en_paralelo)
     return otro_id
@@ -465,9 +468,10 @@ def test_si_otro_pedido_los_ato_en_el_medio_no_queda_un_remito_huerfano(
 
 def test_si_el_otro_ato_solo_uno_se_sueltan_los_que_este_alcanzo_a_atar(
         tres_reclamos, monkeypatch):
-    """La variante que obliga a soltar antes de borrar: este pedido llegó a atar
-    dos, y `RemitoService.delete` se niega a borrar un remito con reclamos. Sin
-    soltarlos, el remito huérfano se queda."""
+    """La variante a medias: este pedido llegó a atar dos y el tercero se lo
+    había llevado el otro. Antes había que soltar los dos antes de borrar el
+    remito (`RemitoService.delete` se niega a borrar uno con reclamos); ahora el
+    remito y esos dos vínculos están en la misma transacción y se deshacen juntos."""
     client, cliente, reclamos, _, _ = tres_reclamos
     ids = [r["id"] for r in reclamos]
     otro_id = _otro_pedido_gana(client, cliente, monkeypatch, ata=ids[:1])

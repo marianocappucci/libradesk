@@ -738,13 +738,12 @@ class CuotaRepository:
         seria afirmar algo que no paso. El hecho de que la cuota ya salio lo
         dice `remito_id`, que es tambien lo que mira la guarda de `anular()`.
 
-        ## Lo que NO es atomico
+        ## Es atomico (2026-10-16)
 
-        Igual que en incidencias: el remito lo escribe la conexion de LibraCore
-        y el vinculo lo escribe SQLAlchemy, asi que no hay una transaccion que
-        cubra las dos. Se emite primero el remito y despues se ata, porque el
-        error al reves es peor — una cuota que dice "ya se remitio" apuntando a
-        un remito que no existe no se podria facturar nunca.
+        Igual que en incidencias: el remito y el vinculo de las cuotas entran en
+        una sola transaccion (`RemitoService.create(vincular=...)`). Antes eran
+        dos commits y una caida entre los dos dejaba un remito sin cuotas detras,
+        que el puente mandaba a facturar mientras las cuotas seguian sin remitir.
         """
         from . import fecha
         from .remitos_presupuestos import datos_cliente_para_comprobante
@@ -827,7 +826,16 @@ class CuotaRepository:
         if cliente is None:
             raise KeyError(cliente_id)
 
-        remito = remitos.create(
+        def atar(sesion, remito_id):
+            # Una sola sentencia, así que no hay un estado intermedio donde la
+            # mitad del lote quedó atada al remito y la otra mitad no.
+            sesion.execute(
+                update(ContratoCuota)
+                .where(ContratoCuota.id.in_(ids))
+                .values(remito_id=remito_id)
+            )
+
+        return remitos.create(
             # El día en que se emite, en hora de Argentina — no la fecha de
             # emisión de la cuota, que puede ser de hace meses si se está
             # poniendo al día un devengado viejo.
@@ -837,19 +845,9 @@ class CuotaRepository:
             items=items,
             observations="",
             usuario_id=usuario_id,
+            vincular=atar,
             **datos_cliente_para_comprobante(cliente, cliente["domicilio"] or None),
         )
-
-        with self.session_factory() as session:
-            # Una sola sentencia, así que no hay un estado intermedio donde la
-            # mitad del lote quedó atada al remito y la otra mitad no.
-            session.execute(
-                update(ContratoCuota)
-                .where(ContratoCuota.id.in_(ids))
-                .values(remito_id=remito["id"])
-            )
-            session.commit()
-        return remito
 
     def anular(self, cuota_id: int, *, motivo: str | None = None) -> dict:
         """Anula en vez de borrar, mismo criterio que la baja logica de clientes.
