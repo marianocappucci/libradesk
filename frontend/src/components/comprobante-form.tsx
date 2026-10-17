@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SelectCliente } from 'libra-ui/SelectCliente'
-import { crearClienteEn } from '@/lib/alta-de-cliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -439,6 +439,7 @@ export function ComprobanteForm({
                 hint: c.empresa ? c.nombre : c.ciudad ?? undefined,
               }))}
               crear={crearCliente}
+              {...ALTA_FISCAL}
               placeholder="Elegí un cliente"
               ariaLabel="Cliente"
             />

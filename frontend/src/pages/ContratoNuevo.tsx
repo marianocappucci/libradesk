@@ -16,7 +16,7 @@ import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { SelectCliente } from 'libra-ui/SelectCliente'
-import { crearClienteEn } from '@/lib/alta-de-cliente'
+import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -217,6 +217,7 @@ export function ContratoNuevo() {
                       onChange={field.onChange}
                       opciones={opcionesCliente(clientes)}
                       crear={crearCliente}
+                      {...ALTA_FISCAL}
                       placeholder="Elegí un cliente"
                       // 🔴 `ariaLabel` no es decorativo acá: el disparador es un
                       // `role="combobox"`, y para ese rol el contenido **no**
