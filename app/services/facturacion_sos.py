@@ -85,6 +85,7 @@ from datetime import date, datetime
 
 import httpx
 
+from . import fecha as fecha_helper
 from .facturacion_config import leer_efectiva
 
 logger = logging.getLogger(__name__)
@@ -490,7 +491,7 @@ def _fecha(valor) -> str:
     texto = str(valor or "").strip()
     if len(texto) >= 10 and texto[4] == "-" and texto[7] == "-":
         return texto[:10]
-    return date.today().strftime("%Y-%m-%d")
+    return fecha_helper.hoy()
 
 
 class AdaptadorSOS:
@@ -723,7 +724,7 @@ class AdaptadorSOS:
         > pero el envío falla y hay que reintentar.
         """
         token = self.token()
-        hoy = date.today()
+        hoy = fecha_helper.ahora().date()
         maximo = 0
         for fila in self._ventas_del_ano(hoy.year, token):
             # `factura` viene armada como "FA-0003-00009001": letra, punto de

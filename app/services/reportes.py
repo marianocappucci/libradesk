@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased, sessionmaker
 
+from . import fecha as fecha_helper
 from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .depositos import Deposito, lugar_de
@@ -255,7 +256,7 @@ class ReportesService:
     # ── Garantias ───────────────────────────────────────────────────
     def garantias(self, dias: int = 60, cliente_id: int | None = None) -> list[dict]:
         with self.session_factory() as session:
-            hoy = datetime.now()
+            hoy = fecha_helper.ahora()
             limite = hoy + timedelta(days=dias)
             stmt = (
                 select(Equipo, Cliente, Deposito.nombre)

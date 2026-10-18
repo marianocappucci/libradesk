@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from . import fecha as fecha_helper
 from .incidencias import ESTADO_LABELS as ESTADO_RECLAMO_LABELS
 
 # ── Vocabulario compartido ─────────────────────────────────────────
@@ -166,7 +167,7 @@ class Vista:
 
     def __post_init__(self):
         if not self.generado:
-            self.generado = datetime.now().isoformat(timespec="seconds")
+            self.generado = fecha_helper.ahora().isoformat(timespec="seconds")
 
     @property
     def cantidad_filas(self) -> int:
@@ -237,7 +238,7 @@ def equipamiento(data: list[dict], filtros: list[str]) -> Vista:
         Columna("Alta", 12),
     ]
 
-    ahora = datetime.now()
+    ahora = fecha_helper.ahora()
     filas = []
     for r in data:
         vence = r["garantia_vence"]

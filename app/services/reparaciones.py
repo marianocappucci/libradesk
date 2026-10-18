@@ -38,6 +38,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+from . import fecha as fecha_helper
 
 
 class Reparacion(Base):
@@ -161,7 +162,7 @@ def _dias_afuera(r: Reparacion) -> int | None:
     """
     if r.fecha_envio is None:
         return None
-    fin = r.fecha_retorno or date.today()
+    fin = r.fecha_retorno or fecha_helper.ahora().date()
     return (fin - r.fecha_envio).days
 
 
