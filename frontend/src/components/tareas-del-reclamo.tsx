@@ -51,7 +51,7 @@ type Tecnico = { id: number; nombre: string }
 
 /** El vocabulario de la TAREA, que no es el del reclamo.
  *
- *  El reclamo distingue «Resuelta» de «Cerrada» porque alguien controla el
+ *  El reclamo distingue «Resuelto» de «Cerrado» porque alguien controla el
  *  comprobante de servicios contra la hoja de ruta antes de mandarlo a
  *  facturación. Ese control es del reclamo entero, no de cada tarea. */
 const ESTADOS: Record<string, string> = {

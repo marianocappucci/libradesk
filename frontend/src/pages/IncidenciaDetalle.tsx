@@ -1096,7 +1096,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
               {bloqueCoberturaAbono}
               <div className="grid gap-0.5 pt-1 text-xs text-muted-foreground">
                 <span>Creada: {formatFecha(incidencia.fecha_creacion)}</span>
-                {incidencia.fecha_cierre && <span>Cerrada: {formatFecha(incidencia.fecha_cierre)}</span>}
+                {incidencia.fecha_cierre && <span>Cerrado: {formatFecha(incidencia.fecha_cierre)}</span>}
               </div>
             </CardContent>
           </Card>}
@@ -1182,7 +1182,7 @@ export function IncidenciaDetalle({ simple = false }: { simple?: boolean } = {})
                   {bloqueCoberturaAbono}
                   <div className="grid gap-0.5 pt-1 text-xs text-muted-foreground">
                     <span>Creada: {formatFecha(incidencia.fecha_creacion)}</span>
-                    {incidencia.fecha_cierre && <span>Cerrada: {formatFecha(incidencia.fecha_cierre)}</span>}
+                    {incidencia.fecha_cierre && <span>Cerrado: {formatFecha(incidencia.fecha_cierre)}</span>}
                   </div>
                 </CardContent>
               </Card>

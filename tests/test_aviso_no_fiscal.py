@@ -129,7 +129,7 @@ _PALABRAS = "palabra " * 40
 
 def _orden_de_trabajo(n_notas: int, n_actividad: int) -> bytes:
     return incidencia_pdf.generar_pdf_incidencia({
-        "id": 13, "fecha_creacion": "13-08-2026 04:22", "estado_label": "Abierta",
+        "id": 13, "fecha_creacion": "13-08-2026 04:22", "estado_label": "Abierto",
         "nro_cds": "0001-00041989",
         "cliente": {"nombre": "Arrebeef S.A.", "cuit": "30-71234567-9",
                     "domicilio": "Ruta 5 km 101", "email": "sistemas@arrebeef.com.ar"},
@@ -209,7 +209,7 @@ def test_el_comprobante_no_parte_el_aviso(tipo):
       "recepcion"), ingreso_pdf._ALTO_AVISO),
     ("orden de trabajo", incidencia_pdf._IncidenciaPDF,
      (EMPRESA, {"id": 1, "fecha_creacion": "13-08-2026 04:22",
-                "estado_label": "Abierta"}), incidencia_pdf._ALTO_AVISO),
+                "estado_label": "Abierto"}), incidencia_pdf._ALTO_AVISO),
 ])
 def test_ninguna_altura_de_arranque_parte_el_aviso(nombre, clase, args, reserva):
     """La reserva de cada documento, contra **todas** las alturas de arranque.

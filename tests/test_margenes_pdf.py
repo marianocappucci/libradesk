@@ -156,7 +156,7 @@ def _desbordes(pdf: bytes, tolerancia: float = 0.6) -> list[str]:
 
 def _incidencia(texto: str) -> bytes:
     return incidencia_pdf.generar_pdf_incidencia({
-        "id": 13, "fecha_creacion": "13-08-2026 04:22", "estado_label": "Abierta",
+        "id": 13, "fecha_creacion": "13-08-2026 04:22", "estado_label": "Abierto",
         "nro_cds": "0001-00041989",
         "cliente": {"nombre": texto, "cuit": "30-71234567-9",
                     "domicilio": texto, "email": "sistemas@arrebeef.com.ar"},
@@ -354,7 +354,7 @@ def test_el_alto_reservado_para_el_aviso_final_es_el_que_ocupa():
 
 #: Lo mínimo que `header()` necesita para dibujar el membrete.
 _DATOS_MINIMOS = {"id": 1, "fecha_creacion": "13-08-2026 04:22",
-                  "estado_label": "Abierta"}
+                  "estado_label": "Abierto"}
 
 
 @pytest.mark.parametrize("clase,args", [
