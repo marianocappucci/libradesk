@@ -194,6 +194,16 @@ services:
       # (el provisioning se lo pone al dar de alta). dev era la unica sin el,
       # porque su compose es el del repo y no salio del provisioning.
       - LIBRA_SERVICE_TOKEN=${LIBRA_SERVICE_TOKEN:?falta LIBRA_SERVICE_TOKEN}
+      # Rotación sin corte (libraauth v0.52.0): mientras está definida, la
+      # instancia acepta el token nuevo y el anterior. Vacía no vale nada, y por
+      # eso es opcional aunque la de arriba sea obligatoria. La maneja
+      # `panel_admin.py token-servicio <slug> --rotar|--cerrar`.
+      #
+      # ⚠️ No confundir con `CONTALIBRA_SERVICE_TOKEN` (el puente de facturación,
+      # cuando la instancia lo configura por entorno): ése es la credencial que
+      # nos deja entrar a ContaLibra, y su valor es el LIBRA_INTEGRACION_TOKEN de
+      # la ContaLibra destino (`panel_admin.py vincular-integracion`).
+      - LIBRA_SERVICE_TOKEN_ANTERIOR=${LIBRA_SERVICE_TOKEN_ANTERIOR:-}
       - ENV=production
       # Recuperacion de contrasena (libraauth v0.5.0). Sin SMTP la app levanta
       # igual y POST /auth/forgot-password devuelve 503: cargar estas
