@@ -197,8 +197,8 @@ def _tarjetas_resumen(pdf: FPDF, resumen: dict) -> None:
     mas. Mismo lenguaje visual que el recuadro de saldo del resumen de cuenta
     corriente de LibraCore."""
     datos = [
-        ("Recibidas", str(resumen["recibidas"])),
-        ("Resueltas", str(resumen["resueltas"])),
+        ("Recibidos", str(resumen["recibidas"])),
+        ("Resueltos", str(resumen["resueltas"])),
         ("Pendientes", str(resumen["pendientes"])),
         ("Horas", f"{resumen['horas']:.1f}".replace(".", ",")),
     ]
@@ -430,18 +430,18 @@ def _seccion_incidencias(pdf: FPDF, informe: dict) -> None:
     incidencias = informe["incidencias"]
     _titulo_seccion(
         pdf, "Detalle de reclamos",
-        "Incluye las abiertas durante el período y las resueltas en él, "
+        "Incluye los abiertos durante el período y los resueltos en él, "
         "aunque se hubieran abierto antes.",
     )
 
     filas = []
     for i in incidencias:
         if i["fecha_cierre"] is not None:
-            estado = f"Resuelta {_fecha(i['fecha_cierre'])}"
+            estado = f"Resuelto {_fecha(i['fecha_cierre'])}"
         elif i["cerrada"]:
             # Cerrada sin fecha: dato de la migración del sistema viejo. Se
             # informa como resuelta, sin inventarle una fecha.
-            estado = "Resuelta"
+            estado = "Resuelto"
         else:
             estado = "Pendiente"
         filas.append([
@@ -454,7 +454,7 @@ def _seccion_incidencias(pdf: FPDF, informe: dict) -> None:
         ])
 
     # Los anchos salen de medir el contenido real, no de repartir el ancho en
-    # partes iguales: "Resuelta 08/01/2026" ocupa ~30 mm a 8 pt y una fecha
+    # partes iguales: "Resuelto 08/01/2026" ocupa ~30 mm a 8 pt y una fecha
     # completa ~17 mm. Una columna corta no se nota al escribirla — se nota
     # como un truncado con elipsis en cada fila.
     #

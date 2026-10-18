@@ -24,6 +24,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from . import fecha as fecha_helper
+from .incidencias import ESTADO_LABELS as ESTADO_RECLAMO_LABELS
+
 # ── Vocabulario compartido ─────────────────────────────────────────
 #
 # Vive aca y no en `xlsx_helper` (donde estaba) porque ya no es del Excel: lo
@@ -33,8 +36,9 @@ from datetime import datetime
 ESTADO_LABEL = {
     "activo": "Activo", "baja": "Baja", "en_reparacion": "En reparación",
     "almacenado": "En depósito",
-    "abierto": "Abierto", "en_progreso": "En progreso",
-    "resuelta": "Resuelta", "cerrado": "Cerrado",
+    # Los del reclamo no se copian: se toman de `incidencias.ESTADO_LABELS`,
+    # que es de donde salen el PDF, el listado y la pantalla.
+    **ESTADO_RECLAMO_LABELS,
 }
 PRIO_LABEL = {"alta": "Alta", "media": "Media", "baja": "Baja"}
 FACT_LABEL = {"pendiente_cobro": "Pend. cobro", "facturada": "Facturada"}
@@ -163,7 +167,7 @@ class Vista:
 
     def __post_init__(self):
         if not self.generado:
-            self.generado = datetime.now().isoformat(timespec="seconds")
+            self.generado = fecha_helper.ahora().isoformat(timespec="seconds")
 
     @property
     def cantidad_filas(self) -> int:
@@ -234,7 +238,7 @@ def equipamiento(data: list[dict], filtros: list[str]) -> Vista:
         Columna("Alta", 12),
     ]
 
-    ahora = datetime.now()
+    ahora = fecha_helper.ahora()
     filas = []
     for r in data:
         vence = r["garantia_vence"]
@@ -397,8 +401,8 @@ def garantias(data: list[dict], filtros: list[str]) -> Vista:
 def por_tecnico(data: list[dict], filtros: list[str]) -> Vista:
     columnas = [
         Columna("Técnico", 28), Columna("Total", 9, numerica=True),
-        Columna("Abiertas", 10, numerica=True), Columna("En progreso", 13, numerica=True),
-        Columna("Cerradas", 10, numerica=True), Columna("% Resolución", 14, numerica=True),
+        Columna("Abiertos", 10, numerica=True), Columna("En progreso", 13, numerica=True),
+        Columna("Cerrados", 10, numerica=True), Columna("% Resolución", 14, numerica=True),
         Columna("Actividades", 13, numerica=True), Columna("Prom. horas", 13, numerica=True),
     ]
 

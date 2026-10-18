@@ -72,6 +72,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from ..database import Base
+from . import fecha as fecha_helper
 
 _PREFIJO_RECEPCION = "REC-"
 _PREFIJO_ENTREGA = "ENT-"
@@ -168,7 +169,7 @@ def _dias_en_taller(i: IngresoReparacion) -> int | None:
     """
     if i.fecha_recepcion is None:
         return None
-    fin = i.fecha_entrega.date() if i.fecha_entrega else date.today()
+    fin = i.fecha_entrega.date() if i.fecha_entrega else fecha_helper.ahora().date()
     return (fin - i.fecha_recepcion.date()).days
 
 
@@ -315,7 +316,7 @@ class IngresoRepository:
             # mismo defecto de "el default declarado en dos capas" que ya se
             # pagó con `estado_activo` en el módulo de alquileres.
             if not data.get("fecha_recepcion"):
-                data["fecha_recepcion"] = datetime.now()
+                data["fecha_recepcion"] = fecha_helper.ahora()
             data["usuario"] = usuario_actor or "Sistema"
 
             i = IngresoReparacion(**data)
@@ -397,7 +398,7 @@ class IngresoRepository:
                     f"comprobante {i.numero_entrega}."
                 )
 
-            i.fecha_entrega = data.get("fecha_entrega") or datetime.now()
+            i.fecha_entrega = data.get("fecha_entrega") or fecha_helper.ahora()
             i.retirado_por = data.get("retirado_por")
             i.trabajo_realizado = data.get("trabajo_realizado")
             i.observaciones_entrega = data.get("observaciones_entrega")

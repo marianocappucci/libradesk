@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased, sessionmaker
 
+from . import fecha as fecha_helper
 from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .depositos import Deposito, lugar_de
@@ -139,9 +140,9 @@ class DashboardService:
         from .contratos import Contrato
         from .ingresos import IngresoReparacion
 
-        hoy = date.today()
+        ahora = fecha_helper.ahora()
+        hoy = ahora.date()
         limite = hoy + timedelta(days=dias)
-        ahora = datetime.now()
 
         with self.session_factory() as session:
             nombre_cliente = dict(session.execute(select(Cliente.id, Cliente.nombre)).all())
@@ -362,7 +363,7 @@ class DashboardService:
             # bajas (la garantia de un equipo dado de baja no le importa a
             # nadie) y entran tambien las YA vencidas, que son justamente las
             # que hay que ver primero.
-            hoy = date.today()
+            hoy = fecha_helper.ahora().date()
             limite = hoy + timedelta(days=dias_garantia)
             garantias = []
             for e in session.execute(
@@ -505,7 +506,7 @@ class DashboardService:
                     "referencias": referencias.get(e.id, []),
                     "garantia_vence": vence_date.isoformat() if vence_date else None,
                     "dias_garantia_restantes": (
-                        (vence_date - date.today()).days if vence_date else None
+                        (vence_date - fecha_helper.ahora().date()).days if vence_date else None
                     ),
                     "fecha_adicion": e.fecha_adicion.isoformat() if e.fecha_adicion else None,
                     "observaciones": e.observaciones,

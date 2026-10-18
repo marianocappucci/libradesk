@@ -29,6 +29,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased, sessionmaker
 
+from . import fecha as fecha_helper
 from .categorias import CategoriaIncidencia
 from .clientes import Cliente
 from .equipos import Equipo, descripcion_equipo
@@ -111,7 +112,7 @@ class InformeService:
                 "periodo": {
                     "desde": desde,
                     "hasta": hasta,
-                    "emitido": date.today().isoformat(),
+                    "emitido": fecha_helper.hoy(),
                 },
                 "resumen": self._resumen(session, cliente_id, incidencias, desde_dt, hasta_dt),
                 "incidencias": incidencias,

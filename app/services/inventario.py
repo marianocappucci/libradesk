@@ -56,6 +56,7 @@ from libracommerce.usecases.inventory import (
 from libracore.db import core as libracore_core
 
 from . import comercial, iva
+from . import fecha as fecha_helper
 
 #: Se re-exporta para que los routers atrapen el error sin importar del motor.
 __all__ = [
@@ -566,7 +567,7 @@ def ajustar(item_id: int, deposito_id: int, cantidad: float, *,
     """
     if not cantidad:
         raise ValueError("La cantidad del ajuste no puede ser cero.")
-    cuando = fecha or datetime.now()
+    cuando = fecha or fecha_helper.ahora()
     with libracore_core.get_connection() as conn:
         repo = _repo(conn)
         with repo.transaction():
@@ -629,7 +630,7 @@ def transferir(item_id: int, origen_id: int, destino_id: int, cantidad: float, *
                 from_location_id=origen_id,
                 to_location_id=destino_id,
                 quantity=Decimal(str(cantidad)),
-                occurred_at=fecha or datetime.now(),
+                occurred_at=fecha or fecha_helper.ahora(),
                 note=nota,
                 created_by=usuario_id,
                 reason_code_salida=f"transferencia{sufijo}_salida",

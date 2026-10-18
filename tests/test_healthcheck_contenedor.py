@@ -69,7 +69,12 @@ COMPOSES = {
 # el router NO declare — `/health` dejó de servir para esto el 2026-08-12,
 # cuando pasó a existir. El assert de `_rutas_de_salud()` lo verifica en vez de
 # confiar en que quien la lea se acuerde.
-RUTA_INEXISTENTE = "/api/health-que-no-existe"
+#
+# 🔴 **Fuera de `/api`**, desde que la SPA es la del motor (libracore v1.133.0):
+# una ruta `/api/...` que no existe contesta 404 en JSON y no el `index.html`, o
+# sea que `/api/health-que-no-existe` ya no sirve de control — el catch-all dejó
+# de mentirle a esa familia de rutas. Cualquier otra sigue cayendo en la SPA con 200.
+RUTA_INEXISTENTE = "/health-que-no-existe"
 
 
 def _rutas_de_salud() -> set[str]:

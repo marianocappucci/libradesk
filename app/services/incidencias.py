@@ -65,9 +65,15 @@ TIPO_FACTURACION_ABONO = "mensual"
 # Etiquetas legibles. Viven acá —en el dominio— y no en el generador de PDF,
 # porque son cómo se llama un estado, no cómo se lo dibuja: el día que haya un
 # segundo consumidor (un mail, un export) no tiene que copiarlas.
+#
+# Van en **masculino** porque la pantalla dice «reclamo» (decisión del humano,
+# 2026-09-13): Abierto, En progreso, Resuelto, Cerrado. Los valores guardados
+# (`resuelta` incluido, que es femenino por herencia) no cambian: es sólo la
+# etiqueta. `frontend/src/api.ts` repite esta tabla y
+# `tests/test_etiquetas_de_estado.py` las cruza.
 ESTADO_LABELS = {
-    "abierto": "Abierta", "en_progreso": "En progreso",
-    "resuelta": "Resuelta", "cerrado": "Cerrada",
+    "abierto": "Abierto", "en_progreso": "En progreso",
+    "resuelta": "Resuelto", "cerrado": "Cerrado",
 }
 PRIORIDAD_LABELS = {"alta": "Alta", "media": "Media", "baja": "Baja"}
 MODALIDAD_LABELS = {"on_site": "On-site", "remoto": "Remoto"}
