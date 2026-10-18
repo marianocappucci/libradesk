@@ -48,6 +48,8 @@ from libracommerce.domain.inventory import StockMovement, StockMovementType
 from libracommerce.usecases.inventory import verificar_disponibilidad
 from libracore.db import core as libracore_core
 
+from . import fecha as fecha_helper
+
 #: El `source_type` con el que el movimiento apunta a la incidencia. Con esto,
 #: `list_stock_movements_by_source("incidencia", id)` devuelve todo lo que
 #: consumio un ticket, sin joins contra tablas de otro dueno.
@@ -98,7 +100,7 @@ def cargar(incidencia_id: int, item_id: int, location_id: int, cantidad: float, 
     """
     if cantidad <= 0:
         raise ValueError("La cantidad de material tiene que ser positiva.")
-    momento = cuando or datetime.now()
+    momento = cuando or fecha_helper.ahora()
     cant = Decimal(str(cantidad))
 
     with libracore_core.get_connection() as conn:
@@ -139,7 +141,7 @@ def quitar(material_id: int, *, usuario_id: int | None = None,
     ledger del que se puede borrar no sirve para auditar, y lo que hay que
     poder contestar es "quien cargo esto y quien lo saco", no solo cuanto hay.
     """
-    momento = cuando or datetime.now()
+    momento = cuando or fecha_helper.ahora()
     with libracore_core.get_connection() as conn:
         repo = SqliteCommerceRepository(conn)
         fila = conn.execute(

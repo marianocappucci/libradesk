@@ -10,7 +10,6 @@ colores de resaltado vivian aca hasta el 2026-08-04; se mudaron a
 `reporte_vista.py` cuando los reportes empezaron a verse tambien en pantalla,
 porque dejaron de ser del Excel. Este modulo quedo con lo que si es suyo:
 poner celdas en una hoja. Quien lo llama es `reporte_xlsx.py`."""
-from datetime import datetime
 from io import BytesIO
 
 from fastapi.responses import StreamingResponse
@@ -18,6 +17,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
+
+from . import fecha as fecha_helper
 
 PRIMARY = "FF4338CA"  # indigo-700
 HDR_BG = "FFE0E7FF"  # indigo-100
@@ -61,7 +62,7 @@ def add_meta_header(ws: Worksheet, titulo: str, filtros: list[str], col_count: i
     ws.row_dimensions[1].height = 26
 
     info = "   |   ".join(
-        [f"Generado: {datetime.now().strftime('%d-%m-%Y %H:%M')}", *filtros]
+        [f"Generado: {fecha_helper.ahora().strftime('%d-%m-%Y %H:%M')}", *filtros]
     )
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=col_count)
     c2 = ws.cell(row=2, column=1, value=info)
