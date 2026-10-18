@@ -146,7 +146,12 @@ def test_el_token_viaja_en_el_header_y_no_en_la_url(client, configurado):
                 json={"origen_tipo": "remito", "ids": [remito["id"]]})
 
     llamada = falso.llamadas[0]
+    # El mismo valor en los dos headers (libraauth v0.52.0): la credencial de
+    # integración y, mientras haya ContaLibras sin vincular, la de servicio.
+    assert llamada["headers"][fe.HEADER_INTEGRACION] == TOKEN
     assert llamada["headers"][fe.HEADER_TOKEN] == TOKEN
+    assert fe.HEADER_INTEGRACION == "x-integracion-auth"
+    assert fe.HEADER_TOKEN == "x-internal-auth"
     assert TOKEN not in llamada["url"]
     assert llamada["url"] == f"{URL}/api/comprobantes-pendientes"
     assert llamada["timeout"] == fe.TIMEOUT

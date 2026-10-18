@@ -16,8 +16,8 @@ tres motivos:
 1. **El token es una credencial de otro servicio.** `config.json` entra en el
    backup (`libracore.respaldo`), así que guardarlo ahí lo copia a cada
    respaldo que se baje. El del otro lado ya vive en el entorno
-   (`LIBRA_SERVICE_TOKEN` de libraauth); que el emisor haga lo mismo deja la
-   credencial en un solo tipo de lugar.
+   (`LIBRA_INTEGRACION_TOKEN` de libraauth v0.52.0); que el emisor haga lo
+   mismo deja la credencial en un solo tipo de lugar.
 2. **El emparejamiento no es una preferencia del usuario.** Se define una vez,
    al dar de alta a un cliente que contrató los dos sistemas, y es el operador
    quien toca el compose — no algo que se cambie desde una pantalla.
@@ -76,9 +76,17 @@ NOMBRES_DESTINO = {
     DESTINO_SOS: "SOS Contador",
 }
 
-# El header que espera `libraauth.session_auth.token_de_servicio_valido` del
-# otro lado. Se escribe acá y no se importa de libraauth para no atar el emisor
-# a una versión del motor de auth por una constante de una línea.
+# Los headers que valida libraauth del otro lado. Se escriben acá y no se
+# importan de libraauth para no atar el emisor a una versión del motor de auth
+# por una constante de una línea.
+#
+# `CONTALIBRA_SERVICE_TOKEN` lleva el **`LIBRA_INTEGRACION_TOKEN` de la
+# ContaLibra destino** (libraauth v0.52.0; una por instancia, sólo abre las
+# rutas de integración), que se carga con `panel_admin.py vincular-integracion`.
+# Una instancia todavía no vinculada tiene ahí el token de servicio de
+# ContaLibra, como antes. Del otro lado cada header se compara sólo contra su
+# variable, así que el valor va en los dos y el envío anda con cualquiera.
+HEADER_INTEGRACION = "x-integracion-auth"
 HEADER_TOKEN = "x-internal-auth"
 
 RUTA_BANDEJA = "/api/comprobantes-pendientes"
@@ -874,14 +882,15 @@ class PuenteFacturacion:
         )
 
     def _post(self, url: str, token: str, payload: dict) -> httpx.Response:
+        headers = {HEADER_INTEGRACION: token, HEADER_TOKEN: token}
         if self._cliente_http is not None:
             return self._cliente_http.post(
                 f"{url}{RUTA_BANDEJA}", json=payload,
-                headers={HEADER_TOKEN: token}, timeout=TIMEOUT,
+                headers=headers, timeout=TIMEOUT,
             )
         with httpx.Client(timeout=TIMEOUT) as cliente:
             return cliente.post(f"{url}{RUTA_BANDEJA}", json=payload,
-                                headers={HEADER_TOKEN: token})
+                                headers=headers)
 
     @staticmethod
     def _detalle(respuesta: httpx.Response) -> str:
