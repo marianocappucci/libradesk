@@ -298,14 +298,14 @@ def test_caida_al_convertir_un_presupuesto_no_deja_remito_ni_vinculo(
     assert len(_remitos(client)) == 1
 
 
-# ── La copia del INSERT del motor ──────────────────────────────────────────
+# ── Con y sin vinculo, el mismo remito ─────────────────────────────────────
 
 
-def test_el_insert_transaccional_escribe_lo_mismo_que_el_del_motor(client, cliente):
-    """`_insertar_remito` copia el INSERT de `rp.create_remito` (el motor no
-    ofrece `conn=`). Si el motor suma una columna, esto se pone rojo al subir el
-    pin y no en produccion: las dos filas tienen que ser identicas salvo lo que
-    la base genera."""
+def test_el_remito_atado_se_escribe_igual_que_el_comun(client, cliente):
+    """Con `vincular` el remito entra por `rp.create_remito(conn=<la de la sesion>)` y sin
+    el, por `rp.create_remito()`: es la misma funcion del motor, asi que las dos filas
+    tienen que ser identicas salvo lo que la base genera. Ya no hay un INSERT propio que
+    pueda quedar atras si el motor suma una columna."""
     from app.services.remitos_presupuestos import RemitoService
 
     base = dict(

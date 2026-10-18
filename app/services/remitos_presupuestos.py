@@ -39,7 +39,6 @@ Tres decisiones que cuestan tiempo si no estan escritas:
 """
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Callable
 
@@ -47,6 +46,7 @@ from libracore import config_manager
 from libracore.db import core as libracore_core
 from libracore.db import remitos_presupuestos as rp
 from libracore.db.fk_de_producto import soltar_fk
+from libracore.db.migraciones import conexion_libracore
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -403,31 +403,6 @@ def datos_cliente_para_comprobante(cliente: dict, override_address: str | None =
     }
 
 
-#: Las columnas que escribe `libracore.db.remitos_presupuestos.create_remito`, en su
-#: orden. **Es una copia**: `_insertar_remito` hace el mismo INSERT por una sesion de
-#: SQLAlchemy, que es lo unico que lo deja entrar en la transaccion de un vinculo, y el
-#: motor no ofrece `create_remito(conn=...)`. Un test compara las dos filas
-#: (`tests/test_remito_atomico.py`), asi que una columna nueva en el motor pone rojo
-#: ahi y no en produccion.
-_COLUMNAS_REMITO = (
-    "number", "date", "client_id", "client_name", "client_address", "client_cuit",
-    "client_email", "client_phone", "items", "subtotal", "tax_rate", "tax_amount",
-    "total", "observations", "pdf_path", "usuario_id",
-)
-
-_INSERT_REMITO = text(
-    f"INSERT INTO remitos ({', '.join(_COLUMNAS_REMITO)}) "
-    f"VALUES ({', '.join(':' + c for c in _COLUMNAS_REMITO)}) RETURNING id"
-)
-
-
-def _insertar_remito(sesion: Session, valores: dict) -> int:
-    """El INSERT de `rp.create_remito()`, por `sesion` y **sin commitear**."""
-    fila = {c: valores[c] for c in _COLUMNAS_REMITO}
-    fila["items"] = json.dumps(fila["items"], ensure_ascii=False)
-    return sesion.execute(_INSERT_REMITO, fila).scalar_one()
-
-
 class RemitoService:
     """Envoltorio sobre `libracore.db.remitos_presupuestos` (remitos)."""
 
@@ -458,9 +433,10 @@ class RemitoService:
         Es posible porque en LibraDesk **core y dominio son la MISMA base
         PostgreSQL**: `create_app()` le pasa la misma URL a SQLAlchemy y a
         `libracore.db.core.configure()`, y `libradesk` esta en `_UNA_SOLA_BASE`
-        del motor. El insert se hace entonces por la sesion de SQLAlchemy; sin
-        `vincular` el remito sigue entrando por `rp.create_remito()`, como
-        siempre.
+        del motor. El remito entra entonces por `rp.create_remito(conn=...)` con la
+        conexion de la sesion de SQLAlchemy (`conexion_libracore(sesion.connection())`),
+        asi que no hay un INSERT propio que mantener junto al del motor; sin
+        `vincular` entra con la conexion propia del motor, como siempre.
         """
         items = _normalizar_items(items, tax_rate, cotizacion)
         subtotal, tax_amount, total = _totales(items, tax_rate)
@@ -480,7 +456,10 @@ class RemitoService:
             remito_id = rp.create_remito(**valores)
         else:
             with get_session_factory()() as sesion:
-                remito_id = _insertar_remito(sesion, valores)
+                # La conexion de la sesion, presentada como la espera el motor: el
+                # remito entra en la transaccion de SQLAlchemy y no commitea solo.
+                remito_id = rp.create_remito(
+                    **valores, conn=conexion_libracore(sesion.connection()))
                 vincular(sesion, remito_id)
                 # Un solo commit para las dos escrituras. Si `vincular` levanta,
                 # el `with` cierra la sesion y se deshace todo, remito incluido.
