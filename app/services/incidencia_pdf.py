@@ -225,7 +225,7 @@ def generar_pdf_incidencia(datos: dict) -> bytes:
     _campo(pdf, "Prioridad", datos["prioridad_label"])
     _campo(pdf, "Modalidad", datos["modalidad_label"])
     pdf.ln(_LINEA)
-    _campo(pdf, "Cerrada", datos["fecha_cierre"])
+    _campo(pdf, "Cerrado", datos["fecha_cierre"])
     _campo(pdf, "Horas", datos["horas"])
     pdf.ln(_LINEA)
     _campo(pdf, "Categoría", datos["categoria"], _CW)

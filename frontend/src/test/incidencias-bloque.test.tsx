@@ -309,7 +309,7 @@ describe('El estado se lee por color, no sólo por texto', () => {
   const POR_ESTADO = [
     { estado: 'abierto', label: 'Abierto', tono: 'negativo' },
     { estado: 'en_progreso', label: 'En progreso', tono: 'atencion' },
-    { estado: 'resuelta', label: 'Resuelta', tono: 'ok' },
+    { estado: 'resuelta', label: 'Resuelto', tono: 'ok' },
     { estado: 'cerrado', label: 'Cerrado', tono: 'neutro' },
   ]
 

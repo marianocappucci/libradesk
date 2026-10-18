@@ -844,10 +844,13 @@ export function ubicacionTexto(sector: string | null, ubicacion: string | null):
 export type EstadoIncidencia = 'abierto' | 'en_progreso' | 'resuelta' | 'cerrado'
 export type PrioridadIncidencia = 'alta' | 'media' | 'baja'
 
+/** Masculino, porque la pantalla dice «reclamo». El valor guardado `resuelta`
+ *  queda como está: sólo cambia la etiqueta. Repite `ESTADO_LABELS` de
+ *  `app/services/incidencias.py` y `tests/test_etiquetas_de_estado.py` las cruza. */
 export const ESTADO_LABELS: Record<EstadoIncidencia, string> = {
   abierto: 'Abierto',
   en_progreso: 'En progreso',
-  resuelta: 'Resuelta',
+  resuelta: 'Resuelto',
   cerrado: 'Cerrado',
 }
 

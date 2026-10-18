@@ -258,7 +258,7 @@ export function ClienteDetalle() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Reclamos abiertos ({abiertas.length})</CardTitle>
-            <CardDescription>Abiertas y en progreso, de la más reciente a la más vieja.</CardDescription>
+            <CardDescription>Abiertos y en progreso, de la más reciente a la más vieja.</CardDescription>
           </CardHeader>
           <CardContent>
             {abiertas.length === 0 ? (
