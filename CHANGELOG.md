@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-10-18
+- **Cambiado:** **el puente a ContaLibra manda la credencial también en `x-integracion-auth`** (libraauth v0.52.0 ADR-025, libracore v1.183.0 ADR-071). `CONTALIBRA_SERVICE_TOKEN` pasa a llevar el **`LIBRA_INTEGRACION_TOKEN` de la ContaLibra destino** (una por instancia, sólo abre las rutas de integración), que se carga con `panel_admin.py vincular-integracion`. El valor va en los dos headers, así que una instancia todavía no vinculada sigue andando con el token de servicio de antes. El header se sigue escribiendo a mano: no ata el pin de libraauth. `docker-compose.yml` declara `LIBRA_SERVICE_TOKEN_ANTERIOR` (rotación sin corte, default vacío). Sin migración. Test: `tests/test_facturacion_externa.py`.
+
 ### 2026-10-17
 - **Cambiado:** el alta de cliente en el lugar de las pantallas que emiten algo fiscal (Presupuestos, Remitos, venta nueva, remito de venta, contratos y contratos de proveedor) pide además **CUIT y condición frente al IVA** (`ALTA_FISCAL`). Lo habilita libra-ui `v0.158.2` (ADR-072 del kit), que deja de ofrecer «IVA No Responsable», una condición que este backend no conoce; `src/test/alta-de-cliente.test.ts` vigila que las condiciones del kit sean las de `app/services/iva.py`.
 

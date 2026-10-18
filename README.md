@@ -97,7 +97,7 @@ destinos posibles y la instancia elige uno.
 | Variable | Descripción |
 |----------|-------------|
 | `CONTALIBRA_URL` | URL de la instancia de Contalibra del mismo cliente |
-| `CONTALIBRA_SERVICE_TOKEN` | Token de servicio. Nunca sale por la API, ni enmascarado |
+| `CONTALIBRA_SERVICE_TOKEN` | El `LIBRA_INTEGRACION_TOKEN` de la ContaLibra destino (libraauth v0.52.0; lo carga `panel_admin.py vincular-integracion`). Viaja en `x-integracion-auth` y `x-internal-auth`. Nunca sale por la API, ni enmascarado |
 
 **Destino `sos`** — SOS Contador, el sistema del estudio contable del cliente:
 
