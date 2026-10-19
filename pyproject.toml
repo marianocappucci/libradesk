@@ -225,7 +225,8 @@ dependencies = [
     # v1.182.0 -> v1.183.0 (2026-10-18): tokens de servicio e integracion propios de cada instancia (ADR-071); con libraauth v0.52.0 (ADR-025, token anterior para rotar sin corte). Sin migracion.
     # v1.183.0 -> v1.184.0 (2026-10-18): los cobros de MercadoPago con el CUIT de quien factura nacen ignorados y no se auto-facturan (ADR-072); `admin.services.clientes_dir()` publica. Sin migracion.
     # v1.184.0 -> v1.184.1 (2026-10-18): tokens por instancia, `${VAR:?mensaje}` se lee del .env (corrige ADR-071). Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.184.1",
+    # v1.184.1 -> v1.185.0 (2026-10-18): la nota de debito de una factura a cuenta corriente hereda la cuenta: asienta su debito y se paga con recibo (ADR-073). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.185.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
@@ -248,7 +249,8 @@ dependencies = [
     # (ADR-053; este producto no lo usa). Ensayo con datos ficticios: conteos y md5 iguales antes y despues.
     # v0.63.0 -> v0.64.0 (2026-10-17): `anular_venta` resta lo que las notas de credito ya devolvieron o dejaron a favor (ADR-064). Sin migracion.
     # v0.64.0 -> v0.65.0 (2026-10-18): el reloj de hora.py sale de libracore.fechas (ADR-065; pide libracore>=1.182). Sin migracion.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.65.0",
+    # v0.65.0 -> v0.66.0 (2026-10-18): los reportes por dia leen el dia de Argentina; se sigue guardando el instante UTC (ADR-066). Sin migracion.
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.66.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
