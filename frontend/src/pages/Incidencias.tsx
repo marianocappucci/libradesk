@@ -680,7 +680,7 @@ export function Incidencias({ simple = false }: { simple?: boolean } = {}) {
           va a 1236, fuera de la pantalla. La clase alcanza sola; cambiar el
           contenedor era una modificación sin motivo. */}
       {seleccionadas.length > 0 && (
-        <Card className="sticky bottom-4 z-20 shadow-lg">
+        <Card className="sticky bottom-[calc(var(--alto-barra-de-estado,0px)+1rem)] z-20 shadow-lg">
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-medium">
