@@ -39,7 +39,7 @@ import {
 import { ICONOS } from 'libra-ui/iconos-identidad'
 import { INDICADORES } from 'libra-ui/iconos-indicador'
 import { createLayout } from 'libra-ui/Layout'
-import { SelectorDeSucursal } from '@/components/sucursal'
+import { SelectorDeSucursal, useSucursal } from '@/components/sucursal'
 import { WORDMARK } from '@/branding'
 
 /* El TILE del sidebar abarca el ítem entero —icono y texto—, y marca la sección
@@ -74,6 +74,11 @@ function modulosDe(u: unknown): string[] | undefined {
  */
 export function enModoSimple(u: unknown): boolean {
   return (modulosDe(u) ?? []).includes('modo_simple')
+}
+
+/** El nombre de la sucursal activa, para la barra de estado del pie. Sin sucursales cargadas, nada. */
+function useSucursalActiva(): string | undefined {
+  return useSucursal().activa?.nombre
 }
 
 export const Layout = createLayout({
@@ -254,4 +259,8 @@ export const Layout = createLayout({
   // de envolver al Layout, esto rompe con "no hay contexto" y no con una lista
   // vacía — que es la forma preferible de fallar.
   userMenu: <SelectorDeSucursal />,
+  // La barra de estado del pie (libra-ui ADR-083, libracore ADR-075): usuario y sucursal, ARCA, respaldo y versión, de
+  // `GET /api/estado-del-sistema` al cargar y cada pocos minutos. La sucursal es la activa del selector (vive en el
+  // navegador, `localStorage`), así que la da el producto y no el backend; mismo contexto que el selector.
+  barraDeEstado: { useSucursal: useSucursalActiva },
 })
