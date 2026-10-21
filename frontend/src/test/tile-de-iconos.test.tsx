@@ -242,11 +242,13 @@ describe('no quedan iconos del set viejo', () => {
   it('todo lo que dibuja es un <svg> de lucide, sin restos de Fluent', async () => {
     // Los SVG de `fluent-color` traían gradientes con hex horneados
     // (`<linearGradient>`), que es lo único que los distingue del marcado de
-    // lucide sin mirar el path.
+    // lucide sin mirar el path. La marca del producto queda afuera: desde
+    // libra-ui v0.176.0 (ADR-090) va en 3D y sus degradés son a propósito.
     montar('/clientes')
     await waitFor(() => expect(screen.getAllByText('LibraDesk').length).toBeGreaterThan(0))
 
-    expect(document.querySelectorAll('linearGradient, radialGradient')).toHaveLength(0)
+    const degradados = Array.from(document.querySelectorAll('linearGradient, radialGradient'))
+    expect(degradados.filter((g) => !g.closest('[role="img"][aria-label="LibraDesk"]'))).toHaveLength(0)
     // Y que efectivamente hay iconos dibujados: sin esto el caso de arriba pasa
     // en una pantalla vacía.
     expect(document.querySelectorAll('svg').length).toBeGreaterThan(20)
