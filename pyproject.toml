@@ -269,7 +269,8 @@ dependencies = [
     # v0.70.1 -> v0.71.0 (2026-10-22): el stock de un nodo de LibraEdge (ADR-071): ganchos del ledger, guarda de sucursales con nodo, stock.movimiento y compra.recibida. Migracion 0008 aditiva (stock_movements.origen/origen_id); fuera de un nodo no cambia nada.
     # v0.71.0 -> v0.72.0 (2026-10-22): en un nodo de LibraEdge el deposito por defecto es el de su sucursal. Migracion 0009 aditiva (nodo_local); fuera de un nodo no cambia nada.
     # v0.72.0 -> v0.72.1 (2026-10-22): la carga inicial lleva a cero los depositos ajenos del nodo (PC que cambia de sucursal). Sin migracion.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.72.1",
+    # v0.72.1 -> v0.73.0 (2026-10-23): el vinculo del producto viaja con la venta del nodo (ADR-072). Migracion 0010 aditiva (venta_origen_nodo).
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.73.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
