@@ -237,7 +237,11 @@ dependencies = [
     # v1.188.0 -> v1.189.0 (2026-10-21): altas de clientes en un nodo: id provisorio y gancho al crear (ADR-077). Sin migracion.
     # v1.189.0 -> v1.190.0 (2026-10-22): libracore-unir-bases para unir la base core dentro de la del dominio (ADR-078). Sin migracion.
     # v1.190.0 -> v1.190.1 (2026-10-22): LibraCargo y LibraClub en _UNA_SOLA_BASE (ADR-078). Sin migracion.
-    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.190.1",
+    # v1.190.1 -> v1.191.0 (2026-10-23): cola de comprobantes del nodo offline (cola_arca, ADR-079). Migracion 0029 aditiva.
+    # v1.191.0 -> v1.192.0 (2026-10-24): costuras de caja: corregir, extra y gancho del central (ADR-080). Sin migracion.
+    # v1.192.0 -> v1.192.1 (2026-10-24): un ciclo con el candado del esquema da deadlock en 1 s, no a los 120 s (ADR-081). Sin migracion.
+    # v1.192.1 -> v1.194.0 (2026-10-25): unir-bases con libraauth en el core (ADR-082), GestioLibra y MedLibra de una sola base y tabla de modulos del producto (ADR-083). Sin migracion.
+    "libracore @ git+https://github.com/marianocappucci/libracore.git@v1.194.0",
     # Stock de consumibles. Este producto NO tenia stock de ninguna clase --sus
     # `depositos` guardan unidades serializadas, no existencias-- y la decision
     # del 2026-08-11 fue **adoptar el motor** que ya usan Contalibra, Restolibra
@@ -268,7 +272,9 @@ dependencies = [
     # v0.70.1 -> v0.71.0 (2026-10-22): el stock de un nodo de LibraEdge (ADR-071): ganchos del ledger, guarda de sucursales con nodo, stock.movimiento y compra.recibida. Migracion 0008 aditiva (stock_movements.origen/origen_id); fuera de un nodo no cambia nada.
     # v0.71.0 -> v0.72.0 (2026-10-22): en un nodo de LibraEdge el deposito por defecto es el de su sucursal. Migracion 0009 aditiva (nodo_local); fuera de un nodo no cambia nada.
     # v0.72.0 -> v0.72.1 (2026-10-22): la carga inicial lleva a cero los depositos ajenos del nodo (PC que cambia de sucursal). Sin migracion.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.72.1",
+    # v0.72.1 -> v0.73.0 (2026-10-23): el vinculo del producto viaja con la venta del nodo (ADR-072). Migracion 0010 aditiva (venta_origen_nodo).
+    # v0.73.0 -> v0.73.1 (2026-10-24): serializar_esquema toma antes el candado del core (ADR-073). Sin migracion.
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.73.1",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
