@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from libracore.indices_ajuste import INDICES
 from sqlalchemy import (
     Boolean,
     Date,
@@ -119,9 +120,10 @@ PERIODICIDADES = ("mensual", "bimestral", "trimestral", "semestral", "anual")
 # contrato aceptando algo que el generador después saltea en silencio.
 FRECUENCIAS_VISITA = PERIODICIDADES
 
-# `indice` queda declarado pero se comporta como `manual` hasta que se defina de
-# donde sale el indice — es una de las decisiones que el diseno dejo abiertas.
-# Declararlo ahora evita una migracion despues solo para agregar un valor.
+# `indice` se ajusta con los índices oficiales que guarda el motor
+# (`libracore.indices_ajuste`, ADR-085 de libracore) desde la revisión `0043`:
+# el contrato dice cuál (`indice_ajuste`) y cada cuánto (`periodicidad_ajuste`).
+# Hasta el 2026-10-26 estaba declarado y se comportaba como `manual`.
 METODOS_ACTUALIZACION = ("fijo", "manual", "porcentaje", "indice", "dolar", "lista")
 
 MONEDAS = ("ARS", "USD")
@@ -239,6 +241,11 @@ class Contrato(Base):
     metodo_actualizacion: Mapped[str] = mapped_column(
         String(20), nullable=False, default="manual",
     )
+    #: Con `metodo_actualizacion='indice'`: qué índice del motor
+    #: (`libracore.indices_ajuste.INDICES`) y cada cuánto se ajusta, contado
+    #: desde `fecha_inicio`. Revisión `0043`.
+    indice_ajuste: Mapped[str | None] = mapped_column(String(30))
+    periodicidad_ajuste: Mapped[str | None] = mapped_column(String(20))
 
     estado: Mapped[str] = mapped_column(String(20), nullable=False, default="borrador", index=True)
 
@@ -393,6 +400,8 @@ def _to_dict(
         "dia_vencimiento": c.dia_vencimiento,
         "moneda": c.moneda,
         "metodo_actualizacion": c.metodo_actualizacion,
+        "indice_ajuste": c.indice_ajuste,
+        "periodicidad_ajuste": c.periodicidad_ajuste,
         "estado": c.estado,
         "responsable": c.responsable,
         "observaciones": c.observaciones,
@@ -527,6 +536,18 @@ class ContratoRepository:
             valor = data.get(campo)
             if valor is not None and valor not in validos:
                 raise ValueError(f"{etiqueta} inválida: {valor}")
+
+        indice = data.get("indice_ajuste")
+        if indice is not None and indice not in INDICES:
+            raise ValueError(f"Índice de ajuste inválido: {indice}")
+        cada = data.get("periodicidad_ajuste")
+        if cada is not None and cada not in PERIODICIDADES:
+            raise ValueError(f"Periodicidad del ajuste inválida: {cada}")
+        if data.get("metodo_actualizacion") == "indice" and (not indice or not cada):
+            raise ValueError(
+                "Un contrato que se actualiza por índice tiene que decir cuál "
+                "y cada cuánto se ajusta."
+            )
 
         dia = data.get("dia_vencimiento")
         if dia is not None and not 1 <= dia <= 31:
@@ -667,6 +688,8 @@ class ContratoRepository:
                 "tipo_contrato": c.tipo_contrato, "estado": c.estado,
                 "periodicidad": c.periodicidad, "moneda": c.moneda,
                 "metodo_actualizacion": c.metodo_actualizacion,
+                "indice_ajuste": c.indice_ajuste,
+                "periodicidad_ajuste": c.periodicidad_ajuste,
                 "dia_vencimiento": c.dia_vencimiento,
                 "fecha_inicio": c.fecha_inicio, "fecha_fin": c.fecha_fin,
                 **data,
