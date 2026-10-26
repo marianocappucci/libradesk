@@ -6,6 +6,7 @@
 // libra-ui/api-client, mismo patron que el resto de la familia.
 
 export { api, ApiError, type User } from 'libra-ui/api-client'
+import { ApiError } from 'libra-ui/api-client'
 
 import type { OpcionSelect } from 'libra-ui/SelectBuscable'
 import type { TonoEstado } from 'libra-ui/badge-estado'
@@ -517,8 +518,8 @@ export const METODO_ACTUALIZACION_LABELS: Record<string, string> = {
   fijo: 'Precio fijo',
   manual: 'Actualización manual',
   porcentaje: 'Porcentaje cada N meses',
-  // Declarado pero se comporta como manual hasta que se defina de dónde sale
-  // el índice — decisión abierta del diseño.
+  // Desde la revisión 0043 el contrato dice cuál índice del motor y cada cuánto
+  // se ajusta (`indice_ajuste`, `periodicidad_ajuste`): ver `PropuestaDeAjuste`.
   indice: 'Índice configurable',
   dolar: 'En dólares, convertido al facturar',
   lista: 'Lista de precios',
@@ -586,6 +587,13 @@ export type Contrato = {
   primera_visita: string | null
   moneda: string
   metodo_actualizacion: string
+  /** Con `metodo_actualizacion === 'indice'` los dos vienen siempre (el
+   *  backend los exige); con cualquier otro método son `null`. */
+  indice_ajuste_nombre?: string | null
+  indice_ajuste: string | null
+  /** Cada cuánto se ajusta, contado desde `fecha_inicio`: una clave de
+   *  `PERIODICIDAD_LABELS`. */
+  periodicidad_ajuste: string | null
   estado: string
   responsable: string | null
   observaciones: string | null
@@ -600,6 +608,85 @@ export type Contrato = {
   // Sólo en la ficha (`GET /api/contratos/{id}`), no en el listado.
   lineas?: ContratoLinea[]
   precios?: ContratoPrecio[]
+}
+
+// ── El ajuste por índice de un contrato (revisión 0043, 2026-10-26) ────────
+//
+// Los índices los guarda y calcula el motor (`libracore.indices_ajuste`); el
+// contrato sólo dice cuál usa y cada cuánto. La pantalla muestra la propuesta
+// (`GET /api/contratos/{id}/ajuste`, que no escribe) y el humano la confirma
+// (`POST`, que cierra el precio vigente y abre el ajustado).
+
+/** Un índice del catálogo del motor (`GET /api/contratos/ajustes/indices`). */
+export type IndiceDeAjuste = {
+  /** `icl`, `ipc`, `ipc_variacion`, `cer`, `uva`, `dolar_a3500`, `casa_propia`. */
+  clave: string
+  nombre: string
+  /** Cada cuánto publica la fuente — no es la del ajuste del contrato. */
+  periodicidad: string
+  /** `false` = se carga a mano (Casa Propia): el backend no puede bajarlo. */
+  se_baja_solo: boolean
+}
+
+/** Un valor del índice que entró en la cuenta. `valor` viaja como cadena para
+ *  no perder decimales: no pasarlo por `Number` salvo para mostrarlo. */
+export type ValorDeIndice = { fecha: string; valor: string; fuente: string }
+
+export type AjusteCalculado = {
+  indice: string
+  indice_nombre: string
+  fecha_base: string
+  fecha_ajuste: string
+  importe_anterior: number
+  importe_nuevo: number
+  /** Cadena, por lo mismo que `ValorDeIndice.valor`. */
+  coeficiente: string
+  variacion_pct: number
+  valores: ValorDeIndice[]
+}
+
+export type PropuestaDeAjuste = {
+  /** `false` = el período de ajuste en curso ya tiene su precio. */
+  corresponde: boolean
+  /** Por qué no corresponde: el contrato no cumplió su primer período, o el período en curso ya tiene su precio. */
+  motivo?: 'primer_periodo' | 'ya_ajustado' | null
+  indice: string
+  indice_nombre?: string | null
+  periodicidad_ajuste: string
+  /** El comienzo del período en curso: la fecha que se manda al aplicar. */
+  fecha_ajuste: string
+  proximo_ajuste: string
+  precio_vigente: number
+  precio_vigente_desde: string
+  /** `null` si `corresponde` es `false`. */
+  ajuste: AjusteCalculado | null
+}
+
+export type AjusteAplicado = { precio: ContratoPrecio; ajuste: AjusteCalculado }
+
+/** El `detail` de un 409 cuando falta un valor del índice: `ApiError.detailData`
+ *  (el `detail` de un 409 de otro motivo es una cadena). */
+export type FaltaDeIndice = { mensaje: string; indice: string; fechas_faltantes: string[] }
+
+export function faltaDeIndice(err: unknown): FaltaDeIndice | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null
+  const d = err.detailData as Partial<FaltaDeIndice> | undefined
+  if (!d || typeof d !== 'object' || !Array.isArray(d.fechas_faltantes)) return null
+  return {
+    mensaje: err.detail,
+    indice: String(d.indice ?? ''),
+    fechas_faltantes: d.fechas_faltantes.map(String),
+  }
+}
+
+/** Las opciones del selector de índice. El `hint` avisa cuál se carga a mano y
+ *  entra en la búsqueda, así que se puede tipear «a mano» o la sigla. */
+export function opcionesIndice(indices: IndiceDeAjuste[]): OpcionSelect[] {
+  return indices.map((i) => ({
+    value: i.clave,
+    label: i.nombre,
+    hint: i.se_baja_solo ? undefined : 'se carga a mano',
+  }))
 }
 
 // ── Las actas de entrega y devolución (fase 3, 2026-08-17) ─────────────────

@@ -110,7 +110,7 @@ def test_proponer_aplicar_y_la_cuota_sale_con_el_precio_ajustado(client, cliente
 
     # El período ya tiene su precio: no se vuelve a ajustar.
     otra = client.get(f"/api/contratos/{contrato['id']}/ajuste", params={"fecha": "2026-06-01"}).json()
-    assert otra["corresponde"] is False and otra["ajuste"] is None
+    assert otra["corresponde"] is False and otra["ajuste"] is None and otra["motivo"] == "ya_ajustado"
     assert client.post(f"/api/contratos/{contrato['id']}/ajuste",
                        json={"fecha_ajuste": "2026-05-15"}).status_code == 409
 
@@ -151,6 +151,7 @@ def test_sin_el_valor_y_sin_fuente_dice_que_falta(client, cliente, sin_red):
     r = client.get(f"/api/contratos/{contrato['id']}/ajuste", params={"fecha": "2026-05-20"})
     assert r.status_code == 409
     assert r.json()["detail"]["fechas_faltantes"] == ["2026-05-15"]
+    assert r.json()["detail"]["indice_nombre"].startswith("Índice para Contratos de Locación")
 
 
 def test_un_contrato_manual_no_tiene_ajuste(client, cliente):
@@ -158,3 +159,19 @@ def test_un_contrato_manual_no_tiene_ajuste(client, cliente):
                          periodicidad_ajuste=None)
     r = client.get(f"/api/contratos/{contrato['id']}/ajuste")
     assert r.status_code == 409
+
+
+def test_en_el_primer_periodo_no_hay_ajuste_y_lo_dice(client, cliente, sin_red):
+    contrato = _contrato(client, cliente)
+    assert contrato["indice_ajuste_nombre"].startswith("Índice para Contratos de Locación")
+    p = client.get(f"/api/contratos/{contrato['id']}/ajuste", params={"fecha": "2026-03-01"}).json()
+    assert (p["corresponde"], p["motivo"], p["proximo_ajuste"]) == (False, "primer_periodo", "2026-05-15")
+
+
+def test_un_contrato_cerrado_no_se_ajusta(client, cliente, sin_red):
+    contrato = _contrato(client, cliente)
+    valores.guardar("icl", "2026-02-15", "30.00", "bcra")
+    valores.guardar("icl", "2026-05-15", "31.50", "bcra")
+    assert client.put(f"/api/contratos/{contrato['id']}", json={"estado": "rescindido"}).status_code == 200
+    r = client.post(f"/api/contratos/{contrato['id']}/ajuste", json={"fecha_ajuste": "2026-05-15"})
+    assert r.status_code == 409 and "rescindido" in r.text

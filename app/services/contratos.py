@@ -401,6 +401,7 @@ def _to_dict(
         "moneda": c.moneda,
         "metodo_actualizacion": c.metodo_actualizacion,
         "indice_ajuste": c.indice_ajuste,
+        "indice_ajuste_nombre": INDICES[c.indice_ajuste].nombre if c.indice_ajuste in INDICES else None,
         "periodicidad_ajuste": c.periodicidad_ajuste,
         "estado": c.estado,
         "responsable": c.responsable,

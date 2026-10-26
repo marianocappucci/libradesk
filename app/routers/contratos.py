@@ -399,7 +399,10 @@ class AjusteIn(BaseModel):
 
 
 def _indice_faltante(e) -> HTTPException:
-    return HTTPException(409, {"mensaje": str(e), "indice": e.indice, "fechas_faltantes": e.fechas})
+    from libracore.indices_ajuste import INDICES
+
+    return HTTPException(409, {"mensaje": str(e), "indice": e.indice, "indice_nombre": INDICES[e.indice].nombre,
+                               "fechas_faltantes": e.fechas})
 
 
 @router.get("/ajustes/indices")

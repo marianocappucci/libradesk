@@ -35,7 +35,7 @@ from libracore.fechas import hoy
 from libracore.periodos import periodo_anclado
 from sqlalchemy import select
 
-from .contratos import Contrato, ContratoPrecio, ContratoRepository
+from .contratos import ESTADOS_CERRADOS, Contrato, ContratoPrecio, ContratoRepository
 
 #: Cuántos días antes de la primera fecha que falta se pide a la fuente: un IPC mensual se fecha el primero del mes y
 #: la fuente lo devuelve igual, pero así una semana de ICL sin bajar entra en el mismo pedido.
@@ -103,12 +103,14 @@ class AjusteRepository:
     def proponer(self, contrato_id: int, *, fecha: date | None = None) -> dict:
         """Qué ajuste le toca al contrato en `fecha` (hoy, si no se dice). **No escribe nada** en el contrato.
 
-        `{corresponde, fecha_ajuste, proximo_ajuste, precio_vigente, precio_vigente_desde, ajuste}`. Con
-        `corresponde=False` el período de ajuste en curso ya tiene su precio y `ajuste` es `None`."""
+        `{corresponde, motivo, fecha_ajuste, proximo_ajuste, precio_vigente, precio_vigente_desde, ajuste}`. Con
+        `corresponde=False`, `ajuste` es `None` y `motivo` dice por qué: `primer_periodo` (el contrato todavía no
+        cumplió su primer período) o `ya_ajustado` (el período en curso ya tiene su precio)."""
         c, precio = self._contrato_y_precio(contrato_id)
         periodo = periodo_anclado(c.periodicidad_ajuste, ancla=fecha or hoy(), arranque=c.fecha_inicio)
         respuesta = {
             "indice": c.indice_ajuste,
+            "indice_nombre": ia.INDICES[c.indice_ajuste].nombre if c.indice_ajuste in ia.INDICES else None,
             "periodicidad_ajuste": c.periodicidad_ajuste,
             "fecha_ajuste": periodo.desde.isoformat(),
             "proximo_ajuste": (periodo.hasta + timedelta(days=1)).isoformat(),
@@ -116,15 +118,21 @@ class AjusteRepository:
             "precio_vigente_desde": precio.vigencia_desde.isoformat(),
         }
         if periodo.desde <= precio.vigencia_desde:
-            return {**respuesta, "corresponde": False, "ajuste": None}
+            # Dos razones distintas para lo mismo, que la pantalla dice distinto: el contrato todavía está en su
+            # primer período (nunca hubo nada que ajustar) o el período en curso ya tiene su precio.
+            motivo = "primer_periodo" if periodo.desde <= c.fecha_inicio else "ya_ajustado"
+            return {**respuesta, "corresponde": False, "motivo": motivo, "ajuste": None}
         ajuste = _ajustar_bajando_si_falta(c.indice_ajuste, precio.importe, precio.vigencia_desde, periodo.desde)
-        return {**respuesta, "corresponde": True, "ajuste": _serializar(ajuste)}
+        return {**respuesta, "corresponde": True, "motivo": None, "ajuste": _serializar(ajuste)}
 
     def aplicar(self, contrato_id: int, *, fecha_ajuste: date, usuario: str = "Sistema") -> dict:
         """Aplica el ajuste que `proponer` muestra para `fecha_ajuste`: cierra el precio vigente y abre el nuevo.
 
         Se vuelve a calcular acá, no se confía en el importe de la pantalla: entre que se mostró y se confirmó pudo
         haber cambiado el precio vigente o el índice. Si `fecha_ajuste` no es la del período en curso, no se aplica."""
+        c, _ = self._contrato_y_precio(contrato_id)
+        if c.estado in ESTADOS_CERRADOS:
+            raise SinAjuste(f"El contrato está {c.estado}: no se ajusta.")
         propuesta = self.proponer(contrato_id, fecha=fecha_ajuste)
         if not propuesta["corresponde"]:
             raise SinAjuste("El período de ajuste en curso ya tiene su precio.")

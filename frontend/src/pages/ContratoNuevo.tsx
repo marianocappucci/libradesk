@@ -7,8 +7,10 @@ import { EncabezadoDePantalla } from 'libra-ui/acciones'
 import {
   api, ApiError, ESTADO_CONTRATO_LABELS, METODO_ACTUALIZACION_LABELS,
   PERIODICIDAD_LABELS, TIPO_CONTRATO_LABELS, TIPOS_CON_CUOTA, opcionesCliente,
+  opcionesIndice,
   type Cliente, type Contrato, type TipoContrato,
 } from '../api'
+import { useIndicesDeAjuste } from '../hooks/use-indices-de-ajuste'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +18,7 @@ import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { SelectCliente } from 'libra-ui/SelectCliente'
+import { SelectBuscable } from '@/components/select-buscable'
 import { ALTA_FISCAL, crearClienteEn } from '@/lib/alta-de-cliente'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -46,6 +49,24 @@ const contratoSchema = z.object({
   responsable: z.string().trim().optional(),
   observaciones: z.string().trim().optional(),
   importe: z.string().trim().optional(),
+  /** Con método «índice», cuál y cada cuánto se ajusta; `''` = sin elegir. En
+   *  cualquier otro método no se mandan (en la API viajan como `null`). */
+  indice_ajuste: z.string(),
+  periodicidad_ajuste: z.string(),
+}).superRefine((v, ctx) => {
+  // 🔑 Obligatorios **sólo si el método se ve**: el selector del método vive en
+  // el bloque de cobro, que un comodato no tiene. Exigirlos con ese bloque
+  // escondido dejaría un formulario que no se deja guardar sin decir por qué.
+  if (v.metodo_actualizacion !== 'indice') return
+  if (!TIPOS_CON_CUOTA.includes(v.tipo_contrato as TipoContrato)) return
+  if (!v.indice_ajuste) {
+    ctx.addIssue({ code: 'custom', path: ['indice_ajuste'], message: 'Elegí el índice' })
+  }
+  if (!v.periodicidad_ajuste) {
+    ctx.addIssue({
+      code: 'custom', path: ['periodicidad_ajuste'], message: 'Elegí cada cuánto se ajusta',
+    })
+  }
 })
 
 type ContratoFormValues = z.infer<typeof contratoSchema>
@@ -85,6 +106,7 @@ export function ContratoNuevo() {
       metodo_actualizacion: 'manual',
       dia_vencimiento: '', domicilio_instalacion: '', responsable: '',
       observaciones: '', importe: '',
+      indice_ajuste: '', periodicidad_ajuste: '',
     },
   })
 
@@ -94,6 +116,11 @@ export function ContratoNuevo() {
   const llevaCuota = TIPOS_CON_CUOTA.includes(tipoElegido)
   // El ancla de la visita sólo tiene sentido si el contrato visita.
   const visitaElegida = form.watch('frecuencia_visita')
+  // Los dos campos del ajuste existen sólo con método «índice» **y** con el
+  // bloque de cobro a la vista (que es donde se elige el método).
+  const usaIndice = llevaCuota && form.watch('metodo_actualizacion') === 'indice'
+  const indiceElegido = form.watch('indice_ajuste')
+  const { indices, error: errorIndices } = useIndicesDeAjuste(usaIndice)
 
   function describeError(err: unknown): string {
     if (err instanceof ApiError) return err.detail
@@ -115,7 +142,16 @@ export function ContratoNuevo() {
       fecha_inicio: values.fecha_inicio,
       estado: values.estado,
       periodicidad: values.periodicidad,
-      metodo_actualizacion: values.metodo_actualizacion,
+      // Un método «índice» que quedó escondido (se cambió la modalidad a una sin
+      // cuota después de elegirlo) viajaría sin índice y el backend lo rechaza:
+      // se manda `manual`, que es lo que ese contrato era sin el bloque.
+      metodo_actualizacion: (
+        values.metodo_actualizacion === 'indice' && !usaIndice
+          ? 'manual' : values.metodo_actualizacion
+      ),
+      // `null` si el método no es índice: es lo que la API espera, no ausente.
+      indice_ajuste: usaIndice ? values.indice_ajuste : null,
+      periodicidad_ajuste: usaIndice ? values.periodicidad_ajuste : null,
       // `'ninguna'` es el centinela de pantalla; la API espera `null`.
       frecuencia_visita: (
         values.frecuencia_visita === 'ninguna' ? null : values.frecuencia_visita
@@ -364,6 +400,56 @@ export function ContratoNuevo() {
                     </Select>
                   </FormItem>
                 )} />
+                {/* El ajuste por índice (ADR-018): cuál y cada cuánto. Los dos
+                    son obligatorios, y el backend contesta error si faltan. */}
+                {usaIndice && (
+                  <>
+                    <FormField control={form.control} name="indice_ajuste" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Índice</FormLabel>
+                        <FormControl>
+                          <SelectBuscable
+                            value={field.value}
+                            onChange={field.onChange}
+                            opciones={opcionesIndice(indices)}
+                            placeholder="Elegí un índice"
+                            // Mismo motivo que el del cliente: el disparador es
+                            // un `role="combobox"` y `SelectBuscable` no
+                            // reenvía el `id` del `FormLabel`.
+                            ariaLabel="Índice"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {indices.find((i) => i.clave === indiceElegido)?.se_baja_solo === false
+                            ? 'Este índice se carga a mano: hasta que estén sus valores no se puede calcular el ajuste.'
+                            : 'Los valores oficiales del índice se bajan de la fuente al calcular el ajuste.'}
+                        </FormDescription>
+                        {errorIndices && <p className="text-sm text-destructive">{errorIndices}</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="periodicidad_ajuste" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Se ajusta cada</FormLabel>
+                        {/* select-cerrado: las 5 periodicidades de la constante PERIODICIDAD_LABELS */}
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Elegí cada cuánto" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Object.entries(PERIODICIDAD_LABELS).map(([p, label]) => (
+                              <SelectItem key={p} value={p}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Se cuenta desde el inicio del contrato, no desde el calendario.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

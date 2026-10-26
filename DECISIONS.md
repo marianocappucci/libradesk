@@ -276,3 +276,20 @@ wiki (entidad `libradesk`).
   - Un cliente dado de alta desde otra pantalla nace con `tipo_facturacion` por defecto (`por_servicio`), sin empresa, CUIT ni domicilio. Un 409 del backend (email o CUIT repetido) se muestra dentro del panel sin perder lo cargado.
   - Un campo de cliente nuevo que no sea `SelectCliente` pone en rojo `campos-de-cliente.test.ts` al agregarlo, no en una revisión.
 
+
+## ADR-018 — Los períodos y el ajuste por índice son los del motor (`libracore.periodos` y `libracore.indices_ajuste`)
+
+**Estado:** aceptada (2026-10-26). Pedido del humano, junto con el producto nuevo LibraInmo: «pasa a libracore y después libradesk también que lo use desde libracore» y «aprovechamos y se lo agregamos a libradesk también».
+
+**Contexto.** La aritmética de períodos (cuotas del 2026-08-15, visitas del 2026-08-16) vivía en `app/services/cuotas.py` y `app/services/visitas.py`. Subió al motor como `libracore.periodos` (ADR-086 de libracore, v1.196.0; `periodo_anclado` y `sumar_meses` en v1.196.1). `metodo_actualizacion='indice'` estaba declarado desde la fase 1 y se comportaba como `manual` porque nadie sabía de dónde salía el índice; desde libracore v1.196.0 el motor guarda los índices oficiales y hace la cuenta (ADR-085 del motor).
+
+**Decisión.**
+1. **`cuotas.py` y `visitas.py` no tienen aritmética propia**: `periodo_de` y `vencimiento_de` son envoltorios que reciben un `Contrato` y llaman al motor; `Periodo` es el del motor; `visitas.periodo_anclado` llama a `libracore.periodos.periodo_anclado`. El comportamiento de las cuotas no cambia (sus tests pasan igual). 🔴 **El de las visitas sí, en un caso borde que era un defecto**: con un arranque a fin de mes, el ancla quedaba fuera del período devuelto (arranque 31-01: el 28-02 daba el período del 31-01 al 27-02). Lo fija `tests/test_aritmetica_del_motor.py`.
+2. **El contrato por índice dice cuál y cada cuánto** (revisión `0043`): `indice_ajuste` (clave de `libracore.indices_ajuste.INDICES`, validada por el repositorio y no por un CHECK, porque el catálogo crece con un bump del motor) y `periodicidad_ajuste`. Los dos son obligatorios con `metodo_actualizacion='indice'`.
+3. **El ajuste se cuenta desde `fecha_inicio`** (`periodo_anclado`) y su base es el **precio vigente**: de su `vigencia_desde` a la fecha del ajuste. Un ajuste a mano en el medio no se pisa ni se cuenta dos veces.
+4. **Con confirmación humana**: `GET /api/contratos/{id}/ajuste` muestra la cuenta con los valores del índice que tomó; `POST` la rehace (no confía en el importe de la pantalla) y la aplica con `actualizar_precio`, con `motivo='ajuste_indice:<clave>'`. No hay cron.
+5. **Si falta un valor, se baja de la fuente en el momento** (`libracore.indices_descarga.sincronizar`) y se reintenta una vez; si igual falta, 409 con las fechas que faltan.
+
+**Lo que no hace.** No ajusta solo. El dólar A 3500 no se publica los fines de semana y el motor no toma el valor anterior (ADR-085 del motor): un ajuste que cae sábado o domingo no encuentra valor. Casa Propia se carga a mano.
+
+**Tests.** `tests/test_aritmetica_del_motor.py` y `tests/test_ajuste_por_indice.py`. Este último corre la cadena real del motor (`libracore.migrar.upgrade`) sobre la base del test, porque la plantilla de la suite no la corre y `indices_ajuste` la crea la `0030` del motor.
