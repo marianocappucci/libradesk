@@ -20,9 +20,10 @@ cuadrilla, las horas, los materiales, el cierre con control y el camino a
 facturación vienen de arriba sin escribir una línea. Lo único propio de acá es
 *qué contratos toca visitar en este período y cuáles ya se generaron*.
 
-La aritmética de períodos **sí es propia, y por una razón**: `periodo_anclado()`
-cuenta la cadencia desde el acuerdo con el cliente, mientras la de las cuotas la
-alinea al año calendario.
+La aritmética de períodos es la del motor (`libracore.periodos`), pero **no la
+misma que la de las cuotas, y por una razón**: `periodo_anclado()` cuenta la
+cadencia desde el acuerdo con el cliente, mientras la de las cuotas la alinea al
+año calendario.
 
 🔴 **Nació copiando la de cuotas y eso era un defecto.** Allá los bloques
 *tienen* que ser de calendario: es lo que hace posible el prorrateo del primer
@@ -63,16 +64,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from libracore.periodos import periodo_anclado as _periodo_anclado
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from .contratos import FRECUENCIAS_VISITA, Contrato  # noqa: F401  (se reexporta)
-from .cuotas import (
-    _MESES_POR_PERIODICIDAD,
-    _UN_DIA,
-    Periodo,
-    _sumar_meses,
-)
+from .cuotas import Periodo
 from .incidencias import Incidencia
 
 # `FRECUENCIAS_VISITA` vive en `contratos.py` y se importa: es donde se valida al
@@ -92,40 +89,19 @@ _MESES = (
 def periodo_anclado(cadencia: str, *, ancla: date, arranque: date) -> Periodo:
     """El período de visita que contiene a `ancla`, **contado desde `arranque`**.
 
-    Es la diferencia con `periodo_por_cadencia()`, que alinea los bloques al año
-    calendario. Un trimestral que arranca el 15-02 devenga feb-abr, may-jul,
-    ago-oct, nov-ene — que es como se pacta con un cliente, y lo que la versión
-    de calendario hacía imposible expresar.
+    Es la de `libracore.periodos` (ADR-086 de libracore, v1.196.1), que nació acá
+    y subió al motor el 2026-10-26: un trimestral que arranca el 15-02 va de feb a
+    abr, may-jul, ago-oct y nov-ene, que es como se pacta con un cliente. Allá se
+    corrigió el arranque a fin de mes: con arranque el 31-01, el 28-02 caía fuera
+    del período devuelto (31-01 al 27-02).
 
-    🔴 **Las cuotas siguen usando la de calendario, y está bien.** Allá los
-    bloques *tienen* que ser de calendario: es lo que hace posible el prorrateo
-    del primer mes, que fue una decisión explícita. Una visita no se prorratea,
-    así que esa razón no viaja con la fórmula — copiarla sin preguntárselo fue
-    el defecto que esto arregla.
+    🔴 **Las cuotas siguen usando la de calendario, y está bien**: el prorrateo
+    del primer mes lo exige, y una visita no se prorratea.
 
     El día del período es el de `arranque`, y ése es el día que se visita:
     independiente del `dia_vencimiento` del contrato, que es cuándo se cobra.
-
-    Con `ancla` anterior a `arranque` devuelve el primer período —el que empieza
-    en `arranque`—, y la guarda de vigencia de `_proponer()` se encarga de que
-    no se genere nada antes de tiempo.
     """
-    paso = _MESES_POR_PERIODICIDAD[cadencia]
-    # Cuántos períodos completos entraron entre el arranque y el ancla. Se
-    # cuenta en MESES y no en días: los períodos son de meses, y con días el
-    # redondeo se corre en los meses de 28 y 31.
-    meses = (ancla.year - arranque.year) * 12 + (ancla.month - arranque.month)
-    # Ajuste por el día: si el ancla cae ANTES del día del arranque dentro de su
-    # mes, todavía está en el período anterior. Sin esto, un mensual que arranca
-    # el 20 diría que el 5 de marzo es el período de marzo cuando es el de
-    # febrero (20-02 al 19-03).
-    if ancla.day < arranque.day:
-        meses -= 1
-    n = meses // paso if meses >= 0 else -((-meses + paso - 1) // paso)
-
-    desde = _sumar_meses(arranque, n * paso)
-    hasta = _sumar_meses(desde, paso) - _UN_DIA
-    return Periodo(desde=desde, hasta=hasta)
+    return _periodo_anclado(cadencia, ancla=ancla, arranque=arranque)
 
 
 def titulo_de(periodo: Periodo) -> str:
@@ -194,7 +170,7 @@ class VisitaService:
         # que la revisión `0030` vino a deshacer. Se puede cobrar el 10 y
         # visitar el 25.
         #
-        # `_sumar_meses()` ya recortó el día al último del mes destino, así que
+        # `sumar_meses()` del motor ya recortó el día al último del mes destino, así que
         # un arranque el 31 no revienta en un mes de 30.
         return periodo.desde
 
