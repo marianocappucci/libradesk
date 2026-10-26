@@ -44,6 +44,7 @@ const CONTRATO = {
   fecha_inicio: '2026-08-01', fecha_fin: null, renovacion_automatica: false,
   periodicidad: 'mensual', frecuencia_visita: null, primera_visita: null,
   dia_vencimiento: 10, moneda: 'ARS', metodo_actualizacion: 'manual',
+  indice_ajuste: null, periodicidad_ajuste: null,
   estado: 'activo', responsable: null, observaciones: null, archivo_pdf: null,
   created_at: null, importe_vigente: 45000, precio_vigente_desde: '2026-08-01',
   lleva_cuota: true, equipos_vigentes: 1,

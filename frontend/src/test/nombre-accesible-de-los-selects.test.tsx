@@ -117,6 +117,7 @@ const CONTRATO = {
   domicilio_instalacion: null, fecha_inicio: '2026-08-01', fecha_fin: null,
   renovacion_automatica: false, periodicidad: 'mensual', dia_vencimiento: 10,
   moneda: 'ARS', metodo_actualizacion: 'manual', estado: 'activo',
+  indice_ajuste: null, periodicidad_ajuste: null,
   responsable: null, observaciones: null, archivo_pdf: null, created_at: null,
   importe_vigente: 55000, precio_vigente_desde: '2026-08-01',
   lleva_cuota: true, equipos_vigentes: 1, lineas: [LINEA], precios: [],
@@ -212,6 +213,18 @@ const PANTALLAS: {
     montar: async () => {
       render(<ContratoNuevo />, '/contratos/nuevo')
       await screen.findByRole('combobox', { name: 'Modalidad' })
+    },
+  },
+  {
+    titulo: 'Alta de contrato — con ajuste por índice',
+    // Los seis de arriba más los dos del ajuste (ADR-018): el índice, que es un
+    // `SelectBuscable` y necesita `ariaLabel` sí o sí, y «Se ajusta cada», un
+    // Radix adentro de un `FormControl` que se nombra solo por su `FormLabel`.
+    cuantos: 8,
+    montar: async (user) => {
+      render(<ContratoNuevo />, '/contratos/nuevo')
+      await elegirEnRadix(user, 'Actualización del precio', 'Índice configurable')
+      await screen.findByRole('combobox', { name: 'Se ajusta cada' })
     },
   },
   {

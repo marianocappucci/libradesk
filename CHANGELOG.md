@@ -11,6 +11,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-10-26
+- **Agregado:** **ajuste por índice del contrato** (ADR-018; libracore v1.196.0, ADR-085 del motor; **revisión `0043`**, aditiva). Con «Actualización: índice», el contrato dice qué índice usa (ICL, IPC, CER, UVA, dólar A 3500, Casa Propia) y cada cuánto se ajusta, contado desde el inicio. La ficha muestra el ajuste que corresponde, con los valores que tomó, y «Aplicar ajuste» cierra el precio vigente y abre el ajustado. Si falta un valor del índice, se baja del BCRA o de datos.gob.ar en el momento.
+- **Cambiado:** la aritmética de cuotas y visitas es la del motor (`libracore.periodos`, ADR-086, v1.196.1). Las cuotas no cambian. **Corregido:** el período de visita con un arranque a fin de mes dejaba afuera al día que lo pedía (arranque 31-01: el 28-02 caía en el período del 31-01 al 27-02).
+- **Cambiado:** pin de libracore a `v1.196.1`. **Migración del motor `0030`** (`indices_ajuste`, aditiva y vacía), ya en la cadena del deploy.
+
 ### 2026-10-20
 - **Agregado:** **la barra de estado del pie** (pedido del humano; libracore ADR-075, libra-ui ADR-083; sin migración). Una línea chica al pie de todas las pantallas con el usuario, el certificado de ARCA que vence en menos de 30 días o venció, el último respaldo y la versión (este producto no tiene LibraEdge: esa parte no se muestra). `app/main.py` monta `build_estado_del_sistema_router` del motor (`GET /api/estado-del-sistema`, con `require_staff`: cualquier rol de la instancia; ARCA, respaldo y versión del motor, sólo el admin) con la carpeta de respaldos. Frontend: `createLayout({ barraDeEstado })`. La barra va fija al pie de la columna del contenido (decisión del humano): los pies `sticky` de `Incidencias.tsx` y `Cuotas.tsx` se corren con `bottom-[var(--alto-barra-de-estado,0px)]` para quedar arriba de ella. La sucursal es la activa del selector (`barraDeEstado: { useSucursal }`). Tests: `tests/test_estado_del_sistema.py`. Pines: **libracore `v1.187.0`** (antes `v1.186.2`) y **libra-ui `v0.170.0`** (antes `v0.168.0`; trae también el ADR-084 del kit, «Sucursal sin internet» dice que en el local se entra por la copia local). Sin migración.
 

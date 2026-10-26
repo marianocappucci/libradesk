@@ -25,6 +25,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse
+from libracore.indices_ajuste import IndiceFaltante
 from pydantic import BaseModel
 
 from ..dependencies import (
@@ -34,6 +35,8 @@ from ..dependencies import (
 )
 from ..services import acta_pdf, archivos
 from ..services.actas import ActaRepository
+from ..services.ajustes import AjusteRepository, SinAjuste
+from ..services.ajustes import catalogo as catalogo_de_indices
 from ..services.contratos import (
     CierreServiceActivo,
     ContratoRepository,
@@ -65,6 +68,10 @@ class ContratoIn(BaseModel):
     dia_vencimiento: int | None = None
     moneda: str = "ARS"
     metodo_actualizacion: str = "manual"
+    #: Con `metodo_actualizacion='indice'`: la clave del índice del motor y cada
+    #: cuánto se ajusta. Ver la revisión `0043`.
+    indice_ajuste: str | None = None
+    periodicidad_ajuste: str | None = None
     estado: str = "borrador"
     responsable: str | None = None
     observaciones: str | None = None
@@ -90,6 +97,8 @@ class ContratoUpdate(BaseModel):
     dia_vencimiento: int | None = None
     moneda: str | None = None
     metodo_actualizacion: str | None = None
+    indice_ajuste: str | None = None
+    periodicidad_ajuste: str | None = None
     estado: str | None = None
     responsable: str | None = None
     observaciones: str | None = None
@@ -382,6 +391,59 @@ def actualizar_precio(
     except KeyError:
         raise HTTPException(404, "contrato not found")
     except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+class AjusteIn(BaseModel):
+    fecha_ajuste: date
+
+
+def _indice_faltante(e) -> HTTPException:
+    from libracore.indices_ajuste import INDICES
+
+    return HTTPException(409, {"mensaje": str(e), "indice": e.indice, "indice_nombre": INDICES[e.indice].nombre,
+                               "fechas_faltantes": e.fechas})
+
+
+@router.get("/ajustes/indices")
+def indices_de_ajuste():
+    """Los índices del motor (`libracore.indices_ajuste`), para elegir el del contrato."""
+    return catalogo_de_indices()
+
+
+@router.get("/{contrato_id}/ajuste")
+def proponer_ajuste(
+    contrato_id: int, fecha: date | None = None,
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+):
+    """El ajuste por índice que le toca al contrato (hoy, o en `fecha`), con los valores que tomó. **No escribe**:
+    aplicarlo es `POST`, con confirmación humana. Si falta un valor del índice, se baja de la fuente y se reintenta;
+    si igual falta, 409 con las fechas que faltan."""
+    try:
+        return AjusteRepository(contratos).proponer(contrato_id, fecha=fecha)
+    except KeyError:
+        raise HTTPException(404, "contrato not found")
+    except IndiceFaltante as e:
+        raise _indice_faltante(e)
+    except SinAjuste as e:
+        raise HTTPException(409, str(e))
+
+
+@router.post("/{contrato_id}/ajuste", status_code=201)
+def aplicar_ajuste(
+    contrato_id: int, data: AjusteIn, request: Request,
+    contratos: ContratoRepository = Depends(get_contrato_repository),
+):
+    """Aplica el ajuste del período: cierra el precio vigente y abre el ajustado, con `motivo='ajuste_indice:<índice>'`.
+    La cuenta se rehace acá, no se toma el importe de la pantalla."""
+    try:
+        return AjusteRepository(contratos).aplicar(contrato_id, fecha_ajuste=data.fecha_ajuste,
+                                                   usuario=_usuario(request))
+    except KeyError:
+        raise HTTPException(404, "contrato not found")
+    except IndiceFaltante as e:
+        raise _indice_faltante(e)
+    except (SinAjuste, ValueError) as e:
         raise HTTPException(409, str(e))
 
 
