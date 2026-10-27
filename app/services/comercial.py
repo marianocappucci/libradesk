@@ -269,6 +269,9 @@ CREATE TABLE IF NOT EXISTS cc_asientos (
     usuario_id       INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     created_at       TEXT DEFAULT (datetime('now','-3 hours')),
     origen           TEXT,
+    -- La moneda del asiento (ADR-088 de LibraCore, v1.198.0). Esta copia del DDL
+    -- del motor no se entera sola: sin la columna, todo asiento revienta.
+    moneda           TEXT NOT NULL DEFAULT 'ARS',
     CHECK (debe >= 0 AND haber >= 0),
     CHECK ((debe > 0 AND haber = 0) OR (haber > 0 AND debe = 0)
            OR origen_legado IS NOT NULL)
@@ -289,6 +292,7 @@ CREATE TABLE IF NOT EXISTS recibos (
     origen_id         INTEGER,
     concepto          TEXT DEFAULT '',
     total             REAL NOT NULL,
+    moneda            TEXT NOT NULL DEFAULT 'ARS',
     pagos             TEXT NOT NULL DEFAULT '[]',
     observaciones     TEXT DEFAULT '',
     anulado           INTEGER NOT NULL DEFAULT 0,
