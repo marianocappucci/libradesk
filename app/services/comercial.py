@@ -269,6 +269,9 @@ CREATE TABLE IF NOT EXISTS cc_asientos (
     usuario_id       INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     created_at       TEXT DEFAULT (datetime('now','-3 hours')),
     origen           TEXT,
+    -- La moneda del asiento (ADR-088 de LibraCore, v1.198.0). Esta copia del DDL
+    -- del motor no se entera sola: sin la columna, todo asiento revienta.
+    moneda           TEXT NOT NULL DEFAULT 'ARS',
     CHECK (debe >= 0 AND haber >= 0),
     CHECK ((debe > 0 AND haber = 0) OR (haber > 0 AND debe = 0)
            OR origen_legado IS NOT NULL)
@@ -289,6 +292,7 @@ CREATE TABLE IF NOT EXISTS recibos (
     origen_id         INTEGER,
     concepto          TEXT DEFAULT '',
     total             REAL NOT NULL,
+    moneda            TEXT NOT NULL DEFAULT 'ARS',
     pagos             TEXT NOT NULL DEFAULT '[]',
     observaciones     TEXT DEFAULT '',
     anulado           INTEGER NOT NULL DEFAULT 0,
@@ -410,6 +414,13 @@ def sincronizar_parties() -> dict:
     cliente-- asi que van desplazados `_OFFSET_PROVEEDOR`. No es elegante; es lo
     unico que no obliga a tocar el esquema del motor.
 
+    **Aguanta dos procesos a la vez** (`ON CONFLICT (id) DO NOTHING`): los dos
+    workers de uvicorn la corren en el arranque y el anti-join no ve lo que el
+    otro todavia no commiteo, asi que los dos intentan el mismo id. Sin la
+    clausula el segundo moria con `UniqueViolation` en `parties_pkey` (visto en
+    `libradesk-demo` el 2026-10-21; `tests/test_parties_carrera.py`). Lo mismo
+    vale para `asegurar_parties()` en dos pedidos simultaneos.
+
     Devuelve cuantos creo de cada lado.
     """
     creados = {"clientes": 0, "proveedores": 0}
@@ -427,6 +438,7 @@ def sincronizar_parties() -> dict:
             FROM clients c
             LEFT JOIN parties p ON p.id = c.id
             WHERE p.id IS NULL
+            ON CONFLICT (id) DO NOTHING
             """
         )
         creados["clientes"] = max(cur.rowcount or 0, 0)
@@ -442,6 +454,7 @@ def sincronizar_parties() -> dict:
             FROM proveedores pr
             LEFT JOIN parties p ON p.id = pr.id + ?
             WHERE p.id IS NULL
+            ON CONFLICT (id) DO NOTHING
             """,
             (_OFFSET_PROVEEDOR, _OFFSET_PROVEEDOR),
         )

@@ -52,11 +52,16 @@ liquidacion vieja diera otro numero, que es exactamente lo que
 """
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
+from libracore.periodos import (
+    Periodo,
+    redondear,
+)
+from libracore.periodos import periodo_de as _periodo_de
+from libracore.periodos import vencimiento_de as _vencimiento_de
 from sqlalchemy import (
     Date,
     DateTime,
@@ -105,122 +110,32 @@ ESTADOS_CUOTA = ("pendiente", "facturada", "cobrada", "vencida", "anulada")
 # Con la cuota en uno de estos ya no se toca: o se cobro o se dio de baja.
 ESTADOS_CERRADOS_CUOTA = ("cobrada", "anulada")
 
-# Cuantos meses cubre un periodo, por periodicidad del contrato.
-_MESES_POR_PERIODICIDAD = {
-    "mensual": 1, "bimestral": 2, "trimestral": 3, "semestral": 6, "anual": 12,
-}
-
-_CENTAVO = Decimal("0.01")
-
-# El paso entre dos periodos contiguos: uno termina el dia antes de que arranque
-# el siguiente, mismo criterio que las vigencias de `contratos_precios`.
-_UN_DIA = timedelta(days=1)
-
-
-def _redondear(valor: Decimal) -> Decimal:
-    """Dos decimales, medio hacia arriba.
-
-    `ROUND_HALF_UP` y no el `ROUND_HALF_EVEN` que trae Python por defecto: el
-    banquero redondea 0.125 a 0.12 y una factura argentina lo redondea a 0.13.
-    Sobre un prorrateo, que es una division, esto aparece seguido.
-    """
-    return valor.quantize(_CENTAVO, rounding=ROUND_HALF_UP)
-
-
-def _ultimo_dia(anio: int, mes: int) -> int:
-    return calendar.monthrange(anio, mes)[1]
-
-
-def _sumar_meses(d: date, meses: int) -> date:
-    """`d` mas N meses, recortando el dia al ultimo del mes destino.
-
-    El 31 de enero mas un mes es el 28 (o 29) de febrero. Sin este recorte la
-    aritmetica de periodos revienta con `ValueError: day is out of range` en los
-    meses cortos, que es un defecto que sale una vez al anio y en produccion.
-    """
-    total = d.month - 1 + meses
-    anio = d.year + total // 12
-    mes = total % 12 + 1
-    return date(anio, mes, min(d.day, _ultimo_dia(anio, mes)))
-
-
-@dataclass(frozen=True)
-class Periodo:
-    """La ventana que cubre una cuota, con sus dos puntas inclusive."""
-
-    desde: date
-    hasta: date
-
-    @property
-    def dias(self) -> int:
-        return (self.hasta - self.desde).days + 1
+# 🔑 **La aritmetica de periodos es la del motor** (`libracore.periodos`, ADR-086 de
+# libracore, v1.196.1). Vivio aca del 2026-08-15 al 2026-10-26 y subio al motor
+# cuando LibraInmo necesito la misma; desde entonces este modulo pone sus
+# envoltorios (los que reciben un `Contrato`) y nada de aritmetica propia.
 
 
 def periodo_de(contrato: Contrato, ancla: date) -> Periodo:
     """El periodo de FACTURACION de calendario que contiene a `ancla`.
 
-    Envoltorio de `periodo_por_cadencia()` sobre la periodicidad de **cobro**.
-    Se separaron el 2026-08-16, cuando aparecio el segundo consumidor de la
-    misma aritmetica: las visitas de mantenimiento, que tienen su propia
-    cadencia (`contratos.frecuencia_visita`) porque cobrar y visitar no son lo
-    mismo — se puede cobrar mensual y visitar trimestral.
-
-    Una sola aritmetica con dos llamadores, y no dos copias que puedan
-    divergir: el recorte de dia de `_sumar_meses()` y la alineacion al anio de
-    los multi-mes son sutiles, y la segunda copia iba a ser la que se olvidara
-    de alguno.
+    Envoltorio de `libracore.periodos.periodo_de` sobre la periodicidad de
+    **cobro** del contrato. Las visitas tienen su propia cadencia
+    (`contratos.frecuencia_visita`) y su propio periodo, anclado al acuerdo
+    (`visitas.py`): cobrar y visitar no son lo mismo.
     """
-    return periodo_por_cadencia(contrato.periodicidad, ancla)
+    return _periodo_de(contrato.periodicidad, ancla)
 
 
 def vencimiento_de(contrato: Contrato, periodo: Periodo) -> date | None:
     """El `dia_vencimiento` del contrato, dentro del mes en que se emite.
 
-    Se recorta al ultimo dia del mes: un contrato con vencimiento el 31 no
-    puede vencer el 31 de febrero. Sin `dia_vencimiento` no se inventa
-    ninguno — queda `NULL`, que significa "no pactado".
-
-    Es una funcion del modulo y no un metodo del repositorio por el mismo
-    motivo por el que `periodo_de` lo es desde el 2026-08-16: aparecio un
-    segundo consumidor —las actas de devolucion, que emiten su cargo de
-    reposicion dentro de SU transaccion— y una segunda copia de este recorte
-    seria la que se olvidara de febrero.
+    Envoltorio de `libracore.periodos.vencimiento_de`: recorta al ultimo dia del
+    mes y, sin `dia_vencimiento`, devuelve `None` ("no pactado"). Lo usan las
+    cuotas y las actas de devolucion, que emiten su cargo dentro de SU
+    transaccion.
     """
-    if contrato.dia_vencimiento is None:
-        return None
-    base = periodo.desde
-    return date(
-        base.year, base.month,
-        min(contrato.dia_vencimiento, _ultimo_dia(base.year, base.month)),
-    )
-
-
-def periodo_por_cadencia(cadencia: str, ancla: date) -> Periodo:
-    """El periodo de CALENDARIO que **contiene** a `ancla`.
-
-    🔴 **Los periodos son de calendario, no se cuentan desde `fecha_inicio`.**
-    El primer intento los anclaba al arranque del contrato —un mensual que
-    empieza el 20 devengaba del 20 al 19— y eso **hace imposible el prorrateo**:
-    el primer periodo arranca justo el dia que arranca el contrato, asi que
-    siempre esta completo y no hay nada que prorratear. Contradecia de plano la
-    decision del humano del 2026-08-15 ("proporcional por dias, primer y ultimo
-    mes"), y el test que lo cubria compartia la premisa, asi que pasaba en verde.
-
-    Con periodos de calendario, un mensual que arranca el 20 de agosto tiene el
-    periodo 01-08 al 31-08 y **cubre 12 de esos 31 dias**, que es de donde sale
-    la cuota proporcional.
-
-    Para los multi-mes el bloque se alinea al anio: un trimestral devenga
-    ene-mar, abr-jun, jul-sep, oct-dic sin importar cuando arranco el contrato,
-    y el primero le sale prorrateado igual que al mensual.
-    """
-    paso = _MESES_POR_PERIODICIDAD[cadencia]
-    # En que bloque del anio cae el ancla. Para el mensual (paso 1) esto es
-    # simplemente su mes.
-    bloque = (ancla.month - 1) // paso
-    desde = date(ancla.year, bloque * paso + 1, 1)
-    hasta = _sumar_meses(desde, paso) - _UN_DIA
-    return Periodo(desde=desde, hasta=hasta)
+    return _vencimiento_de(contrato.dia_vencimiento, periodo)
 
 
 class ContratoCuota(Base):
@@ -448,14 +363,9 @@ class CuotaRepository:
 
         # La ventana efectiva: la interseccion entre el periodo y la vida del
         # contrato. Es lo que produce el prorrateo de las dos puntas.
-        desde = max(periodo.desde, contrato.fecha_inicio)
-        hasta = periodo.hasta if contrato.fecha_fin is None else min(
-            periodo.hasta, contrato.fecha_fin,
-        )
-        if desde > hasta:
+        cubierto = periodo.recortado(contrato.fecha_inicio, contrato.fecha_fin)
+        if cubierto is None:
             return None  # el contrato no toca este periodo
-
-        cubierto = Periodo(desde=desde, hasta=hasta)
         parcial = cubierto.dias < periodo.dias
 
         precio = session.execute(
@@ -474,12 +384,12 @@ class CuotaRepository:
         # de febrero vale mas. Dividir siempre por 30 le cobraria de menos a
         # febrero y de mas a los meses de 31.
         if parcial:
-            importe = _redondear(
+            importe = redondear(
                 precio.importe * Decimal(cubierto.dias) / Decimal(periodo.dias)
             )
             tipo_cargo = "proporcional"
         else:
-            importe = _redondear(precio.importe)
+            importe = redondear(precio.importe)
             tipo_cargo = (
                 "mantenimiento" if contrato.tipo_contrato == "abono" else "alquiler"
             )
@@ -672,7 +582,7 @@ class CuotaRepository:
                 "cuotas», no la carga manual: cargarlo a mano dejaría dos cobros "
                 "del mismo mes."
             )
-        importe = _redondear(Decimal(str(importe)))
+        importe = redondear(Decimal(str(importe)))
         with self.session_factory() as session:
             c = session.get(Contrato, contrato_id)
             if c is None:

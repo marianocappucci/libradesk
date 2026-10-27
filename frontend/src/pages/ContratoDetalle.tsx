@@ -8,6 +8,8 @@ import {
   type Acta, type Activo, type Contrato, type ContratoLinea, type Proveedor,
 } from '../api'
 import { NuevaActa } from '@/components/acta-de-contrato'
+import { AjustePorIndice } from '@/components/ajuste-por-indice'
+import { useIndicesDeAjuste } from '../hooks/use-indices-de-ajuste'
 import { ContratoFirmado } from '@/components/contrato-firmado'
 import { fecha, pesos } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -61,6 +63,9 @@ export function ContratoDetalle() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // El catálogo sólo se pide si el contrato se ajusta por índice. Va antes de
+  // los `return` de abajo: un hook no puede quedar detrás de uno.
+  const { indices } = useIndicesDeAjuste(contrato?.metodo_actualizacion === 'indice')
 
   const [accion, setAccion] = useState<Accion | null>(null)
   const [saving, setSaving] = useState(false)
@@ -235,6 +240,11 @@ export function ContratoDetalle() {
   // Un contrato sin equipos —el abono— no entrega nada, así que no tiene de qué
   // hablar la pestaña de actas. Con actas viejas sí, aunque hoy no haya equipos.
   const hayActas = lineas.length > 0 || actas.length > 0
+  const porIndice = contrato.metodo_actualizacion === 'indice'
+  // Con la clave como respaldo: el contrato la trae siempre, el catálogo puede
+  // no haber llegado todavía.
+  const nombreDelIndice = indices.find((i) => i.clave === contrato.indice_ajuste)?.nombre
+    ?? contrato.indice_ajuste
 
   return (
     <div className="grid gap-4">
@@ -294,6 +304,15 @@ export function ContratoDetalle() {
               <Dato label="Periodicidad" valor={PERIODICIDAD_LABELS[contrato.periodicidad]} />
               <Dato label="Día de vencimiento" valor={contrato.dia_vencimiento?.toString()} />
               <Dato label="Actualización" valor={METODO_ACTUALIZACION_LABELS[contrato.metodo_actualizacion]} />
+              {porIndice && (
+                <>
+                  <Dato label="Índice de ajuste" valor={nombreDelIndice} />
+                  <Dato label="Se ajusta cada"
+                        valor={contrato.periodicidad_ajuste
+                          ? PERIODICIDAD_LABELS[contrato.periodicidad_ajuste]
+                          : null} />
+                </>
+              )}
             </>
           )}
           {/* 🔑 La cadencia de VISITA, aparte de la de cobro y no adentro de
@@ -314,6 +333,22 @@ export function ContratoDetalle() {
           <Dato label="Observaciones" valor={contrato.observaciones} />
         </CardContent>
       </Card>
+
+      {/* El ajuste por índice, sólo si el contrato se actualiza así. En esta
+          pestaña y no en «Historial» porque es lo que el operador viene a ver
+          al abrir un contrato que le toca ajustar; el resultado, en cambio,
+          queda en el historial de precios. */}
+      {porIndice && (
+        <div className="mt-4">
+          <AjustePorIndice
+            contratoId={contrato.id}
+            moneda={contrato.moneda}
+            precioVigenteDesde={contrato.precio_vigente_desde}
+            indices={indices}
+            onAplicado={() => { void load() }}
+          />
+        </div>
+      )}
 
       {/* 🔑 En la pestaña del contrato y no en una propia: es un dato de la
           ficha, no una sección. Una pestaña para un botón habría escondido lo
@@ -421,7 +456,7 @@ export function ContratoDetalle() {
                           {p.vigencia_hasta ? fecha(p.vigencia_hasta) : <BadgeEstado tono="ok">Vigente</BadgeEstado>}
                         </td>
                         <td className="py-2 pr-3 font-medium">{pesos(p.importe, p.moneda)}</td>
-                        <td className="py-2 pr-3 text-muted-foreground">{p.motivo ?? '—'}</td>
+                        <td className="py-2 pr-3 text-muted-foreground">{motivoDePrecio(p.motivo)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -690,6 +725,15 @@ export function ContratoDetalle() {
       </Dialog>
     </div>
   )
+}
+
+/** El motivo de una fila del historial. El ajuste por índice lo escribe el
+ *  backend como `ajuste_indice:<clave>`; se dice en castellano. El resto
+ *  (`alta`, `porcentaje`…) se muestra como viene, igual que antes. */
+function motivoDePrecio(motivo: string | null): string {
+  if (!motivo) return '—'
+  const clave = motivo.startsWith('ajuste_indice:') ? motivo.slice('ajuste_indice:'.length) : null
+  return clave ? `Ajuste por índice (${clave})` : motivo
 }
 
 function Dato({ label, valor }: { label: string; valor: string | null | undefined }) {
