@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-10-27
+- **Corregido:** el espejo de `parties` aguanta dos procesos a la vez (`ON CONFLICT (id) DO NOTHING` en `sincronizar_parties`). Los dos workers de uvicorn lo corren al arrancar y el segundo moría con `UniqueViolation` en `parties_pkey` (visto en `libradesk-demo` el 2026-10-21); uvicorn lo relanzaba, así que no había caída, sólo un traceback por arranque. Test: `tests/test_parties_carrera.py`, que arma la carrera sin depender del reloj. Sin migración.
+
 ### 2026-10-26
 - **Agregado:** **ajuste por índice del contrato** (ADR-018; libracore v1.196.0, ADR-085 del motor; **revisión `0043`**, aditiva). Con «Actualización: índice», el contrato dice qué índice usa (ICL, IPC, CER, UVA, dólar A 3500, Casa Propia) y cada cuánto se ajusta, contado desde el inicio. La ficha muestra el ajuste que corresponde, con los valores que tomó, y «Aplicar ajuste» cierra el precio vigente y abre el ajustado. Si falta un valor del índice, se baja del BCRA o de datos.gob.ar en el momento.
 - **Cambiado:** la aritmética de cuotas y visitas es la del motor (`libracore.periodos`, ADR-086, v1.196.1). Las cuotas no cambian. **Corregido:** el período de visita con un arranque a fin de mes dejaba afuera al día que lo pedía (arranque 31-01: el 28-02 caía en el período del 31-01 al 27-02).
