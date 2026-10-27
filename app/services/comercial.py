@@ -414,6 +414,13 @@ def sincronizar_parties() -> dict:
     cliente-- asi que van desplazados `_OFFSET_PROVEEDOR`. No es elegante; es lo
     unico que no obliga a tocar el esquema del motor.
 
+    **Aguanta dos procesos a la vez** (`ON CONFLICT (id) DO NOTHING`): los dos
+    workers de uvicorn la corren en el arranque y el anti-join no ve lo que el
+    otro todavia no commiteo, asi que los dos intentan el mismo id. Sin la
+    clausula el segundo moria con `UniqueViolation` en `parties_pkey` (visto en
+    `libradesk-demo` el 2026-10-21; `tests/test_parties_carrera.py`). Lo mismo
+    vale para `asegurar_parties()` en dos pedidos simultaneos.
+
     Devuelve cuantos creo de cada lado.
     """
     creados = {"clientes": 0, "proveedores": 0}
@@ -431,6 +438,7 @@ def sincronizar_parties() -> dict:
             FROM clients c
             LEFT JOIN parties p ON p.id = c.id
             WHERE p.id IS NULL
+            ON CONFLICT (id) DO NOTHING
             """
         )
         creados["clientes"] = max(cur.rowcount or 0, 0)
@@ -446,6 +454,7 @@ def sincronizar_parties() -> dict:
             FROM proveedores pr
             LEFT JOIN parties p ON p.id = pr.id + ?
             WHERE p.id IS NULL
+            ON CONFLICT (id) DO NOTHING
             """,
             (_OFFSET_PROVEEDOR, _OFFSET_PROVEEDOR),
         )
