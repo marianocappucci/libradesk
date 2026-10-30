@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-10-30
+- **Marca blanca** (ADR-019; `libracore` v1.206.0, `libraauth` v0.57.0, `libra-ui` v0.185.0): la instancia puede llevar el nombre, el logo, el color y los Términos y Condiciones propios de un revendedor (`/api/marca`, `/manifest.webmanifest`). Con marca propia exige los términos del revendedor y nunca cae a los de la familia; el mail de recuperación sale con su nombre. Sin marca cargada no cambia nada. Variable a definir en una instancia de revendedor: `LIBRADESK_RESET_URL_BASE`.
+
 ### 2026-10-27
 - **Corregido:** el espejo de `parties` aguanta dos procesos a la vez (`ON CONFLICT (id) DO NOTHING` en `sincronizar_parties`). Los dos workers de uvicorn lo corren al arrancar y el segundo moría con `UniqueViolation` en `parties_pkey` (visto en `libradesk-demo` el 2026-10-21); uvicorn lo relanzaba, así que no había caída, sólo un traceback por arranque. Test: `tests/test_parties_carrera.py`, que arma la carrera sin depender del reloj. Sin migración.
 

@@ -293,3 +293,23 @@ wiki (entidad `libradesk`).
 **Lo que no hace.** No ajusta solo. El dólar A 3500 no se publica los fines de semana y el motor no toma el valor anterior (ADR-085 del motor): un ajuste que cae sábado o domingo no encuentra valor. Casa Propia se carga a mano.
 
 **Tests.** `tests/test_aritmetica_del_motor.py` y `tests/test_ajuste_por_indice.py`. Este último corre la cadena real del motor (`libracore.migrar.upgrade`) sobre la base del test, porque la plantilla de la suite no la corre y `indices_ajuste` la crea la `0030` del motor.
+
+
+## ADR-019 — La marca blanca: la instancia puede llevar el nombre, el logo, el color y los términos de un revendedor
+
+**Estado:** aceptada (2026-10-30). Segundo producto del piloto de marca blanca (libracore ADR-092 y ADR-093, libraauth
+ADR-030, libra-ui ADR-098; el primero fue LibraInmo).
+
+**Decisión.**
+1. `app/main.py` monta `build_marca_router(dist=…)` (lectura pública, manifest e íconos) y `build_marca_admin_router()`
+   detrás de `require_admin_o_servicio`, igual que el tema: lo cambia el admin o el backoffice.
+2. 🔴 `TerminosRepository(contrato_propio=leer_terminos_propios, exigir_propio=es_marca_propia)`: con marca propia la
+   instancia **exige** los términos del revendedor y, sin ellos, queda frenada; nunca cae a los de la familia.
+3. `PasswordResetService(product_name=lambda: nombre_de_marca("LibraDesk"))`: el mail de recuperación sale con el nombre
+   de la marca.
+4. El manifest tiene que ganarle al catch-all de la SPA. `create_app` no conoce el dist (lo monta `asgi.py` después), así
+   que `app/frontend_dist.py` lo resuelve una sola vez y lo usan `main.py` y `asgi.py`.
+5. `main.tsx` espera `cargarMarca()` (tope de 2 s, no falla) antes de montar la SPA.
+
+**Pendiente a propósito.** `LIBRADESK_RESET_URL_BASE` tiene por defecto `dev.libradesk.com.ar`: una instancia de
+revendedor tiene que definirla. Tests: `tests/test_marca_blanca.py` y `tests/test_marca_blanca_terminos.py`.
