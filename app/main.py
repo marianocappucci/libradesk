@@ -35,17 +35,20 @@ from libracore.config_router import (
 from libracore.docs_api import cerrar_docs_de_la_api
 from libracore.errores import instalar_registro_de_errores
 from libracore.estado_del_sistema import build_estado_del_sistema_router
+from libracore.marca_router import build_marca_admin_router, build_marca_router, es_marca_propia, nombre_de_marca
 from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 from libracore.smtp_router import build_smtp_probe_router
 from libracore.tema_router import build_tema_admin_router, build_tema_router
+from libracore.terminos_propios import leer_terminos_propios
 from sqlalchemy.engine import make_url
 
 from . import database, schema
 from .auditoria import AUDITABLES, ENTIDADES_DEL_LOG, registrador_del_motor
 from .auth import build_session_auth, get_current_user, require_admin, require_admin_o_servicio, require_staff
 from .database import configure, get_engine, get_session_factory
+from .frontend_dist import frontend_dist
 from .modules_gate import require_module
 from .routers import (
     activos,
@@ -278,7 +281,12 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     #
     # 🔴 Sin esta linea el gate NO corta y la instancia no falla: se queda sin
     # gate, en silencio. Por eso cada producto tiene un test que lo prueba.
-    app.state.terminos = TerminosRepository(sessions)
+    #
+    # Marca blanca (ADR-092/093 del motor): una instancia con marca propia **exige** los Términos de su revendedor
+    # y, sin ellos, queda frenada; nunca cae a los de la familia.
+    app.state.terminos = TerminosRepository(
+        sessions, contrato_propio=leer_terminos_propios, exigir_propio=es_marca_propia
+    )
     # Codigos de acceso a la demo (libraauth v0.26.0). **Solo si esta
     # instancia es una demo**, guiado por las mismas dos variables que
     # siembran al visitante y registran `POST /auth/demo`: en la instancia de
@@ -294,7 +302,8 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
         app.state.demo_codigos = DemoCodigoRepository(sessions)
     app.state.password_reset = PasswordResetService(
         sessions,
-        product_name="LibraDesk",
+        # CALLABLE: con marca propia el mail de recuperación sale con el nombre del revendedor.
+        product_name=lambda: nombre_de_marca("LibraDesk"),
         reset_url_base=os.environ.get(
             "LIBRADESK_RESET_URL_BASE", "https://dev.libradesk.com.ar/reset-password"
         ),
@@ -610,6 +619,11 @@ def create_app(database_url: str, data_dir: str) -> FastAPI:
     # del token de servicio del backoffice: 🔴 con `require_admin` a secas el backoffice NO entraría (esa guarda no conoce el token).
     app.include_router(build_tema_router())
     app.include_router(build_tema_admin_router(), dependencies=[Depends(require_admin_o_servicio)])
+    # La marca de la instancia (nombre, logo, color, íconos y manifest), para venderla a marca blanca. La lectura es
+    # pública (el login también lleva la marca) y se monta **antes** del catch-all de la SPA (`asgi.py`): si no,
+    # `/manifest.webmanifest` devolvería el `index.html`. Escribir es del admin o del backoffice (token de servicio).
+    app.include_router(build_marca_router(dist=frontend_dist()))
+    app.include_router(build_marca_admin_router(), dependencies=[Depends(require_admin_o_servicio)])
     # Una sola variable para los dos routers: la copia externa sube lo que deja
     # el backup, y su enlace (credenciales de rclone, estado de la subida) vive
     # en la MISMA carpeta. Dos rutas escritas por separado divergen sin error.
