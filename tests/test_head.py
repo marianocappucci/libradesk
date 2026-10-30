@@ -18,13 +18,22 @@ from app.spa import SIN_CACHE, montar_spa
 
 
 @pytest.fixture
-def cliente(client, tmp_path):
+def cliente(data_dir, url_de_base, tmp_path, monkeypatch):
+    """La app armada como `app.asgi`: el mismo `dist` para la marca (que sirve `/manifest.webmanifest`) y para la SPA.
+
+    Con el `client` de la suite la marca resolvería el `dist` real del repo, que en el CI no existe, y el manifest daría 404."""
+    import app.main as principal
+    from tests.conftest import construir_app
+
+    monkeypatch.setattr(principal, "frontend_dist", lambda: tmp_path)
+    app = construir_app(data_dir, url_de_base)
     (tmp_path / "assets").mkdir()
     (tmp_path / "assets" / "app-abc123.js").write_text("console.log(1)")
     (tmp_path / "index.html").write_text("<html>spa</html>")
     (tmp_path / "manifest.webmanifest").write_text("{}")
-    montar_spa(client.app, tmp_path)
-    return client
+    montar_spa(app, tmp_path)
+    with TestClient(app, base_url="https://testserver") as c:
+        yield c
 
 
 @pytest.mark.parametrize("ruta", ["/", "/pantalla/3", "/manifest.webmanifest"])

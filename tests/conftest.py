@@ -556,3 +556,15 @@ def _captcha_siempre_valido(monkeypatch):
     # libraauth v0.50.0 (ADR-023) llama `_captcha_de(request, usados)`: el segundo argumento es el `captcha_usados=` del
     # router, que el doble ignora.
     monkeypatch.setattr("libraauth.session_auth._captcha_de", lambda request, usados=None: doble)
+
+
+@pytest.fixture
+def _marca_aislada(tmp_path, monkeypatch):
+    """La marca de la instancia (config, logo y Términos propios, libracore ADR-092/093) en el `tmp_path` del test.
+
+    `config_manager` fija sus rutas al importarse, así que sin esto la marca de un test quedaría en el disco del que corre la suite.
+    """
+    from libracore import config_manager
+
+    monkeypatch.setattr(config_manager, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config_manager, "MARCA_DIR", str(tmp_path / "marca"))
