@@ -32,13 +32,13 @@ from libracore.config_router import (
     build_empresa_admin_router,
     build_empresa_router,
 )
+from libracore.corte_de_servicio import CorteDeServicioMiddleware
 from libracore.docs_api import cerrar_docs_de_la_api
 from libracore.errores import instalar_registro_de_errores
 from libracore.estado_del_sistema import build_estado_del_sistema_router
 from libracore.marca_router import build_marca_admin_router, build_marca_router, es_marca_propia, nombre_de_marca
 from libracore.resguardo_enlace import build_resguardo_enlace_router
 from libracore.respaldo import Instancia
-from libracore.corte_de_servicio import CorteDeServicioMiddleware
 from libracore.security_headers import CSP_SPA, SecurityHeadersMiddleware
 from libracore.smtp_router import build_smtp_probe_router
 from libracore.tema_router import build_tema_admin_router, build_tema_router
