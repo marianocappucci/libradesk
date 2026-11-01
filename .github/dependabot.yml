@@ -21,6 +21,10 @@ updates:
       # Los motores de la familia se pinean por tag de git y se propagan
       # con el workflow bump-motores (ver libra-bump), no por dependabot.
       - dependency-name: "libra*"
+      # 🔴 pytest queda en <9.2 (2026-11-01): con 9.2 el `--dist loadgroup` de pytest-xdist 3.8 deja de agrupar
+      # (ver el tope en `pyproject.toml`). Se saca junto con ese tope.
+      - dependency-name: "pytest"
+        versions: [">=9.2"]
   - package-ecosystem: "npm"
     target-branch: develop
     directory: "/frontend"
