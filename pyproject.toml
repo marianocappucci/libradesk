@@ -297,7 +297,8 @@ dependencies = [
     # v0.72.1 -> v0.73.0 (2026-10-23): el vinculo del producto viaja con la venta del nodo (ADR-072). Migracion 0010 aditiva (venta_origen_nodo).
     # v0.73.0 -> v0.73.1 (2026-10-24): serializar_esquema toma antes el candado del core (ADR-073). Sin migracion.
     # v0.73.1 -> v0.75.0 (2026-11-01): el puente proveedor <-> party en `erp.proveedores` (ADR-075). Sin migracion.
-    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.75.0",
+    # v0.75.0 -> v0.76.0 (2026-11-01): tipos de movimiento propios y upsert del party que no reescribe (ADR-076). Sin migracion.
+    "libracommerce[migrations] @ git+https://github.com/marianocappucci/libracommerce.git@v0.76.0",
     # LibraGenda se usa como **libreria de reglas, no de persistencia**: de
     # todo el motor este producto importa `find_conflicts`, que es una
     # funcion pura sobre objetos `Appointment`. No se corren sus migraciones
