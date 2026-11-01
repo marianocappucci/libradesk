@@ -61,10 +61,14 @@ AUDITABLES: dict[str, str] = {
 #: Lo que se audita por el camino del motor: `{tabla: nombre logico}`. Hoy sólo `clients`.
 ENTIDADES_DEL_MOTOR: dict[str, str] = {"clients": "cliente"}
 
+#: Lo que se audita por el repositorio de LibraCommerce (`RepositorioAuditado`): `{tabla: nombre
+#: logico}`. Hoy sólo `catalog_items`, que cubre productos, consumibles y servicios del catálogo.
+ENTIDADES_DEL_CATALOGO: dict[str, str] = {"catalog_items": "producto"}
+
 #: Todo lo que la pantalla de Logs ofrece en el filtro de entidades. Router de `libraauth`
 #: arma ese selector con `sorted(set(auditables.values()))`: sólo mira los valores, así que
 #: mezclar las dos listas (clases del ORM y tablas del motor) alcanza.
-ENTIDADES_DEL_LOG: dict[str, str] = {**AUDITABLES, **ENTIDADES_DEL_MOTOR}
+ENTIDADES_DEL_LOG: dict[str, str] = {**AUDITABLES, **ENTIDADES_DEL_MOTOR, **ENTIDADES_DEL_CATALOGO}
 
 
 def registrador_del_motor():
@@ -97,6 +101,19 @@ def registrador_del_motor():
     return registrador
 
 
+def registrador_del_catalogo():
+    """El registrador de las escrituras de `catalog_items` (altas, ediciones y bajas del catalogo).
+
+    Es el `registrador_dbapi` de `libraauth` --mismo formato de fila, mismo usuario, misma
+    tabla-- con las opciones de LibraCommerce (`opciones_del_registrador`: sin `created_at`,
+    etiqueta por `name`, colecciones resumidas). Lo enchufa `RepositorioAuditado`, que lo llama
+    en la misma transaccion que la escritura.
+    """
+    from libracommerce.db import auditoria as aud
+
+    return registrador_dbapi(ENTIDADES_DEL_CATALOGO, **aud.opciones_del_registrador())
+
+
 # 🔴 Aca vivia `"Servicio": "servicio"`, con el comentario "el precio de lista de
 # lo que se cotiza". Se fue el 2026-08-19: la revision `0031` dropeo la tabla
 # `servicios` y borro el modelo el 2026-08-17, y la entrada quedo dos dias
@@ -113,10 +130,11 @@ def registrador_del_motor():
 # Lo cuida `tests/test_auditables.py`, que es el guard del patron: la proxima
 # tabla que se dropee no deja el mismo resto.
 #
-# ⚠️ **Queda abierto, y es una decision de producto**: el catalogo de
-# LibraCommerce que reemplazo a `servicios` --`catalog_items`, donde hoy vive el
-# precio de lista-- **no se audita en ningun lado**. Sus modelos son del motor,
-# no de este producto, asi que sumarlo no es agregar una linea aca.
+# ✅ **Cerrado el 2026-11-01 (ADR-020)**: el catalogo de LibraCommerce que reemplazo a
+# `servicios` --`catalog_items`, donde vive el precio de lista-- se audita por el tercer
+# camino: el repositorio de LibraCommerce envuelto en `RepositorioAuditado`
+# (`services/inventario._repo`), con `registrador_del_catalogo()`. Como `clients`, no esta en
+# `AUDITABLES`: con las dos cosas cada cambio dejaria dos filas.
 
 # Las tablas que YA son historial quedan afuera a proposito:
 # `equipos_movimientos`, `incidencias_estados_log` y `actividades_incidencia`.
