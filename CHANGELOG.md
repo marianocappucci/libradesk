@@ -11,6 +11,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin versionar] — hitos por fecha
 
+### 2026-11-01
+- **Agregado:** **el catálogo se audita** (ADR-020; sin migración, sin cambios en el motor). Las altas, ediciones y bajas de `catalog_items` —consumibles y servicios— quedan en el log de actividad con quién y qué cambió (entidad «producto»), por el `RepositorioAuditado` de LibraCommerce.
+
 ### 2026-10-30
 - **Marca blanca** (ADR-019; `libracore` v1.206.0, `libraauth` v0.57.0, `libra-ui` v0.185.0): la instancia puede llevar el nombre, el logo, el color y los Términos y Condiciones propios de un revendedor (`/api/marca`, `/manifest.webmanifest`). Con marca propia exige los términos del revendedor y nunca cae a los de la familia; el mail de recuperación sale con su nombre. Sin marca cargada no cambia nada. Variable a definir en una instancia de revendedor: `LIBRADESK_RESET_URL_BASE`.
 

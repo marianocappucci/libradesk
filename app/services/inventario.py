@@ -38,6 +38,7 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+from libracommerce.db.auditoria import RepositorioAuditado
 from libracommerce.db.repository import SqliteCommerceRepository
 from libracommerce.db.schema import init_schema
 from libracommerce.domain.catalog import (
@@ -113,8 +114,18 @@ def ensure_schema() -> None:
         init_schema(conn)
 
 
-def _repo(conn) -> SqliteCommerceRepository:
-    return SqliteCommerceRepository(conn)
+def _repo(conn) -> RepositorioAuditado:
+    """El repositorio de LibraCommerce, **envuelto**: cada alta, edicion o baja de
+    `catalog_items` queda en `actividad_log` (ADR-020), en la transaccion de la escritura.
+
+    Desnudo no audita y no se nota --el log sigue mostrando las filas de las otras
+    entidades--, asi que este es el unico lugar donde se arma; lo sostiene
+    `tests/test_auditoria_catalogo.py`. Las otras tablas que escribe el repositorio no estan
+    en la lista blanca del registrador y no dejan fila.
+    """
+    from ..auditoria import registrador_del_catalogo
+
+    return RepositorioAuditado(SqliteCommerceRepository(conn), conn, registrador_del_catalogo())
 
 
 # ── Depositos ────────────────────────────────────────────────────────────

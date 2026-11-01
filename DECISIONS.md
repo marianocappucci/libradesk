@@ -313,3 +313,26 @@ ADR-030, libra-ui ADR-098; el primero fue LibraInmo).
 
 **Pendiente a propósito.** `LIBRADESK_RESET_URL_BASE` tiene por defecto `dev.libradesk.com.ar`: una instancia de
 revendedor tiene que definirla. Tests: `tests/test_marca_blanca.py` y `tests/test_marca_blanca_terminos.py`.
+
+
+## ADR-020 — `catalog_items` se audita por el repositorio de LibraCommerce envuelto (`RepositorioAuditado`)
+
+**Estado:** aceptada (2026-11-01). Cierra el ítem 9 de LibraDesk de los pendientes de la familia: el catálogo (productos,
+consumibles y servicios, donde vive el precio de lista) no dejaba rastro de quién lo creó, cambió o dio de baja.
+
+**Qué ya existía.** `AUDITABLES` (listener de `flush` de `libraauth`, sólo modelos ORM de este producto) y el camino del
+motor para `clients` (ADR-013, `libracore.auditoria`). Ninguno alcanza: `catalog_items` no es un modelo de este producto
+ni lo escribe `libracore.db`; lo escribe `SqliteCommerceRepository.save_catalog_item`. Para eso LibraCommerce ya trae
+`libracommerce.db.auditoria.RepositorioAuditado` (ADR-050 del motor comercial), con el formato de fila de `libraauth`.
+
+**Decisión.**
+1. `services/inventario._repo(conn)` devuelve el repositorio envuelto, con `registrador_del_catalogo()`
+   (`app/auditoria.py`): el `registrador_dbapi` de `libraauth` con la lista blanca `{"catalog_items": "producto"}` y las
+   opciones de LibraCommerce. Las otras tablas que escribe el repositorio no están en la lista y no dejan fila.
+2. La fila entra en la misma transacción que la escritura (si falla el log, se cae el cambio). La baja del catálogo es
+   lógica (`active=false`), así que se ve como una edición con `active` en el diff.
+3. Como `clients`, `catalog_items` no va en `AUDITABLES` (sería doble fila); sí en `ENTIDADES_DEL_LOG`, para que el filtro
+   de la pantalla de Logs ofrezca «producto».
+
+**Sin cambios en el motor ni migración.** Tests: `tests/test_auditoria_catalogo.py`, con un guard que falla si alguien
+escribe el catálogo con el repositorio desnudo.
